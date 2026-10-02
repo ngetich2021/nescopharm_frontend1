@@ -1,0 +1,449 @@
+{
+  "info": {
+    "_postman_id": "invoices-collection-2025-11-26",
+    "name": "Cherry API - Invoices",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Comprehensive Postman collection for Cherry API Invoice endpoints. Includes invoice CRUD operations, invoice generation from orders, payment recording, payment allocations, and reporting."
+  },
+  "item": [
+    {
+      "name": "Invoice CRUD",
+      "item": [
+        {
+          "name": "List All Invoices",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices?per_page=15&customer_id={{customer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices"],
+              "query": [
+                { "key": "per_page", "value": "15", "description": "Number of results per page (optional)" },
+                { "key": "customer_id", "value": "{{customer_id}}", "description": "Filter by customer ID (optional)" }
+              ]
+            },
+            "description": "Get a paginated list of all invoices for the authenticated user's company. Can filter by customer_id."
+          }
+        },
+        {
+          "name": "Get Invoice by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}"]
+            },
+            "description": "Get detailed information about a specific invoice including customer, order, line items, and creator."
+          }
+        },
+        {
+          "name": "Create Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"type\": \"sales\",\n  \"invoice_date\": \"2025-11-26\",\n  \"due_date\": \"2025-12-26\",\n  \"currency\": \"KES\",\n  \"payment_terms\": \"Net 30\",\n  \"notes\": \"Thank you for your business\",\n  \"terms_and_conditions\": \"Payment due within 30 days\",\n  \"line_items\": [\n    {\n      \"product_id\": \"{{product_id}}\",\n      \"variant_id\": null,\n      \"description\": \"Product Name - Description\",\n      \"quantity\": 2,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1500.00,\n      \"discount_amount\": 0,\n      \"tax_rate\": 16\n    },\n    {\n      \"product_id\": null,\n      \"description\": \"Service Fee\",\n      \"quantity\": 1,\n      \"unit\": \"service\",\n      \"unit_price\": 500.00,\n      \"discount_amount\": 50,\n      \"tax_rate\": 0\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices"]
+            },
+            "description": "Create a new invoice with line items. Type can be 'sales', 'service', or 'recurring'."
+          }
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"type\": \"sales\",\n  \"invoice_date\": \"2025-11-26\",\n  \"due_date\": \"2025-12-31\",\n  \"currency\": \"KES\",\n  \"payment_terms\": \"Net 45\",\n  \"notes\": \"Updated notes\",\n  \"terms_and_conditions\": \"Updated terms\",\n  \"status\": \"sent\",\n  \"line_items\": [\n    {\n      \"product_id\": \"{{product_id}}\",\n      \"description\": \"Updated Product Description\",\n      \"quantity\": 3,\n      \"unit\": \"pcs\",\n      \"unit_price\": 1600.00,\n      \"discount_amount\": 100,\n      \"tax_rate\": 16\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}"]
+            },
+            "description": "Update an existing invoice. Cannot update paid invoices. Status options: draft, sent, viewed, paid, overdue, cancelled."
+          }
+        },
+        {
+          "name": "Delete Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}"]
+            },
+            "description": "Delete an invoice. Cannot delete invoices with payments recorded."
+          }
+        }
+      ],
+      "description": "Basic CRUD operations for invoices"
+    },
+    {
+      "name": "Invoice from Order",
+      "item": [
+        {
+          "name": "Create Invoice from Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_date\": \"2025-11-26\",\n  \"due_date\": \"2025-12-26\",\n  \"payment_terms\": \"Net 30\",\n  \"notes\": \"Invoice generated from order\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/from-order/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "from-order", "{{order_id}}"]
+            },
+            "description": "Generate an invoice from an existing order. Automatically populates line items from order items. Will fail if an invoice already exists for this order."
+          }
+        },
+        {
+          "name": "Get Invoice by Order ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/by-order/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "by-order", "{{order_id}}"]
+            },
+            "description": "Find the invoice associated with a specific order."
+          }
+        }
+      ],
+      "description": "Create and retrieve invoices from orders"
+    },
+    {
+      "name": "Send Invoice",
+      "item": [
+        {
+          "name": "Send Invoice via Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"email\",\n  \"email\": \"customer@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "send"]
+            },
+            "description": "Send an invoice to a customer via email. Uses customer email if not specified."
+          }
+        },
+        {
+          "name": "Send Invoice via WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"whatsapp\",\n  \"phone\": \"+254712345678\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "send"]
+            },
+            "description": "Send an invoice to a customer via WhatsApp. Uses customer WhatsApp phone if not specified. Sends invoice as PDF document."
+          }
+        }
+      ],
+      "description": "Send invoices to customers via different channels"
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Record Payment for Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000.00,\n  \"payment_method\": \"mpesa\",\n  \"payment_date\": \"2025-11-26\",\n  \"transaction_id\": \"MPESA-ABC123XYZ\",\n  \"notes\": \"Partial payment received\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/record-payment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "record-payment"]
+            },
+            "description": "Record a new payment for an invoice. Creates a Payment record and allocates it to the invoice. Automatically updates invoice status based on payment amount."
+          }
+        },
+        {
+          "name": "Map Existing Payment to Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"apply_amount\": 2500.00,\n  \"notes\": \"Allocated from order payment\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/map-payment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "map-payment"]
+            },
+            "description": "Allocate an existing payment to an invoice. Useful when a payment was made against an order and needs to be linked to the corresponding invoice. apply_amount is optional - defaults to minimum of available payment amount or invoice balance."
+          }
+        },
+        {
+          "name": "Get Invoice Payment History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/payment-history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "payment-history"]
+            },
+            "description": "Get all payment allocations for an invoice, including payment details, amounts, and allocation dates."
+          }
+        },
+        {
+          "name": "Get Invoice Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/balance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "balance"]
+            },
+            "description": "Get comprehensive invoice balance including direct payments and allocations. Also includes verification to check if stored amounts match calculated amounts."
+          }
+        },
+        {
+          "name": "Sync Invoice Amounts",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/{{invoice_id}}/sync-amounts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "{{invoice_id}}", "sync-amounts"]
+            },
+            "description": "Recalculate and synchronize invoice amounts based on actual payments (both direct and allocated). Useful for fixing discrepancies."
+          }
+        }
+      ],
+      "description": "Record and manage payments for invoices"
+    },
+    {
+      "name": "Payment Allocations",
+      "item": [
+        {
+          "name": "Get Payment Available Amount",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/available-amount",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "available-amount"]
+            },
+            "description": "Check how much of a payment is still available to be allocated to invoices. Shows total amount, allocated amount, available amount, and list of existing allocations."
+          }
+        },
+        {
+          "name": "Get Payment Allocations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/allocations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "allocations"]
+            },
+            "description": "Get all allocations for a specific payment."
+          }
+        },
+        {
+          "name": "Allocate Payment to Multiple Invoices",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"allocations\": [\n    {\n      \"invoice_id\": \"{{invoice_id}}\",\n      \"amount\": 2500.00\n    },\n    {\n      \"invoice_id\": \"{{invoice_id_2}}\",\n      \"amount\": 1500.00\n    }\n  ],\n  \"notes\": \"Bulk allocation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/allocate-to-invoices",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "allocate-to-invoices"]
+            },
+            "description": "Allocate a payment across multiple invoices in a single request."
+          }
+        },
+        {
+          "name": "Deallocate Payment from Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payment-allocations/{{allocation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payment-allocations", "{{allocation_id}}"]
+            },
+            "description": "Remove a payment allocation from an invoice. The payment amount becomes available for re-allocation."
+          }
+        }
+      ],
+      "description": "Manage payment allocations across invoices"
+    },
+    {
+      "name": "Reports & Statistics",
+      "item": [
+        {
+          "name": "Get Invoice Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/statistics?start_date=2025-01-01&end_date=2025-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "statistics"],
+              "query": [
+                { "key": "start_date", "value": "2025-01-01", "description": "Start date for statistics period (optional, defaults to start of current month)" },
+                { "key": "end_date", "value": "2025-12-31", "description": "End date for statistics period (optional, defaults to end of current month)" }
+              ]
+            },
+            "description": "Get invoice statistics including total invoices, total amount, paid amount, outstanding amount, and counts by status."
+          }
+        },
+        {
+          "name": "Get Aging Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Accept", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/aging-report?as_of_date=2025-11-26",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "aging-report"],
+              "query": [
+                { "key": "as_of_date", "value": "2025-11-26", "description": "Date to calculate aging from (optional, defaults to today)" }
+              ]
+            },
+            "description": "Get invoice aging report with buckets: Current, 1-30 days, 31-60 days, 61-90 days, 90+ days overdue. Shows invoices and totals per bucket."
+          }
+        }
+      ],
+      "description": "Invoice reports and statistics"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost", "type": "string", "description": "Base URL for the API" },
+    { "key": "token", "value": "", "type": "string", "description": "Bearer token for authentication" },
+    { "key": "invoice_id", "value": "", "type": "string", "description": "UUID of the invoice" },
+    { "key": "customer_id", "value": "", "type": "string", "description": "UUID of the customer" },
+    { "key": "order_id", "value": "", "type": "string", "description": "UUID of the order" },
+    { "key": "product_id", "value": "", "type": "string", "description": "UUID of the product" },
+    { "key": "payment_id", "value": "", "type": "string", "description": "UUID of the payment" },
+    { "key": "allocation_id", "value": "", "type": "string", "description": "UUID of the payment allocation" },
+    { "key": "invoice_id_2", "value": "", "type": "string", "description": "UUID of a second invoice (for bulk operations)" }
+  ]
+}

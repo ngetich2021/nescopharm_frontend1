@@ -1,0 +1,701 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\OrderDispatch;
+use App\Models\OrderDispatchItem;
+use App\Models\Order;
+use App\Models\Logistic;
+use App\Models\DeliveryPerson;
+use App\Services\ApprovalWorkflowService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
+
+class OrderDispatchController extends Controller
+{
+    protected $workflowService;
+
+    public function __construct(ApprovalWorkflowService $workflowService)
+    {
+        $this->middleware('auth:sanctum');
+        $this->workflowService = $workflowService;
+    }
+
+    protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
+    {
+        $user = $request->user();
+        $role = $user->role;
+        if (!$role) {
+            return false;
+        }
+        if ($role->hasPermission('can_manage_system')) {
+            return true;
+        }
+        if ($role->hasPermission('can_manage_company')) {
+            if ($resourceCompanyId !== null) {
+                return $user->company_id === $resourceCompanyId;
+            }
+            return true;
+        }
+        return $role->hasPermission($permission);
+    }
+
+    /**
+     * Generate a unique dispatch number for the company.
+     * Format: ODI-{companyId8}-{sequential 4 digits}
+     */
+    protected function generateDispatchNumber($companyId)
+    {
+        $prefix = 'ODI-' . substr($companyId, 0, 8) . '-';
+        
+        $lastDispatch = DB::table('order_dispatches')
+            ->select('dispatch_number')
+            ->where('dispatch_number', 'like', $prefix . '%')
+            ->orderBy('dispatch_number', 'desc')
+            ->lockForUpdate()
+            ->first();
+
+        $nextNumber = $lastDispatch ? (int)substr($lastDispatch->dispatch_number, strlen($prefix)) + 1 : 1;
+        return $prefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Get all order dispatches
+     */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$this->hasPermission($request, 'can_view_order_dispatches', $user->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to view order dispatches.',
+            ], 403);
+        }
+
+        $query = OrderDispatch::with([
+            'order.customer',
+            'items.product',
+            'items.variant',
+            'fromStore',
+            'deliveryLocation',
+            'logistic.deliveryPerson',
+            'createdBy:id,first_name,last_name,email',
+            'approvedBy:id,first_name,last_name,email',
+            'activeWorkflowInstance.stepInstances.step',
+        ])->where('company_id', $user->company_id);
+
+        // Filters
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->has('approval_status')) {
+            $query->where('approval_status', $request->approval_status);
+        }
+        if ($request->has('order_id')) {
+            $query->where('order_id', $request->order_id);
+        }
+
+        $dispatches = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Order dispatches retrieved successfully.',
+            'data' => $dispatches,
+        ]);
+    }
+
+    /**
+     * Get a specific order dispatch
+     */
+    public function show(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $dispatch = OrderDispatch::with([
+            'order.customer',
+            'order.orderItems.product',
+            'items.product',
+            'items.variant',
+            'items.unit',
+            'items.orderItem',
+            'fromStore',
+            'deliveryLocation',
+            'logistic.deliveryPerson',
+            'createdBy:id,first_name,last_name,email',
+            'approvedBy:id,first_name,last_name,email',
+            'workflowInstances.stepInstances.step',
+            'activeWorkflowInstance.stepInstances.step',
+        ])->find($id);
+
+        if (!$dispatch) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Order dispatch not found.',
+            ], 404);
+        }
+
+        if (!$this->hasPermission($request, 'can_view_order_dispatches', $dispatch->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to view this order dispatch.',
+            ], 403);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Order dispatch retrieved successfully.',
+            'data' => $dispatch,
+        ]);
+    }
+
+    /**
+     * Create an order dispatch from an order
+     */
+    public function store(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$this->hasPermission($request, 'can_create_order_dispatches', $user->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to create order dispatches.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'order_id' => 'required|uuid|exists:orders,id',
+            'from_store_id' => 'nullable|uuid|exists:stores,id',
+            'estimated_delivery_date' => 'nullable|date',
+            'notes' => 'nullable|string',
+            'special_instructions' => 'nullable|string',
+            'items' => 'required|array|min:1',
+            'items.*.order_item_id' => 'required|uuid|exists:order_items,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.packaging_breakdown' => 'nullable|array',
+            'items.*.packaging_notes' => 'nullable|string',
+            'initiate_workflow' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors(),
+            ], 400);
+        }
+
+        try {
+            return DB::transaction(function () use ($request, $user) {
+                // Get the order
+                $order = Order::with(['orderItems.product', 'deliveryLocation'])->findOrFail($request->order_id);
+                
+                // Verify order belongs to user's company
+                if ($order->company_id !== $user->company_id) {
+                    throw new \Exception('Order does not belong to your company.');
+                }
+
+                // Check if order already has a dispatch
+                $existingDispatch = OrderDispatch::where('order_id', $order->id)->first();
+                if ($existingDispatch) {
+                    return response()->json([
+                        'status' => 'failed',
+                        'message' => 'This order already has a dispatch created.',
+                        'data' => ['existing_dispatch' => $existingDispatch],
+                    ], 400);
+                }
+
+                // Generate dispatch number
+                $dispatchNumber = $this->generateDispatchNumber($user->company_id);
+
+                // Create order dispatch
+                $dispatch = OrderDispatch::create([
+                    'id' => (string) Str::uuid(),
+                    'dispatch_number' => $dispatchNumber,
+                    'order_id' => $order->id,
+                    'company_id' => $user->company_id,
+                    'from_store_id' => $request->from_store_id,
+                    'delivery_location_id' => $order->delivery_location_id,
+                    'approval_status' => 'draft',
+                    'status' => 'pending',
+                    'estimated_delivery_date' => $request->estimated_delivery_date,
+                    'notes' => $request->notes,
+                    'special_instructions' => $request->special_instructions,
+                    'created_by' => $user->id,
+                ]);
+
+                // Create dispatch items from order items
+                foreach ($request->items as $itemData) {
+                    $orderItem = $order->orderItems->firstWhere('id', $itemData['order_item_id']);
+                    
+                    if (!$orderItem) {
+                        throw new \Exception("Order item {$itemData['order_item_id']} not found in order.");
+                    }
+
+                    // Validate quantity doesn't exceed order item quantity
+                    if ($itemData['quantity'] > $orderItem->quantity) {
+                        throw new \Exception("Dispatch quantity for {$orderItem->product->name} cannot exceed order quantity.");
+                    }
+
+                    OrderDispatchItem::create([
+                        'id' => (string) Str::uuid(),
+                        'order_dispatch_id' => $dispatch->id,
+                        'order_item_id' => $orderItem->id,
+                        'product_id' => $orderItem->product_id,
+                        'variant_id' => $orderItem->variant_id,
+                        'product_code' => $orderItem->product->product_code ?? null,
+                        'quantity' => $itemData['quantity'],
+                        'unit_id' => $orderItem->unit_id,
+                        'packaging_breakdown' => $itemData['packaging_breakdown'] ?? null,
+                        'packaging_notes' => $itemData['packaging_notes'] ?? null,
+                    ]);
+                }
+
+                // Optionally initiate approval workflow
+                if ($request->input('initiate_workflow', false)) {
+                    try {
+                        $workflowInstance = $dispatch->initiateApprovalWorkflow($user->id);
+                        
+                        $dispatch->update([
+                            'approval_status' => $workflowInstance->status,
+                            'workflow_instance_id' => $workflowInstance->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to initiate workflow for order dispatch', [
+                            'dispatch_id' => $dispatch->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Order dispatch created successfully.',
+                    'data' => $dispatch->load([
+                        'order.customer',
+                        'items.product',
+                        'items.variant',
+                        'activeWorkflowInstance',
+                    ]),
+                ], 201);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to create order dispatch', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Failed to create order dispatch: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update an order dispatch (only if in draft or rejected status)
+     */
+    public function update(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $dispatch = OrderDispatch::findOrFail($id);
+
+        if (!$this->hasPermission($request, 'can_update_order_dispatches', $dispatch->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to update order dispatches.',
+            ], 403);
+        }
+
+        if (!$dispatch->canBeEdited()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Cannot edit dispatch with status: ' . $dispatch->approval_status,
+            ], 400);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'from_store_id' => 'nullable|uuid|exists:stores,id',
+            'estimated_delivery_date' => 'nullable|date',
+            'notes' => 'nullable|string',
+            'special_instructions' => 'nullable|string',
+            'items' => 'nullable|array|min:1',
+            'items.*.id' => 'nullable|uuid|exists:order_dispatch_items,id',
+            'items.*.order_item_id' => 'required_with:items|uuid|exists:order_items,id',
+            'items.*.quantity' => 'required_with:items|integer|min:1',
+            'items.*.packaging_breakdown' => 'nullable|array',
+            'items.*.packaging_notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors(),
+            ], 400);
+        }
+
+        try {
+            return DB::transaction(function () use ($request, $dispatch) {
+                // Update dispatch
+                $dispatch->update([
+                    'from_store_id' => $request->input('from_store_id', $dispatch->from_store_id),
+                    'estimated_delivery_date' => $request->input('estimated_delivery_date', $dispatch->estimated_delivery_date),
+                    'notes' => $request->input('notes', $dispatch->notes),
+                    'special_instructions' => $request->input('special_instructions', $dispatch->special_instructions),
+                ]);
+
+                // Update items if provided
+                if ($request->has('items')) {
+                    $order = $dispatch->order()->with('orderItems.product')->first();
+                    
+                    // Delete existing items and recreate
+                    OrderDispatchItem::where('order_dispatch_id', $dispatch->id)->delete();
+                    
+                    foreach ($request->items as $itemData) {
+                        $orderItem = $order->orderItems->firstWhere('id', $itemData['order_item_id']);
+                        
+                        if (!$orderItem) {
+                            throw new \Exception("Order item {$itemData['order_item_id']} not found in order.");
+                        }
+
+                        if ($itemData['quantity'] > $orderItem->quantity) {
+                            throw new \Exception("Dispatch quantity for {$orderItem->product->name} cannot exceed order quantity.");
+                        }
+
+                        OrderDispatchItem::create([
+                            'id' => (string) Str::uuid(),
+                            'order_dispatch_id' => $dispatch->id,
+                            'order_item_id' => $orderItem->id,
+                            'product_id' => $orderItem->product_id,
+                            'variant_id' => $orderItem->variant_id,
+                            'product_code' => $orderItem->product->product_code ?? null,
+                            'quantity' => $itemData['quantity'],
+                            'unit_id' => $orderItem->unit_id,
+                            'packaging_breakdown' => $itemData['packaging_breakdown'] ?? null,
+                            'packaging_notes' => $itemData['packaging_notes'] ?? null,
+                        ]);
+                    }
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Order dispatch updated successfully.',
+                    'data' => $dispatch->fresh(['items.product', 'items.variant']),
+                ]);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to update order dispatch', [
+                'dispatch_id' => $dispatch->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Failed to update order dispatch: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete an order dispatch (only if in draft status)
+     */
+    public function destroy(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $dispatch = OrderDispatch::findOrFail($id);
+
+        if (!$this->hasPermission($request, 'can_delete_order_dispatches', $dispatch->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to delete order dispatches.',
+            ], 403);
+        }
+
+        if ($dispatch->approval_status !== 'draft') {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Can only delete dispatches in draft status.',
+            ], 400);
+        }
+
+        try {
+            $dispatch->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Order dispatch deleted successfully.',
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to delete order dispatch', [
+                'dispatch_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Failed to delete order dispatch: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Initiate approval workflow for an order dispatch
+     */
+    public function initiateWorkflow(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $dispatch = OrderDispatch::findOrFail($id);
+
+        if (!$this->hasPermission($request, 'can_create_order_dispatches', $dispatch->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to initiate workflow.',
+            ], 403);
+        }
+
+        if ($dispatch->hasActiveWorkflow()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Dispatch already has an active workflow.',
+            ], 400);
+        }
+
+        if (!in_array($dispatch->approval_status, ['draft', 'rejected'])) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Can only initiate workflow for draft or rejected dispatches.',
+            ], 400);
+        }
+
+        try {
+            $workflowInstance = $dispatch->initiateApprovalWorkflow($user->id, [
+                'order_id' => $dispatch->order_id,
+                'total_items' => $dispatch->items()->count(),
+            ]);
+
+            $dispatch->update([
+                'approval_status' => $workflowInstance->status,
+                'workflow_instance_id' => $workflowInstance->id,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Approval workflow initiated successfully.',
+                'data' => $dispatch->fresh(['activeWorkflowInstance.stepInstances.step']),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to initiate workflow', [
+                'dispatch_id' => $dispatch->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Failed to initiate workflow: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Create logistics/delivery for an approved dispatch
+     */
+    public function createLogistics(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $dispatch = OrderDispatch::with(['order.customer', 'order.deliveryLocation', 'items'])->findOrFail($id);
+
+        if (!$this->hasPermission($request, 'can_dispatch_orders', $dispatch->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to create logistics.',
+            ], 403);
+        }
+
+        if (!$dispatch->canBeDispatched()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Dispatch must be approved before creating logistics.',
+            ], 400);
+        }
+
+        if ($dispatch->logistic_id) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Logistics already created for this dispatch.',
+            ], 400);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'delivery_person_id' => 'nullable|uuid|exists:delivery_people,id',
+            'logistics_provider' => 'nullable|string|max:255',
+            'delivery_method' => 'nullable|string|max:255',
+            'vehicle_type' => 'nullable|string|max:255',
+            'vehicle_id' => 'nullable|string|max:255',
+            'estimated_delivery_time' => 'nullable|date',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors(),
+            ], 400);
+        }
+
+        try {
+            return DB::transaction(function () use ($request, $dispatch, $user) {
+                $order = $dispatch->order;
+                $deliveryLocation = $order->deliveryLocation;
+                $customer = $order->customer;
+
+                // Generate tracking number if not set on order
+                $trackingNumber = $order->tracking_number ?? 'TRK-' . strtoupper(Str::random(10));
+                
+                if (!$order->tracking_number) {
+                    $order->update(['tracking_number' => $trackingNumber]);
+                }
+
+                // Create logistic record
+                $logistic = Logistic::create([
+                    'id' => (string) Str::uuid(),
+                    'order_id' => $order->id,
+                    'company_id' => $dispatch->company_id,
+                    'dispatcher_id' => $user->id,
+                    'delivery_person_id' => $request->input('delivery_person_id'),
+                    'logistics_provider' => $request->input('logistics_provider'),
+                    'delivery_method' => $request->input('delivery_method', 'standard'),
+                    'vehicle_type' => $request->input('vehicle_type'),
+                    'vehicle_id' => $request->input('vehicle_id'),
+                    'tracking_number' => $trackingNumber,
+                    'delivery_status' => 'dispatched',
+                    'recipient_name' => $customer->name,
+                    'recipient_phone' => $customer->phone,
+                    'delivery_address' => $deliveryLocation ? $deliveryLocation->address : null,
+                    'city' => $deliveryLocation ? $deliveryLocation->city : null,
+                    'state' => $deliveryLocation ? $deliveryLocation->estate : null,
+                    'country' => $deliveryLocation ? $deliveryLocation->country : null,
+                    'dispatch_time' => now(),
+                    'estimated_delivery_time' => $request->input('estimated_delivery_time', $dispatch->estimated_delivery_date),
+                    'notes' => $request->input('notes'),
+                ]);
+
+                // Update dispatch with logistic reference
+                $dispatch->update([
+                    'logistic_id' => $logistic->id,
+                    'status' => 'in_transit',
+                    'dispatch_date' => now(),
+                ]);
+
+                // Update order status
+                $order->update(['status' => 'dispatched']);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Logistics created successfully.',
+                    'data' => [
+                        'dispatch' => $dispatch->fresh(['logistic.deliveryPerson']),
+                        'logistic' => $logistic,
+                    ],
+                ]);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to create logistics', [
+                'dispatch_id' => $dispatch->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Failed to create logistics: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Mark dispatch as delivered
+     */
+    public function markDelivered(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $dispatch = OrderDispatch::with(['logistic', 'items'])->findOrFail($id);
+
+        if (!$this->hasPermission($request, 'can_dispatch_orders', $dispatch->company_id)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Unauthorized to mark delivery.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'items' => 'required|array|min:1',
+            'items.*.id' => 'required|uuid|exists:order_dispatch_items,id',
+            'items.*.delivered_quantity' => 'required|integer|min:0',
+            'items.*.damaged_quantity' => 'nullable|integer|min:0',
+            'items.*.delivery_notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors(),
+            ], 400);
+        }
+
+        try {
+            return DB::transaction(function () use ($request, $dispatch) {
+                // Update dispatch items
+                foreach ($request->items as $itemData) {
+                    $item = OrderDispatchItem::find($itemData['id']);
+                    
+                    if ($item && $item->order_dispatch_id === $dispatch->id) {
+                        $item->update([
+                            'delivered_quantity' => $itemData['delivered_quantity'],
+                            'damaged_quantity' => $itemData['damaged_quantity'] ?? 0,
+                            'delivery_notes' => $itemData['delivery_notes'] ?? null,
+                        ]);
+                    }
+                }
+
+                // Update dispatch status
+                $dispatch->update([
+                    'status' => 'delivered',
+                    'actual_delivery_date' => now(),
+                ]);
+
+                // Update logistic status if exists
+                if ($dispatch->logistic) {
+                    $dispatch->logistic->update([
+                        'delivery_status' => 'delivered',
+                        'actual_delivery_time' => now(),
+                    ]);
+                }
+
+                // Update order status
+                $dispatch->order->update(['status' => 'delivered']);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Dispatch marked as delivered successfully.',
+                    'data' => $dispatch->fresh(['items', 'logistic']),
+                ]);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to mark dispatch as delivered', [
+                'dispatch_id' => $dispatch->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Failed to mark as delivered: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+}

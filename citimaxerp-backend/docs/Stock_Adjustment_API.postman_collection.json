@@ -1,0 +1,757 @@
+{
+	"info": {
+		"_postman_id": "stock-adjustment-collection-2025",
+		"name": "Stock Adjustment API",
+		"description": "Complete API collection for Stock Adjustment feature with Activity Tracking.\n\nThis collection includes:\n- Create, read, update, delete stock adjustments\n- Approval and rejection workflow\n- Apply adjustments to inventory\n- Activity tracking and monitoring\n- Statistics and reporting\n\nBase URL: {{base_url}}/api\nAuthentication: Bearer Token",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.token) {",
+									"        pm.environment.set(\"auth_token\", jsonData.token);",
+									"        console.log(\"Token saved to environment\");",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{user_email}}\",\n    \"password\": \"{{user_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"login"
+							]
+						},
+						"description": "Login to get authentication token"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Stock Adjustments - CRUD",
+			"item": [
+				{
+					"name": "List All Stock Adjustments",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments?per_page=20&sort_by=created_at&sort_order=desc",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments"
+							],
+							"query": [
+								{
+									"key": "store_id",
+									"value": "",
+									"description": "Filter by store UUID",
+									"disabled": true
+								},
+								{
+									"key": "product_id",
+									"value": "",
+									"description": "Filter by product UUID",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "pending",
+									"description": "draft, pending, approved, rejected, completed",
+									"disabled": true
+								},
+								{
+									"key": "reason_type",
+									"value": "damage",
+									"description": "damage, expiry, theft, loss, found, etc.",
+									"disabled": true
+								},
+								{
+									"key": "adjustment_type",
+									"value": "decrease",
+									"description": "increase, decrease, set",
+									"disabled": true
+								},
+								{
+									"key": "start_date",
+									"value": "2025-11-01",
+									"disabled": true
+								},
+								{
+									"key": "end_date",
+									"value": "2025-11-30",
+									"disabled": true
+								},
+								{
+									"key": "search",
+									"value": "ADJ-",
+									"description": "Search in adjustment number, reason, notes",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "20"
+								},
+								{
+									"key": "sort_by",
+									"value": "created_at"
+								},
+								{
+									"key": "sort_order",
+									"value": "desc"
+								}
+							]
+						},
+						"description": "Get paginated list of stock adjustments with filters"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Single Stock Adjustment",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}"
+							]
+						},
+						"description": "Get detailed information about a specific stock adjustment"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Stock Adjustment - Damage",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.id) {",
+									"        pm.environment.set(\"adjustment_id\", jsonData.data.id);",
+									"        pm.environment.set(\"adjustment_number\", jsonData.data.adjustment_number);",
+									"        console.log(\"Adjustment ID saved: \" + jsonData.data.id);",
+									"        console.log(\"Adjustment Number: \" + jsonData.data.adjustment_number);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"product_id\": \"{{product_id}}\",\n    \"adjustment_type\": \"decrease\",\n    \"reason_type\": \"damage\",\n    \"quantity_adjusted\": 10,\n    \"reason\": \"Product damaged during storage inspection\",\n    \"notes\": \"Found damaged items in warehouse sector A\",\n    \"status\": \"draft\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments"
+							]
+						},
+						"description": "Create a stock adjustment for damaged products"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Stock Adjustment - Found Items",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"product_id\": \"{{product_id}}\",\n    \"adjustment_type\": \"increase\",\n    \"reason_type\": \"found\",\n    \"quantity_adjusted\": 5,\n    \"reason\": \"Found additional items during stock count\",\n    \"notes\": \"Items discovered in secondary storage location\",\n    \"status\": \"pending\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments"
+							]
+						},
+						"description": "Create a stock adjustment for found items"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Stock Adjustment - Set Quantity",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"product_id\": \"{{product_id}}\",\n    \"adjustment_type\": \"set\",\n    \"reason_type\": \"correction\",\n    \"quantity_adjusted\": 100,\n    \"reason\": \"Correcting stock quantity to match physical count\",\n    \"notes\": \"After full inventory reconciliation\",\n    \"unit_cost\": 50.00,\n    \"unit_price\": 75.00,\n    \"status\": \"pending\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments"
+							]
+						},
+						"description": "Create a stock adjustment to set exact quantity"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Stock Adjustment - Expiry",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"product_id\": \"{{product_id}}\",\n    \"batch_id\": \"{{batch_id}}\",\n    \"adjustment_type\": \"decrease\",\n    \"reason_type\": \"expiry\",\n    \"quantity_adjusted\": 15,\n    \"reason\": \"Products expired and removed from inventory\",\n    \"notes\": \"Batch expired on 2025-10-31\",\n    \"status\": \"pending\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments"
+							]
+						},
+						"description": "Create a stock adjustment for expired products"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Stock Adjustment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"quantity_adjusted\": 12,\n    \"reason\": \"Updated reason - Product damaged during storage inspection (revised count)\",\n    \"notes\": \"Recounted and found 12 damaged items instead of 10\",\n    \"status\": \"pending\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}"
+							]
+						},
+						"description": "Update a stock adjustment (only draft or pending status)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Stock Adjustment",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}"
+							]
+						},
+						"description": "Delete a stock adjustment (only draft status)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Stock Adjustments - Workflow",
+			"item": [
+				{
+					"name": "Approve Stock Adjustment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}/approve",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}",
+								"approve"
+							]
+						},
+						"description": "Approve a pending or draft stock adjustment"
+					},
+					"response": []
+				},
+				{
+					"name": "Reject Stock Adjustment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"rejection_reason\": \"Insufficient documentation provided. Please attach supporting evidence before resubmitting.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}/reject",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}",
+								"reject"
+							]
+						},
+						"description": "Reject a pending or draft stock adjustment with reason"
+					},
+					"response": []
+				},
+				{
+					"name": "Apply Stock Adjustment to Inventory",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}/apply",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}",
+								"apply"
+							]
+						},
+						"description": "Apply an approved adjustment to actual inventory and create inventory movement"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Activity Tracking",
+			"item": [
+				{
+					"name": "Get All Stock Adjustment Activities",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/activities?per_page=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"activities"
+							],
+							"query": [
+								{
+									"key": "adjustment_id",
+									"value": "{{adjustment_id}}",
+									"description": "Filter by specific adjustment",
+									"disabled": true
+								},
+								{
+									"key": "product_id",
+									"value": "{{product_id}}",
+									"description": "Filter by product",
+									"disabled": true
+								},
+								{
+									"key": "action",
+									"value": "stock_adjustment_created",
+									"description": "Filter by action type",
+									"disabled": true
+								},
+								{
+									"key": "start_date",
+									"value": "2025-11-01",
+									"disabled": true
+								},
+								{
+									"key": "end_date",
+									"value": "2025-11-30",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Get all activity logs for stock adjustments across the company"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Activities for Specific Adjustment",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/{{adjustment_id}}/activities",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"{{adjustment_id}}",
+								"activities"
+							]
+						},
+						"description": "Get complete activity trail for a specific stock adjustment"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Statistics & Reporting",
+			"item": [
+				{
+					"name": "Get Stock Adjustment Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/stock-adjustments/statistics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"stock-adjustments",
+								"statistics"
+							],
+							"query": [
+								{
+									"key": "store_id",
+									"value": "",
+									"description": "Filter by store",
+									"disabled": true
+								},
+								{
+									"key": "start_date",
+									"value": "2025-11-01",
+									"description": "Default: last 30 days",
+									"disabled": true
+								},
+								{
+									"key": "end_date",
+									"value": "2025-11-30",
+									"description": "Default: today",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get statistics including counts, totals, and breakdowns by reason/type"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Helper Endpoints",
+			"item": [
+				{
+					"name": "Get Products List",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.data && jsonData.data.data.length > 0) {",
+									"        pm.environment.set(\"product_id\", jsonData.data.data[0].id);",
+									"        console.log(\"Product ID saved: \" + jsonData.data.data[0].id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/products?per_page=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"products"
+							],
+							"query": [
+								{
+									"key": "per_page",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get products list to select a product for adjustment"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Product Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/products/{{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"products",
+								"{{product_id}}"
+							]
+						},
+						"description": "Get product details including current stock quantity"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_email",
+			"value": "admin@example.com",
+			"type": "string"
+		},
+		{
+			"key": "user_password",
+			"value": "password",
+			"type": "string"
+		},
+		{
+			"key": "adjustment_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "adjustment_number",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "product_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "batch_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

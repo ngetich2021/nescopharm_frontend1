@@ -1,0 +1,137 @@
+{
+  "info": {
+    "_postman_id": "breakages-collection-2025-08-26",
+    "name": "Cherry API - Breakages API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for Cherry API Breakages endpoints."
+  },
+  "item": [
+    {
+      "name": "List Breakages",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{base_url}}/api/whs/breakages", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages"] }
+      }
+    },
+    {
+      "name": "Create Breakage (RAW)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"notes\": \"Broken item in warehouse\",\n  \"replacement_requested\": true,\n  \"items\": [\n    {\n      \"product_id\": \"{{product_id}}\",\n      \"variant_id\": null,\n      \"quantity\": 2,\n      \"cause\": \"Dropped during transfer\",\n      \"notes\": \"Visible cracks\",\n      \"image\": \"base64-encoded-image-or-url\"\n    }\n  ]\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/whs/breakages", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages"] }
+      }
+    },
+    {
+      "name": "Get Breakage by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{base_url}}/api/whs/breakages/{{breakage_id}}", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages", "{{breakage_id}}"] }
+      }
+    },
+    {
+      "name": "Update Breakage",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"notes\": \"Updated notes\",\n  \"status\": \"approved\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/whs/breakages/{{breakage_id}}", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages", "{{breakage_id}}"] }
+      }
+    },
+    {
+      "name": "Approve Breakage",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"approved\": true,\n  \"approval_status\": \"approved\",\n  \"status\": \"approved\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/whs/breakages/{{breakage_id}}/approve", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages", "{{breakage_id}}", "approve"] }
+      }
+    },
+    {
+      "name": "Delete Breakage",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{base_url}}/api/whs/breakages/{{breakage_id}}", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages", "{{breakage_id}}"] }
+      }
+    },
+    {
+      "name": "My Breakages",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{base_url}}/api/whs/breakages/my", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages", "my"] }
+      }
+    },
+    {
+      "name": "Company Breakages",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{base_url}}/api/whs/breakages/company/{{company_id}}", "host": ["{{base_url}}"], "path": ["api", "whs", "breakages", "company", "{{company_id}}"] }
+      }
+    },
+    {
+      "name": "Upload Breakage Item Image (RAW)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Accept", "value": "application/json", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"image\": \"base64-encoded-image-or-url\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/whs/breakage-items/{{item_id}}/upload-image", "host": ["{{base_url}}"], "path": ["api", "whs", "breakage-items", "{{item_id}}", "upload-image"] }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost" },
+    { "key": "token", "value": "" },
+    { "key": "product_id", "value": "" },
+    { "key": "breakage_id", "value": "" },
+    { "key": "company_id", "value": "" },
+    { "key": "item_id", "value": "" }
+  ]
+}

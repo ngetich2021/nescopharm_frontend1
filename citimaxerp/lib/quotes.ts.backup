@@ -1,0 +1,302 @@
+import apiCall from "@/lib/api"
+
+// Define the Quote type based on the API response
+export interface Quote {
+  id: string
+  customer_id: string
+  company_id: string
+  quote_number: string
+  total_amount: string
+  status: string
+  valid_until: string
+  created_at: string
+  updated_at: string
+  customer: {
+    id: string
+    name: string
+    email: string
+    phone: string
+  } | null
+  // quote_items can be included in the response but not required
+  quote_items?: Array<{
+    id: string
+    product_id: string
+    quantity: number
+    unit_price: string
+    product?: {
+      id: string
+      name: string
+      description?: string
+      price: string
+    }
+  }>
+}
+
+// Define the API response types
+interface QuotesApiResponse {
+  status: string
+  quotes: {
+    data: Quote[]
+  }
+  message?: string
+}
+
+/**
+ * Fetches a list of quotes from the API.
+ * @returns A promise that resolves to an array of Quote objects.
+ * @throws An error if the API call fails or returns an invalid format.
+ */
+export async function fetchQuotes(
+  filters: {
+    search?: string;
+    status?: string;
+    dateRange?: { from: string; to: string };
+  } = {}
+): Promise<Quote[]> {
+  try {
+    // Check if we're in a browser environment before making the API call
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    
+    // Add a small delay to ensure auth is loaded (helps with race conditions)
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Build query parameters
+    const queryParams = new URLSearchParams();
+    
+    if (filters.search) queryParams.append('search', filters.search);
+    if (filters.status && filters.status !== 'all') queryParams.append('status', filters.status);
+    if (filters.dateRange?.from) queryParams.append('from_date', filters.dateRange.from);
+    if (filters.dateRange?.to) queryParams.append('to_date', filters.dateRange.to);
+    
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    
+    const response = await apiCall<QuotesApiResponse>(`/quotes${queryString}`, "GET", undefined, true);
+
+    if (response.status === "success" && response.quotes?.data) {
+      // Transform the data to ensure consistent properties
+      return response.quotes.data.map((quote: Quote) => ({
+        ...quote,
+        // Ensure these fields are never null/undefined to prevent UI errors
+        total_amount: quote.total_amount || "0",
+        status: quote.status || "unknown",
+        customer: quote.customer || { id: "", name: "Unknown", email: "", phone: "" }
+      }));
+    } else {
+      const errorMessage = typeof response.message === 'string' 
+        ? response.message 
+        : 'Failed to fetch quotes';
+      throw new Error(errorMessage);
+    }
+  } catch (error: any) {
+    // Handle specific role-related errors from the API
+    if (error.message && error.message.includes("role")) {
+      return [];
+    }
+    
+    // Handle specific company_id errors
+    if (error.message && error.message.includes("company_id") && error.message.includes("null")) {
+      return [];
+    }
+    
+    // Check if this is a PDO error and the api call already tried to handle it
+    if (error.isPdoError) {
+      return []; // Return empty array rather than failing completely
+    }
+    
+    throw new Error(`Failed to fetch quotes data: ${error.message || "Unknown error"}`);
+  }
+}
+
+/**
+ * Fetches a single quote by ID.
+ * @param quoteId The ID of the quote to fetch
+ * @returns Promise with quote data or null if not found
+ */
+export async function getQuoteById(quoteId: string): Promise<Quote | null> {
+  try {
+    // Check if we're in a browser environment before making the API call
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    
+    // Add a small delay to ensure auth is loaded (helps with race conditions)
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    const response = await apiCall<{ status: string; quote: Quote; message?: string }>(
+      `/quotes/${quoteId}`, 
+      "GET",
+      undefined,
+      true
+    );
+    
+    if (response.status === "success" && response.quote) {
+      // Transform the data to ensure consistent properties
+      return {
+        ...response.quote,
+        // Ensure these fields are never null/undefined to prevent UI errors
+        total_amount: response.quote.total_amount || "0",
+        status: response.quote.status || "unknown",
+        customer: response.quote.customer || { id: "", name: "Unknown", email: "", phone: "" }
+      };
+    } else {
+      const errorMessage = typeof response.message === 'string' 
+        ? response.message 
+        : 'Failed to fetch quote';
+      throw new Error(errorMessage);
+    }
+  } catch (error: any) {
+    // Handle specific role-related errors from the API
+    if (error.message && error.message.includes("role")) {
+      return null;
+    }
+    
+    // Handle specific company_id errors
+    if (error.message && error.message.includes("company_id") && error.message.includes("null")) {
+      return null;
+    }
+    
+    // Check if this is a PDO error and the api call already tried to handle it
+    if (error.isPdoError) {
+      return null;
+    }
+    
+    throw new Error(`Failed to fetch quote data: ${error.message || "Unknown error"}`);
+  }
+}
+
+/**
+ * Creates a new quote in the system.
+ * @param quoteData The data for the new quote
+ * @returns The created quote object
+ */
+export async function createQuote(quoteData: {
+  customer_id: string;
+  quote_items: { product_id: string; quantity: number; unit_price: string }[];
+  notes?: string;
+  valid_until?: string;
+}): Promise<Quote> {
+  try {
+    // Check if we're in a browser environment before making the API call
+    if (typeof window === 'undefined') {
+      throw new Error("createQuote must be called client-side");
+    }
+    
+    // Add a small delay to ensure auth is loaded (helps with race conditions)
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Make API call WITH authentication required
+    const response = await apiCall<{ status: string; quote: Quote; message?: string }>(
+      "/quotes", 
+      "POST",
+      quoteData,
+      true
+    );
+    
+    if (response.status === "success" && response.quote) {
+      // Ensure consistent structure
+      return {
+        ...response.quote,
+        // Ensure these fields are never null/undefined to prevent UI errors
+        total_amount: response.quote.total_amount || "0",
+        status: response.quote.status || "draft",
+        customer: response.quote.customer || { id: "", name: "Unknown", email: "", phone: "" }
+      };
+    } else {
+      const errorMessage = typeof response.message === 'string' 
+        ? response.message 
+        : 'Failed to create quote';
+      throw new Error(errorMessage);
+    }
+  } catch (error: any) {
+    // Handle specific role-related errors from the API
+    if (error.message && error.message.includes("role")) {
+    }
+    
+    // Handle specific company_id errors
+    if (error.message && error.message.includes("company_id") && error.message.includes("null")) {
+    }
+    
+    // Check if this is a PDO error
+    if (error.isPdoError) {
+      throw new Error("Database connection issue occurred. Please try again.");
+    }
+    
+    throw new Error(`Failed to create quote: ${error.message || "Unknown error"}`);
+  }
+}
+
+/**
+ * Updates an existing quote.
+ * @param quoteId The ID of the quote to update
+ * @param quoteData The updated quote data
+ * @returns Promise with the updated quote
+ */
+export async function updateQuote(
+  quoteId: string, 
+  quoteData: {
+    customer_id?: string;
+    quote_items?: { product_id: string; quantity: number; unit_price: string }[];
+    notes?: string;
+    valid_until?: string;
+    status?: string;
+  }
+): Promise<Quote> {
+  try {
+    // Check if we're in a browser environment before making the API call
+    if (typeof window === 'undefined') {
+      throw new Error("updateQuote must be called client-side");
+    }
+    
+    // Add a small delay to ensure auth is loaded (helps with race conditions)
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Make API call WITH authentication required
+    const response = await apiCall<{ status: string; quote: Quote; message?: string }>(
+      `/quotes/${quoteId}`,
+      "PUT",
+      quoteData,
+      true
+    );
+    
+    if (response.status === "success" && response.quote) {
+      // Ensure consistent structure
+      return {
+        ...response.quote,
+        // Ensure these fields are never null/undefined to prevent UI errors
+        total_amount: response.quote.total_amount || "0",
+        status: response.quote.status || "draft",
+        customer: response.quote.customer || { id: "", name: "Unknown", email: "", phone: "" }
+      };
+    } else {
+      const errorMessage = typeof response.message === 'string' 
+        ? response.message 
+        : 'Failed to update quote';
+      throw new Error(errorMessage);
+    }
+  } catch (error: any) {
+    // Handle specific role-related errors from the API
+    if (error.message && error.message.includes("role")) {
+    }
+    
+    // Handle specific company_id errors
+    if (error.message && error.message.includes("company_id") && error.message.includes("null")) {
+    }
+    
+    // Check if this is a PDO error
+    if (error.isPdoError) {
+      throw new Error("Database connection issue occurred. Please try again.");
+    }
+    
+    throw new Error(`Failed to update quote: ${error.message || "Unknown error"}`);
+  }
+}

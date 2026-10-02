@@ -1,0 +1,5 @@
+Response: 
+Response: <?xml version="1.0" encoding="utf-8"?><API3G><Result>950</Result><ResultExplanation>Request missing mandatory fields – PaymentAmount In Transaction</ResultExplanation></API3G>
+Response: <?xml version="1.0" encoding="utf-8"?><API3G><Result>950</Result><ResultExplanation>Request missing mandatory fields – PaymentAmount In Transaction</ResultExplanation></API3G>
+Response: <?xml version="1.0" encoding="utf-8"?><API3G><Result>950</Result><ResultExplanation>Request missing mandatory fields – PaymentAmount In Transaction</ResultExplanation></API3G>
+Response: <?xml version="1.0" encoding="utf-8"?><API3G><Result>000</Result><ResultExplanation>Transaction created</ResultExplanation><TransToken>5DA25B7E-16C2-4AB5-8011-BFD2EB11D732</TransToken><TransRef>R62706998</TransRef></API3G>

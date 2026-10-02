@@ -1,0 +1,822 @@
+psql:inserts_only.sql:1: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(df04483a-2e88-4cb9-aca8-34981ce76719) is not present in table "customer_accounts".
+psql:inserts_only.sql:2: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(69d7e7fc-5acb-445e-9198-de798403bc67) is not present in table "customer_accounts".
+psql:inserts_only.sql:3: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(9e611bf3-5469-4ee6-8ec9-9706df35e08f) is not present in table "customer_accounts".
+psql:inserts_only.sql:4: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(e3da2dfb-4ce4-4791-b843-e78ad54db853) is not present in table "customer_accounts".
+psql:inserts_only.sql:5: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(105b5b8c-51e1-4f54-a40b-10778a5228d2) is not present in table "customer_accounts".
+psql:inserts_only.sql:6: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(6dcd6880-91d2-4da6-87e1-97f82f3d6ead) is not present in table "customer_accounts".
+psql:inserts_only.sql:7: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(cdf69594-12c6-40af-936c-dc7aef32b17b) is not present in table "customer_accounts".
+psql:inserts_only.sql:8: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(b8d93d6f-72da-4d20-955a-b50f28375097) is not present in table "customer_accounts".
+psql:inserts_only.sql:9: ERROR:  insert or update on table "account_bank_details" violates foreign key constraint "account_bank_details_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(082f231f-d40e-4752-8d97-d71f3bae2d83) is not present in table "customer_accounts".
+psql:inserts_only.sql:10: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(df04483a-2e88-4cb9-aca8-34981ce76719) is not present in table "customer_accounts".
+psql:inserts_only.sql:11: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(69d7e7fc-5acb-445e-9198-de798403bc67) is not present in table "customer_accounts".
+psql:inserts_only.sql:12: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(9e611bf3-5469-4ee6-8ec9-9706df35e08f) is not present in table "customer_accounts".
+psql:inserts_only.sql:13: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(cf305716-e317-4929-8888-2bf9f008ae8f) is not present in table "customer_accounts".
+psql:inserts_only.sql:14: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(e3da2dfb-4ce4-4791-b843-e78ad54db853) is not present in table "customer_accounts".
+psql:inserts_only.sql:15: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(105b5b8c-51e1-4f54-a40b-10778a5228d2) is not present in table "customer_accounts".
+psql:inserts_only.sql:16: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(6dcd6880-91d2-4da6-87e1-97f82f3d6ead) is not present in table "customer_accounts".
+psql:inserts_only.sql:17: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(cdf69594-12c6-40af-936c-dc7aef32b17b) is not present in table "customer_accounts".
+psql:inserts_only.sql:18: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(b8d93d6f-72da-4d20-955a-b50f28375097) is not present in table "customer_accounts".
+psql:inserts_only.sql:19: ERROR:  insert or update on table "account_directors" violates foreign key constraint "account_directors_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(082f231f-d40e-4752-8d97-d71f3bae2d83) is not present in table "customer_accounts".
+psql:inserts_only.sql:20: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(df04483a-2e88-4cb9-aca8-34981ce76719) is not present in table "customer_accounts".
+psql:inserts_only.sql:21: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(9e611bf3-5469-4ee6-8ec9-9706df35e08f) is not present in table "customer_accounts".
+psql:inserts_only.sql:22: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(e3da2dfb-4ce4-4791-b843-e78ad54db853) is not present in table "customer_accounts".
+psql:inserts_only.sql:23: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(105b5b8c-51e1-4f54-a40b-10778a5228d2) is not present in table "customer_accounts".
+psql:inserts_only.sql:24: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(6dcd6880-91d2-4da6-87e1-97f82f3d6ead) is not present in table "customer_accounts".
+psql:inserts_only.sql:25: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(cdf69594-12c6-40af-936c-dc7aef32b17b) is not present in table "customer_accounts".
+psql:inserts_only.sql:26: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(b8d93d6f-72da-4d20-955a-b50f28375097) is not present in table "customer_accounts".
+psql:inserts_only.sql:27: ERROR:  insert or update on table "account_suppliers" violates foreign key constraint "account_suppliers_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(082f231f-d40e-4752-8d97-d71f3bae2d83) is not present in table "customer_accounts".
+psql:inserts_only.sql:28: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(df04483a-2e88-4cb9-aca8-34981ce76719) is not present in table "customer_accounts".
+psql:inserts_only.sql:29: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(9e611bf3-5469-4ee6-8ec9-9706df35e08f) is not present in table "customer_accounts".
+psql:inserts_only.sql:30: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(cf305716-e317-4929-8888-2bf9f008ae8f) is not present in table "customer_accounts".
+psql:inserts_only.sql:31: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(e3da2dfb-4ce4-4791-b843-e78ad54db853) is not present in table "customer_accounts".
+psql:inserts_only.sql:32: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(105b5b8c-51e1-4f54-a40b-10778a5228d2) is not present in table "customer_accounts".
+psql:inserts_only.sql:33: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(6dcd6880-91d2-4da6-87e1-97f82f3d6ead) is not present in table "customer_accounts".
+psql:inserts_only.sql:34: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(cdf69594-12c6-40af-936c-dc7aef32b17b) is not present in table "customer_accounts".
+psql:inserts_only.sql:35: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(b8d93d6f-72da-4d20-955a-b50f28375097) is not present in table "customer_accounts".
+psql:inserts_only.sql:36: ERROR:  insert or update on table "authorised_purchase_persons" violates foreign key constraint "authorised_purchase_persons_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(082f231f-d40e-4752-8d97-d71f3bae2d83) is not present in table "customer_accounts".
+psql:inserts_only.sql:37: ERROR:  duplicate key value violates unique constraint "companies_pkey"
+DETAIL:  Key (id)=(f71a7d56-5483-4b28-8476-3fe028a4f5c1) already exists.
+psql:inserts_only.sql:38: ERROR:  insert or update on table "customer_account_approvals" violates foreign key constraint "customer_account_approvals_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(6dcd6880-91d2-4da6-87e1-97f82f3d6ead) is not present in table "customer_accounts".
+psql:inserts_only.sql:39: ERROR:  insert or update on table "customer_account_approvals" violates foreign key constraint "customer_account_approvals_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(105b5b8c-51e1-4f54-a40b-10778a5228d2) is not present in table "customer_accounts".
+psql:inserts_only.sql:40: ERROR:  insert or update on table "customer_account_approvals" violates foreign key constraint "customer_account_approvals_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(e3da2dfb-4ce4-4791-b843-e78ad54db853) is not present in table "customer_accounts".
+psql:inserts_only.sql:41: ERROR:  insert or update on table "customer_account_approvals" violates foreign key constraint "customer_account_approvals_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(314ef65d-c518-4260-a2cc-115564d9e186) is not present in table "customer_accounts".
+psql:inserts_only.sql:42: ERROR:  insert or update on table "customer_account_approvals" violates foreign key constraint "customer_account_approvals_customer_account_id_foreign"
+DETAIL:  Key (customer_account_id)=(df04483a-2e88-4cb9-aca8-34981ce76719) is not present in table "customer_accounts".
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:57: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(11cafa19-6fda-4c82-8a6c-7758bc6b7b7b) already exists.
+psql:inserts_only.sql:58: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(d7b2e69a-4bee-4594-9413-1963ad48a7e9) already exists.
+psql:inserts_only.sql:59: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(694f278b-f0d6-48bd-8888-2ad87849729a) already exists.
+psql:inserts_only.sql:60: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(61ae988f-457e-41e6-b98c-2355783bb74f) already exists.
+psql:inserts_only.sql:61: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(7c27393a-1793-4cdc-9a8e-7615fe7ece40) already exists.
+psql:inserts_only.sql:62: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(11d0666d-f102-43f7-81b4-731db44fb26c) already exists.
+psql:inserts_only.sql:63: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(2ced5cd3-9178-4876-95b2-56518bf03d58) already exists.
+psql:inserts_only.sql:64: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(131602ef-bf60-49ac-81ca-3c19dfe7149e) already exists.
+psql:inserts_only.sql:65: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(ef505114-b72f-4222-87a9-eb8ec0a4cf25) already exists.
+psql:inserts_only.sql:66: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(dcbd972e-2063-4bb1-aedc-a65c3ba2c418) already exists.
+psql:inserts_only.sql:67: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(4caa5cc2-fa88-4b16-876a-8186e9879821) already exists.
+psql:inserts_only.sql:68: ERROR:  duplicate key value violates unique constraint "customers_pkey"
+DETAIL:  Key (id)=(f7ee76f1-12e6-4c3e-a316-cc07a236cbe7) already exists.
+INSERT 0 1
+psql:inserts_only.sql:70: ERROR:  insert or update on table "dispatch_items" violates foreign key constraint "dispatch_items_dispatch_id_foreign"
+DETAIL:  Key (dispatch_id)=(fe890908-d06f-4208-adb4-1a9c32fd7c51) is not present in table "dispatches".
+psql:inserts_only.sql:71: ERROR:  insert or update on table "dispatch_items" violates foreign key constraint "dispatch_items_dispatch_id_foreign"
+DETAIL:  Key (dispatch_id)=(a32acea9-486b-41bf-bae1-f35011d3af86) is not present in table "dispatches".
+psql:inserts_only.sql:72: ERROR:  insert or update on table "dispatch_items" violates foreign key constraint "dispatch_items_dispatch_id_foreign"
+DETAIL:  Key (dispatch_id)=(7f8f106c-82f7-4934-9132-b1439c741f6d) is not present in table "dispatches".
+psql:inserts_only.sql:73: ERROR:  insert or update on table "dispatch_items" violates foreign key constraint "dispatch_items_dispatch_id_foreign"
+DETAIL:  Key (dispatch_id)=(1f10bd8a-1318-42e6-a8a6-720420464e16) is not present in table "dispatches".
+psql:inserts_only.sql:74: ERROR:  insert or update on table "dispatch_items" violates foreign key constraint "dispatch_items_dispatch_id_foreign"
+DETAIL:  Key (dispatch_id)=(1f10bd8a-1318-42e6-a8a6-720420464e16) is not present in table "dispatches".
+psql:inserts_only.sql:75: ERROR:  insert or update on table "dispatch_items" violates foreign key constraint "dispatch_items_dispatch_id_foreign"
+DETAIL:  Key (dispatch_id)=(4373b403-e258-4019-8121-a37b3af61ed8) is not present in table "dispatches".
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:81: ERROR:  insert or update on table "employee_statutory_details" violates foreign key constraint "employee_statutory_details_employee_id_foreign"
+DETAIL:  Key (employee_id)=(9dee0c8d-1c4a-47cf-a9e5-57fde4901659) is not present in table "employees".
+psql:inserts_only.sql:82: ERROR:  insert or update on table "employee_statutory_details" violates foreign key constraint "employee_statutory_details_employee_id_foreign"
+DETAIL:  Key (employee_id)=(7d37e064-98eb-4028-8fa7-919056993bf7) is not present in table "employees".
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:85: ERROR:  duplicate key value violates unique constraint "expense_categories_name_company_key"
+DETAIL:  Key (name, company_id)=(Payroll, f71a7d56-5483-4b28-8476-3fe028a4f5c1) already exists.
+psql:inserts_only.sql:86: ERROR:  duplicate key value violates unique constraint "expense_categories_name_company_key"
+DETAIL:  Key (name, company_id)=(stationary, f71a7d56-5483-4b28-8476-3fe028a4f5c1) already exists.
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:89: ERROR:  insert or update on table "invoice_line_items" violates foreign key constraint "invoice_line_items_invoice_id_foreign"
+DETAIL:  Key (invoice_id)=(69a73333-17b0-4d11-bf77-e64e2ebf4e0b) is not present in table "invoices".
+psql:inserts_only.sql:90: ERROR:  insert or update on table "invoice_line_items" violates foreign key constraint "invoice_line_items_invoice_id_foreign"
+DETAIL:  Key (invoice_id)=(69b6d5ba-e376-4e0b-8aaa-76b6cf1042de) is not present in table "invoices".
+psql:inserts_only.sql:91: ERROR:  insert or update on table "invoice_line_items" violates foreign key constraint "invoice_line_items_invoice_id_foreign"
+DETAIL:  Key (invoice_id)=(6f07263f-b509-42ee-947b-d5a11f01d04d) is not present in table "invoices".
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:95: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(4) already exists.
+psql:inserts_only.sql:96: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(5) already exists.
+psql:inserts_only.sql:97: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(6) already exists.
+psql:inserts_only.sql:98: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(7) already exists.
+psql:inserts_only.sql:99: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(8) already exists.
+psql:inserts_only.sql:100: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(9) already exists.
+psql:inserts_only.sql:101: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(10) already exists.
+psql:inserts_only.sql:102: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(11) already exists.
+psql:inserts_only.sql:103: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(12) already exists.
+psql:inserts_only.sql:104: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(13) already exists.
+psql:inserts_only.sql:105: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(14) already exists.
+psql:inserts_only.sql:106: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(15) already exists.
+psql:inserts_only.sql:107: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(16) already exists.
+psql:inserts_only.sql:108: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(17) already exists.
+psql:inserts_only.sql:109: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(18) already exists.
+psql:inserts_only.sql:110: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(19) already exists.
+psql:inserts_only.sql:111: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(20) already exists.
+psql:inserts_only.sql:112: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(21) already exists.
+psql:inserts_only.sql:113: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(22) already exists.
+psql:inserts_only.sql:114: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(23) already exists.
+psql:inserts_only.sql:115: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(24) already exists.
+psql:inserts_only.sql:116: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(25) already exists.
+psql:inserts_only.sql:117: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(26) already exists.
+psql:inserts_only.sql:118: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(27) already exists.
+psql:inserts_only.sql:119: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(28) already exists.
+psql:inserts_only.sql:120: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(29) already exists.
+psql:inserts_only.sql:121: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(30) already exists.
+psql:inserts_only.sql:122: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(31) already exists.
+psql:inserts_only.sql:123: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(32) already exists.
+psql:inserts_only.sql:124: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(33) already exists.
+psql:inserts_only.sql:125: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(34) already exists.
+psql:inserts_only.sql:126: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(35) already exists.
+psql:inserts_only.sql:127: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(36) already exists.
+psql:inserts_only.sql:128: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(37) already exists.
+psql:inserts_only.sql:129: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(38) already exists.
+psql:inserts_only.sql:130: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(39) already exists.
+psql:inserts_only.sql:131: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(40) already exists.
+psql:inserts_only.sql:132: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(41) already exists.
+psql:inserts_only.sql:133: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(42) already exists.
+psql:inserts_only.sql:134: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(43) already exists.
+psql:inserts_only.sql:135: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(44) already exists.
+psql:inserts_only.sql:136: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(45) already exists.
+psql:inserts_only.sql:137: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(46) already exists.
+psql:inserts_only.sql:138: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(47) already exists.
+psql:inserts_only.sql:139: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(48) already exists.
+psql:inserts_only.sql:140: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(49) already exists.
+psql:inserts_only.sql:141: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(50) already exists.
+psql:inserts_only.sql:142: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(51) already exists.
+psql:inserts_only.sql:143: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(52) already exists.
+psql:inserts_only.sql:144: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(53) already exists.
+psql:inserts_only.sql:145: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(54) already exists.
+psql:inserts_only.sql:146: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(55) already exists.
+psql:inserts_only.sql:147: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(56) already exists.
+psql:inserts_only.sql:148: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(57) already exists.
+psql:inserts_only.sql:149: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(58) already exists.
+psql:inserts_only.sql:150: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(59) already exists.
+psql:inserts_only.sql:151: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(60) already exists.
+psql:inserts_only.sql:152: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(61) already exists.
+psql:inserts_only.sql:153: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(62) already exists.
+psql:inserts_only.sql:154: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(63) already exists.
+psql:inserts_only.sql:155: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(64) already exists.
+psql:inserts_only.sql:156: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(65) already exists.
+psql:inserts_only.sql:157: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(66) already exists.
+psql:inserts_only.sql:158: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(67) already exists.
+psql:inserts_only.sql:159: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(68) already exists.
+psql:inserts_only.sql:160: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(69) already exists.
+psql:inserts_only.sql:161: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(70) already exists.
+psql:inserts_only.sql:162: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(71) already exists.
+psql:inserts_only.sql:163: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(72) already exists.
+psql:inserts_only.sql:164: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(73) already exists.
+psql:inserts_only.sql:165: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(74) already exists.
+psql:inserts_only.sql:166: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(75) already exists.
+psql:inserts_only.sql:167: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(76) already exists.
+psql:inserts_only.sql:168: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(77) already exists.
+psql:inserts_only.sql:169: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(78) already exists.
+psql:inserts_only.sql:170: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(79) already exists.
+psql:inserts_only.sql:171: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(80) already exists.
+psql:inserts_only.sql:172: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(81) already exists.
+psql:inserts_only.sql:173: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(82) already exists.
+psql:inserts_only.sql:174: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(83) already exists.
+psql:inserts_only.sql:175: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(84) already exists.
+psql:inserts_only.sql:176: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(85) already exists.
+psql:inserts_only.sql:177: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(86) already exists.
+psql:inserts_only.sql:178: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(87) already exists.
+psql:inserts_only.sql:179: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(88) already exists.
+psql:inserts_only.sql:180: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(89) already exists.
+psql:inserts_only.sql:181: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(90) already exists.
+psql:inserts_only.sql:182: ERROR:  duplicate key value violates unique constraint "migrations_pkey"
+DETAIL:  Key (id)=(91) already exists.
+psql:inserts_only.sql:183: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:184: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:185: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:186: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:187: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:188: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:189: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:190: ERROR:  insert or update on table "order_items" violates foreign key constraint "order_items_product_id_fkey"
+DETAIL:  Key (product_id)=(682a613b-da30-4ea0-b557-943190f6d4c0) is not present in table "products".
+psql:inserts_only.sql:191: ERROR:  insert or update on table "order_items" violates foreign key constraint "fk_order_items_variant_id"
+DETAIL:  Key (variant_id)=(e5ab008e-cee9-4c9f-8db5-3685b229edb3) is not present in table "product_variants".
+psql:inserts_only.sql:192: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(3bad4c2b-3995-4d4d-a87f-5bb55e440451) already exists.
+psql:inserts_only.sql:193: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(3a687f12-bff3-4fdb-9256-d3ac9d221d11) already exists.
+psql:inserts_only.sql:194: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(3da547be-c3d1-4b7c-a48f-ffaa7fff5649) already exists.
+psql:inserts_only.sql:195: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(3277e6bf-3c33-491e-922f-665f17393999) already exists.
+psql:inserts_only.sql:196: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(1add4b91-537e-4002-9601-0175f1095032) already exists.
+psql:inserts_only.sql:197: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(e1d47a18-0a3a-44ba-afb0-bb799e7814df) already exists.
+psql:inserts_only.sql:198: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(fc139e58-b7d7-453a-b442-b2e78a97241a) already exists.
+psql:inserts_only.sql:199: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(24d59e4b-3f62-4f83-a8a7-66b1ed7cf63e) already exists.
+psql:inserts_only.sql:200: ERROR:  duplicate key value violates unique constraint "orders_pkey"
+DETAIL:  Key (id)=(039efad8-da39-4214-8c29-a24a55262e83) already exists.
+psql:inserts_only.sql:201: ERROR:  duplicate key value violates unique constraint "payments_pkey"
+DETAIL:  Key (id)=(d6215f6b-853b-44dc-b86f-cc6efee9bc0f) already exists.
+psql:inserts_only.sql:202: ERROR:  duplicate key value violates unique constraint "payments_pkey"
+DETAIL:  Key (id)=(242ceda6-6ab2-4a85-8ed1-50c038d96d83) already exists.
+psql:inserts_only.sql:203: ERROR:  duplicate key value violates unique constraint "payments_pkey"
+DETAIL:  Key (id)=(4aa4f81b-0056-4801-8f98-2668b0fad69f) already exists.
+psql:inserts_only.sql:204: ERROR:  duplicate key value violates unique constraint "payments_pkey"
+DETAIL:  Key (id)=(91f85956-d2c8-4715-80ff-23663dcdc61c) already exists.
+INSERT 0 1
+psql:inserts_only.sql:206: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(9) already exists.
+psql:inserts_only.sql:207: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(2) already exists.
+psql:inserts_only.sql:208: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(3) already exists.
+psql:inserts_only.sql:209: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(28) already exists.
+psql:inserts_only.sql:210: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(26) already exists.
+psql:inserts_only.sql:211: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(23) already exists.
+psql:inserts_only.sql:212: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(5) already exists.
+psql:inserts_only.sql:213: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(11) already exists.
+psql:inserts_only.sql:214: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(24) already exists.
+psql:inserts_only.sql:215: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(18) already exists.
+psql:inserts_only.sql:216: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(4) already exists.
+psql:inserts_only.sql:217: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(16) already exists.
+psql:inserts_only.sql:218: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(14) already exists.
+psql:inserts_only.sql:219: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(8) already exists.
+psql:inserts_only.sql:220: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(13) already exists.
+psql:inserts_only.sql:221: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(1) already exists.
+psql:inserts_only.sql:222: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(19) already exists.
+psql:inserts_only.sql:223: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(7) already exists.
+psql:inserts_only.sql:224: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(6) already exists.
+psql:inserts_only.sql:225: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(10) already exists.
+psql:inserts_only.sql:226: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(31) already exists.
+psql:inserts_only.sql:227: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(29) already exists.
+psql:inserts_only.sql:228: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(15) already exists.
+psql:inserts_only.sql:229: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(21) already exists.
+psql:inserts_only.sql:230: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(12) already exists.
+psql:inserts_only.sql:231: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(20) already exists.
+psql:inserts_only.sql:232: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(17) already exists.
+psql:inserts_only.sql:233: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(35) already exists.
+psql:inserts_only.sql:234: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(25) already exists.
+psql:inserts_only.sql:235: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(22) already exists.
+psql:inserts_only.sql:236: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(30) already exists.
+psql:inserts_only.sql:237: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(27) already exists.
+psql:inserts_only.sql:238: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(36) already exists.
+psql:inserts_only.sql:239: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(33) already exists.
+psql:inserts_only.sql:240: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(34) already exists.
+psql:inserts_only.sql:241: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(32) already exists.
+psql:inserts_only.sql:242: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(37) already exists.
+psql:inserts_only.sql:243: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(38) already exists.
+psql:inserts_only.sql:244: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(39) already exists.
+psql:inserts_only.sql:245: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(41) already exists.
+psql:inserts_only.sql:246: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(49) already exists.
+psql:inserts_only.sql:247: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(62) already exists.
+psql:inserts_only.sql:248: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(42) already exists.
+psql:inserts_only.sql:249: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(69) already exists.
+psql:inserts_only.sql:250: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(63) already exists.
+psql:inserts_only.sql:251: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(46) already exists.
+psql:inserts_only.sql:252: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(54) already exists.
+psql:inserts_only.sql:253: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(52) already exists.
+psql:inserts_only.sql:254: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(53) already exists.
+psql:inserts_only.sql:255: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(70) already exists.
+psql:inserts_only.sql:256: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(57) already exists.
+psql:inserts_only.sql:257: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(40) already exists.
+psql:inserts_only.sql:258: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(48) already exists.
+psql:inserts_only.sql:259: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(58) already exists.
+psql:inserts_only.sql:260: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(43) already exists.
+psql:inserts_only.sql:261: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(61) already exists.
+psql:inserts_only.sql:262: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(64) already exists.
+psql:inserts_only.sql:263: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(59) already exists.
+psql:inserts_only.sql:264: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(44) already exists.
+psql:inserts_only.sql:265: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(47) already exists.
+psql:inserts_only.sql:266: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(45) already exists.
+psql:inserts_only.sql:267: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(55) already exists.
+psql:inserts_only.sql:268: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(50) already exists.
+psql:inserts_only.sql:269: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(65) already exists.
+psql:inserts_only.sql:270: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(51) already exists.
+psql:inserts_only.sql:271: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(56) already exists.
+psql:inserts_only.sql:272: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(73) already exists.
+psql:inserts_only.sql:273: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(72) already exists.
+psql:inserts_only.sql:274: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(66) already exists.
+psql:inserts_only.sql:275: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(60) already exists.
+psql:inserts_only.sql:276: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(75) already exists.
+psql:inserts_only.sql:277: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(67) already exists.
+psql:inserts_only.sql:278: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(68) already exists.
+psql:inserts_only.sql:279: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(74) already exists.
+psql:inserts_only.sql:280: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(71) already exists.
+psql:inserts_only.sql:281: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(76) already exists.
+psql:inserts_only.sql:282: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(77) already exists.
+psql:inserts_only.sql:283: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(81) already exists.
+psql:inserts_only.sql:284: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(78) already exists.
+psql:inserts_only.sql:285: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(79) already exists.
+psql:inserts_only.sql:286: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(80) already exists.
+psql:inserts_only.sql:287: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(116) already exists.
+psql:inserts_only.sql:288: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(94) already exists.
+psql:inserts_only.sql:289: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(99) already exists.
+psql:inserts_only.sql:290: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(83) already exists.
+psql:inserts_only.sql:291: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(95) already exists.
+psql:inserts_only.sql:292: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(112) already exists.
+psql:inserts_only.sql:293: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(106) already exists.
+psql:inserts_only.sql:294: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(84) already exists.
+psql:inserts_only.sql:295: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(103) already exists.
+psql:inserts_only.sql:296: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(87) already exists.
+psql:inserts_only.sql:297: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(88) already exists.
+psql:inserts_only.sql:298: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(89) already exists.
+psql:inserts_only.sql:299: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(82) already exists.
+psql:inserts_only.sql:300: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(91) already exists.
+psql:inserts_only.sql:301: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(85) already exists.
+psql:inserts_only.sql:302: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(86) already exists.
+psql:inserts_only.sql:303: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(104) already exists.
+psql:inserts_only.sql:304: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(118) already exists.
+psql:inserts_only.sql:305: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(92) already exists.
+psql:inserts_only.sql:306: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(93) already exists.
+psql:inserts_only.sql:307: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(97) already exists.
+psql:inserts_only.sql:308: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(102) already exists.
+psql:inserts_only.sql:309: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(90) already exists.
+psql:inserts_only.sql:310: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(122) already exists.
+psql:inserts_only.sql:311: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(98) already exists.
+psql:inserts_only.sql:312: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(100) already exists.
+psql:inserts_only.sql:313: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(96) already exists.
+psql:inserts_only.sql:314: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(111) already exists.
+psql:inserts_only.sql:315: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(105) already exists.
+psql:inserts_only.sql:316: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(107) already exists.
+psql:inserts_only.sql:317: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(108) already exists.
+psql:inserts_only.sql:318: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(109) already exists.
+psql:inserts_only.sql:319: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(115) already exists.
+psql:inserts_only.sql:320: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(110) already exists.
+psql:inserts_only.sql:321: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(120) already exists.
+psql:inserts_only.sql:322: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(101) already exists.
+psql:inserts_only.sql:323: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(113) already exists.
+psql:inserts_only.sql:324: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(119) already exists.
+psql:inserts_only.sql:325: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(114) already exists.
+psql:inserts_only.sql:326: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(121) already exists.
+psql:inserts_only.sql:327: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(117) already exists.
+psql:inserts_only.sql:328: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(123) already exists.
+psql:inserts_only.sql:329: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(129) already exists.
+psql:inserts_only.sql:330: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(131) already exists.
+psql:inserts_only.sql:331: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(132) already exists.
+psql:inserts_only.sql:332: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(125) already exists.
+psql:inserts_only.sql:333: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(143) already exists.
+psql:inserts_only.sql:334: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(126) already exists.
+psql:inserts_only.sql:335: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(127) already exists.
+psql:inserts_only.sql:336: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(128) already exists.
+psql:inserts_only.sql:337: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(155) already exists.
+psql:inserts_only.sql:338: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(137) already exists.
+psql:inserts_only.sql:339: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(124) already exists.
+psql:inserts_only.sql:340: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(133) already exists.
+psql:inserts_only.sql:341: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(139) already exists.
+psql:inserts_only.sql:342: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(134) already exists.
+psql:inserts_only.sql:343: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(140) already exists.
+psql:inserts_only.sql:344: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(151) already exists.
+psql:inserts_only.sql:345: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(130) already exists.
+psql:inserts_only.sql:346: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(138) already exists.
+psql:inserts_only.sql:347: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(135) already exists.
+psql:inserts_only.sql:348: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(156) already exists.
+psql:inserts_only.sql:349: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(149) already exists.
+psql:inserts_only.sql:350: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(144) already exists.
+psql:inserts_only.sql:351: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(145) already exists.
+psql:inserts_only.sql:352: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(148) already exists.
+psql:inserts_only.sql:353: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(136) already exists.
+psql:inserts_only.sql:354: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(141) already exists.
+psql:inserts_only.sql:355: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(142) already exists.
+psql:inserts_only.sql:356: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(152) already exists.
+psql:inserts_only.sql:357: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(153) already exists.
+psql:inserts_only.sql:358: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(147) already exists.
+psql:inserts_only.sql:359: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(150) already exists.
+psql:inserts_only.sql:360: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(154) already exists.
+psql:inserts_only.sql:361: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(157) already exists.
+psql:inserts_only.sql:362: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(160) already exists.
+psql:inserts_only.sql:363: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(158) already exists.
+psql:inserts_only.sql:364: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(159) already exists.
+psql:inserts_only.sql:365: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(146) already exists.
+psql:inserts_only.sql:366: ERROR:  duplicate key value violates unique constraint "personal_access_tokens_pkey"
+DETAIL:  Key (id)=(161) already exists.
+psql:inserts_only.sql:367: ERROR:  duplicate key value violates unique constraint "product_categories_company_id_name_unique"
+DETAIL:  Key (company_id, name)=(f71a7d56-5483-4b28-8476-3fe028a4f5c1, syringes) already exists.
+psql:inserts_only.sql:368: ERROR:  duplicate key value violates unique constraint "product_categories_company_id_name_unique"
+DETAIL:  Key (company_id, name)=(f71a7d56-5483-4b28-8476-3fe028a4f5c1, POP) already exists.
+psql:inserts_only.sql:369: ERROR:  duplicate key value violates unique constraint "product_categories_company_id_name_unique"
+DETAIL:  Key (company_id, name)=(f71a7d56-5483-4b28-8476-3fe028a4f5c1, Masks) already exists.
+psql:inserts_only.sql:370: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(6dfbf6f6-98de-4ed4-bdba-7a54757a25da) is not present in table "products".
+psql:inserts_only.sql:371: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(4bfa274c-0c1e-4c39-aa38-d1674b50b352) is not present in table "products".
+psql:inserts_only.sql:372: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(4bfa274c-0c1e-4c39-aa38-d1674b50b352) is not present in table "products".
+psql:inserts_only.sql:373: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(4bfa274c-0c1e-4c39-aa38-d1674b50b352) is not present in table "products".
+psql:inserts_only.sql:374: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(4bfa274c-0c1e-4c39-aa38-d1674b50b352) is not present in table "products".
+psql:inserts_only.sql:375: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(2c609d8a-76c9-4958-abf1-ec4801d3a4eb) is not present in table "products".
+psql:inserts_only.sql:376: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(2c609d8a-76c9-4958-abf1-ec4801d3a4eb) is not present in table "products".
+psql:inserts_only.sql:377: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(2c609d8a-76c9-4958-abf1-ec4801d3a4eb) is not present in table "products".
+psql:inserts_only.sql:378: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(c798ef71-7560-4163-b577-c771bd828393) is not present in table "products".
+psql:inserts_only.sql:379: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(c798ef71-7560-4163-b577-c771bd828393) is not present in table "products".
+psql:inserts_only.sql:380: ERROR:  insert or update on table "product_packaging_units" violates foreign key constraint "product_packaging_units_product_id_foreign"
+DETAIL:  Key (product_id)=(c798ef71-7560-4163-b577-c771bd828393) is not present in table "products".
+psql:inserts_only.sql:381: ERROR:  insert or update on table "product_receipt_items" violates foreign key constraint "product_receipt_items_product_receipt_id_foreign"
+DETAIL:  Key (product_receipt_id)=(6da7d29a-8adc-4c42-ba29-ee1e32be5e0f) is not present in table "product_receipts".
+INSERT 0 1
+psql:inserts_only.sql:383: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(6dfbf6f6-98de-4ed4-bdba-7a54757a25da) is not present in table "products".
+psql:inserts_only.sql:384: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(98b29b42-e89d-47ac-9899-a8cc092f3122) is not present in table "products".
+psql:inserts_only.sql:385: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(98b29b42-e89d-47ac-9899-a8cc092f3122) is not present in table "products".
+psql:inserts_only.sql:386: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(98b29b42-e89d-47ac-9899-a8cc092f3122) is not present in table "products".
+psql:inserts_only.sql:387: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(3207a59b-daa9-4960-8f2f-36f7eec242a1) is not present in table "products".
+psql:inserts_only.sql:388: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(3207a59b-daa9-4960-8f2f-36f7eec242a1) is not present in table "products".
+psql:inserts_only.sql:389: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(afe4861b-5cfc-4c40-9715-c591225c52c7) is not present in table "products".
+psql:inserts_only.sql:390: ERROR:  insert or update on table "product_variants" violates foreign key constraint "product_variants_product_id_fkey"
+DETAIL:  Key (product_id)=(afe4861b-5cfc-4c40-9715-c591225c52c7) is not present in table "products".
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:402: ERROR:  insert or update on table "purchase_order_items" violates foreign key constraint "purchase_order_items_purchase_order_id_foreign"
+DETAIL:  Key (purchase_order_id)=(8e95b942-473c-4539-ae23-2873a55f6d78) is not present in table "purchase_orders".
+psql:inserts_only.sql:403: ERROR:  insert or update on table "purchase_order_items" violates foreign key constraint "purchase_order_items_purchase_order_id_foreign"
+DETAIL:  Key (purchase_order_id)=(4579cb33-97f7-47d8-806f-0a573634d481) is not present in table "purchase_orders".
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:413: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(9e1e4a0e-f182-4d23-aa60-4cc07e81ddde) already exists.
+psql:inserts_only.sql:414: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(fc9f68e9-ea62-41a4-8c7e-1b451605c053) already exists.
+psql:inserts_only.sql:415: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(991a5b17-a491-41dd-84b5-e423475baa05) already exists.
+psql:inserts_only.sql:416: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(583ff834-2cbd-4682-aaea-50f6d3a12e10) already exists.
+psql:inserts_only.sql:417: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(3b0ba0d2-c9b5-46e9-8e03-80ffe06c8c5b) already exists.
+psql:inserts_only.sql:418: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(40b32534-032c-4ab1-910c-463047e62d27) already exists.
+psql:inserts_only.sql:419: ERROR:  duplicate key value violates unique constraint "quotes_pkey"
+DETAIL:  Key (id)=(fa2fa6f3-bcd9-4fe7-9077-526945016b6d) already exists.
+psql:inserts_only.sql:420: ERROR:  insert or update on table "requisition_items" violates foreign key constraint "requisition_items_requisition_id_foreign"
+DETAIL:  Key (requisition_id)=(95ce8e79-630c-4a59-8bb2-dc043c773cc2) is not present in table "requisitions".
+psql:inserts_only.sql:421: ERROR:  insert or update on table "requisition_items" violates foreign key constraint "requisition_items_requisition_id_foreign"
+DETAIL:  Key (requisition_id)=(067953ac-618d-429d-9949-e356a8e0a803) is not present in table "requisitions".
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+psql:inserts_only.sql:425: ERROR:  duplicate key value violates unique constraint "roles_pkey"
+DETAIL:  Key (id)=(9bc93efe-8f23-45f2-a5ed-fb34fdd29a66) already exists.
+psql:inserts_only.sql:426: ERROR:  duplicate key value violates unique constraint "roles_pkey"
+DETAIL:  Key (id)=(99a231fe-daf1-498a-9706-5ca3e7901d97) already exists.
+psql:inserts_only.sql:427: ERROR:  duplicate key value violates unique constraint "roles_pkey"
+DETAIL:  Key (id)=(53e3c075-65dc-48d4-8089-39bc2088dbe3) already exists.
+psql:inserts_only.sql:428: ERROR:  duplicate key value violates unique constraint "stores_pkey"
+DETAIL:  Key (id)=(b55bff54-48a4-4992-9865-061cea854f64) already exists.
+psql:inserts_only.sql:429: ERROR:  duplicate key value violates unique constraint "suppliers_pkey"
+DETAIL:  Key (id)=(9b9f0754-14c3-48a3-b030-56bf24a5a78e) already exists.
+psql:inserts_only.sql:430: ERROR:  duplicate key value violates unique constraint "suppliers_pkey"
+DETAIL:  Key (id)=(2e4599e8-5eb4-48f2-a7bf-9bae82872862) already exists.
+psql:inserts_only.sql:431: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(fb94f1ca-fc74-4c50-8e36-da6140c14389) already exists.
+psql:inserts_only.sql:432: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(03327f48-df58-4cc2-98fd-40868494d83d) already exists.
+psql:inserts_only.sql:433: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(bef281b2-4f87-4bd6-9309-596bf486e820) already exists.
+psql:inserts_only.sql:434: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(5ae4aaf9-a1dc-4c46-9e17-b5296d0f596d) already exists.
+psql:inserts_only.sql:435: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(2151ffc9-9cdd-422b-b5bc-08c46efa5cd7) already exists.
+psql:inserts_only.sql:436: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(b46fee7b-894b-447b-a068-69d005a2ec65) already exists.
+psql:inserts_only.sql:437: ERROR:  duplicate key value violates unique constraint "users_pkey"
+DETAIL:  Key (id)=(5f01c27a-afaf-43a1-a759-1babbc1ace26) already exists.

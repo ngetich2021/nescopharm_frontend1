@@ -1,0 +1,766 @@
+{
+  "info": {
+    "name": "Stock Count Management API",
+    "description": "Complete API collection for Stock Count Management including cycle counts and full counts. This collection covers creating, updating, viewing, and managing inventory stock counts with variance tracking.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "company_id",
+      "value": "14fafcd8-137b-4725-a6e9-7542ad27a6ed",
+      "type": "string"
+    },
+    {
+      "key": "store_id",
+      "value": "f5c9bb5b-7b2c-4596-958a-0931f9595dac",
+      "type": "string"
+    },
+    {
+      "key": "stock_count_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "product_1_id",
+      "value": "b93d477d-dee6-4b68-ada1-4d1522ada5a8",
+      "type": "string"
+    },
+    {
+      "key": "product_2_id",
+      "value": "e1972b65-3e71-48c9-9249-c38388eb6673",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.data.token);",
+                  "    pm.environment.set(\"access_token\", jsonData.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@cherrydist.com\",\n  \"password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": ["{{base_url}}"],
+              "path": ["login"]
+            },
+            "description": "Authenticate and receive bearer token for subsequent requests"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Stock Counts",
+      "item": [
+        {
+          "name": "List All Stock Counts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"]
+            },
+            "description": "Retrieve a list of all stock counts for the authenticated user's company"
+          },
+          "response": []
+        },
+        {
+          "name": "List Stock Counts - Filter by Store",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts?store_id={{store_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"],
+              "query": [
+                {
+                  "key": "store_id",
+                  "value": "{{store_id}}"
+                }
+              ]
+            },
+            "description": "Filter stock counts by specific store"
+          },
+          "response": []
+        },
+        {
+          "name": "List Stock Counts - Filter by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts?status=completed",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "completed",
+                  "description": "Options: draft, in_progress, completed, approved, cancelled"
+                }
+              ]
+            },
+            "description": "Filter stock counts by status"
+          },
+          "response": []
+        },
+        {
+          "name": "List Stock Counts - Filter by Type",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts?count_type=cycle_count",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"],
+              "query": [
+                {
+                  "key": "count_type",
+                  "value": "cycle_count",
+                  "description": "Options: cycle_count, full_count"
+                }
+              ]
+            },
+            "description": "Filter stock counts by type"
+          },
+          "response": []
+        },
+        {
+          "name": "View Stock Count Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Retrieve detailed information about a specific stock count including all items"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Stock Count - Draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"stock_count_id\", jsonData.stock_count.id);",
+                  "    pm.environment.set(\"stock_count_id\", jsonData.stock_count.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Monthly Stock Count - {{$timestamp}}\",\n  \"description\": \"Regular monthly inventory count\",\n  \"count_type\": \"cycle_count\",\n  \"status\": \"draft\",\n  \"location\": \"Main Warehouse\",\n  \"category_filter\": \"Beverages\",\n  \"assigned_to\": \"warehouse@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500,\n      \"counted_quantity\": null,\n      \"notes\": \"Coca-Cola 500ml\"\n    },\n    {\n      \"product_id\": \"{{product_2_id}}\",\n      \"expected_quantity\": 450,\n      \"counted_quantity\": null,\n      \"notes\": \"Sprite 500ml\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"]
+            },
+            "description": "Create a new stock count in draft status with expected quantities"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Stock Count - In Progress",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Emergency Stock Count - {{$timestamp}}\",\n  \"description\": \"Urgent inventory verification\",\n  \"count_type\": \"full_count\",\n  \"status\": \"in_progress\",\n  \"location\": \"Warehouse Section A\",\n  \"assigned_to\": \"manager@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500,\n      \"notes\": \"Priority item\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"]
+            },
+            "description": "Create a new stock count that starts immediately in in_progress status"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Count - Start Counting",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Update status from draft to in_progress to begin counting"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Count - Record Counts",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"id\": \"{{item_1_id}}\",\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500,\n      \"counted_quantity\": 495,\n      \"notes\": \"Found 5 units short\"\n    },\n    {\n      \"id\": \"{{item_2_id}}\",\n      \"product_id\": \"{{product_2_id}}\",\n      \"expected_quantity\": 450,\n      \"counted_quantity\": 455,\n      \"notes\": \"Found 5 units extra\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Record actual counted quantities for items. Note: You need to get item IDs from the stock count details first."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Count - Complete",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Update status to completed when counting is finished"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Count - Approve",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"approved_by\": \"admin@cherrydist.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Approve stock count - This will update actual inventory quantities!"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Count - Cancel",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cancelled\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Cancel a stock count (can only cancel draft or in_progress counts)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Count - Edit Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Stock Count Name\",\n  \"description\": \"Updated description\",\n  \"location\": \"Warehouse Section B\",\n  \"assigned_to\": \"newuser@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Update stock count details (name, description, location, etc.)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Stock Count",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Delete a stock count. Note: Cannot delete approved stock counts."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Complete Workflows",
+      "item": [
+        {
+          "name": "Workflow 1: Draft to Approved",
+          "item": [
+            {
+              "name": "Step 1: Create Draft Stock Count",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    var jsonData = pm.response.json();",
+                      "    pm.collectionVariables.set(\"stock_count_id\", jsonData.stock_count.id);",
+                      "    ",
+                      "    // Store item IDs for later use",
+                      "    if (jsonData.stock_count.items && jsonData.stock_count.items.length > 0) {",
+                      "        pm.collectionVariables.set(\"item_1_id\", jsonData.stock_count.items[0].id);",
+                      "    }",
+                      "    if (jsonData.stock_count.items && jsonData.stock_count.items.length > 1) {",
+                      "        pm.collectionVariables.set(\"item_2_id\", jsonData.stock_count.items[1].id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Complete Workflow Test - {{$timestamp}}\",\n  \"description\": \"Testing complete stock count workflow\",\n  \"count_type\": \"cycle_count\",\n  \"status\": \"draft\",\n  \"location\": \"Main Warehouse\",\n  \"assigned_to\": \"warehouse@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500,\n      \"notes\": \"Coca-Cola 500ml\"\n    },\n    {\n      \"product_id\": \"{{product_2_id}}\",\n      \"expected_quantity\": 450,\n      \"notes\": \"Sprite 500ml\"\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 2: Start Counting",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"in_progress\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 3: View Details Before Counting",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var jsonData = pm.response.json();",
+                      "    ",
+                      "    // Store item IDs if not already stored",
+                      "    if (jsonData.stock_count.items && jsonData.stock_count.items.length > 0) {",
+                      "        pm.collectionVariables.set(\"item_1_id\", jsonData.stock_count.items[0].id);",
+                      "    }",
+                      "    if (jsonData.stock_count.items && jsonData.stock_count.items.length > 1) {",
+                      "        pm.collectionVariables.set(\"item_2_id\", jsonData.stock_count.items[1].id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 4: Record Counted Quantities",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"items\": [\n    {\n      \"id\": \"{{item_1_id}}\",\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500,\n      \"counted_quantity\": 495,\n      \"notes\": \"Found 5 units short\"\n    },\n    {\n      \"id\": \"{{item_2_id}}\",\n      \"product_id\": \"{{product_2_id}}\",\n      \"expected_quantity\": 450,\n      \"counted_quantity\": 455,\n      \"notes\": \"Found 5 units extra\"\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 5: Complete Counting",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"completed\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 6: Review Variances",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 7: Approve (Updates Inventory)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"approved\",\n  \"approved_by\": \"admin@cherrydist.com\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Workflow 2: Quick Count (Direct to In Progress)",
+          "item": [
+            {
+              "name": "Step 1: Create and Start Immediately",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    var jsonData = pm.response.json();",
+                      "    pm.collectionVariables.set(\"stock_count_id\", jsonData.stock_count.id);",
+                      "    ",
+                      "    if (jsonData.stock_count.items && jsonData.stock_count.items.length > 0) {",
+                      "        pm.collectionVariables.set(\"item_1_id\", jsonData.stock_count.items[0].id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Quick Count - {{$timestamp}}\",\n  \"description\": \"Spot check inventory\",\n  \"count_type\": \"cycle_count\",\n  \"status\": \"in_progress\",\n  \"location\": \"Main Warehouse\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 2: Record Count and Complete",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"completed\",\n  \"items\": [\n    {\n      \"id\": \"{{item_1_id}}\",\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 500,\n      \"counted_quantity\": 500,\n      \"notes\": \"Count matches expected\"\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["stock-counts", "{{stock_count_id}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Edge Cases & Error Scenarios",
+      "item": [
+        {
+          "name": "Error: Create Without Items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Invalid Stock Count\",\n  \"count_type\": \"cycle_count\",\n  \"status\": \"draft\",\n  \"items\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"]
+            },
+            "description": "Should return validation error - items array must have at least 1 item"
+          },
+          "response": []
+        },
+        {
+          "name": "Error: Invalid Status Value",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Invalid Status Test\",\n  \"count_type\": \"cycle_count\",\n  \"status\": \"invalid_status\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": 100\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"]
+            },
+            "description": "Should return validation error - invalid status value"
+          },
+          "response": []
+        },
+        {
+          "name": "Error: Delete Approved Count",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts/{{stock_count_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "{{stock_count_id}}"]
+            },
+            "description": "Attempting to delete an approved stock count should return error"
+          },
+          "response": []
+        },
+        {
+          "name": "Error: Negative Quantity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"name\": \"Negative Quantity Test\",\n  \"count_type\": \"cycle_count\",\n  \"status\": \"draft\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_1_id}}\",\n      \"expected_quantity\": -10\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-counts",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts"]
+            },
+            "description": "Should return validation error - quantities must be >= 0"
+          },
+          "response": []
+        },
+        {
+          "name": "Error: Non-existent Stock Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stock-counts/00000000-0000-0000-0000-000000000000",
+              "host": ["{{base_url}}"],
+              "path": ["stock-counts", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "Should return 404 - stock count not found"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

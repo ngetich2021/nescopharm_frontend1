@@ -1,0 +1,305 @@
+{
+  "info": {
+    "name": "Accounting Triggers API",
+    "description": "Database-driven accounting trigger configuration API. Create, manage, and configure accounting triggers without code changes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api/finance"
+    },
+    {
+      "key": "token",
+      "value": "your-bearer-token-here"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Get All Categories with Triggers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers/categories",
+            "description": "Returns all trigger categories (sales, purchase, expense) with their active triggers."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Triggers",
+      "item": [
+        {
+          "name": "List All Triggers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/accounting-triggers",
+              "host": ["{{baseUrl}}"],
+              "path": ["accounting-triggers"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "sales",
+                  "description": "Filter by category code",
+                  "disabled": true
+                },
+                {
+                  "key": "include_inactive",
+                  "value": "true",
+                  "description": "Include inactive triggers",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Returns all triggers available for the company, grouped by category."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Available Trigger Keys (for Dropdowns)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/accounting-triggers/available-keys?category=sales",
+              "host": ["{{baseUrl}}"],
+              "path": ["accounting-triggers", "available-keys"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "sales",
+                  "description": "Filter by category code"
+                }
+              ]
+            },
+            "description": "Returns trigger keys formatted for dropdown selections."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Default Triggers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers/defaults",
+            "description": "Returns the default trigger for each category."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Trigger",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers/{{triggerId}}",
+            "description": "Returns details of a specific trigger configuration."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Custom Trigger",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounting-triggers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_code\": \"sales\",\n  \"trigger_key\": \"custom_mobile_delivery\",\n  \"trigger_name\": \"When Mobile Delivery Confirmed\",\n  \"description\": \"Revenue is recognized when driver confirms delivery via mobile app\",\n  \"model_class\": \"App\\\\Models\\\\MobileDeliveryConfirmation\",\n  \"model_status\": \"confirmed\",\n  \"journal_type\": \"sales\",\n  \"debit_accounts\": [\"accounts_receivable\"],\n  \"credit_accounts\": [\"sales_revenue\", \"vat_output\"],\n  \"is_active\": true,\n  \"is_default\": false,\n  \"sort_order\": 50\n}"
+            },
+            "description": "Creates a new company-specific trigger. System triggers cannot be created via API."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Trigger",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/accounting-triggers/{{triggerId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trigger_name\": \"Updated Trigger Name\",\n  \"description\": \"Updated description\",\n  \"is_active\": true\n}"
+            },
+            "description": "Updates a trigger. System triggers can only have is_active and is_default modified."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Trigger",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/accounting-triggers/{{triggerId}}",
+            "description": "Deletes a company-specific trigger. System triggers cannot be deleted."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Trigger as Default",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounting-triggers/{{triggerId}}/set-default",
+            "description": "Sets a trigger as the default for its category. Previous default is unset."
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Update Status",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounting-triggers/bulk-update-status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trigger_ids\": [\n    \"trigger-uuid-1\",\n    \"trigger-uuid-2\"\n  ],\n  \"is_active\": false\n}"
+            },
+            "description": "Enable or disable multiple triggers at once."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Common Workflows",
+      "item": [
+        {
+          "name": "1. Get Sales Triggers for Configuration Page",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers?category=sales",
+            "description": "Step 1: Load all sales triggers for the configuration UI"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Change Default Sales Trigger to Order Delivered",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// First, get the order_delivered trigger ID",
+                  "pm.sendRequest({",
+                  "    url: pm.environment.get('baseUrl') + '/accounting-triggers/available-keys?category=sales',",
+                  "    method: 'GET',",
+                  "    header: {",
+                  "        'Authorization': 'Bearer ' + pm.environment.get('token')",
+                  "    }",
+                  "}, function(err, res) {",
+                  "    const triggers = res.json().data;",
+                  "    const deliverTrigger = triggers.find(t => t.value === 'order_delivered');",
+                  "    if (deliverTrigger) {",
+                  "        pm.environment.set('orderDeliveredTriggerId', deliverTrigger.id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounting-triggers/{{orderDeliveredTriggerId}}/set-default",
+            "description": "Step 2: Set 'order_delivered' as the default sales trigger"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Create Custom POD Trigger",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounting-triggers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_code\": \"sales\",\n  \"trigger_key\": \"pod_signed\",\n  \"trigger_name\": \"When POD is Signed\",\n  \"description\": \"Revenue is recognized when customer signs the Proof of Delivery document\",\n  \"model_class\": \"App\\\\Models\\\\ProofOfDelivery\",\n  \"model_status\": \"signed\",\n  \"journal_type\": \"sales\",\n  \"debit_accounts\": [\"accounts_receivable\"],\n  \"credit_accounts\": [\"sales_revenue\", \"vat_output\"],\n  \"is_active\": true,\n  \"is_default\": false\n}"
+            },
+            "description": "Step 3: Create a custom trigger for Proof of Delivery"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Disable Manual Entry Triggers",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounting-triggers/bulk-update-status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trigger_ids\": [\"manual-sales-trigger-id\", \"manual-purchase-trigger-id\", \"manual-expense-trigger-id\"],\n  \"is_active\": false\n}"
+            },
+            "description": "Step 4: Disable all 'manual' triggers to enforce automatic accounting"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Pre-Seeded Triggers Reference",
+      "item": [
+        {
+          "name": "Sales Triggers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers?category=sales",
+            "description": "Sales triggers:\n- order_created\n- order_completed\n- order_dispatched\n- order_delivered\n- invoice_created\n- invoice_sent (DEFAULT)\n- invoice_approved\n- payment_received\n- manual"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Triggers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers?category=purchase",
+            "description": "Purchase triggers:\n- purchase_created\n- purchase_approved\n- goods_received (DEFAULT)\n- payment_made\n- manual"
+          },
+          "response": []
+        },
+        {
+          "name": "Expense Triggers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounting-triggers?category=expense",
+            "description": "Expense triggers:\n- expense_created\n- expense_approved (DEFAULT)\n- expense_paid\n- manual"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

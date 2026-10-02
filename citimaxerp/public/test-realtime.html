@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { color: #22c55e; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        .info { color: #3b82f6; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .online { background-color: #22c55e; }
+        .offline { background-color: #ef4444; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Real-Time Chat Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>📊 Connection Status</h2>
+        <div id="connection-status">
+            <span class="status-indicator offline"></span>
+            <span>Checking connection...</span>
+        </div>
+        <div id="pusher-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 Environment Configuration</h2>
+        <div id="env-config"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔐 Authentication</h2>
+        <div id="auth-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📨 Message Testing</h2>
+        <button onclick="testNotification()">Test Notification</button>
+        <button onclick="testWebhook()">Test Webhook</button>
+        <button onclick="simulateMessage()">Simulate Message</button>
+        <div id="message-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🎯 Manual Test Instructions</h2>
+        <ol>
+            <li><strong>Open Chat Interface:</strong> Navigate to <a href="/chat" target="_blank">/chat</a> in a new tab</li>
+            <li><strong>Check Connection:</strong> Look for "Live" status indicator in the chat interface</li>
+            <li><strong>Multi-Tab Test:</strong> Open chat in multiple tabs, send messages in one tab</li>
+            <li><strong>Webhook Test:</strong> Use the "Test Webhook" button above</li>
+            <li><strong>Console Monitoring:</strong> Check browser console for real-time event logs</li>
+        </ol>
+    </div>
+
+    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+    <script>
+        const log = (message, type = 'info') => {
+            const logElement = document.getElementById('message-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const colorClass = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logElement.innerHTML += `<div class="${colorClass}">[${timestamp}] ${message}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        };
+
+        // Check environment configuration
+        const checkEnvironment = () => {
+            const envDiv = document.getElementById('env-config');
+            
+            // These would need to be passed from your Next.js app
+            const config = {
+                apiUrl: 'https://cherry-api-main.laravel.cloud/api',
+                pusherKey: 'c5b55f47280cfd13366d',
+                pusherCluster: 'eu'
+            };
+
+            envDiv.innerHTML = `
+                <div class="success">✅ API URL: ${config.apiUrl}</div>
+                <div class="success">✅ Pusher Key: ${config.pusherKey}</div>
+                <div class="success">✅ Pusher Cluster: ${config.pusherCluster}</div>
+            `;
+
+            return config;
+        };
+
+        // Check authentication
+        const checkAuth = () => {
+            const authDiv = document.getElementById('auth-status');
+            const token = localStorage.getItem('sanctum_token');
+            
+            if (token) {
+                authDiv.innerHTML = `<div class="success">✅ Auth token found (${token.length} chars)</div>`;
+                return true;
+            } else {
+                authDiv.innerHTML = `<div class="warning">⚠️ No auth token found. Login to your app first.</div>`;
+                return false;
+            }
+        };
+
+        // Test Pusher connection
+        const testPusher = (config) => {
+            const statusDiv = document.getElementById('connection-status');
+            const pusherDiv = document.getElementById('pusher-status');
+            
+            try {
+                const pusher = new Pusher(config.pusherKey, {
+                    cluster: config.pusherCluster,
+                    forceTLS: true
+                });
+
+                pusher.connection.bind('connected', () => {
+                    statusDiv.innerHTML = `
+                        <span class="status-indicator online"></span>
+                        <span class="success">Connected to Pusher</span>
+                    `;
+                    log('✅ Successfully connected to Pusher', 'success');
+                });
+
+                pusher.connection.bind('disconnected', () => {
+                    statusDiv.innerHTML = `
+                        <span class="status-indicator offline"></span>
+                        <span class="error">Disconnected from Pusher</span>
+                    `;
+                    log('❌ Disconnected from Pusher', 'error');
+                });
+
+                pusher.connection.bind('error', (error) => {
+                    log(`❌ Pusher connection error: ${error.message}`, 'error');
+                });
+
+                // Try to subscribe to a test channel
+                const channel = pusher.subscribe('test-channel');
+                
+                channel.bind('pusher:subscription_succeeded', () => {
+                    log('✅ Successfully subscribed to test channel', 'success');
+                });
+
+                channel.bind('pusher:subscription_error', (error) => {
+                    log(`❌ Subscription error: ${error.message}`, 'error');
+                });
+
+                pusherDiv.innerHTML = `
+                    <div class="info">📡 Pusher instance created</div>
+                    <div class="info">🔗 Attempting connection to ${config.pusherCluster} cluster</div>
+                `;
+
+                window.testPusher = pusher;
+                return pusher;
+
+            } catch (error) {
+                log(`❌ Failed to initialize Pusher: ${error.message}`, 'error');
+                statusDiv.innerHTML = `
+                    <span class="status-indicator offline"></span>
+                    <span class="error">Failed to connect</span>
+                `;
+            }
+        };
+
+        // Test notification
+        const testNotification = () => {
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    new Notification('🧪 Real-Time Test', {
+                        body: 'Notification system is working!',
+                        icon: '/favicon.ico'
+                    });
+                    log('✅ Test notification sent', 'success');
+                } else if (Notification.permission === 'default') {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            new Notification('🧪 Real-Time Test', {
+                                body: 'Notification permission granted!',
+                                icon: '/favicon.ico'
+                            });
+                            log('✅ Notification permission granted and test sent', 'success');
+                        } else {
+                            log('❌ Notification permission denied', 'error');
+                        }
+                    });
+                } else {
+                    log('❌ Notifications are blocked', 'error');
+                }
+            } else {
+                log('❌ Notifications not supported', 'error');
+            }
+        };
+
+        // Test webhook
+        const testWebhook = async () => {
+            const config = checkEnvironment();
+            const timestamp = Math.floor(Date.now() / 1000);
+            const messageId = `wamid.test_${timestamp}`;
+
+            log('📤 Sending test webhook...', 'info');
+
+            const payload = {
+                object: "whatsapp_business_account",
+                entry: [{
+                    changes: [{
+                        value: {
+                            metadata: {
+                                phone_number_id: "test_phone_number_id"
+                            },
+                            messages: [{
+                                id: messageId,
+                                from: "1234567890",
+                                timestamp: timestamp.toString(),
+                                type: "text",
+                                text: {
+                                    body: `🧪 Test message from webhook at ${new Date().toLocaleTimeString()}`
+                                }
+                            }]
+                        }
+                    }]
+                }]
+            };
+
+            try {
+                const response = await fetch(`${config.apiUrl}/webhooks/meta/whatsapp`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const responseText = await response.text();
+                
+                if (response.ok) {
+                    log(`✅ Webhook sent successfully (${response.status})`, 'success');
+                    log(`Response: ${responseText}`, 'info');
+                } else {
+                    log(`⚠️ Webhook response (${response.status}): ${responseText}`, 'warning');
+                }
+            } catch (error) {
+                log(`❌ Webhook failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Simulate message
+        const simulateMessage = () => {
+            const message = {
+                id: `sim_${Date.now()}`,
+                content: `🧪 Simulated message at ${new Date().toLocaleTimeString()}`,
+                direction: 'inbound',
+                sender_type: 'customer',
+                created_at: new Date().toISOString()
+            };
+            
+            log(`📨 Simulated message: ${message.content}`, 'info');
+            
+            // Play notification sound if available
+            try {
+                const audio = new Audio('/notification.mp3');
+                audio.volume = 0.5;
+                audio.play().then(() => {
+                    log('🔊 Notification sound played', 'success');
+                }).catch(e => {
+                    log('🔇 Could not play notification sound', 'warning');
+                });
+            } catch (e) {
+                log('🔇 Notification sound not available', 'warning');
+            }
+        };
+
+        // Initialize tests
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🚀 Starting real-time test suite...', 'info');
+            
+            const config = checkEnvironment();
+            checkAuth();
+            testPusher(config);
+            
+            log('💡 Use the buttons above to run additional tests', 'info');
+            log('💡 Open /chat in another tab to see real-time functionality', 'info');
+        });
+    </script>
+</body>
+</html>

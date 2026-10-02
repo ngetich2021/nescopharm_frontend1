@@ -1,0 +1,76 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+BUILD_FIXES_SUMMARY.md
+ENHANCED_CACHE_SYSTEM.md
+ENHANCED_INVOICE_DISPLAY_DOCUMENTATION.md
+ENHANCED_PAYMENT_MAPPING_SEARCH_DOCUMENTATION.md
+IMPLEMENTATION_STATUS_UNIFIED_PAYMENTS.md
+INVOICE_FROM_ORDER_VARIANTS_IMPLEMENTATION.md
+INVOICE_INFORMATION_IN_ORDER_DETAILS.md
+INVOICE_PAYMENT_MANAGEMENT_IMPLEMENTATION.md
+PAYMENT_ALLOCATION_BUSINESS_RULES.md
+PAYMENT_MAPPING_ENHANCEMENT_DOCUMENTATION.md
+test-debug-api-call.js
+test-enhanced-invoice-display.html
+test-enhanced-payment-mapping.html
+test-invoice-from-order-variants.js
+test-invoice-payment-management.html
+test-order-variants.js
+test-payment-allocation-feature.html
+test-payment-allocation-fixes.html
+test-payment-mapping-enhancement.html
+UNIFIED_PAYMENT_ALLOCATION_IMPLEMENTATION_PLAN.md
+public/test-invoice-variants.html
+ADMIN_API_BACKEND_REQUIREMENTS.md
+ADMIN_API_MAPPING_UPDATED.md
+ADMIN_IMPLEMENTATION_STATUS.md
+ADMIN_PORTAL_DEFAULT_FILTERS_REMOVAL.md
+ADMIN_PORTAL_DOCUMENTATION.md
+COMPANIES_API_INTEGRATION_FIX.md
+COMPANIES_PAGE_ARRAY_SAFETY_FIXED.md
+SUBSCRIPTIONS_PAGE_ALL_FIXES_COMPLETE.md
+test-companies-api-debug.js
+test-create-employee.js
+PAYMENT_MODAL_ENHANCEMENTS.md
+PERMISSIONS_GUIDELINES.md
+PERMISSIONS_IMPLEMENTATION_REPORT.md
+PERMISSIONS_IMPLEMENTATION_SUMMARY.md
+Product Requirements Document - Accounting and Finance.docx
+test-acknowledge-receipt.js
+Warehouse Management System - Backend Technical Specification.markdown
+WORKFLOW_BUILDER_README.md
+TEST_PRODUCT_CREATION.md
+TEST_UPDATE_RESULTS.md
+test-product-creation.js
+test-product-simple.js
+test-product-update.js
+get-auth-token.js
+test-packaging-calc.js
+STOCK_COUNT_IMPLEMENTATION.md
+STOCK_ADJUSTMENTS_IMPLEMENTATION.md
+.DS_Store

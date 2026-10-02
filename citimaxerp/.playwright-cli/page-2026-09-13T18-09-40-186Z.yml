@@ -1,0 +1,30 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - heading "CitiMax ERP" [level=2] [ref=e5]
+    - generic [ref=e7]:
+      - img "Logo" [ref=e9]
+      - generic [ref=e10]:
+        - heading "Welcome back to CitiMax ERP" [level=1] [ref=e11]
+        - paragraph [ref=e12]: Simplify and automate your business processes
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - text: Email
+          - textbox "Email" [active] [ref=e15]:
+            - /placeholder: you@company.com
+        - generic [ref=e16]:
+          - text: Password
+          - generic [ref=e17]:
+            - textbox "Password" [ref=e18]:
+              - /placeholder: Enter your password
+            - button [ref=e19]
+        - generic [ref=e23]:
+          - link "Forgot password?" [ref=e24] [cursor=pointer]:
+            - /url: /forgot-password
+          - generic [ref=e25]:
+            - text: Remember me
+            - switch "Remember me" [checked] [ref=e26]
+        - button "Log in" [ref=e27]
+      - paragraph [ref=e28]: Need access? Contact your organization administrator.
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"

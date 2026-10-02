@@ -1,0 +1,527 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "Cherry API - Accounting Integration",
+		"description": "API collection for managing company accounting settings and workflow configurations.\n\nThis collection allows companies to:\n- Configure when transactions hit the accounting system\n- Choose between accrual and cash basis accounting\n- Set up approval workflows\n- Manage account code mappings",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api"
+		},
+		{
+			"key": "access_token",
+			"value": "your-access-token-here"
+		}
+	],
+	"item": [
+		{
+			"name": "Accounting Settings",
+			"description": "Manage company-specific accounting workflow configurations",
+			"item": [
+				{
+					"name": "Get Accounting Settings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings"]
+						},
+						"description": "Retrieves the current accounting settings for the authenticated user's company.\n\nReturns:\n- Current settings configuration\n- Available options for all configurable fields\n- Trigger options for sales, purchases, and expenses"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"url": {
+									"raw": "{{base_url}}/finance/accounting-settings",
+									"host": ["{{base_url}}"],
+									"path": ["finance", "accounting-settings"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"body": "{\n    \"data\": {\n        \"id\": \"uuid\",\n        \"company_id\": \"uuid\",\n        \"accounting_method\": \"accrual\",\n        \"sales_recognition_trigger\": \"invoice_sent\",\n        \"auto_record_cash_sales\": true,\n        \"credit_sales_on_invoice_send\": true,\n        \"purchase_recognition_trigger\": \"goods_received\",\n        \"expense_recognition_trigger\": \"expense_approved\",\n        \"auto_record_customer_payments\": true,\n        \"auto_record_supplier_payments\": true,\n        \"record_proforma_invoices\": false,\n        \"record_draft_invoices\": false,\n        \"vat_recognition\": \"invoice_date\",\n        \"cogs_recognition\": \"on_dispatch\",\n        \"perpetual_inventory\": true,\n        \"require_invoice_approval\": false,\n        \"require_expense_approval\": true,\n        \"require_journal_approval\": false,\n        \"expense_approval_threshold\": null,\n        \"accounting_integration_enabled\": true,\n        \"log_failed_entries\": true,\n        \"soft_fail_on_accounting_error\": true,\n        \"financial_year_start_month\": 1,\n        \"lock_closed_periods\": true,\n        \"current_period_end\": null\n    },\n    \"options\": {\n        \"sales_recognition_triggers\": {\n            \"order_created\": \"When Order is Created\",\n            \"order_completed\": \"When Order is Completed\",\n            \"order_dispatched\": \"When Order is Dispatched\",\n            \"order_delivered\": \"When Order is Delivered (Dispatch Confirmed)\",\n            \"invoice_created\": \"When Invoice is Created\",\n            \"invoice_sent\": \"When Invoice is Sent (Recommended)\",\n            \"invoice_approved\": \"When Invoice is Approved\",\n            \"payment_received\": \"When Payment is Received (Cash Basis)\"\n        },\n        \"purchase_recognition_triggers\": {\n            \"purchase_created\": \"When Purchase Order is Created\",\n            \"purchase_approved\": \"When Purchase Order is Approved\",\n            \"goods_received\": \"When Goods are Received (Recommended)\",\n            \"payment_made\": \"When Payment is Made (Cash Basis)\"\n        },\n        \"expense_recognition_triggers\": {\n            \"expense_created\": \"When Expense is Created\",\n            \"expense_approved\": \"When Expense is Approved (Recommended)\",\n            \"expense_paid\": \"When Expense is Paid (Cash Basis)\"\n        },\n        \"accounting_methods\": {\n            \"accrual\": \"Accrual Basis (Record when earned/incurred)\",\n            \"cash\": \"Cash Basis (Record when paid/received)\"\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Accounting Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"accounting_method\": \"accrual\",\n    \"sales_recognition_trigger\": \"invoice_sent\",\n    \"expense_recognition_trigger\": \"expense_approved\",\n    \"auto_record_customer_payments\": true,\n    \"require_expense_approval\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings"]
+						},
+						"description": "Updates the accounting settings for the authenticated user's company.\n\n**Available Fields:**\n\n| Field | Type | Description |\n|-------|------|-------------|\n| accounting_method | string | `accrual` or `cash` |\n| sales_recognition_trigger | string | When to record sales (see options below) |\n| purchase_recognition_trigger | string | When to record purchases |\n| expense_recognition_trigger | string | When to record expenses |\n| auto_record_cash_sales | boolean | Auto-record POS/cash sales |\n| auto_record_customer_payments | boolean | Auto-record customer payments |\n| auto_record_supplier_payments | boolean | Auto-record supplier payments |\n| require_expense_approval | boolean | Require approval for expenses |\n| expense_approval_threshold | number | Amount above which approval is required |\n| accounting_integration_enabled | boolean | Enable/disable accounting integration |\n\n**Sales Recognition Triggers:**\n- `order_created` - When order is created\n- `order_completed` - When order is completed\n- `order_dispatched` - When order is dispatched\n- `order_delivered` - When delivery is confirmed\n- `invoice_created` - When invoice is created\n- `invoice_sent` - When invoice is sent (default)\n- `invoice_approved` - When invoice is approved\n- `payment_received` - When payment is received (cash basis)"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "PUT",
+								"url": {
+									"raw": "{{base_url}}/finance/accounting-settings",
+									"host": ["{{base_url}}"],
+									"path": ["finance", "accounting-settings"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"body": "{\n    \"message\": \"Accounting settings updated successfully\",\n    \"data\": {\n        \"id\": \"uuid\",\n        \"company_id\": \"uuid\",\n        \"accounting_method\": \"accrual\",\n        \"sales_recognition_trigger\": \"invoice_sent\",\n        \"expense_recognition_trigger\": \"expense_approved\",\n        \"auto_record_customer_payments\": true,\n        \"require_expense_approval\": true\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Update - Cash Basis Accounting",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"accounting_method\": \"cash\",\n    \"sales_recognition_trigger\": \"payment_received\",\n    \"purchase_recognition_trigger\": \"payment_made\",\n    \"expense_recognition_trigger\": \"expense_paid\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings"]
+						},
+						"description": "Example: Configure company for cash basis accounting.\n\nIn cash basis accounting:\n- Revenue is recorded when payment is received\n- Expenses are recorded when payment is made\n- No accounts receivable/payable tracking"
+					},
+					"response": []
+				},
+				{
+					"name": "Update - Record on Delivery",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"accounting_method\": \"accrual\",\n    \"sales_recognition_trigger\": \"order_delivered\",\n    \"cogs_recognition\": \"on_delivery\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings"]
+						},
+						"description": "Example: Configure company to record revenue when delivery is confirmed through the dispatch process.\n\nThis is useful for:\n- Companies that need proof of delivery before recognizing revenue\n- Businesses with high return rates\n- Compliance with revenue recognition standards (ASC 606)"
+					},
+					"response": []
+				},
+				{
+					"name": "Update - Disable Accounting Integration",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"accounting_integration_enabled\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings"]
+						},
+						"description": "Example: Temporarily disable automatic accounting integration.\n\nWhen disabled:\n- No automatic journal entries are created\n- Business transactions still process normally\n- Manual journal entries can still be created"
+					},
+					"response": []
+				},
+				{
+					"name": "Reset to Defaults",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings/reset",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings", "reset"]
+						},
+						"description": "Resets all accounting settings to their default values.\n\n**Default Configuration:**\n- Accounting Method: Accrual\n- Sales Trigger: Invoice Sent\n- Purchase Trigger: Goods Received\n- Expense Trigger: Expense Approved\n- Auto-record payments: Enabled\n- Require expense approval: Enabled"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"url": {
+									"raw": "{{base_url}}/finance/accounting-settings/reset",
+									"host": ["{{base_url}}"],
+									"path": ["finance", "accounting-settings", "reset"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"body": "{\n    \"message\": \"Accounting settings reset to defaults\",\n    \"data\": {\n        \"accounting_method\": \"accrual\",\n        \"sales_recognition_trigger\": \"invoice_sent\",\n        \"purchase_recognition_trigger\": \"goods_received\",\n        \"expense_recognition_trigger\": \"expense_approved\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Settings Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/accounting-settings/summary",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "accounting-settings", "summary"]
+						},
+						"description": "Returns a plain-language summary of the current accounting configuration.\n\nUseful for:\n- Displaying settings to non-technical users\n- Dashboard widgets\n- Configuration review"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"url": {
+									"raw": "{{base_url}}/finance/accounting-settings/summary",
+									"host": ["{{base_url}}"],
+									"path": ["finance", "accounting-settings", "summary"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"body": "{\n    \"enabled\": true,\n    \"method\": \"accrual\",\n    \"summary\": [\n        \"🟢 **Accounting integration is ENABLED**\",\n        \"📊 Using **Accrual Basis** accounting - Revenue and expenses are recorded when earned/incurred, not when cash changes hands.\",\n        \"🧾 **Sales** are recorded to accounting when invoice is sent (recommended)\",\n        \"💳 **Cash sales** (POS) are recorded immediately when payment is received\",\n        \"📦 **Purchases** are recorded to accounting when goods are received (recommended)\",\n        \"💸 **Expenses** are recorded to accounting when expense is approved (recommended)\",\n        \"✅ Customer payments automatically create accounting entries\",\n        \"✅ Supplier payments automatically create accounting entries\"\n    ]\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Account Mappings",
+			"description": "Manage chart of account mappings for different transaction types",
+			"item": [
+				{
+					"name": "List Account Mappings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/account-mappings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "account-mappings"]
+						},
+						"description": "Lists all account mappings configured for the company.\n\nAccount mappings link business transaction types to specific Chart of Account codes."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Available Mapping Keys",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/account-mappings/available-keys",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "account-mappings", "available-keys"]
+						},
+						"description": "Returns all available mapping keys that can be configured.\n\n**Core Keys:**\n- sales_revenue\n- accounts_receivable\n- accounts_payable\n- cash\n- bank\n- vat_output\n- vat_input\n- cost_of_goods_sold\n- inventory\n- general_expense\n\n**Payment Method Keys:**\n- payment_cash\n- payment_card\n- payment_bank_transfer\n- payment_mpesa"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Account Mapping",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"mapping_key\": \"sales_revenue\",\n    \"chart_of_account_id\": \"uuid-of-account\",\n    \"description\": \"Main sales revenue account\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finance/account-mappings",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "account-mappings"]
+						},
+						"description": "Creates a new account mapping for a specific transaction type."
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Update Mappings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"mappings\": [\n        {\n            \"mapping_key\": \"sales_revenue\",\n            \"chart_of_account_id\": \"uuid-1\"\n        },\n        {\n            \"mapping_key\": \"accounts_receivable\",\n            \"chart_of_account_id\": \"uuid-2\"\n        },\n        {\n            \"mapping_key\": \"vat_output\",\n            \"chart_of_account_id\": \"uuid-3\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finance/account-mappings/bulk",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "account-mappings", "bulk"]
+						},
+						"description": "Updates multiple account mappings in a single request.\n\nUseful for initial setup or bulk configuration changes."
+					},
+					"response": []
+				},
+				{
+					"name": "Initialize Default Mappings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/account-mappings/initialize",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "account-mappings", "initialize"]
+						},
+						"description": "Initializes default account mappings based on the company's existing Chart of Accounts.\n\nThis attempts to auto-match accounts by:\n- Account code patterns (e.g., 4xxx for income)\n- Account names (e.g., 'Sales Revenue')\n- Account types"
+					},
+					"response": []
+				},
+				{
+					"name": "Validate Configuration",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/finance/account-mappings/validate",
+							"host": ["{{base_url}}"],
+							"path": ["finance", "account-mappings", "validate"]
+						},
+						"description": "Validates the current account mapping configuration.\n\nReturns:\n- Missing required mappings\n- Invalid account references\n- Configuration warnings"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Business Workflows",
+			"description": "Examples of how accounting entries are triggered by business operations",
+			"item": [
+				{
+					"name": "Send Invoice (Triggers A/R Entry)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"method\": \"email\",\n    \"email\": \"customer@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/invoices/:invoice_id/send",
+							"host": ["{{base_url}}"],
+							"path": ["invoices", ":invoice_id", "send"],
+							"variable": [
+								{
+									"key": "invoice_id",
+									"value": "uuid"
+								}
+							]
+						},
+						"description": "Sends an invoice to the customer.\n\n**Accounting Trigger:** If `sales_recognition_trigger` is set to `invoice_sent`, this creates:\n\n```\nDR Accounts Receivable    $X,XXX\n    CR Sales Revenue              $X,XXX\n    CR VAT Output (if applicable) $XXX\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Record Payment (Clears A/R)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"amount\": 1500.00,\n    \"payment_method\": \"bank_transfer\",\n    \"payment_date\": \"2025-12-04\",\n    \"transaction_id\": \"TXN-12345\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/invoices/:invoice_id/payment",
+							"host": ["{{base_url}}"],
+							"path": ["invoices", ":invoice_id", "payment"],
+							"variable": [
+								{
+									"key": "invoice_id",
+									"value": "uuid"
+								}
+							]
+						},
+						"description": "Records a payment against an invoice.\n\n**Accounting Entry (Accrual Basis):**\n```\nDR Bank/Cash              $X,XXX\n    CR Accounts Receivable        $X,XXX\n```\n\n**Accounting Entry (Cash Basis):**\nIf `sales_recognition_trigger` is `payment_received`:\n```\nDR Bank/Cash              $X,XXX\n    CR Sales Revenue              $X,XXX\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Dispatch as Delivered",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"items\": [\n        {\n            \"item_id\": \"uuid-of-dispatch-item\",\n            \"delivered_quantity\": 10,\n            \"damaged_quantity\": 0,\n            \"delivery_notes\": \"Delivered to reception\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/order-dispatches/:dispatch_id/delivered",
+							"host": ["{{base_url}}"],
+							"path": ["order-dispatches", ":dispatch_id", "delivered"],
+							"variable": [
+								{
+									"key": "dispatch_id",
+									"value": "uuid"
+								}
+							]
+						},
+						"description": "Marks a dispatch as delivered (delivery confirmation).\n\n**Accounting Trigger:** If `sales_recognition_trigger` is set to `order_delivered`, this creates:\n\n```\nDR Accounts Receivable    $X,XXX\n    CR Sales Revenue              $X,XXX\n```\n\nThis is useful for companies that want to recognize revenue only when delivery is confirmed."
+					},
+					"response": []
+				},
+				{
+					"name": "Approve Expense",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/expenses/:expense_id/approve",
+							"host": ["{{base_url}}"],
+							"path": ["expenses", ":expense_id", "approve"],
+							"variable": [
+								{
+									"key": "expense_id",
+									"value": "uuid"
+								}
+							]
+						},
+						"description": "Approves an expense.\n\n**Accounting Trigger:** If `expense_recognition_trigger` is set to `expense_approved`, this creates:\n\n```\nDR Expense Account        $X,XXX\n    CR Cash/Bank                  $X,XXX\n```"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

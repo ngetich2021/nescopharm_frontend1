@@ -1,0 +1,46 @@
+{
+  "info": {
+    "name": "Stock Adjustment - Product Variant Example",
+    "description": "Collection for adjusting stock of products with variants via the Cherry API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "Create Stock Adjustment (Product Variant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"variant_id\": \"{{variant_id}}\",\n  \"store_id\": \"{{store_id}}\",\n  \"adjustment_type\": \"decrease\",\n  \"reason_type\": \"damage\",\n  \"quantity_adjusted\": -2,\n  \"reason\": \"Damaged during inspection\",\n  \"notes\": \"Found damaged items in warehouse sector A\",\n  \"status\": \"draft\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/api/stock-adjustments",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["api", "stock-adjustments"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    { "key": "token", "value": "" },
+    { "key": "product_id", "value": "" },
+    { "key": "variant_id", "value": "" },
+    { "key": "store_id", "value": "" }
+  ]
+}

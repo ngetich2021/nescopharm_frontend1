@@ -1,0 +1,392 @@
+"use client";
+
+import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { 
+  Eye, 
+  MoreHorizontal, 
+  Edit, 
+  Trash2, 
+  CheckCircle, 
+  XCircle, 
+  Search,
+  Download,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  RefreshCw,
+  Package
+} from "lucide-react";
+import { type Breakage } from "@/lib/breakages";
+
+interface BreakagesTableProps {
+  breakages: Breakage[];
+  loading: boolean;
+  onViewBreakage: (breakage: Breakage) => void;
+  onEditBreakage: (breakage: Breakage) => void;
+  onDeleteBreakage: (breakage: Breakage) => void;
+  onApproveBreakage: (breakage: Breakage) => void;
+  onCreateDispatch: (breakage: Breakage) => void;
+  search: string;
+  onSearchChange: (search: string) => void;
+  currentPage: number;
+  totalPages: number;
+  rowsPerPage: number;
+  onPageChange: (page: number) => void;
+  onRowsPerPageChange: (rowsPerPage: number) => void;
+  totalItems: number;
+  onRefresh: () => void;
+  onCreateNew: () => void;
+}
+
+export function BreakagesTable({
+  breakages,
+  loading,
+  onViewBreakage,
+  onEditBreakage,
+  onDeleteBreakage,
+  onApproveBreakage,
+  onCreateDispatch,
+  search,
+  onSearchChange,
+  currentPage,
+  totalPages,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
+  totalItems,
+  onRefresh,
+  onCreateNew,
+}: BreakagesTableProps) {
+  const getStatusBadge = (status: string | null | undefined) => {
+    if (!status) {
+      return <Badge variant="secondary" className="bg-gray-100 text-gray-800">Unknown</Badge>;
+    }
+    
+    switch (status.toLowerCase()) {
+      case "pending":
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      case "approved":
+        return <Badge variant="secondary" className="bg-green-100 text-green-800">Approved</Badge>;
+      case "rejected":
+        return <Badge variant="secondary" className="bg-red-100 text-red-800">Rejected</Badge>;
+      case "replaced":
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Replaced</Badge>;
+      case "resolved":
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Resolved</Badge>;
+      case "dispatch_initiated":
+        return <Badge variant="secondary" className="bg-purple-100 text-purple-800">Dispatch Initiated</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const getApprovalStatusBadge = (approvalStatus: string | null | undefined) => {
+    if (!approvalStatus) {
+      return <Badge variant="outline" className="border-gray-500 text-gray-700">Unknown</Badge>;
+    }
+    
+    switch (approvalStatus.toLowerCase()) {
+      case "pending":
+        return <Badge variant="outline" className="border-yellow-500 text-yellow-700">Pending Approval</Badge>;
+      case "approved":
+        return <Badge variant="outline" className="border-green-500 text-green-700">Approved</Badge>;
+      case "rejected":
+        return <Badge variant="outline" className="border-red-500 text-red-700">Rejected</Badge>;
+      default:
+        return <Badge variant="outline">{approvalStatus}</Badge>;
+    }
+  };
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <div className="flex space-x-4">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
+              <Input
+                className="pl-8 max-w-sm"
+                placeholder="Search breakages..."
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCreateNew}
+              className="border-[#1E2764] text-[#1E2764] hover:bg-[#1E2764]/10"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Report Breakage
+            </Button>
+            <Button variant="outline" size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={onRefresh}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
+        </div>
+        <div className="rounded-md border bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-semibold">Breakage #</TableHead>
+                <TableHead className="font-semibold">Reporter</TableHead>
+                <TableHead className="font-semibold">Items</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Approval Status</TableHead>
+                <TableHead className="font-semibold">Approver</TableHead>
+                <TableHead className="font-semibold">Created</TableHead>
+                <TableHead className="text-right font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={8} className="h-24 text-center">
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#1E2764]"></div>
+                    <span>Loading breakages...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : breakages.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="h-24 text-center">
+                  <div className="text-gray-500">
+                    <p className="font-semibold">No breakages found</p>
+                    <p className="text-sm">Create your first breakage report to get started</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              breakages.map((breakage) => {
+                const replacementRequestedCount = breakage.items.filter(item => item.replacement_requested).length;
+                return (
+                  <TableRow 
+                    key={breakage.id} 
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => onViewBreakage(breakage)}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-[#1E2764]">
+                          {breakage.breakage_number}
+                        </span>
+                        {breakage.notes && (
+                          <span className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">
+                            {breakage.notes}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {breakage.reporter?.first_name} {breakage.reporter?.last_name}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {breakage.reporter?.email}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {breakage.items.length} item{breakage.items.length !== 1 ? 's' : ''}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {replacementRequestedCount > 0 && (
+                            <span className="text-orange-600">
+                              {replacementRequestedCount} replacement{replacementRequestedCount !== 1 ? 's' : ''} requested
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(breakage.status)}
+                    </TableCell>
+                    <TableCell>
+                      {getApprovalStatusBadge(breakage.approval_status)}
+                    </TableCell>
+                    <TableCell>
+                      {breakage.approver ? (
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">
+                            {breakage.approver.first_name} {breakage.approver.last_name}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {breakage.approver.email}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">Not yet assigned</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {format(new Date(breakage.created_at), "MMM dd, yyyy")}
+                        <div className="text-xs text-muted-foreground">
+                          {format(new Date(breakage.created_at), "HH:mm")}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <ActionsDropdown
+                        breakage={breakage}
+                        onView={() => onViewBreakage(breakage)}
+                        onEdit={() => onEditBreakage(breakage)}
+                        onDelete={() => onDeleteBreakage(breakage)}
+                        onApprove={() => onApproveBreakage(breakage)}
+                        onCreateDispatch={() => onCreateDispatch(breakage)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <p className="text-sm font-medium">Rows per page</p>
+            <Select
+              value={rowsPerPage.toString()}
+              onValueChange={(value) => {
+                onRowsPerPageChange(Number(value));
+                onPageChange(1);
+              }}
+            >
+              <SelectTrigger className="h-8 w-[70px]">
+                <SelectValue placeholder={rowsPerPage} />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {[5, 10, 20, 30, 40, 50].map((pageSize) => (
+                  <SelectItem key={pageSize} value={pageSize.toString()}>
+                    {pageSize}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
+              disabled={currentPage === 1}
+              className="border-gray-200 hover:bg-[#1E2764]/10 hover:text-[#1E2764] hover:border-[#1E2764]"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="flex items-center justify-center text-sm font-medium">
+              Page {currentPage} of {totalPages || 1}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(Math.min(currentPage + 1, totalPages || 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="border-gray-200 hover:bg-[#1E2764]/10 hover:text-[#1E2764] hover:border-[#1E2764]"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ActionsDropdown({ 
+  breakage,
+  onView,
+  onEdit,
+  onDelete,
+  onApprove,
+  onCreateDispatch
+}: { 
+  breakage: Breakage;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onApprove: () => void;
+  onCreateDispatch: () => void;
+}) {
+  const canEdit = breakage.status === "pending" && breakage.approval_status === "pending";
+  const canDelete = breakage.status === "pending" && breakage.approval_status === "pending";
+  const canApprove = breakage.approval_status === "pending";
+  const canCreateDispatch = breakage.approval_status === "approved" && 
+    breakage.status !== "dispatch_initiated" &&
+    breakage.items.some(item => item.replacement_requested);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="h-8 w-8 p-0">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        <DropdownMenuItem onClick={onView}>
+          <Eye className="h-4 w-4 mr-2" /> View Details
+        </DropdownMenuItem>
+        {canApprove && (
+          <DropdownMenuItem onClick={onApprove} className="text-green-600 focus:text-green-600">
+            <CheckCircle className="h-4 w-4 mr-2" /> Approve/Reject
+          </DropdownMenuItem>
+        )}
+        {canCreateDispatch && (
+          <DropdownMenuItem onClick={onCreateDispatch} className="text-blue-600 focus:text-blue-600">
+            <Package className="h-4 w-4 mr-2" /> Create Replacement Dispatch
+          </DropdownMenuItem>
+        )}
+        {canEdit && (
+          <DropdownMenuItem onClick={onEdit}>
+            <Edit className="h-4 w-4 mr-2" /> Edit Breakage
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onDelete} className="text-primary focus:text-primary">
+              <Trash2 className="h-4 w-4 mr-2" /> Delete Breakage
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

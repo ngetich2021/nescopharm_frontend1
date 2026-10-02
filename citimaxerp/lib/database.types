@@ -1,0 +1,104 @@
+export type Database = {
+  public: {
+    Tables: {
+      customers: {
+        Row: {
+          id: string;
+          name: string;
+          email: string;
+          phone: string;
+          status: "active" | "inactive";
+          created_at: string;
+          recent_activity: {
+            date: string;
+            type: string;
+            description: string;
+            amount: number | null;
+          }[];
+          customer_notes: {
+            note: string;
+            added_by: string;
+            added_date: string;
+          }[];
+          company?: string | null;
+          address?: string | null;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          postal_code?: string | null;
+          tags?: string[];
+          total_orders?: number;
+          total_spend?: number;
+          loyalty_points?: number;
+          customer_type?: string | null;
+          preferred_communication_channel?: string | null;
+          last_contact_date?: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          email: string;
+          phone: string;
+          status: "active" | "inactive";
+          created_at?: string;
+          recent_activity?: {
+            date: string;
+            type: string;
+            description: string;
+            amount: number | null;
+          }[];
+          customer_notes?: {
+            note: string;
+            added_by: string;
+            added_date: string;
+          }[];
+          company?: string | null;
+          address?: string | null;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          postal_code?: string | null;
+          tags?: string[];
+          total_orders?: number;
+          total_spend?: number;
+          loyalty_points?: number;
+          customer_type?: string | null;
+          preferred_communication_channel?: string | null;
+          last_contact_date?: string | null;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          email?: string;
+          phone?: string;
+          status?: "active" | "inactive";
+          created_at?: string;
+          recent_activity?: {
+            date: string;
+            type: string;
+            description: string;
+            amount: number | null;
+          }[];
+          customer_notes?: {
+            note: string;
+            added_by: string;
+            added_date: string;
+          }[];
+          company?: string | null;
+          address?: string | null;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          postal_code?: string | null;
+          tags?: string[];
+          total_orders?: number;
+          total_spend?: number;
+          loyalty_points?: number;
+          customer_type?: string | null;
+          preferred_communication_channel?: string | null;
+          last_contact_date?: string | null;
+        };
+      };
+    };
+  };
+}

@@ -1,0 +1,230 @@
+{
+  "info": {
+    "name": "Product Receipt Creation Examples",
+    "description": "Comprehensive examples for creating product receipts with all variables including serial number tracking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Complete Receipt with All Variables",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"company_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"supplier_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n  \"contractor_id\": \"550e8400-e29b-41d4-a716-446655440003\",\n  \"document_type\": \"receipt\",\n  \"reference_number\": \"SUP-INV-2025-001\",\n  \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n  \"document_url\": \"https://example.com/documents/receipt-001.pdf\",\n  \"items\": [\n    {\n      \"product_id\": \"550e8400-e29b-41d4-a716-446655440010\",\n      \"sku\": \"LAPTOP-DELL-001\",\n      \"barcode\": \"123456789012\",\n      \"variant_id\": \"550e8400-e29b-41d4-a716-446655440011\",\n      \"quantity\": 3,\n      \"unit_price\": 1200.00,\n      \"unit_cost\": 1000.00,\n      \"expiry_date\": \"2027-09-11\",\n      \"notes\": \"Dell Laptops with manufacturer warranties\",\n      \"batch_number\": \"BATCH-DELL-2025-Q3\",\n      \"lot_number\": \"LOT-DEL-092025\",\n      \"manufacture_date\": \"2025-08-15\",\n      \"supplier\": \"Dell Technologies\",\n      \"supplier_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n      \"serial_numbers\": [\n        \"DELL123456789\",\n        \"DELL987654321\",\n        \"DELL456789123\"\n      ],\n      \"warranty_months\": 24\n    },\n    {\n      \"product_id\": \"550e8400-e29b-41d4-a716-446655440020\",\n      \"sku\": \"MOUSE-LOG-001\",\n      \"barcode\": \"987654321098\",\n      \"quantity\": 10,\n      \"unit_price\": 25.00,\n      \"unit_cost\": 18.00,\n      \"notes\": \"Logitech wireless mice\",\n      \"batch_number\": \"BATCH-LOG-2025-001\",\n      \"manufacture_date\": \"2025-09-01\",\n      \"supplier\": \"Logitech\",\n      \"supplier_id\": \"550e8400-e29b-41d4-a716-446655440005\",\n      \"track_serials\": true,\n      \"serial_prefix\": \"LOG\",\n      \"warranty_months\": 12\n    },\n    {\n      \"sku\": \"CABLE-USB-001\",\n      \"barcode\": \"456789123456\",\n      \"name\": \"USB-C Cable\",\n      \"quantity\": 50,\n      \"unit_price\": 5.00,\n      \"unit_cost\": 3.00,\n      \"notes\": \"Generic USB-C cables - no serial tracking needed\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Creates a product receipt with all possible variables including mixed serial number scenarios"
+      }
+    },
+    {
+      "name": "2. Products with Pre-existing Serial Numbers",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"supplier_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n  \"document_type\": \"invoice\",\n  \"reference_number\": \"APPLE-INV-2025-001\",\n  \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n  \"items\": [\n    {\n      \"product_id\": \"550e8400-e29b-41d4-a716-446655440030\",\n      \"quantity\": 5,\n      \"unit_price\": 999.00,\n      \"unit_cost\": 800.00,\n      \"serial_numbers\": [\n        \"APPLE123456789012\",\n        \"APPLE210987654321\",\n        \"APPLE345678901234\",\n        \"APPLE456789012345\",\n        \"APPLE567890123456\"\n      ],\n      \"warranty_months\": 12,\n      \"batch_number\": \"BATCH-APPLE-2025-001\",\n      \"manufacture_date\": \"2025-08-20\",\n      \"supplier\": \"Apple Inc.\",\n      \"notes\": \"iPhone 15 Pro with Apple serial numbers\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Example for products that come with manufacturer serial numbers (electronics, equipment)"
+      }
+    },
+    {
+      "name": "3. Auto-generated Serial Numbers",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"document_type\": \"delivery_note\",\n  \"reference_number\": \"DELIVERY-2025-001\",\n  \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n  \"items\": [\n    {\n      \"sku\": \"WIDGET-001\",\n      \"name\": \"Industrial Widget\",\n      \"quantity\": 20,\n      \"unit_price\": 50.00,\n      \"unit_cost\": 35.00,\n      \"track_serials\": true,\n      \"serial_prefix\": \"WDG\",\n      \"warranty_months\": 6,\n      \"batch_number\": \"BATCH-WDG-2025-001\",\n      \"lot_number\": \"LOT-WDG-092025\",\n      \"manufacture_date\": \"2025-09-05\",\n      \"notes\": \"Custom widgets requiring serial tracking\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Products requiring serial tracking but without pre-existing serials - system will auto-generate them"
+      }
+    },
+    {
+      "name": "4. Mixed Serial Scenarios",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"supplier_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n  \"document_type\": \"receipt\",\n  \"reference_number\": \"MIXED-2025-001\",\n  \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n  \"items\": [\n    {\n      \"product_id\": \"550e8400-e29b-41d4-a716-446655440030\",\n      \"quantity\": 2,\n      \"unit_price\": 999.00,\n      \"serial_numbers\": [\n        \"APPLE123456789012\",\n        \"APPLE210987654321\"\n      ],\n      \"warranty_months\": 12,\n      \"notes\": \"iPhones with Apple serials\"\n    },\n    {\n      \"sku\": \"CABLE-USB-001\",\n      \"name\": \"USB-C Cable\",\n      \"quantity\": 10,\n      \"unit_price\": 15.00,\n      \"track_serials\": true,\n      \"serial_prefix\": \"CBL\",\n      \"warranty_months\": 6,\n      \"notes\": \"Generic cables - auto-generate serials\"\n    },\n    {\n      \"sku\": \"BASIC-ITEM-001\",\n      \"name\": \"Basic Item\",\n      \"quantity\": 50,\n      \"unit_price\": 2.00,\n      \"notes\": \"No serial tracking needed\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Mixed receipt with pre-existing serials, auto-generated serials, and non-serialized items"
+      }
+    },
+    {
+      "name": "5. Minimal Required Fields",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"document_type\": \"receipt\",\n  \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n  \"items\": [\n    {\n      \"sku\": \"SIMPLE-001\",\n      \"name\": \"Simple Product\",\n      \"quantity\": 1,\n      \"unit_price\": 10.00\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Minimal payload with only required fields for simple product receipt"
+      }
+    },
+    {
+      "name": "6. Receipt with File Upload",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "store_id",
+              "value": "550e8400-e29b-41d4-a716-446655440001",
+              "type": "text"
+            },
+            {
+              "key": "document_type",
+              "value": "invoice",
+              "type": "text"
+            },
+            {
+              "key": "reference_number",
+              "value": "FILE-UPLOAD-001",
+              "type": "text"
+            },
+            {
+              "key": "received_by",
+              "value": "550e8400-e29b-41d4-a716-446655440004",
+              "type": "text"
+            },
+            {
+              "key": "items",
+              "value": "[{\"sku\": \"UPLOAD-001\", \"name\": \"Product with Document\", \"quantity\": 5, \"unit_price\": 25.00, \"serial_numbers\": [\"SER001\", \"SER002\", \"SER003\", \"SER004\", \"SER005\"], \"warranty_months\": 12}]",
+              "type": "text"
+            },
+            {
+              "key": "document",
+              "type": "file",
+              "src": "/path/to/receipt.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Example showing how to upload a document file with the receipt using multipart/form-data"
+      }
+    },
+    {
+      "name": "7. Batch Receipt Creation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"receipts\": [\n    {\n      \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n      \"document_type\": \"receipt\",\n      \"reference_number\": \"BATCH-001\",\n      \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n      \"items\": [\n        {\n          \"sku\": \"BATCH-ITEM-001\",\n          \"name\": \"Batch Item 1\",\n          \"quantity\": 10,\n          \"unit_price\": 15.00\n        }\n      ]\n    },\n    {\n      \"store_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n      \"document_type\": \"receipt\",\n      \"reference_number\": \"BATCH-002\",\n      \"received_by\": \"550e8400-e29b-41d4-a716-446655440004\",\n      \"items\": [\n        {\n          \"sku\": \"BATCH-ITEM-002\",\n          \"name\": \"Batch Item 2\",\n          \"quantity\": 5,\n          \"unit_price\": 30.00,\n          \"track_serials\": true,\n          \"serial_prefix\": \"BAT\"\n        }\n      ]\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/product-receipts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "product-receipts"]
+        },
+        "description": "Creating multiple receipts in a single API call using the receipts array"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "description": "Base URL for the API"
+    },
+    {
+      "key": "auth_token",
+      "value": "your-bearer-token-here",
+      "description": "Authentication token"
+    }
+  ]
+}

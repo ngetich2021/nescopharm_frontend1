@@ -1,0 +1,35 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# Build outputs
+**/.next/
+**/dist/
+**/build/
+
+# Laravel
+citimaxerp-backend/storage/*.key
+citimaxerp-backend/storage/framework/cache/*
+citimaxerp-backend/storage/framework/sessions/*
+citimaxerp-backend/storage/framework/views/*
+citimaxerp-backend/storage/logs/*.log
+citimaxerp-backend/bootstrap/cache/*.php
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code worktrees (stale agent copies, not real project files)
+**/.claude/worktrees/

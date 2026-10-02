@@ -1,0 +1,555 @@
+{
+  "info": {
+    "name": "Bulk Stock Adjustment API",
+    "description": "Collection for testing bulk stock adjustment functionality. Allows adjusting multiple products and product variants in a single request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "YOUR_AUTH_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "product_id_1",
+      "value": "REPLACE_WITH_ACTUAL_PRODUCT_ID",
+      "type": "string"
+    },
+    {
+      "key": "product_id_2",
+      "value": "REPLACE_WITH_ACTUAL_PRODUCT_ID",
+      "type": "string"
+    },
+    {
+      "key": "variant_id_1",
+      "value": "REPLACE_WITH_ACTUAL_VARIANT_ID",
+      "type": "string"
+    },
+    {
+      "key": "batch_id_1",
+      "value": "REPLACE_WITH_ACTUAL_BATCH_ID",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Bulk Stock Adjustments",
+      "item": [
+        {
+          "name": "Create Bulk Adjustments - Simple",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adjustments\": [\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"adjustment_type\": \"decrease\",\n      \"reason_type\": \"damage\",\n      \"quantity_adjusted\": 5,\n      \"reason\": \"Items damaged during transport\",\n      \"notes\": \"Driver reported dropping box\",\n      \"status\": \"draft\"\n    },\n    {\n      \"product_id\": \"{{product_id_2}}\",\n      \"adjustment_type\": \"decrease\",\n      \"reason_type\": \"damage\",\n      \"quantity_adjusted\": 3,\n      \"reason\": \"Items damaged during transport\",\n      \"status\": \"draft\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                "bulk"
+              ]
+            },
+            "description": "Create multiple stock adjustments for different products with damage reason."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Bulk Adjustments - Product Variants",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adjustments\": [\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"variant_id\": \"{{variant_id_1}}\",\n      \"adjustment_type\": \"set\",\n      \"reason_type\": \"recount\",\n      \"quantity_adjusted\": 45,\n      \"reason\": \"Physical inventory count - Size Small\",\n      \"notes\": \"Annual inventory audit\",\n      \"status\": \"pending\"\n    },\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"variant_id\": \"{{variant_id_1}}\",\n      \"adjustment_type\": \"set\",\n      \"reason_type\": \"recount\",\n      \"quantity_adjusted\": 67,\n      \"reason\": \"Physical inventory count - Size Medium\",\n      \"notes\": \"Annual inventory audit\",\n      \"status\": \"pending\"\n    },\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"variant_id\": \"{{variant_id_1}}\",\n      \"adjustment_type\": \"set\",\n      \"reason_type\": \"recount\",\n      \"quantity_adjusted\": 52,\n      \"reason\": \"Physical inventory count - Size Large\",\n      \"notes\": \"Annual inventory audit\",\n      \"status\": \"pending\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                "bulk"
+              ]
+            },
+            "description": "Create adjustments for multiple variants of the same product (e.g., different sizes)."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Bulk Adjustments - Mixed Types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adjustments\": [\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"adjustment_type\": \"decrease\",\n      \"reason_type\": \"damage\",\n      \"quantity_adjusted\": 5,\n      \"reason\": \"Water damaged items\",\n      \"status\": \"pending\"\n    },\n    {\n      \"product_id\": \"{{product_id_2}}\",\n      \"adjustment_type\": \"increase\",\n      \"reason_type\": \"found\",\n      \"quantity_adjusted\": 10,\n      \"reason\": \"Found items in back storage\",\n      \"status\": \"draft\"\n    },\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"batch_id\": \"{{batch_id_1}}\",\n      \"adjustment_type\": \"decrease\",\n      \"reason_type\": \"expiry\",\n      \"quantity_adjusted\": 20,\n      \"reason\": \"Batch expired\",\n      \"attachments\": [\"https://example.com/expiry-report.pdf\"],\n      \"status\": \"pending\"\n    },\n    {\n      \"product_id\": \"{{product_id_2}}\",\n      \"adjustment_type\": \"decrease\",\n      \"reason_type\": \"theft\",\n      \"quantity_adjusted\": 3,\n      \"reason\": \"Reported stolen\",\n      \"notes\": \"Police report filed\",\n      \"status\": \"pending\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                "bulk"
+              ]
+            },
+            "description": "Create adjustments with different types (increase, decrease, set) and different reasons."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Bulk Adjustments - With All Fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adjustments\": [\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"variant_id\": \"{{variant_id_1}}\",\n      \"batch_id\": \"{{batch_id_1}}\",\n      \"adjustment_type\": \"decrease\",\n      \"reason_type\": \"damage\",\n      \"quantity_adjusted\": 5,\n      \"reason\": \"Comprehensive test with all fields\",\n      \"notes\": \"Testing all available fields\",\n      \"unit_cost\": 100.00,\n      \"unit_price\": 150.00,\n      \"status\": \"pending\",\n      \"attachments\": [\n        \"https://example.com/photo1.jpg\",\n        \"https://example.com/report.pdf\"\n      ],\n      \"metadata\": {\n        \"inspector\": \"John Doe\",\n        \"incident_id\": \"INC-2025-001\",\n        \"department\": \"Warehouse A\"\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                "bulk"
+              ]
+            },
+            "description": "Create an adjustment with all available optional fields populated."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints for creating bulk stock adjustments"
+    },
+    {
+      "name": "Single Adjustment Operations",
+      "item": [
+        {
+          "name": "Get All Stock Adjustments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments?per_page=20&sort_by=created_at&sort_order=desc",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "20"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "created_at"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "status",
+                  "value": "draft",
+                  "disabled": true
+                },
+                {
+                  "key": "reason_type",
+                  "value": "damage",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve all stock adjustments with optional filters."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Stock Adjustment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Get detailed information about a specific stock adjustment."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stock Adjustment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"pending\",\n  \"notes\": \"Updated notes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Update a draft or pending stock adjustment."
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Stock Adjustment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Approve a pending stock adjustment."
+          },
+          "response": []
+        },
+        {
+          "name": "Reject Stock Adjustment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejection_reason\": \"Insufficient documentation provided\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id",
+                "reject"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Reject a pending stock adjustment with a reason."
+          },
+          "response": []
+        },
+        {
+          "name": "Apply Stock Adjustment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id",
+                "apply"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Apply an approved stock adjustment to inventory."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Stock Adjustment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Delete a draft stock adjustment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Operations on individual stock adjustments"
+    },
+    {
+      "name": "Statistics & Activities",
+      "item": [
+        {
+          "name": "Get Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/statistics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                "statistics"
+              ],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-11-01",
+                  "disabled": true
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-11-30",
+                  "disabled": true
+                },
+                {
+                  "key": "store_id",
+                  "value": "STORE_ID",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get statistics about stock adjustments."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Activities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/activities?per_page=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                "activities"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "50"
+                },
+                {
+                  "key": "adjustment_id",
+                  "value": "ADJUSTMENT_ID",
+                  "disabled": true
+                },
+                {
+                  "key": "action",
+                  "value": "stock_adjustment_created",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get activity logs for all stock adjustments."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Activities for Specific Adjustment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stock-adjustments/:id/activities",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "stock-adjustments",
+                ":id",
+                "activities"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "ADJUSTMENT_ID_HERE"
+                }
+              ]
+            },
+            "description": "Get activity log for a specific stock adjustment."
+          },
+          "response": []
+        }
+      ],
+      "description": "Statistics and activity logging endpoints"
+    }
+  ]
+}
