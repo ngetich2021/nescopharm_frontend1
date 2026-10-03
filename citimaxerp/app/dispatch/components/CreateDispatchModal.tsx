@@ -68,7 +68,9 @@ export function CreateLogisticsModal({
   onSuccess
 }: CreateLogisticsModalProps) {
   const { toast } = useToast();
-  const { companyId } = useAuth();
+  const { companyId, userProfile } = useAuth();
+  const roleName = ((userProfile as any)?.role?.name || "").toLowerCase();
+  const canAddDeliveryPerson = roleName === "gm" || roleName === "director" || roleName === "warehouse manager";
   const [loading, setLoading] = useState(false);
   const [deliveryPersons, setDeliveryPersons] = useState<DeliveryPerson[]>([]);
   const [fetchingDeliveryPersons, setFetchingDeliveryPersons] = useState(false);
@@ -326,21 +328,23 @@ export function CreateLogisticsModal({
                       Delivery Person
                       <span className="text-xs text-gray-400 font-normal">(optional)</span>
                     </Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                      onClick={() => { setIsSelectOpen(false); setShowAddDeliveryPerson(true); }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add New
-                    </Button>
+                    {canAddDeliveryPerson && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={() => { setIsSelectOpen(false); setShowAddDeliveryPerson(true); }}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add New
+                      </Button>
+                    )}
                   </div>
-                  <Select 
-                    value={formData.delivery_person_id} 
+                  <Select
+                    value={formData.delivery_person_id}
                     onValueChange={(value) => handleChange("delivery_person_id", value)}
-                    open={isSelectOpen} 
+                    open={isSelectOpen}
                     onOpenChange={setIsSelectOpen}
                   >
                     <SelectTrigger id="delivery_person_id">
@@ -350,9 +354,13 @@ export function CreateLogisticsModal({
                       {deliveryPersons.length === 0 && !fetchingDeliveryPersons ? (
                         <div className="p-2 text-center text-sm text-muted-foreground">
                           No delivery persons available.<br />
-                          <button type="button" className="text-blue-600 hover:underline mt-1" onClick={() => { setIsSelectOpen(false); setShowAddDeliveryPerson(true); }}>
-                            Add one now
-                          </button>
+                          {canAddDeliveryPerson ? (
+                            <button type="button" className="text-blue-600 hover:underline mt-1" onClick={() => { setIsSelectOpen(false); setShowAddDeliveryPerson(true); }}>
+                              Add one now
+                            </button>
+                          ) : (
+                            <span className="text-xs">Only GM, Director or Warehouse Manager can add one.</span>
+                          )}
                         </div>
                       ) : (
                         deliveryPersons.map((person) => (
