@@ -589,6 +589,13 @@ class LogisticController extends Controller
                 ], 409);
             }
 
+            if ($dispatch->approval_status !== 'approved') {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => 'This dispatch must be approved before it can be dispatched.',
+                ], 422);
+            }
+
             return DB::transaction(function () use ($request, $dispatch, $user) {
                 // Rate-based path: transporter + zone rate approved by GM/Director,
                 // warehouse manager just enters carton count. The app computes the
@@ -679,6 +686,8 @@ class LogisticController extends Controller
 
                     $logistic->delivery_invoice_id = $invoice->id;
                     $logistic->save();
+
+                    \App\Http\Controllers\DeliveryNoteController::generateForDispatch($dispatch, $user->id);
                 }
 
                 // Pending-payment dispatches are held where they are (typically

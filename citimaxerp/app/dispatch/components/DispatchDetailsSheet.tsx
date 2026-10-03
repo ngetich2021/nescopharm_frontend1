@@ -1,5 +1,6 @@
 "use client";
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react";
 import {
   type OrderDispatch,
@@ -9,6 +10,7 @@ import {
   submitDispatchForApproval,
   canSubmitDispatch,
   canMarkDelivered,
+  getOrderDispatch,
   type ApproveDispatchRequest,
   type RejectDispatchRequest
 } from "@/lib/order-dispatches";
@@ -62,6 +64,7 @@ import {
 import { format } from "date-fns";
 import { cn, toSentenceCase } from "@/lib/utils";
 import { VisuallyHidden } from "@/components/ui/visually-hidden";
+import { dispatchItemCode } from "@/lib/price-codes";
 
 interface DispatchDetailsSheetProps {
   open: boolean;
@@ -110,6 +113,18 @@ export function DispatchDetailsSheet({
   }, [dispatch?.id]);
 
   if (!localDispatch) return null;
+
+  const reloadDispatch = async () => {
+    const id = localDispatch.id;
+    try {
+      const [res, notes] = await Promise.all([getOrderDispatch(id), getDeliveryNotes(id).catch(() => [])]);
+      if (res?.data) setLocalDispatch(res.data);
+      setDeliveryNote(notes[0] || null);
+    } catch (error) {
+      console.error("Failed to reload dispatch", error);
+    }
+    onRefresh?.();
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -797,10 +812,9 @@ export function DispatchDetailsSheet({
                             <Package className="h-6 w-6 text-gray-400 group-hover:text-blue-500 transition-colors" />
                          </div>
                          <div className="space-y-1">
-                           <div className="font-semibold text-gray-900">{item.product?.name || "Unavailable product"}</div>
+                           <div className="font-semibold text-gray-900">{item.product ? sizedName(item.product.name, item.variant?.name) : "Unavailable product"}</div>
                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                             <span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">SKU: {item.product?.sku || "N/A"}</span>
-                             {item.variant && <span className="text-xs">• {item.variant.name}</span>}
+                             <span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">{dispatchItemCode(item)}</span>
                            </div>
                            {item.batch_allocations && item.batch_allocations.length > 0 && (
                              <div className="text-xs text-gray-500">
@@ -945,22 +959,14 @@ export function DispatchDetailsSheet({
         open={dispatchModalOpen}
         onOpenChange={setDispatchModalOpen}
         dispatch={localDispatch}
-        onSuccess={() => {
-          // Reload delivery notes for this dispatch after payment
-          if (localDispatch?.id) {
-            getDeliveryNotes(localDispatch.id)
-              .then((notes) => setDeliveryNote(notes[0] || null))
-              .catch(() => setDeliveryNote(null));
-          }
-          onRefresh?.();
-        }}
+        onSuccess={reloadDispatch}
       />
       {localDispatch.logistic && (
         <MarkDeliveredModal
           open={markDeliveredModalOpen}
           onOpenChange={setMarkDeliveredModalOpen}
           dispatch={localDispatch}
-          onSuccess={() => onRefresh?.()}
+          onSuccess={reloadDispatch}
         />
       )}
     </>

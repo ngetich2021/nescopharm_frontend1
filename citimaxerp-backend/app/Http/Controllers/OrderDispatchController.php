@@ -79,8 +79,9 @@ class OrderDispatchController extends Controller
 
         $query = OrderDispatch::with([
             'order.customer',
-            'items.product',
+            'items.product.priceTiers',
             'items.variant',
+            'items.orderItem:id,price_label,price_unit',
             'fromStore',
             'deliveryLocation',
             'logistic.deliveryPerson',
@@ -179,8 +180,9 @@ class OrderDispatchController extends Controller
             'order.customer',
             'order.orderItems.product',
             'order.orderItems.variant',
-            'items.product',
+            'items.product.priceTiers',
             'items.variant',
+            'items.orderItem:id,price_label,price_unit',
             'fromStore',
             'deliveryLocation',
             'logistic.deliveryPerson',
@@ -260,7 +262,19 @@ class OrderDispatchController extends Controller
                 ], 422);
             }
 
+            // Each dispatch copies the full order quantities, so a second open one would double-ship.
+            $existing = OrderDispatch::where('order_id', $order->id)
+                ->whereNotIn('status', ['cancelled', 'rejected'])
+                ->whereNotIn('approval_status', ['rejected'])
+                ->first();
 
+            if ($existing) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => "Order already has dispatch {$existing->dispatch_number} ({$existing->status}). Cancel or reject it before creating another.",
+                ], 409);
+            }
 
             // Create the dispatch
             $dispatch = new OrderDispatch();
@@ -344,8 +358,9 @@ class OrderDispatchController extends Controller
             // Load relationships for response
             $dispatch->load([
                 'order',
-                'items.product',
+                'items.product.priceTiers',
                 'items.variant',
+                'items.orderItem:id,price_label,price_unit',
                 'deliveryLocation',
             ]);
 
