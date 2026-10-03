@@ -35,12 +35,13 @@ import { PermissionGuard } from "@/components/PermissionGuard"
 
 interface OrdersTableProps {
   initialOrders?: Order[]
+  isLoading?: boolean
 }
 
-export function OrdersTable({ initialOrders = [] }: OrdersTableProps) {
+export function OrdersTable({ initialOrders = [], isLoading: initialLoading = false }: OrdersTableProps) {
   const router = useRouter()
   const [orders, setOrders] = useState<Order[]>(initialOrders)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(initialLoading)
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)

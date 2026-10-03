@@ -90,7 +90,7 @@ export default function OrdersPage() {
 
         <div className="grid gap-4">
           <h3 className="text-xl font-semibold">Recent Orders</h3>
-          <OrdersTable initialOrders={safeOrders} />
+          <OrdersTable initialOrders={safeOrders} isLoading={isLoadingOrders} />
         </div>
       </div>
     </PermissionGuard>
