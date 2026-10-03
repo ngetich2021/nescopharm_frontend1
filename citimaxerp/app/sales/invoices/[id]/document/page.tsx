@@ -15,6 +15,7 @@ import { ArrowLeft, Download, Mail, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
+import { documentCode } from "@/lib/price-codes"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -368,14 +369,14 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
           <div className="mb-4">
             <table className="w-full border border-gray-300 border-collapse">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 w-10">S.NO</th>
-                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap">CODE</th>
-                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">DESCRIPTION</th>
-                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">QTY</th>
-                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">UNIT PRICE</th>
-                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">PER</th>
-                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">AMOUNT</th>
+                <tr className="bg-gray-50 text-xs">
+                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 w-10">S/No</th>
+                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap">Code No.</th>
+                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Item Name</th>
+                  <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Pack Size</th>
+                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Price per Pack (Ksh)</th>
+                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Order Qty</th>
+                  <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Total Value (Ksh)</th>
                 </tr>
               </thead>
               <tbody>
@@ -387,15 +388,16 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                     : (item.batch_number || item.expiry_date)
                       ? [{ batch_number: item.batch_number ?? null, expiry_date: item.expiry_date ?? null, quantity: null }]
                       : []
-                  const unit = (item.unit || "pcs").toUpperCase()
+                  const packSize = item.unit || "pcs"
                   const qty = parseFloat(item.quantity.toString())
                   const vatRate = parseFloat((item.tax_rate ?? 0).toString())
                   const unitPriceInclVat = parseFloat(item.unit_price.toString()) * (1 + vatRate / 100)
-                  const itemCode = item.variant?.sku || item.product?.product_code || item.product?.sku || "—"
                   return (
                     <tr key={item.id || index} className="leading-5">
                       <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">{index + 1}</td>
-                      <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">{itemCode}</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top whitespace-nowrap font-mono text-xs">
+                        {documentCode(item.metadata?.price_label, (item.product as any)?.item_number)}
+                      </td>
                       <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">
                         <p className="font-semibold">{item.description}</p>
                         {vatRate > 0 && (
@@ -410,26 +412,23 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                           </div>
                         ))}
                       </td>
-                      {/* Each batch qty sits on its batch's line, mirroring the description cell's rows. */}
+                      <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">{packSize}</td>
                       <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
-                        <p className="font-semibold">{qty.toLocaleString()} {unit}</p>
-                        {batches.map((b, i) => {
-                          const batchQty = b.quantity ?? (batches.length === 1 ? qty : null)
-                          return (
-                            <div key={i} className="text-xs">
-                              <p>{batchQty != null ? `${batchQty.toLocaleString()} ${unit}` : " "}</p>
-                              <p>&nbsp;</p>
-                            </div>
-                          )
-                        })}
-                      </td>
-                      <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
-                        KES {formatAmount(unitPriceInclVat)}
+                        {formatAmount(unitPriceInclVat)}
                         {isPricing && item.metadata?.price_label && <span className="font-semibold"> @ {item.metadata.price_label}</span>}
                       </td>
-                      <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top">{unit}</td>
+                      {/* Per-batch qtys only when the line was split across batches; one batch would just repeat the total. */}
+                      <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
+                        <p className="font-semibold">{qty.toLocaleString()}</p>
+                        {batches.length > 1 && batches.map((b, i) => (
+                          <div key={i} className="text-xs">
+                            <p>{b.quantity != null ? b.quantity.toLocaleString() : " "}</p>
+                            <p>&nbsp;</p>
+                          </div>
+                        ))}
+                      </td>
                       <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top font-semibold">
-                        KES {formatAmount(qty * unitPriceInclVat)}
+                        {formatAmount(qty * unitPriceInclVat)}
                       </td>
                     </tr>
                   )
@@ -451,10 +450,12 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                   <span className="text-green-600">-KES {formatAmount(invoice.discount_amount)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">VAT:</span>
-                <span className="text-gray-900">KES {formatAmount(invoice.tax_amount)}</span>
-              </div>
+              {parseFloat(invoice.tax_amount.toString()) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">VAT:</span>
+                  <span className="text-gray-900">KES {formatAmount(invoice.tax_amount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold border-t-2 border-gray-300 pt-2">
                 <span>Total:</span>
                 <span>KES {formatAmount(invoice.total_amount)}</span>

@@ -502,6 +502,293 @@ class ProductController extends Controller
         ]);
     }
 
+    private const PRODUCT_SHEET_HEADERS = [
+        'item_no' => ['itemno', 'itemnumber', 'no'],
+        'row_type' => ['rowtype', 'type', 'linetype'],
+        'size' => ['size', 'variant', 'variation', 'sizename'],
+        'description' => ['itemdescription', 'description', 'name', 'itemname', 'productname'],
+        'category' => ['category'],
+        'uom' => ['unitofmeasure', 'unitofmeasurement', 'uom', 'unit'],
+        'cost' => ['costprice', 'cost', 'unitcost', 'buyingprice'],
+        'tax' => ['taxstatus', 'tax', 'vatstatus'],
+        'hs_code' => ['hscode', 'hs'],
+        'reorder' => ['reorderlevel', 'lowstockthreshold', 'reorder'],
+        'track' => ['trackinventory', 'track'],
+        'active' => ['active', 'isactive', 'status'],
+        'brand' => ['brand'],
+    ];
+
+    /**
+     * Import the products sheet that the products page exports. One row per item; an item with
+     * sizes is followed by one row per size (Item No. 164.1, 164.2 ... or Row Type "Size").
+     * Items are matched by Item No. (blank or unknown = new item), sizes by name under their item.
+     * A blank cell leaves that field unchanged. Stock is never imported - it moves only through
+     * receipts, stock adjustments, recounts and sales. dry_run=1 previews.
+     */
+    public function importProducts(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            'dry_run' => 'nullable|boolean',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()], 400);
+        }
+
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_create_products', $user->company_id)
+            || !$this->hasPermission($request, 'can_update_products', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to import products.'], 403);
+        }
+        $companyId = $user->company_id;
+        $dryRun = $request->boolean('dry_run');
+        $storeId = DB::table('stores')->where('company_id', $companyId)->orderBy('created_at')->value('id');
+
+        try {
+            $rows = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file')->getRealPath())
+                ->getSheet(0)
+                ->toArray(null, true, false, false);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 'failed', 'message' => 'Could not read the file: ' . $e->getMessage()], 422);
+        }
+
+        $columns = [];
+        $priceColumns = [];
+        foreach ($rows[0] ?? [] as $index => $heading) {
+            $normalized = preg_replace('/[^a-z0-9]/', '', strtolower((string) $heading));
+            if (preg_match('/^([a-z]{2,10})(code|price)$/', $normalized, $m) && !in_array($normalized, ['costprice', 'hscode'], true)) {
+                $priceColumns[strtoupper($m[1])][$m[2]] = $index;
+                continue;
+            }
+            foreach (self::PRODUCT_SHEET_HEADERS as $field => $aliases) {
+                if (!isset($columns[$field]) && in_array($normalized, $aliases, true)) {
+                    $columns[$field] = $index;
+                }
+            }
+        }
+        if (!isset($columns['description']) && !isset($columns['item_no'])) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'The first row must have the column headings from the exported products sheet (at least "Item No." or "Item Description").',
+            ], 422);
+        }
+
+        $number = fn ($v) => is_numeric($n = str_replace([',', ' '], '', preg_replace('/^(KES|KSH|KSHS)\.?/i', '', $v))) ? (float) $n : null;
+        $yesNo = fn ($v) => $v === '' ? null : in_array(strtolower($v), ['yes', 'y', 'true', '1', 'active'], true);
+
+        $summary = ['rows' => 0, 'items_created' => 0, 'items_updated' => 0, 'sizes_created' => 0, 'sizes_updated' => 0, 'unchanged' => 0, 'errors' => 0];
+        $results = [];
+        $current = null;
+        // The database is remote (~250ms a round trip): look everything up once instead of per row,
+        // let the preview simulate without writing, and give a real import more than PHP's 30s.
+        $write = !$dryRun;
+        if ($write) {
+            set_time_limit(600);
+        }
+        $products = Product::where('company_id', $companyId)->get()->keyBy(fn ($p) => (string) $p->item_number);
+        // Excel turns size "2.0" into 2 when it saves a sheet, so numeric sizes match by value.
+        $sizeKey = fn ($name) => is_numeric($t = trim((string) $name)) ? (string) (float) $t : mb_strtolower($t);
+        // What the preview shows side by side: the system's values before, and after applying the row.
+        $itemSnapshot = fn (?Product $p) => $p ? [
+            'uom' => $p->unit_of_measurement,
+            'cost' => round((float) $p->unit_cost, 2),
+            'tax' => $this->describeTaxStatus($p),
+            'reorder' => $p->low_stock_threshold !== null ? (int) $p->low_stock_threshold : null,
+        ] : null;
+        $sizeSnapshot = fn (?ProductVariant $v) => $v ? ['cost' => round((float) $v->cost, 2)] : null;
+        $variants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get()
+            ->groupBy('product_id')
+            ->map(fn ($group) => $group->keyBy(fn ($v) => $sizeKey($v->name)));
+        $nextItemNumber = (int) Product::withTrashed()->where('company_id', $companyId)->max('item_number') + 1;
+
+        DB::beginTransaction();
+        try {
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $cell = fn ($key) => isset($columns[$key]) ? trim(preg_replace('/\s+/', ' ', (string) ($row[$columns[$key]] ?? ''))) : '';
+                if (implode('', array_map(fn ($c) => trim((string) $c), $row)) === '') {
+                    continue;
+                }
+                $summary['rows']++;
+                $itemNo = $cell('item_no');
+                $result = ['row' => $i + 1, 'item_no' => $itemNo, 'description' => $cell('description')];
+                $isSize = strtolower($cell('row_type')) === 'size' || str_contains($itemNo, '.') || ($cell('size') !== '' && strtolower($cell('row_type')) !== 'item');
+
+                if ($isSize) {
+                    $parentNo = str_contains($itemNo, '.') ? strstr($itemNo, '.', true) : null;
+                    $parent = $parentNo !== null ? $products->get((string) (int) $parentNo) : $current;
+                    $sizeName = $cell('size');
+                    if (!$parent || $sizeName === '') {
+                        $summary['errors']++;
+                        $results[] = $result + ['status' => 'error', 'message' => !$parent ? "No item {$parentNo} found for this size - put the size rows under their item." : 'Size name is missing.'];
+                        continue;
+                    }
+
+                    $variant = $variants->get($parent->id)?->get($sizeKey($sizeName));
+                    $cost = $number($cell('cost'));
+                    $active = $yesNo($cell('active'));
+                    $before = $sizeSnapshot($variant);
+                    if ($variant) {
+                        $variant->fill(array_filter(['cost' => $cost, 'is_active' => $active], fn ($v) => $v !== null));
+                        if ($variant->isDirty()) {
+                            $write && $variant->save();
+                            $summary['sizes_updated']++;
+                            $status = 'size updated';
+                        } else {
+                            $summary['unchanged']++;
+                            $status = 'unchanged';
+                        }
+                    } else {
+                        $variant = new ProductVariant([
+                            'id' => (string) Str::uuid(),
+                            'product_id' => $parent->id,
+                            'company_id' => $companyId,
+                            'store_id' => $parent->store_id ?? $storeId,
+                            'name' => $sizeName,
+                            'price' => 0,
+                            'cost' => $cost ?? 0,
+                            'stock_quantity' => 0,
+                            'is_active' => $active ?? true,
+                        ]);
+                        if ($write) {
+                            $variant->save();
+                            if (!$parent->has_variations) {
+                                $parent->update(['has_variations' => true]);
+                            }
+                        }
+                        $variants->put($parent->id, ($variants->get($parent->id) ?? collect())->put($sizeKey($sizeName), $variant));
+                        $summary['sizes_created']++;
+                        $status = 'size created';
+                    }
+                    $results[] = array_merge($result, ['status' => $status, 'item_no' => $itemNo ?: ($parent->item_number . ' / ' . $sizeName),
+                        'description' => ProductVariant::sizedName($parent->name, $sizeName),
+                        'row_type' => 'size', 'size' => $sizeName, 'before' => $before, 'after' => $sizeSnapshot($variant)]);
+                    continue;
+                }
+
+                $tax = $this->parseTaxStatus($cell('tax'));
+                if ($tax === false) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => "Tax status \"{$cell('tax')}\" not recognised (use VAT 16%, Zero rated or Exempt)."];
+                    continue;
+                }
+
+                if ($itemNo !== '' && !ctype_digit($itemNo)) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => "Item No. \"{$itemNo}\" is not a number."];
+                    continue;
+                }
+                $product = $itemNo !== '' ? $products->get((string) (int) $itemNo) : null;
+                if (!$product && $cell('description') === '') {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => "Item {$itemNo} not found, and there is no description to create it."];
+                    continue;
+                }
+
+                $fields = array_filter([
+                    'name' => $cell('description') ?: null,
+                    'category' => $cell('category') ?: null,
+                    'unit_of_measurement' => $cell('uom') ?: null,
+                    'unit_cost' => $number($cell('cost')),
+                    'hs_code' => $cell('hs_code') ?: null,
+                    'low_stock_threshold' => $number($cell('reorder')) !== null ? (int) $number($cell('reorder')) : null,
+                    'track_inventory' => $yesNo($cell('track')),
+                    'is_active' => $yesNo($cell('active')),
+                    'brand' => $cell('brand') ?: null,
+                ], fn ($v) => $v !== null);
+                if ($tax !== null) {
+                    $fields['is_taxable'] = $tax['is_taxable'];
+                    $fields['tax_rate'] = $tax['tax_rate'];
+                }
+                if (isset($fields['category']) && $write) {
+                    $fields['category_id'] = $this->resolveCategoryId($companyId, $fields['category']);
+                }
+
+                $before = $itemSnapshot($product);
+                if ($product) {
+                    $product->fill($fields);
+                    if ($product->isDirty()) {
+                        $write && $product->save();
+                        $summary['items_updated']++;
+                        $status = 'updated';
+                    } else {
+                        $summary['unchanged']++;
+                        $status = 'unchanged';
+                    }
+                } else {
+                    $product = new Product($fields + [
+                        'id' => (string) Str::uuid(),
+                        'company_id' => $companyId,
+                        'store_id' => $storeId,
+                        'price' => 0,
+                        'unit_cost' => 0,
+                        'unit_of_measurement' => 'pcs',
+                        'stock_quantity' => 0,
+                        'is_active' => true,
+                        'track_inventory' => true,
+                        'is_taxable' => true,
+                        'tax_rate' => 16,
+                    ]);
+                    if ($write) {
+                        $product->product_number = $this->generateProductNumber($companyId);
+                        $product->save();
+                    } else {
+                        $product->item_number = $nextItemNumber++;
+                    }
+                    $products->put((string) $product->item_number, $product);
+                    $summary['items_created']++;
+                    $status = 'created';
+                }
+
+                $notes = [];
+                foreach ($priceColumns as $list => $cols) {
+                    $price = isset($cols['price']) ? $number(trim((string) ($row[$cols['price']] ?? ''))) : null;
+                    $code = isset($cols['code']) ? $this->priceListItemCode(trim((string) ($row[$cols['code']] ?? '')), $list) : null;
+                    if ($price === null) {
+                        continue;
+                    }
+                    if ($code !== null) {
+                        $owner = ProductPriceTier::where('company_id', $companyId)->where('tier_name', $list)->where('item_code', $code)
+                            ->where('product_id', '!=', $product->id)->first();
+                        if ($owner) {
+                            $notes[] = "{$list} {$code} already belongs to another item - not changed.";
+                            continue;
+                        }
+                    }
+                    if (!$write) {
+                        continue;
+                    }
+                    $tier = ProductPriceTier::where('company_id', $companyId)->where('product_id', $product->id)->whereNull('variant_id')->where('tier_name', $list)->first();
+                    $values = ['price' => round($price, 2), 'unit_of_measure' => $product->unit_of_measurement ?: 'pcs'] + ($code !== null ? ['item_code' => $code] : []);
+                    $tier
+                        ? $tier->update($values)
+                        : ProductPriceTier::create($values + ['id' => (string) Str::uuid(), 'company_id' => $companyId, 'product_id' => $product->id, 'tier_name' => $list]);
+                    if ($list === 'NSPV') {
+                        $product->update(['price' => round($price, 2)]);
+                    }
+                }
+
+                $current = $product;
+                $results[] = array_merge($result, ['status' => $status, 'item_no' => (string) $product->item_number, 'description' => $product->name,
+                    'row_type' => 'item', 'size' => null, 'before' => $before, 'after' => $itemSnapshot($product), 'message' => implode(' ', $notes) ?: null]);
+            }
+
+            $dryRun ? DB::rollBack() : DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Product import failed', ['error' => $e->getMessage(), 'line' => $e->getLine()]);
+            return response()->json(['status' => 'failed', 'message' => 'Import failed: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $dryRun ? 'Preview only - nothing was saved.' : 'Products imported.',
+            'dry_run' => $dryRun,
+            'summary' => $summary,
+            'rows' => $results,
+        ]);
+    }
+
     /**
      * The "Item Code" column may hold the full code (NSPH001, "NSPH 001") or just the number
      * (001) - the list is already known from the import, so only the number is stored. Without
@@ -571,7 +858,8 @@ class ProductController extends Controller
      */
     private function describeTaxStatus(?Product $product): string
     {
-        if (!$product || !$product->is_taxable) {
+        // The setter stores 'true'/'false' text, which the boolean cast reads as true until the model is reloaded.
+        if (!$product || !filter_var($product->getAttributes()['is_taxable'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return 'Exempt';
         }
         $rate = (float) ($product->tax_rate ?? 0);

@@ -53,7 +53,34 @@ class ProductVariant extends Model
     protected $appends = [
         'image_urls',
         'primary_image_url',
+        'display_name',
     ];
+
+    // Trailing size list in an item name, e.g. "Fr26,28,31" or "2.0,2.5,3".
+    private const SIZE_LIST = '/\s*[A-Za-z]*\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)+\s*$/';
+
+    /**
+     * The item name for one size: the size list in the item's name is replaced by the size,
+     * so "Endobronchial Tubes Left Fr26,28,31" with size Fr26 reads "Endobronchial Tubes Left Fr26".
+     */
+    public static function sizedName(?string $productName, ?string $size): string
+    {
+        $productName = trim((string) $productName);
+        $size = trim((string) $size);
+        if ($size === '') {
+            return $productName;
+        }
+        $base = trim(preg_replace(self::SIZE_LIST, '', $productName));
+        return trim(($base !== '' ? $base : $productName) . ' ' . $size);
+    }
+
+    public function getDisplayNameAttribute(): string
+    {
+        $productName = $this->relationLoaded('product')
+            ? $this->product?->name
+            : Product::whereKey($this->product_id)->value('name');
+        return self::sizedName($productName, $this->name);
+    }
 
     // Boolean mutator for PostgreSQL compatibility
     public function setIsActiveAttribute($value)

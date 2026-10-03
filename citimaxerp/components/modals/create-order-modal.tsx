@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Plus, Search, ShoppingCart, Trash2, X, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
-import { DEFAULT_PRICE_CODE, priceOptionsFor } from "@/lib/price-codes"
+import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
@@ -26,6 +26,7 @@ import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts } from "@/lib/products"
 import { getCustomers, Customer as LibCustomer, createCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { formatPackagingForDisplay } from "@/lib/packaging-utils"
+import { sizedName } from "@/lib/product-sizes"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
 
 type Customer = LibCustomer
@@ -43,6 +44,7 @@ type OrderItem = {
   // came from, or "Custom" if hand-typed - internal-only, never printed on
   // a customer-facing order document.
   price_label?: string | null
+  price_unit?: string | null
 }
 
 type Company = { id: string; name: string }
@@ -225,9 +227,19 @@ export function CreateOrderModal({
   const [pendingProduct, setPendingProduct] = useState<ProductWithVariants | null>(null)
   const [pendingVariant, setPendingVariant] = useState<string>("")
 
-  const handleAddProduct = (product: ProductWithVariants, variantId?: string) => {
+  // Typing a full code such as "NSPD 001" picks that item straight away - no list to choose from.
+  useEffect(() => {
+    if (!openProductDropdown || searchLoading) return
+    const hit = findByPriceCode(filteredProducts, productSearchQuery)
+    if (hit) handleAddProduct(hit.product, undefined, hit.option)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productSearchQuery, searchResults, searchLoading, openProductDropdown])
+
+  const handleAddProduct = (product: ProductWithVariants, variantId?: string, option?: PriceOption) => {
     const hasVariants = product.variants && product.variants.length > 0;
-    const existingItemIndex = orderItems.findIndex((item) => item.product_id === product.id && (!hasVariants || item.variant_id === variantId))
+    // Sizes share the item's price code, so the price always comes from the item.
+    const chosen = option ?? defaultPriceOption(product)
+    const existingItemIndex = orderItems.findIndex((item) => item.product_id === product.id && (!hasVariants || item.variant_id === variantId) && (item.price_label || null) === (chosen?.code ?? null))
 
     if (existingItemIndex >= 0) {
       // Update existing item quantity
@@ -237,23 +249,8 @@ export function CreateOrderModal({
         updatedItems[existingItemIndex].quantity * updatedItems[existingItemIndex].unit_price
       setOrderItems(updatedItems)
     } else {
-      // Add new item
-      const unitPrice = products.find(p => p.id === product.id)?.price || 0
-      let finalUnitPrice = 0;
-      if (typeof product.price === 'number') {
-        finalUnitPrice = product.price;
-      } else if (typeof product.price === 'string') {
-        finalUnitPrice = parseFloat(product.price);
-      } else {
-        finalUnitPrice = 0;
-      }
-
-      if (hasVariants && variantId) {
-        const variant = product.variants?.find((v: any) => v.id === variantId);
-        if (variant && variant.price) {
-          finalUnitPrice = parseFloat(typeof variant.price === 'number' ? variant.price.toString() : variant.price);
-        }
-      }
+      // Add new item - use the price tier from chosen option, not product.price
+      const finalUnitPrice = chosen?.price ?? 0
 
       // Calculate tax
       const taxRate = vatRateForProduct(product)
@@ -262,14 +259,15 @@ export function CreateOrderModal({
 
       const newItem: OrderItem = {
         product_id: product.id,
-        product_name: product.name,
+        product_name: sizedName(product.name, product.variants?.find((v: any) => v.id === variantId)?.name),
         quantity: quantity,
         unit_price: finalUnitPrice,
         total_price: finalUnitPrice * quantity,
         variant_id: variantId,
         tax_rate: taxRate,
         tax_amount: taxAmount,
-        price_label: DEFAULT_PRICE_CODE,
+        price_label: chosen?.code ?? null,
+        price_unit: chosen?.unit ?? null,
       }
       setOrderItems([
         ...orderItems,
@@ -284,9 +282,13 @@ export function CreateOrderModal({
   }
 
   const handleSelectVariant = (productId: string, variantId: string, orderItemIndex: number) => {
+    const product = products.find((p) => p.id === productId)
+    const variant = product?.variants?.find((v) => String(v.id) === String(variantId))
     setOrderItems((items) =>
       items.map((item, idx) =>
-        idx === orderItemIndex ? { ...item, variant_id: variantId } : item
+        idx === orderItemIndex
+          ? { ...item, variant_id: variantId, product_name: sizedName(product?.name ?? item.product_name, variant?.name) }
+          : item
       )
     )
     setSelectedVariants((prev) => {
@@ -303,18 +305,6 @@ export function CreateOrderModal({
     updatedItems[index].quantity = quantity
     updatedItems[index].total_price = quantity * item.unit_price
     updatedItems[index].tax_amount = item.unit_price * quantity * (item.tax_rate / 100)
-    setOrderItems(updatedItems)
-  }
-
-  const handleUpdatePrice = (index: number, price: number, label: string | null = "Custom") => {
-    if (price < 0) return
-
-    const updatedItems = [...orderItems]
-    const item = updatedItems[index]
-    updatedItems[index].unit_price = price
-    updatedItems[index].price_label = label
-    updatedItems[index].total_price = item.quantity * price
-    updatedItems[index].tax_amount = price * item.quantity * (item.tax_rate / 100)
     setOrderItems(updatedItems)
   }
 
@@ -408,6 +398,7 @@ export function CreateOrderModal({
           quantity: item.quantity,
           unit_price: item.unit_price,
           price_label: item.price_label || null,
+          price_unit: item.price_unit || null,
           tax_rate: item.tax_rate,
           tax_amount: item.tax_amount,
           ...(item.variant_id ? { variant_id: item.variant_id } : {}),
@@ -700,18 +691,18 @@ export function CreateOrderModal({
   <PopoverContent className="w-[300px] p-0" align="end">
     {pendingProduct && pendingProduct.variants && pendingProduct.variants.length > 0 ? (
       <div className="p-4 space-y-2">
-        <div className="font-medium mb-2">Select Variant for {pendingProduct.name}</div>
+        <div className="font-medium mb-2">Pick size</div>
         <Select
           value={pendingVariant}
           onValueChange={(value) => setPendingVariant(value)}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select variant" />
+            <SelectValue placeholder={`${pendingProduct.name} - pick size`} />
           </SelectTrigger>
           <SelectContent>
             {pendingProduct.variants?.map((variant: ProductVariant) => (
               <SelectItem key={variant.id} value={String(variant.id)}>
-                {variant.name}
+                {sizedName(pendingProduct.name, variant.name)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -737,7 +728,7 @@ export function CreateOrderModal({
     ) : (
       <Command shouldFilter={false}>
         <CommandInput
-          placeholder="Search products by name, SKU or description..."
+          placeholder="Search by description, item no. or code (e.g. NSPD 001)..."
           value={productSearchQuery}
           onValueChange={setProductSearchQuery}
         />
@@ -749,6 +740,18 @@ export function CreateOrderModal({
               ? "Searching..."
               : "No products found"}
           </CommandEmpty>
+          {priceCodeHits(filteredProducts, productSearchQuery).length > 0 && (
+            <CommandGroup heading="Price codes">
+              {priceCodeHits(filteredProducts, productSearchQuery).map(({ product, option }) => (
+                <CommandItem key={`code-${product.id}-${option.code}`} onSelect={() => handleAddProduct(product, undefined, option)}>
+                  <div className="flex flex-col">
+                    <span className="font-semibold">{option.code}</span>
+                    <span className="text-sm text-gray-500">{product.name} | {describeOption(option)}</span>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           <CommandGroup>
             {filteredProducts.map((product) => (
               <CommandItem
@@ -765,7 +768,7 @@ export function CreateOrderModal({
                 <div className="flex flex-col">
                   <span>{product.name}</span>
                   <span className="text-sm text-gray-500">
-                    {product.sku} - Ksh. {parseFloat(product.price || '0').toFixed(2)}
+                    No. {product.item_number ?? '-'} | NSPV Ksh. {parseFloat(product.price || '0').toFixed(2)}
                   </span>
                 </div>
               </CommandItem>
@@ -804,13 +807,6 @@ export function CreateOrderModal({
                           Total
                         </th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                        {/* Variation column header, only if any product has variations */}
-                        {orderItems.some(item => {
-                          const product = products.find((p) => p.id === item.product_id)
-                          return product && Array.isArray(product.variants) && product.variants.length > 0
-                        }) && (
-                          <th className="sticky right-0 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 z-10">Variation</th>
-                        )}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -821,42 +817,31 @@ export function CreateOrderModal({
                         return (
                           <tr key={index}>
                             <td className="px-4 py-3 max-w-[240px]">
-                              <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
+                              {variants.length > 0 ? (
+                                <Select
+                                  value={String(selectedVariants[itemKey] || item.variant_id || "")}
+                                  onValueChange={(value) => handleSelectVariant(item.product_id, value, index)}
+                                >
+                                  <SelectTrigger className={`h-auto min-h-8 text-left text-sm font-medium whitespace-normal ${item.variant_id ? "" : "border-red-500"}`}>
+                                    <SelectValue placeholder={`${product?.name} - pick size`} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {variants.map((variant: ProductVariant) => (
+                                      <SelectItem key={variant.id} value={String(variant.id)}>
+                                        {sizedName(product?.name, variant.name)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
+                              )}
+                              <div className="text-xs text-gray-500">{[item.price_label, item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              {(() => {
-                                const variant = (product as any)?.variants?.find((v: any) => v.id === item.variant_id)
-                                const options = priceOptionsFor(product, variant)
-                                if (options.length === 0) return null
-                                return (
-                                  <Select
-                                    value={item.price_label || ""}
-                                    onValueChange={(code) => {
-                                      const option = options.find(o => o.code === code)
-                                      if (option) handleUpdatePrice(index, option.price, code)
-                                    }}
-                                  >
-                                    <SelectTrigger className="h-7 w-24 text-xs mb-1 px-2">
-                                      <SelectValue placeholder="Price..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {options.map((o) => (
-                                        <SelectItem key={o.code} value={o.code} className="text-xs">
-                                          {o.code} — {o.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                )
-                              })()}
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.unit_price}
-                                onChange={(e) => handleUpdatePrice(index, Number.parseFloat(e.target.value) || 0)}
-                                className="h-8 w-24 text-sm"
-                              />
+                              <div className="text-sm font-medium text-gray-900">
+                                {item.unit_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center">
@@ -905,33 +890,6 @@ export function CreateOrderModal({
                                 <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
                             </td>
-                            {variants.length > 0 && (() => {
-                              const currentVariantId = selectedVariants[itemKey] || item.variant_id || ""
-                              const currentVariant = variants.find((v) => String(v.id) === String(currentVariantId))
-                              const displayName = currentVariant?.name || "No variant selected"
-                              return (
-                                <td className="sticky right-0 px-4 py-3 bg-white z-10 align-top">
-                                  <div className="mb-1 max-w-[220px] whitespace-normal break-words text-sm font-medium text-gray-900">
-                                    {displayName}
-                                  </div>
-                                  <Select
-                                    value={currentVariantId}
-                                    onValueChange={(value) => handleSelectVariant(item.product_id, value, index)}
-                                  >
-                                    <SelectTrigger className="w-full max-w-[200px]">
-                                      <SelectValue placeholder="Select variant" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {variants.map((variant: ProductVariant) => (
-                                        <SelectItem key={variant.id} value={String(variant.id)}>
-                                          {variant.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </td>
-                              )
-                            })()}
                           </tr>
                         )
                       })}

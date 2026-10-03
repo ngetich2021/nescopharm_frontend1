@@ -19,12 +19,22 @@ class ProductPriceTier extends Model
         'product_id',
         'variant_id',
         'tier_name',
+        'item_code',
         'price',
+        'unit_of_measure',
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
     ];
+
+    protected $appends = ['code'];
+
+    // The code staff type on quotes/orders/invoices, e.g. "NSPD 001"; just "NSPD" when no item code is set.
+    public function getCodeAttribute(): string
+    {
+        return trim($this->tier_name . ' ' . ($this->item_code ?? ''));
+    }
 
     public function product()
     {

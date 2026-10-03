@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -8,6 +9,7 @@ import { getQuoteById, Quote } from "@/lib/quotes"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
+import { documentCode } from "@/lib/price-codes"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -175,34 +177,37 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
           <table className="w-full border border-gray-300 border-collapse mb-2">
             <thead>
               <tr className="bg-gray-50 text-xs">
-                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Item Code</th>
-                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Item Description</th>
+                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 w-10">S/No</th>
+                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Code No.</th>
+                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Item Name</th>
                 <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Pack Size</th>
-                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Unit Price ({currency})</th>
+                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Price per Pack ({currency})</th>
                 <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Order Qty</th>
-                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Amount</th>
+                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Total Value ({currency})</th>
               </tr>
             </thead>
             <tbody>
-              {quote.quote_items?.map((item) => {
+              {quote.quote_items?.map((item, index) => {
                 const variantName = (item as any).variant?.name || item.variant_name
                 const qty = item.unit_id && item.unit_quantity ? Number(item.unit_quantity) : item.quantity
                 const vatFactor = 1 + Number(item.tax_rate || 0) / 100
-                const itemCode = item.item_code || (item as any).variant?.sku || item.product?.product_code || item.product?.sku || "-"
                 return (
                   <tr key={item.id}>
-                    <td className="border border-gray-300 px-2 py-1.5 font-mono text-xs align-top">{itemCode}</td>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top">{index + 1}</td>
+                    <td className="border border-gray-300 px-2 py-1.5 font-mono text-xs align-top whitespace-nowrap">
+                      {documentCode(item.price_label, item.item_code || (item.product as any)?.item_number)}
+                    </td>
                     <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">
-                      {item.product?.name}{variantName ? ` - ${variantName}` : ""}
+                      {sizedName(item.product?.name, variantName)}
                       {Number(item.tax_rate || 0) > 0 && (
                         <span className="block w-fit mt-0.5 border border-gray-500 px-1 text-[10px] font-semibold text-gray-700">
                           VAT {Number(item.tax_rate)}% inclusive
                         </span>
                       )}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top whitespace-nowrap">{item.pack_size || "-"}</td>
+                    <td className="border border-gray-300 px-2 py-1.5 align-top">{item.pack_size || "-"}</td>
                     <td className="border border-gray-300 px-2 py-1.5 text-right align-top whitespace-nowrap">
-                      {isPricing ? `${currency} ` : ""}{formatAmount(Number(item.unit_price) * vatFactor)}
+                      {formatAmount(Number(item.unit_price) * vatFactor)}
                       {isPricing && item.price_label && <span className="font-semibold"> @ {item.price_label}</span>}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 text-right align-top">{qty.toLocaleString()}</td>
@@ -213,26 +218,28 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
                 )
               })}
               <tr>
-                <td colSpan={5} className="border border-gray-300 px-2 py-1.5 text-right">Subtotal</td>
+                <td colSpan={6} className="border border-gray-300 px-2 py-1.5 text-right">Subtotal</td>
                 <td className="border border-gray-300 px-2 py-1.5 text-right">{formatAmount(subtotal)}</td>
               </tr>
               {discount > 0 && (
                 <tr>
-                  <td colSpan={5} className="border border-gray-300 px-2 py-1.5 text-right">Discount</td>
+                  <td colSpan={6} className="border border-gray-300 px-2 py-1.5 text-right">Discount</td>
                   <td className="border border-gray-300 px-2 py-1.5 text-right text-green-700">-{formatAmount(discount)}</td>
                 </tr>
               )}
-              <tr>
-                <td colSpan={5} className="border border-gray-300 px-2 py-1.5 text-right">VAT</td>
-                <td className="border border-gray-300 px-2 py-1.5 text-right">{formatAmount(vatTotal)}</td>
-              </tr>
+              {vatTotal > 0 && (
+                <tr>
+                  <td colSpan={6} className="border border-gray-300 px-2 py-1.5 text-right">VAT</td>
+                  <td className="border border-gray-300 px-2 py-1.5 text-right">{formatAmount(vatTotal)}</td>
+                </tr>
+              )}
               <tr className="font-bold">
-                <td colSpan={5} className="border border-gray-300 px-2 py-1.5 text-right">Total ({currency})</td>
+                <td colSpan={6} className="border border-gray-300 px-2 py-1.5 text-right">Total ({currency})</td>
                 <td className="border border-gray-300 px-2 py-1.5 text-right">{formatAmount(total)}</td>
               </tr>
             </tbody>
           </table>
-          <p className="text-right text-xs text-gray-500">Unit prices and amounts are inclusive of VAT.</p>
+          {vatTotal > 0 && <p className="text-right text-xs text-gray-500">Prices for items marked VAT are inclusive of VAT.</p>}
 
 
           {quote.valid_until && (

@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -13,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, ShoppingCart, Trash2, X, Edit, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
-import { DEFAULT_PRICE_CODE, priceOptionsFor } from "@/lib/price-codes"
+import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
 import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
@@ -60,6 +61,7 @@ type OrderItem = {
   // came from, or "Custom" if hand-typed - internal-only, never printed on
   // a customer-facing order document.
   price_label?: string | null
+  price_unit?: string | null
 }
 
 type Company = { id: string; name: string }
@@ -188,13 +190,15 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       const items: OrderItem[] = order.order_items.map(item => ({
         id: item.id,
         product_id: item.product_id,
-        product_name: item.product?.name || "Unknown Product",
+        product_name: item.product ? sizedName(item.product.name, (item as any).variant?.name || item.variant_name) : "Unknown Product",
         quantity: item.quantity,
         unit_price: parseFloat(item.unit_price),
         total_price: parseFloat(item.total_price),
         tax_rate: vatRateForProduct(item.product as any),
         variant_id: item.variant_id || undefined,
-        variant_name: item.variant_name || undefined
+        variant_name: item.variant_name || undefined,
+        price_label: item.price_label ?? null,
+        price_unit: item.price_unit ?? null,
       }))
       setOrderItems(items)
 
@@ -262,7 +266,10 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const filteredProducts = Array.isArray(products)
     ? products.filter((product) => {
         const query = productSearchQuery.toLowerCase().trim()
-        return product.name?.toLowerCase().includes(query) || product.sku?.toLowerCase().includes(query)
+        const compact = query.replace(/\s+/g, "")
+        return product.name?.toLowerCase().includes(query)
+          || String(product.item_number ?? "") === query
+          || priceOptionsFor(product).some((o) => o.code.toLowerCase().replace(/\s+/g, "").includes(compact))
       })
     : []
 
@@ -277,9 +284,19 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const [pendingProduct, setPendingProduct] = useState<ProductWithVariants | null>(null)
   const [pendingVariant, setPendingVariant] = useState<string>("")
 
-  const handleAddProduct = (product: ProductWithVariants, variantId?: string) => {
+  // Typing a full code such as "NSPD 001" picks that item straight away - no list to choose from.
+  useEffect(() => {
+    if (!openProductDropdown) return
+    const hit = findByPriceCode(filteredProducts, productSearchQuery)
+    if (hit) handleAddProduct(hit.product, undefined, hit.option)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productSearchQuery, openProductDropdown])
+
+  const handleAddProduct = (product: ProductWithVariants, variantId?: string, option?: PriceOption) => {
     const hasVariants = product.variants && product.variants.length > 0;
-    const existingItemIndex = orderItems.findIndex((item) => item.product_id === product.id && (!hasVariants || item.variant_id === variantId))
+    // Sizes share the item's price code, so the price always comes from the item.
+    const chosen = option ?? defaultPriceOption(product)
+    const existingItemIndex = orderItems.findIndex((item) => item.product_id === product.id && (!hasVariants || item.variant_id === variantId) && (item.price_label || null) === (chosen?.code ?? null))
 
     if (existingItemIndex >= 0) {
       // Update existing item quantity
@@ -289,24 +306,14 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
         updatedItems[existingItemIndex].quantity * updatedItems[existingItemIndex].unit_price
       setOrderItems(updatedItems)
     } else {
-      // Add new item
-      let unitPrice = parseFloat(
-        typeof product.price === 'number'
-          ? String(product.price)
-          : product.price ? String(product.price) : '0'
-      );
-      if (hasVariants && variantId) {
-        const variant = product.variants?.find((v: any) => v.id === variantId);
-        if (variant && variant.price) {
-          unitPrice = parseFloat(typeof variant.price === 'number' ? variant.price.toString() : variant.price);
-        }
-      }
+      const unitPrice = chosen?.price ?? 0
       const newItem = {
         product_id: product.id,
-        product_name: product.name,
+        product_name: sizedName(product.name, product.variants?.find((v: any) => v.id === variantId)?.name),
         quantity: 1,
         unit_price: unitPrice,
-        price_label: DEFAULT_PRICE_CODE,
+        price_label: chosen?.code ?? null,
+        price_unit: chosen?.unit ?? null,
         total_price: unitPrice,
         tax_rate: vatRateForProduct(product),
         ...(variantId ? { variant_id: variantId } : {}),
@@ -328,7 +335,9 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
     const variant = product?.variants?.find((v) => v.id.toString() === variantId)
     setOrderItems((items) =>
       items.map((item, idx) =>
-        idx === orderItemIndex ? { ...item, variant_id: variantId, variant_name: variant?.name || item.variant_name } : item
+        idx === orderItemIndex
+          ? { ...item, variant_id: variantId, variant_name: variant?.name || item.variant_name, product_name: sizedName(product?.name ?? item.product_name, variant?.name || item.variant_name) }
+          : item
       )
     )
     setSelectedVariants((prev) => {
@@ -343,16 +352,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
     const updatedItems = [...orderItems]
     updatedItems[index].quantity = quantity
     updatedItems[index].total_price = quantity * updatedItems[index].unit_price
-    setOrderItems(updatedItems)
-  }
-
-  const handleUpdatePrice = (index: number, price: number, label: string | null = "Custom") => {
-    if (price < 0) return
-
-    const updatedItems = [...orderItems]
-    updatedItems[index].unit_price = price
-    updatedItems[index].price_label = label
-    updatedItems[index].total_price = updatedItems[index].quantity * price
     setOrderItems(updatedItems)
   }
 
@@ -428,6 +427,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
           quantity: item.quantity,
           unit_price: item.unit_price,
           price_label: item.price_label || null,
+          price_unit: item.price_unit || null,
           ...(item.variant_id ? { variant_id: item.variant_id } : {}),
         })),
       }
@@ -668,18 +668,18 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                 <PopoverContent className="w-[300px] p-0" align="end">
                   {pendingProduct && pendingProduct.variants && pendingProduct.variants.length > 0 ? (
                     <div className="p-4 space-y-2">
-                      <div className="font-medium mb-2">Select Variant for {pendingProduct.name}</div>
+                      <div className="font-medium mb-2">Pick size</div>
                       <Select
                         value={pendingVariant}
                         onValueChange={(value) => setPendingVariant(value)}
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select variant" />
+                          <SelectValue placeholder={`${pendingProduct.name} - pick size`} />
                         </SelectTrigger>
                         <SelectContent>
                           {pendingProduct.variants?.map((variant: ProductVariant) => (
                             <SelectItem key={variant.id} value={variant.id.toString()}>
-                              {variant.name}
+                              {sizedName(pendingProduct.name, variant.name)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -703,14 +703,26 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                       </Button>
                     </div>
                   ) : (
-                    <Command>
+                    <Command shouldFilter={false}>
                       <CommandInput
-                        placeholder="Search products..."
+                        placeholder="Search by description, item no. or code (e.g. NSPD 001)..."
                         value={productSearchQuery}
                         onValueChange={setProductSearchQuery}
                       />
                       <CommandList>
                         <CommandEmpty>No products found</CommandEmpty>
+                        {priceCodeHits(filteredProducts, productSearchQuery).length > 0 && (
+                          <CommandGroup heading="Price codes">
+                            {priceCodeHits(filteredProducts, productSearchQuery).map(({ product, option }) => (
+                              <CommandItem key={`code-${product.id}-${option.code}`} onSelect={() => handleAddProduct(product, undefined, option)}>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold">{option.code}</span>
+                                  <span className="text-sm text-gray-500">{product.name} | {describeOption(option)}</span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
                         <CommandGroup>
                           {filteredProducts.map((product) => (
                             <CommandItem
@@ -727,7 +739,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                               <div className="flex flex-col">
                                 <span>{product.name}</span>
                                 <span className="text-sm text-gray-500">
-                                  {product.sku} - Ksh. {parseFloat(product.price || '0').toFixed(2)}
+                                  No. {product.item_number ?? '-'} | NSPV Ksh. {parseFloat(product.price || '0').toFixed(2)}
                                 </span>
                               </div>
                             </CommandItem>
@@ -766,13 +778,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                           Total
                         </th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                        {/* Variation column header, only if any product has variations */}
-                        {orderItems.some(item => {
-                          const product = products.find((p) => p.id === item.product_id)
-                          return product && Array.isArray(product.variants) && product.variants.length > 0
-                        }) && (
-                          <th className="sticky right-0 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 z-10">Variation</th>
-                        )}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -783,45 +788,31 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                         return (
                           <tr key={index}>
                             <td className="px-4 py-3 max-w-[240px]">
-                              <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
-                              {item.variant_name && (
-                                <div className="text-xs text-gray-500">{item.variant_name}</div>
+                              {variants.length > 0 ? (
+                                <Select
+                                  value={String(selectedVariants[itemKey] || item.variant_id || "")}
+                                  onValueChange={(value) => handleSelectVariant(item.product_id, value, index)}
+                                >
+                                  <SelectTrigger className={`h-auto min-h-8 text-left text-sm font-medium whitespace-normal ${item.variant_id ? "" : "border-red-500"}`}>
+                                    <SelectValue placeholder={`${product?.name} - pick size`} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {variants.map((variant: ProductVariant) => (
+                                      <SelectItem key={variant.id} value={variant.id.toString()}>
+                                        {sizedName(product?.name, variant.name)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
                               )}
+                              <div className="text-xs text-gray-500">{[item.price_label, item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              {(() => {
-                                const variant = (product as any)?.variants?.find((v: any) => v.id === item.variant_id)
-                                const options = priceOptionsFor(product, variant)
-                                if (options.length === 0) return null
-                                return (
-                                  <Select
-                                    value={item.price_label || ""}
-                                    onValueChange={(code) => {
-                                      const option = options.find(o => o.code === code)
-                                      if (option) handleUpdatePrice(index, option.price, code)
-                                    }}
-                                  >
-                                    <SelectTrigger className="h-7 w-24 text-xs mb-1 px-2">
-                                      <SelectValue placeholder="Price..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {options.map((o) => (
-                                        <SelectItem key={o.code} value={o.code} className="text-xs">
-                                          {o.code} — {o.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                )
-                              })()}
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.unit_price}
-                                onChange={(e) => handleUpdatePrice(index, Number.parseFloat(e.target.value) || 0)}
-                                className="h-8 w-24 text-sm"
-                              />
+                              <div className="text-sm font-medium text-gray-900">
+                                {item.unit_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center">
@@ -850,33 +841,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                                 <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
                             </td>
-                            {variants.length > 0 && (() => {
-                              const currentVariantId = selectedVariants[itemKey] || item.variant_id || ""
-                              const currentVariant = variants.find((v) => v.id.toString() === currentVariantId.toString())
-                              const displayName = currentVariant?.name || item.variant_name || "No variant selected"
-                              return (
-                                <td className="sticky right-0 px-4 py-3 bg-white z-10 align-top">
-                                  <div className="mb-1 max-w-[220px] whitespace-normal break-words text-sm font-medium text-gray-900">
-                                    {displayName}
-                                  </div>
-                                  <Select
-                                    value={currentVariantId}
-                                    onValueChange={(value) => handleSelectVariant(item.product_id, value, index)}
-                                  >
-                                    <SelectTrigger className="w-full max-w-[200px]">
-                                      <SelectValue placeholder="Select variant" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {variants.map((variant: ProductVariant) => (
-                                        <SelectItem key={variant.id} value={variant.id.toString()}>
-                                          {variant.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </td>
-                              )
-                            })()}
                           </tr>
                         )
                       })}

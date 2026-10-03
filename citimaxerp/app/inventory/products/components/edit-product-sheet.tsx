@@ -1,6 +1,5 @@
 "use client"
 
-import { priceFloorErrors } from "../price-floor"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -14,9 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, Plus, Image as ImageIcon, Package, Trash2, X, Star, Check, ChevronsUpDown } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { updateProduct, fileToDataUrl, type PriceTierInput } from "@/lib/products"
-import { tierRowsForForm } from "@/lib/price-codes"
-import { PriceCodeFields } from "./price-code-fields"
+import { updateProduct, fileToDataUrl } from "@/lib/products"
 import { getProductCategories } from "@/lib/product-categories"
 import { getSuppliers } from "@/lib/suppliers"
 import { getStores } from "@/lib/stores"
@@ -27,25 +24,9 @@ import type { ProductCategory } from "@/lib/product-categories"
 import type { Product, PackagingUnit } from "@/lib/products"
 import type { Supplier } from "@/lib/suppliers"
 import type { Store } from "@/lib/stores"
-import { CreateCategoryModal } from "@/components/modals/create-category-modal"
 import { ProductKraTab } from "@/components/etims/product-kra-tab"
-
-interface ProductVariant {
-  id: string
-  name: string
-  sku: string
-  price: string
-  cost: string
-  stock_quantity: string
-  is_active: boolean
-  store_id?: string
-  images: string[]
-  attributes: { key: string; value: string }[]
-  allocated: number
-  on_hand: number
-  options: string[]
-  price_tiers: PriceTierInput[]
-}
+import { ProductSizesFields } from "./product-sizes-fields"
+import { sizeRowsFor, sizesForSave, type SizeRow } from "@/lib/product-sizes"
 
 interface Dimensions {
   length: string
@@ -65,38 +46,19 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
-  // Form data
   const [formData, setFormData] = useState({
     name: "",
-    description: "",
-    category: "",
-    brand: "",
-    supplier: "",
-    tags: "",
-    price: "",
     cost: "",
-    shipping_cost: "",
-    logistics_cost: "",
-    margin_amount: "",
-    last_price: "",
-    sku: "",
     barcode: "",
-    product_code: "",
-    unit_of_measurement: "piece",
     stock: "",
     lowStockThreshold: "10",
     trackInventory: true,
     isActive: true,
     weight: "",
-    dimensions: {
-      length: "",
-      width: "",
-      height: ""
-    } as Dimensions,
+    dimensions: { length: "", width: "", height: "" } as Dimensions,
     shippingClass: "standard",
     images: [] as string[],
     primaryImageIndex: 0,
-    hasVariations: false,
     store_id: "",
     hasPackaging: false,
     baseUnit: "",
@@ -104,27 +66,11 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
     taxRate: "",
     hsCode: ""
   })
-  
-  // Variants
-  const [variants, setVariants] = useState<ProductVariant[]>([
-    {
-      id: Date.now().toString(),
-      name: "",
-      sku: "",
-      price: "",
-      cost: "",
-      stock_quantity: "",
-      is_active: true,
-      store_id: "",
-      images: [],
-      attributes: [],
-      allocated: 0,
-      on_hand: 0,
-      options: [],
-      price_tiers: tierRowsForForm([])
-    }
-  ])
-  
+
+  // Sizes (variants kept purely to split stock - price always comes from the item's price code)
+  const [hasSizes, setHasSizes] = useState(false)
+  const [sizes, setSizes] = useState<SizeRow[]>([])
+
   // Packaging state
   const [packagingUnits, setPackagingUnits] = useState<Omit<PackagingUnit, 'id' | 'company_id' | 'product_id' | 'created_at' | 'updated_at'>[]>([])
   
@@ -149,15 +95,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
   const [unitNameOpen, setUnitNameOpen] = useState<{ [key: number]: boolean }>({})
   const [customUnitName, setCustomUnitName] = useState<{ [key: number]: string }>({})
 
-  const [priceTiers, setPriceTiers] = useState<PriceTierInput[]>(() => tierRowsForForm([]))
-
-  // Minimum valid price = unit cost + shipping cost + logistics cost + margin. No price
-  // (selling price, last price, or any tier price) may be at or below this.
-  const minimumValidPrice =
-    (parseFloat(formData.cost) || 0) +
-    (parseFloat(formData.shipping_cost) || 0) +
-    (parseFloat(formData.logistics_cost) || 0) +
-    (parseFloat(formData.margin_amount) || 0)
 
   // Dropdown data
   const [categories, setCategories] = useState<ProductCategory[]>([])
@@ -166,9 +103,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
   // dropdownsLoaded removed
 
   
-  // Category modal state
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
-  const [categorySearchOpen, setCategorySearchOpen] = useState(false)
   
   // Load dropdown data
   useEffect(() => {
@@ -288,41 +222,13 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
     }
   }
   
-  const handleCategoryCreated = (newCategory: ProductCategory) => {
-    // Add new category to the list
-    setCategories(prev => [...prev, newCategory])
-    // Set the newly created category as selected
-    setFormData(prev => ({
-      ...prev,
-      category: newCategory.id
-    }))
-    // Show success notification
-    toast({
-      title: "Category Created",
-      description: `${newCategory.name} has been added successfully`
-    })
-  }
-  
   const loadProductData = () => {
     if (!product) return
     
     setFormData({
       name: product.name || "",
-      description: product.description || "",
-      category: product.category_id || (typeof product.category === 'object' ? product.category?.id || "" : product.category || ""),
-      brand: product.brand || "",
-      supplier: product.supplier_id || (typeof product.supplier === 'object' ? product.supplier?.id || "" : product.supplier || ""),
-      tags: Array.isArray(product.tags) ? product.tags.join(", ") : "",
-      price: product.price !== null && product.price !== undefined ? parseFloat(product.price.toString()).toString() : "",
       cost: product.unit_cost !== null && product.unit_cost !== undefined ? parseFloat(product.unit_cost.toString()).toString() : "",
-      shipping_cost: product.shipping_cost !== null && product.shipping_cost !== undefined ? parseFloat(product.shipping_cost.toString()).toString() : "",
-      logistics_cost: product.logistics_cost !== null && product.logistics_cost !== undefined ? parseFloat(product.logistics_cost.toString()).toString() : "",
-      margin_amount: product.margin_amount !== null && product.margin_amount !== undefined ? parseFloat(product.margin_amount.toString()).toString() : "",
-      last_price: product.last_price !== null && product.last_price !== undefined ? parseFloat(product.last_price.toString()).toString() : "",
-      sku: product.sku || "",
       barcode: product.barcode || "",
-      product_code: product.product_code || "",
-      unit_of_measurement: product.unit_of_measurement || "piece",
       stock: product.stock_quantity !== undefined && product.stock_quantity !== null ? product.stock_quantity.toString() : "0",
       lowStockThreshold: product.low_stock_threshold !== undefined && product.low_stock_threshold !== null ? product.low_stock_threshold.toString() : "10",
       trackInventory: product.track_inventory ?? true,
@@ -336,7 +242,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
       shippingClass: product.shipping_class || "standard",
       images: Array.isArray(product.images) ? product.images : product.image_url ? [product.image_url] : [],
       primaryImageIndex: product.primary_image_index || 0,
-      hasVariations: product.has_variations || false,
       store_id: product.store_id || "",
       hasPackaging: product.has_packaging || false,
       baseUnit: product.base_unit || "",
@@ -345,53 +250,10 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
       hsCode: product.hs_code || ""
     })
 
-    setPriceTiers(tierRowsForForm(Array.isArray((product as any).price_tiers) ? (product as any).price_tiers : []))
+    const existingSizes = sizeRowsFor(product)
+    setSizes(existingSizes)
+    setHasSizes(Boolean(product.has_variations) && existingSizes.length > 0)
 
-    // Load variants if they exist
-    if (product.has_variations && Array.isArray(product.variants) && product.variants.length > 0) {
-      const mappedVariants = product.variants.map((variant: any) => ({
-        id: variant.id || Date.now().toString() + Math.random(),
-        name: variant.name || "",
-        sku: variant.sku || "",
-        price: variant.price?.toString() || "",
-        cost: variant.cost?.toString() || "",
-        stock_quantity: variant.stock_quantity?.toString() || "",
-        is_active: variant.is_active ?? true,
-        store_id: variant.store_id || product.store_id || "",
-        images: Array.isArray(variant.images) ? variant.images : [],
-        attributes: Array.isArray(variant.attributes) 
-          ? variant.attributes.map((attr: any, index: number) => ({
-              key: Object.keys(attr)[0] || "",
-              value: Object.values(attr)[0] || ""
-            }))
-          : [],
-        allocated: variant.allocated || 0,
-        on_hand: variant.on_hand || 0,
-        options: Array.isArray(variant.options) ? variant.options : [],
-        price_tiers: tierRowsForForm(Array.isArray(variant.price_tiers) ? variant.price_tiers : [])
-      }))
-      setVariants(mappedVariants)
-    } else {
-      setVariants([
-        {
-          id: Date.now().toString(),
-          name: "",
-          sku: "",
-          price: "",
-          cost: "",
-          stock_quantity: "",
-          is_active: true,
-          store_id: "",
-          images: [],
-          attributes: [],
-          allocated: 0,
-          on_hand: 0,
-          options: [],
-          price_tiers: tierRowsForForm([])
-        }
-      ])
-    }
-    
     // Load packaging units if they exist
     if (product.has_packaging && Array.isArray(product.packaging_units) && product.packaging_units.length > 0) {
       const mappedPackagingUnits = product.packaging_units.map((unit: any) => ({
@@ -433,166 +295,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
         [field]: value
       }
     }))
-  }
-  
-  const handleVariantChange = (id: string, field: keyof ProductVariant, value: string | boolean) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === id 
-          ? { ...variant, [field]: value } 
-          : variant
-      )
-    )
-  }
-  
-  const addVariant = () => {
-    setVariants(prev => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        name: "",
-        sku: "",
-        price: formData.price,
-        cost: formData.cost,
-        stock_quantity: "",
-        is_active: true,
-        store_id: formData.store_id,
-        images: [],
-        attributes: [],
-        allocated: 0,
-        on_hand: 0,
-        options: [],
-        price_tiers: tierRowsForForm([])
-      }
-    ])
-  }
-
-  const setVariantTiers = (id: string, tiers: PriceTierInput[]) => {
-    setVariants(prev => prev.map(variant => variant.id === id ? { ...variant, price_tiers: tiers } : variant))
-  }
-  
-  const removeVariant = (id: string) => {
-    if (variants.length > 1) {
-      setVariants(prev => prev.filter(variant => variant.id !== id))
-    }
-  }
-  
-  const addVariantAttribute = (variantId: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              attributes: [...variant.attributes, { key: "", value: "" }] 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const updateVariantAttribute = (variantId: string, index: number, field: "key" | "value", value: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              attributes: variant.attributes.map((attr, i) => 
-                i === index ? { ...attr, [field]: value } : attr
-              ) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const removeVariantAttribute = (variantId: string, index: number) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              attributes: variant.attributes.filter((_, i) => i !== index) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const addVariantOption = (variantId: string, option: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              options: [...variant.options, option] 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const removeVariantOption = (variantId: string, optionIndex: number) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              options: variant.options.filter((_, i) => i !== optionIndex) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const updateVariantOption = (variantId: string, optionIndex: number, value: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              options: variant.options.map((option, i) => 
-                i === optionIndex ? value : option
-              ) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const handleVariantImageUpload = async (variantId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-
-    // Read files as base64 data URIs - the backend decodes and persists these
-    // (it rejects blob: URLs, which are only ever valid in this browser tab).
-    const newImages = await Promise.all(Array.from(files).map((file) => fileToDataUrl(file)))
-
-    setVariants(prev =>
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              images: [...variant.images, ...newImages] 
-            } 
-          : variant
-      )
-    )
-    
-    // Reset the file input
-    e.target.value = ""
-  }
-  
-  const removeVariantImage = (variantId: string, imageIndex: number) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              images: variant.images.filter((_, i) => i !== imageIndex) 
-            } 
-          : variant
-      )
-    )
   }
   
   const triggerFileInput = (inputId: string) => {
@@ -680,27 +382,17 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
     setIsSubmitting(true)
     
     try {
-      // Prepare product data to match the ProductData interface
+      // Fields no longer on this form (SKU, product code, brand, description, category, tags,
+      // landed cost) are left out so the product keeps whatever it already has.
+      // price and price_tiers are deliberately omitted: selling prices are owned by the
+      // imported price lists, and sending them here would overwrite the import.
       const productData = {
         name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        category_id: formData.category || undefined,
-        brand: formData.brand.trim() || undefined,
-        supplier_id: formData.supplier || undefined,
-        tags: formData.tags 
-          ? formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
-          : [],
-        price: parseFloat(formData.price) || 0,
         unit_cost: parseFloat(formData.cost) || 0,
-        shipping_cost: parseFloat(formData.shipping_cost) || 0,
-        logistics_cost: parseFloat(formData.logistics_cost) || 0,
-        margin_amount: parseFloat(formData.margin_amount) || 0,
-        price_tiers: priceTiers.filter(t => t.tier_name.trim() && t.price > 0),
-        last_price: formData.last_price ? parseFloat(formData.last_price) : undefined,
-        sku: formData.sku.trim() || undefined,
+        has_variations: hasSizes,
+        variations: hasSizes ? sizesForSave(sizes) : [],
         barcode: formData.barcode.trim() || undefined,
-        product_code: formData.product_code.trim() || undefined,
-        unit_of_measurement: formData.unit_of_measurement,
+        unit_of_measurement: product.unit_of_measurement || "piece",
         low_stock_threshold: parseInt(formData.lowStockThreshold) || 10,
         track_inventory: formData.trackInventory,
         is_active: formData.isActive,
@@ -711,32 +403,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
         shipping_class: formData.shippingClass,
         images: formData.images,
         primary_image_index: formData.primaryImageIndex,
-        has_variations: formData.hasVariations,
-        // Backend expects 'variations' key, not 'variants'; a product without variations sends none
-        variations: (formData.hasVariations ? variants : []).map(variant => ({
-          // Include id if it's a valid UUID for existing variants
-          ...(variant.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(variant.id) ? { id: variant.id } : {}),
-          name: variant.name.trim(),
-          sku: variant.sku.trim() || "",
-          price: parseFloat(variant.price) || 0,
-          cost: parseFloat(variant.cost) || 0,
-          stock_quantity: parseInt(variant.stock_quantity) || 0,
-          is_active: variant.is_active,
-          options: variant.options || [],
-          images: variant.images,
-          store_id: variant.store_id || formData.store_id,
-          allocated: variant.allocated || 0,
-          on_hand: variant.on_hand || parseInt(variant.stock_quantity) || 0,
-          attributes: variant.attributes.reduce((acc, attr) => {
-            if (attr.key && attr.value) {
-              acc[attr.key] = attr.value;
-            }
-            return acc;
-          }, {} as Record<string, string | string[]>),
-          price_tiers: variant.price_tiers
-            .filter(t => t.tier_name.trim() && t.price > 0)
-            .map(t => ({ ...(t.id ? { id: t.id } : {}), tier_name: t.tier_name.trim(), price: t.price })),
-        })),
         store_id: formData.store_id,
         has_packaging: formData.hasPackaging,
         base_unit: formData.hasPackaging ? formData.baseUnit : undefined,
@@ -763,27 +429,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
               height: unit.height ? parseFloat(unit.height as string) : undefined
             }))
           : []
-      }
-      
-      const floorErrors = priceFloorErrors({
-        hasVariations: formData.hasVariations,
-        unitCost: productData.unit_cost,
-        shippingCost: productData.shipping_cost,
-        logisticsCost: productData.logistics_cost,
-        marginAmount: productData.margin_amount,
-        price: productData.price,
-        lastPrice: productData.last_price,
-        tiers: priceTiers,
-        variants: productData.variations,
-      })
-      if (floorErrors.length > 0) {
-        toast({
-          title: "Price too low",
-          description: `${floorErrors.join("; ")} (cost + shipping + logistics + margin).`,
-          variant: "destructive"
-        })
-        setIsSubmitting(false)
-        return
       }
 
       const result = await updateProduct(product.id, productData)
@@ -840,134 +485,26 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <CardContent>
+                <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Product Name *</Label>
+                    <Label>Item No.</Label>
+                    <Input value={product?.item_number ?? ""} disabled />
+                  </div>
+                  <div className="col-span-3 space-y-2">
+                    <Label htmlFor="name">Item Description *</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => handleInputChange("name", e.target.value)}
-                      placeholder="Enter product name"
+                      placeholder="e.g. Syringe 5ml"
                       required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="brand">Brand</Label>
-                    <Input
-                      id="brand"
-                      value={formData.brand}
-                      onChange={(e) => handleInputChange("brand", e.target.value)}
-                      placeholder="Enter brand"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => handleInputChange("description", e.target.value)}
-                      placeholder="Enter product description"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Popover open={categorySearchOpen} onOpenChange={setCategorySearchOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={categorySearchOpen}
-                          className="w-full justify-between"
-                        >
-                          {formData.category 
-                            ? categories.find(cat => cat.id === formData.category)?.name 
-                            : "Select category..."}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search categories..." />
-                          <CommandList>
-                            <CommandEmpty>
-                              <div className="p-2 text-center">
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  No category found.
-                                </p>
-                                <Button
-                                  size="sm"
-                                  className="w-full"
-                                  onClick={() => {
-                                    setCategorySearchOpen(false)
-                                    setIsCategoryModalOpen(true)
-                                  }}
-                                >
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Create New Category
-                                </Button>
-                              </div>
-                            </CommandEmpty>
-                            <CommandGroup>
-                              <CommandItem
-                                onSelect={() => {
-                                  setCategorySearchOpen(false)
-                                  setIsCategoryModalOpen(true)
-                                }}
-                                className="bg-primary/5 font-medium"
-                              >
-                                <Plus className="mr-2 h-4 w-4" />
-                                Create New Category
-                              </CommandItem>
-                              {categories
-                                .filter(cat => cat.is_active)
-                                .map((category) => (
-                                  <CommandItem
-                                    key={category.id}
-                                    value={category.name}
-                                    onSelect={() => {
-                                      handleInputChange("category", category.id)
-                                      setCategorySearchOpen(false)
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        formData.category === category.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <div className="flex items-center gap-2 flex-1">
-                                      <div
-                                        className="w-3 h-3 rounded-full"
-                                        style={{ backgroundColor: category.color }}
-                                      />
-                                      <span>{category.name}</span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tags">Tags (comma-separated)</Label>
-                    <Input
-                      id="tags"
-                      value={formData.tags}
-                      onChange={(e) => handleInputChange("tags", e.target.value)}
-                      placeholder="clothing, premium, cotton"
                     />
                   </div>
                 </div>
               </CardContent>
             </Card>
-            
+
             {/* Pricing */}
             <Card>
               <CardHeader>
@@ -986,109 +523,27 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
                       placeholder="0.00"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="last_price">Last Price</Label>
-                    <Input
-                      id="last_price"
-                      type="number"
-                      step="0.01"
-                      value={formData.last_price}
-                      onChange={(e) => handleInputChange("last_price", e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit_of_measurement">Unit of Measurement</Label>
-                    <Select
-                      value={formData.unit_of_measurement}
-                      onValueChange={(value) => handleInputChange("unit_of_measurement", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="piece">Piece</SelectItem>
-                        <SelectItem value="kg">Kilogram</SelectItem>
-                        <SelectItem value="g">Gram</SelectItem>
-                        <SelectItem value="lb">Pound</SelectItem>
-                        <SelectItem value="oz">Ounce</SelectItem>
-                        <SelectItem value="liter">Liter</SelectItem>
-                        <SelectItem value="ml">Milliliter</SelectItem>
-                        <SelectItem value="m">Meter</SelectItem>
-                        <SelectItem value="cm">Centimeter</SelectItem>
-                        <SelectItem value="ft">Foot</SelectItem>
-                        <SelectItem value="inch">Inch</SelectItem>
-                        <SelectItem value="box">Box</SelectItem>
-                        <SelectItem value="pack">Pack</SelectItem>
-                        <SelectItem value="pair">Pair</SelectItem>
-                        <SelectItem value="set">Set</SelectItem>
-                        <SelectItem value="dozen">Dozen</SelectItem>
-                        <SelectItem value="roll">Roll</SelectItem>
-                        <SelectItem value="bottle">Bottle</SelectItem>
-                        <SelectItem value="can">Can</SelectItem>
-                        <SelectItem value="bag">Bag</SelectItem>
-                        <SelectItem value="carton">Carton</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
-                {/* Landed cost + margin */}
-                <Separator />
-                <div className="space-y-4">
-                  <h4 className="font-medium text-sm">Landed Cost &amp; Margin</h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="shipping_cost">Shipping Cost</Label>
-                      <Input
-                        id="shipping_cost"
-                        type="number"
-                        step="0.01"
-                        value={formData.shipping_cost}
-                        onChange={(e) => handleInputChange("shipping_cost", e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="logistics_cost">Logistics Cost</Label>
-                      <Input
-                        id="logistics_cost"
-                        type="number"
-                        step="0.01"
-                        value={formData.logistics_cost}
-                        onChange={(e) => handleInputChange("logistics_cost", e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="margin_amount">Margin (KES)</Label>
-                      <Input
-                        id="margin_amount"
-                        type="number"
-                        step="0.01"
-                        value={formData.margin_amount}
-                        onChange={(e) => handleInputChange("margin_amount", e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Minimum valid price: <span className="font-medium text-foreground">KES {minimumValidPrice.toFixed(2)}</span> (cost + shipping + logistics + margin). NSPV, last price, and every other price must be greater than this.
-                  </p>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Selling prices come from the imported price lists (NSPV, NSPH, NSPO, NSPD) and are changed by re-importing the list under Inventory &gt; Price Lists.
+                </p>
+              </CardContent>
+            </Card>
 
-                {/* Price tiers */}
-                <Separator />
-                {formData.hasVariations ? (
-                  <p className="text-sm text-muted-foreground">This product has variations - set NSPV, NSPH, NSPO, NSPD for each variation under Variations.</p>
-                ) : (
-                  <PriceCodeFields
-                    nspv={formData.price}
-                    onNspvChange={(value) => handleInputChange("price", value)}
-                    tiers={priceTiers}
-                    onTiersChange={setPriceTiers}
-                  />
-                )}
+            {/* Sizes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Sizes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ProductSizesFields
+                  enabled={hasSizes}
+                  onEnabledChange={setHasSizes}
+                  sizes={sizes}
+                  onSizesChange={setSizes}
+                  productName={formData.name}
+                />
               </CardContent>
             </Card>
 
@@ -1117,24 +572,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sku">SKU</Label>
-                    <Input
-                      id="sku"
-                      value={formData.sku}
-                      onChange={(e) => handleInputChange("sku", e.target.value)}
-                      placeholder="Enter SKU"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="product_code">Product Code</Label>
-                    <Input
-                      id="product_code"
-                      value={formData.product_code}
-                      onChange={(e) => handleInputChange("product_code", e.target.value)}
-                      placeholder="Enter product code"
-                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="barcode">Barcode</Label>
@@ -1319,243 +756,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-            
-            {/* Variations */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Variations</span>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="hasVariations"
-                      checked={formData.hasVariations}
-                      onCheckedChange={(checked) => handleInputChange("hasVariations", checked)}
-                    />
-                    <Label htmlFor="hasVariations">Has Variations</Label>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {formData.hasVariations && (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <p className="text-sm text-muted-foreground">
-                        Add product variations (e.g., size, color)
-                      </p>
-                      <Button type="button" variant="outline" size="sm" onClick={addVariant}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Variation
-                      </Button>
-                    </div>
-                    
-                    {variants.map((variant, index) => (
-                      <div key={variant.id} className="border rounded-lg p-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">Variation {index + 1}</h4>
-                          {variants.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removeVariant(variant.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-name-${variant.id}`}>Name *</Label>
-                            <Input
-                              id={`variant-name-${variant.id}`}
-                              value={variant.name}
-                              onChange={(e) => handleVariantChange(variant.id, "name", e.target.value)}
-                              placeholder="e.g., Small - Red"
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-sku-${variant.id}`}>SKU</Label>
-                            <Input
-                              id={`variant-sku-${variant.id}`}
-                              value={variant.sku}
-                              onChange={(e) => handleVariantChange(variant.id, "sku", e.target.value)}
-                              placeholder="Enter SKU"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <PriceCodeFields
-                              idPrefix={`variant-${variant.id}-`}
-                              title="Variation Prices"
-                              nspv={variant.price}
-                              onNspvChange={(value) => handleVariantChange(variant.id, "price", value)}
-                              tiers={variant.price_tiers}
-                              onTiersChange={(tiers) => setVariantTiers(variant.id, tiers)}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-cost-${variant.id}`}>Cost</Label>
-                            <Input
-                              id={`variant-cost-${variant.id}`}
-                              type="number"
-                              step="0.01"
-                              value={variant.cost}
-                              onChange={(e) => handleVariantChange(variant.id, "cost", e.target.value)}
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-stock-${variant.id}`}>Stock Quantity</Label>
-                            <Input
-                              id={`variant-stock-${variant.id}`}
-                              type="number"
-                              value={variant.stock_quantity}
-                              disabled
-                              readOnly
-                              placeholder="0"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Adjust via Stock Adjustment or a Purchase Order.
-                            </p>
-                          </div>
-                          <div className="flex items-center space-x-2 mt-6">
-                            <Switch
-                              id={`variant-active-${variant.id}`}
-                              checked={variant.is_active}
-                              onCheckedChange={(checked) => handleVariantChange(variant.id, "is_active", checked)}
-                            />
-                            <Label htmlFor={`variant-active-${variant.id}`}>Active</Label>
-                          </div>
-                        </div>
-                        
-                        {/* Variant Attributes */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>Attributes</Label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addVariantAttribute(variant.id)}
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add Attribute
-                            </Button>
-                          </div>
-                          
-                          {variant.attributes.map((attr, attrIndex) => (
-                            <div key={attrIndex} className="flex gap-2 items-center">
-                              <Input
-                                value={attr.key}
-                                onChange={(e) => updateVariantAttribute(variant.id, attrIndex, "key", e.target.value)}
-                                placeholder="Attribute name"
-                                className="flex-1"
-                              />
-                              <Input
-                                value={attr.value}
-                                onChange={(e) => updateVariantAttribute(variant.id, attrIndex, "value", e.target.value)}
-                                placeholder="Attribute value"
-                                className="flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeVariantAttribute(variant.id, attrIndex)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Variant Options */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>Options</Label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addVariantOption(variant.id, "")}
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add Option
-                            </Button>
-                          </div>
-                          
-                          {variant.options.map((option, optionIndex) => (
-                            <div key={optionIndex} className="flex gap-2 items-center">
-                              <Input
-                                value={option}
-                                onChange={(e) => updateVariantOption(variant.id, optionIndex, e.target.value)}
-                                placeholder="Option value (e.g., size, color)"
-                                className="flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeVariantOption(variant.id, optionIndex)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Variant Images */}
-                        <div className="space-y-2">
-                          <Label>Variant Images</Label>
-                          <div className="space-y-2">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              onChange={(e) => handleVariantImageUpload(variant.id, e)}
-                              className="hidden"
-                              id={`variant-image-upload-${variant.id}`}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => triggerFileInput(`variant-image-upload-${variant.id}`)}
-                            >
-                              <ImageIcon className="h-4 w-4 mr-2" />
-                              Upload Images
-                            </Button>
-                            
-                            {variant.images.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {variant.images.map((image, imgIndex) => (
-                                  <div key={imgIndex} className="relative">
-                                    <img 
-                                      src={image} 
-                                      alt={`Variant ${index + 1} Image ${imgIndex + 1}`} 
-                                      className="w-16 h-16 object-cover rounded border"
-                                    />
-                                    <Button
-                                      type="button"
-                                      variant="destructive"
-                                      size="sm"
-                                      className="absolute -top-2 -right-2 h-5 w-5 p-0"
-                                      onClick={() => removeVariantImage(variant.id, imgIndex)}
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
             
@@ -1916,12 +1116,6 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
         </>
       )}
       
-      {/* Create Category Modal */}
-      <CreateCategoryModal
-        open={isCategoryModalOpen}
-        onOpenChange={setIsCategoryModalOpen}
-        onCategoryCreated={handleCategoryCreated}
-      />
       </SheetContent>
     </Sheet>
   )

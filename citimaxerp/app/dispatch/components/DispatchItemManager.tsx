@@ -1,5 +1,6 @@
 "use client";
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { type DispatchItem, type Dispatch } from "@/lib/dispatch";
+import { dispatchItemCode } from "@/lib/price-codes";
 
 interface DispatchItemManagerProps {
   dispatch: Dispatch;
@@ -187,18 +189,12 @@ export function DispatchItemManager({
               <div className="flex justify-between items-start mb-3">
                 <div className="space-y-1 flex-1">
                   <div className="flex items-center space-x-2">
-                    <div className="font-medium text-lg">{item.product?.name}</div>
+                    <div className="font-medium text-lg">{item.product ? sizedName(item.product.name, item.variant?.name) : ""}</div>
                     {getStatusBadge(getItemStatus(item))}
                   </div>
-                  <div className="text-sm text-gray-500">
-                    SKU: {item.product?.sku}
+                  <div className="text-sm text-gray-500 font-mono">
+                    {dispatchItemCode(item)}
                   </div>
-                  {item.variant && (
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium">Variant:</span> {item.variant.name} 
-                      <span className="text-gray-500 ml-2">(SKU: {item.variant.sku})</span>
-                    </div>
-                  )}
                   {item.notes && (
                     <div className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded">
                       <span className="font-medium">Notes:</span> {item.notes}
@@ -293,12 +289,7 @@ export function DispatchItemManager({
                 
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <div className="font-medium">{item.product?.name}</div>
-                    {item.variant && (
-                      <div className="text-sm text-gray-500">
-                        Variant: {item.variant.name}
-                      </div>
-                    )}
+                    <div className="font-medium">{item.product ? sizedName(item.product.name, item.variant?.name) : ""}</div>
                   </div>
                   <div className="text-sm text-gray-500">
                     Remaining: {item.quantity - item.received_quantity}
@@ -364,12 +355,7 @@ export function DispatchItemManager({
               <div key={item.id} className="border rounded-lg p-4 space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="font-medium">{item.product?.name}</div>
-                    {item.variant && (
-                      <div className="text-sm text-gray-500">
-                        Variant: {item.variant.name}
-                      </div>
-                    )}
+                    <div className="font-medium">{item.product ? sizedName(item.product.name, item.variant?.name) : ""}</div>
                   </div>
                   <div className="text-sm text-gray-500">
                     Available: {item.received_quantity}

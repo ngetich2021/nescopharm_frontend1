@@ -28,6 +28,7 @@ class OrderItem extends Model
         'batch_allocations',
         'unit_price',
         'price_label',
+        'price_unit',
         'total_price',
         'tax_rate',
         'tax_amount',

@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -305,10 +306,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
                 {order.order_items && order.order_items.map((item, index) => (
                   <tr key={item.id || index} className="border-b border-gray-200">
                     <td className="py-3 text-sm text-gray-900">
-                      {item.product?.name || 'Product'}
-                      {item.variant_name && (
-                        <span className="text-gray-500"> ({item.variant_name})</span>
-                      )}
+                      {item.product ? sizedName(item.product.name, (item as any).variant?.name || item.variant_name) : 'Product'}
                     </td>
                     <td className="text-right py-3 text-sm text-gray-900">{item.quantity}</td>
                     <td className="text-right py-3 text-sm text-gray-900">KES {formatAmount(item.unit_price)}</td>

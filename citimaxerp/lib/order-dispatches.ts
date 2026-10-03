@@ -677,5 +677,5 @@ export function canCreateLogistics(dispatch: OrderDispatch): boolean {
  * Check if dispatch can be marked as delivered
  */
 export function canMarkDelivered(dispatch: OrderDispatch): boolean {
-  return dispatch.status === 'in_transit' && !!dispatch.logistic;
+  return dispatch.status === 'in_transit' && !!dispatch.logistic && dispatch.logistic.delivery_status !== 'delivered';
 }

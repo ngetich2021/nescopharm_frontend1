@@ -101,16 +101,19 @@ body { font-family: 'Figtree'; background: #fff; }
         <table class="items-table">
             <thead>
                 <tr>
-                    <th>Item Code</th>
-                    <th>Item Description</th>
-                    <th>Quantity</th>
-                    <th>Unit Price (incl. VAT)</th>
-                    <th>Amount (incl. VAT)</th>
+                    <th>S/No</th>
+                    <th>Code No.</th>
+                    <th>Item Name</th>
+                    <th>Pack Size</th>
+                    <th>Price per Pack (Ksh)</th>
+                    <th>Order Qty</th>
+                    <th>Total Value (Ksh)</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($invoice->lineItems as $item)
                 <tr>
+                    <td>{{ $loop->iteration }}</td>
                     <td>{{ $item->itemCode() ?? '-' }}</td>
                     <td>
                         {{ $item->description }}
@@ -118,9 +121,10 @@ body { font-family: 'Figtree'; background: #fff; }
                             <br><span style="display:inline-block; border:1px solid #6b7280; padding:0 4px; font-size:0.75rem; font-weight:600;">VAT {{ rtrim(rtrim(number_format($item->tax_rate, 2), '0'), '.') }}% inclusive</span>
                         @endif
                     </td>
-                    <td>{{ number_format($item->quantity, 2) }}</td>
-                    <td>Ksh {{ number_format($item->unitPriceInclTax(), 2) }}</td>
-                    <td>Ksh {{ number_format($item->line_total, 2) }}</td>
+                    <td>{{ $item->packSize() }}</td>
+                    <td>{{ number_format($item->unitPriceInclTax(), 2) }}</td>
+                    <td>{{ rtrim(rtrim(number_format($item->quantity, 2), '0'), '.') }}</td>
+                    <td>{{ number_format($item->line_total, 2) }}</td>
                 </tr>
                 @endforeach
             </tbody>
@@ -137,10 +141,12 @@ body { font-family: 'Figtree'; background: #fff; }
                 <td style="text-align:right;">-Ksh {{ number_format($invoice->discount_amount, 2) }}</td>
             </tr>
             @endif
+            @if((float) $invoice->tax_amount > 0)
             <tr>
                 <td>VAT</td>
                 <td style="text-align:right;">Ksh {{ number_format($invoice->tax_amount, 2) }}</td>
             </tr>
+            @endif
             <tr>
                 <td class="total-label">Total</td>
                 <td class="total-value" style="text-align:right;">Ksh {{ number_format($invoice->total_amount, 2) }}</td>

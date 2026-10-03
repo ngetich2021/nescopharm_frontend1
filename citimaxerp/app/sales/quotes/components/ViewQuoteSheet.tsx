@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -22,7 +23,7 @@ import { PermissionGuard } from "@/components/PermissionGuard"
 import { SendQuoteModal } from "@/components/modals/send-quote-modal"
 import apiCall from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import { formatPackagingForDisplay } from "@/lib/packaging-utils"
+import { documentCode } from "@/lib/price-codes"
 
 interface ViewQuoteSheetProps {
   open: boolean
@@ -316,100 +317,38 @@ export function ViewQuoteSheet({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Item Code</TableHead>
-                      <TableHead className="min-w-[250px]">Item Description</TableHead>
+                      <TableHead className="w-12">S/No</TableHead>
+                      <TableHead>Code No.</TableHead>
+                      <TableHead className="min-w-[250px]">Item Name</TableHead>
                       <TableHead>Pack Size</TableHead>
-                      <TableHead className="text-center">Order Qty</TableHead>
-                      <TableHead className="text-center">Packaging</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-center">VAT</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Price per Pack (Ksh)</TableHead>
+                      <TableHead className="text-right">Order Qty</TableHead>
+                      <TableHead className="text-right">Total Value (Ksh)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {quote.quote_items?.map((item) => {
-                      // Determine quantity display
-                      const displayQty = item.packagingUnit 
-                        ? `${item.unit_quantity || item.quantity} ${item.packagingUnit.unit_abbreviation}`
-                        : `${item.quantity} PCS`;
-                      
-                      // Get breakdown text - calculate if not provided by API
-                      let breakdown = item.packaging_breakdown?.display_text || '';
-                      if (!breakdown && item.product?.has_packaging && (item.product as any)?.packaging_units && item.quantity > 0) {
-                        const packagingDisplay = formatPackagingForDisplay(item.quantity, (item.product as any).packaging_units);
-                        breakdown = packagingDisplay.shortText;
-                      }
-                      
-                      // Get total pieces (base quantity)
-                      const totalPieces = item.base_quantity || item.quantity;
-
-                      return (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-mono text-sm whitespace-nowrap">{item.item_code || "-"}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="font-medium text-base">{item.product?.name || "Unknown Product"}</div>
-                              {item.variant_id && (item as any).variant && (
-                                <div className="text-sm font-medium text-blue-600 flex items-center gap-1">
-                                  <span className="bg-blue-50 px-2 py-0.5 rounded">
-                                    Variant: {(item as any).variant.name || (item as any).variant_name || "N/A"}
-                                  </span>
-                                </div>
-                              )}
-                              {item.product?.description && (
-                                <div className="text-sm text-gray-600">{item.product.description}</div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">{item.pack_size || "-"}</TableCell>
-                          <TableCell className="text-center">
-                            <div className="space-y-1">
-                              <div className="font-medium">{displayQty}</div>
-                              {item.packagingUnit && (
-                                <div className="text-xs text-gray-500">
-                                  ({totalPieces} {item.product?.base_unit || 'pcs'} total)
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {breakdown ? (
-                              <div className="space-y-1">
-                                <div className="text-sm font-medium text-gray-700">{breakdown}</div>
-                                <div className="text-xs text-gray-500">Breakdown for fulfillment</div>
-                              </div>
-                            ) : (
-                              <div className="text-sm text-gray-400">-</div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="space-y-1">
-                              <div>{formatCurrency(Number(item.unit_price) * vatFactor(item))}</div>
-                              {item.packagingUnit && (
-                                <div className="text-xs text-gray-500">per {item.packagingUnit.unit_abbreviation}</div>
-                              )}
-                              {/* Which named price tier this was - staff-only
-                                  reference, never shown on a printed quote. */}
-                              {item.price_label && (
-                                <div className="text-xs text-gray-500 italic">{item.price_label}</div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {Number(item.tax_rate || 0) > 0 ? (
-                              <span className="inline-block border border-gray-500 px-1.5 py-0.5 text-xs font-semibold text-gray-700 whitespace-nowrap">
-                                VAT {Number(item.tax_rate)}% inclusive
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-500 whitespace-nowrap">{item.tax_label || "-"}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {formatCurrency(item.quantity * Number(item.unit_price) * vatFactor(item))}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {quote.quote_items?.map((item, index) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell className="font-mono text-sm whitespace-nowrap">
+                          {documentCode(item.price_label, item.item_code || (item.product as any)?.item_number)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{item.product ? sizedName(item.product.name, (item as any).variant?.name || (item as any).variant_name) : "Unknown Product"}</div>
+                          {Number(item.tax_rate || 0) > 0 && (
+                            <span className="inline-block mt-1 border border-gray-500 px-1.5 py-0.5 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                              VAT {Number(item.tax_rate)}% inclusive
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">{item.pack_size || "-"}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(Number(item.unit_price) * vatFactor(item))}</TableCell>
+                        <TableCell className="text-right">{(item.unit_id && item.unit_quantity ? Number(item.unit_quantity) : item.quantity).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(item.quantity * Number(item.unit_price) * vatFactor(item))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -433,10 +372,12 @@ export function ViewQuoteSheet({
                     <span className="font-medium">-{formatCurrency(discount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-base">
-                  <span className="text-gray-600">VAT:</span>
-                  <span className="font-medium">{formatCurrency(vatTotal)}</span>
-                </div>
+                {vatTotal > 0 && (
+                  <div className="flex justify-between text-base">
+                    <span className="text-gray-600">VAT:</span>
+                    <span className="font-medium">{formatCurrency(vatTotal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-xl border-t pt-3">
                   <span>Total:</span>
                   <span className="text-blue-600">{formatCurrency(finalAmount)}</span>

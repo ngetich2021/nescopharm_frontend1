@@ -247,18 +247,6 @@ class InvoiceController extends Controller
             'payment_terms' => 'nullable|string',
             'notes' => 'nullable|string',
             'terms_and_conditions' => 'nullable|string',
-            'delivery_note_number' => 'nullable|string|max:100',
-            'delivery_note_date' => 'nullable|date',
-            'reference_number' => 'nullable|string|max:100',
-            'reference_date' => 'nullable|date',
-            'other_references' => 'nullable|string|max:255',
-            'buyers_order_no' => 'nullable|string|max:100',
-            'buyers_order_date' => 'nullable|date',
-            'dispatch_doc_no' => 'nullable|string|max:100',
-            'dispatched_through' => 'nullable|string|max:100',
-            'destination' => 'nullable|string|max:100',
-            'terms_of_delivery' => 'nullable|string|max:255',
-            'mode_of_payment' => 'nullable|string|max:100',
             'generate_etims_receipt' => 'sometimes|boolean',
             'line_items' => 'required|array|min:1',
             'line_items.*.product_id' => 'nullable|exists:products,id',
@@ -317,18 +305,11 @@ class InvoiceController extends Controller
                 'payment_terms' => $credit['payment_terms'],
                 'notes' => $request->notes,
                 'terms_and_conditions' => $request->terms_and_conditions,
-                'delivery_note_number' => $request->delivery_note_number,
-                'delivery_note_date' => $request->delivery_note_date,
-                'reference_number' => $request->reference_number,
-                'reference_date' => $request->reference_date,
-                'other_references' => $request->other_references,
-                'buyers_order_no' => $request->buyers_order_no ?: $this->generateBuyersOrderNo($user->company_id),
-                'buyers_order_date' => $request->buyers_order_date,
-                'dispatch_doc_no' => $request->dispatch_doc_no,
-                'dispatched_through' => $request->dispatched_through,
-                'destination' => $request->destination,
-                'terms_of_delivery' => $request->terms_of_delivery,
-                'mode_of_payment' => $request->mode_of_payment,
+                // Reference/dispatch fields are system-generated only, never typed in.
+                'buyers_order_no' => $this->generateBuyersOrderNo($user->company_id),
+                'buyers_order_date' => $request->invoice_date,
+                'mode_of_payment' => $credit['payment_terms'],
+                'other_references' => $this->customerPrimaryContact($customer),
                 'etims_requested' => $request->boolean('generate_etims_receipt', true),
                 'created_by' => $user->id,
                 'subtotal' => 0,
@@ -426,6 +407,7 @@ class InvoiceController extends Controller
                 $invoice = Invoice::with(['customer', 'order', 'lineItems.product', 'lineItems.variant', 'createdBy', 'company'])
                     ->where('company_id', $companyId)
                     ->findOrFail($id);
+                $this->syncSystemReferences($invoice);
                 return response()->json($invoice);
             });
         } catch (\Exception $e) {
@@ -458,18 +440,6 @@ class InvoiceController extends Controller
             'payment_terms' => 'nullable|string',
             'notes' => 'nullable|string',
             'terms_and_conditions' => 'nullable|string',
-            'delivery_note_number' => 'nullable|string|max:100',
-            'delivery_note_date' => 'nullable|date',
-            'reference_number' => 'nullable|string|max:100',
-            'reference_date' => 'nullable|date',
-            'other_references' => 'nullable|string|max:255',
-            'buyers_order_no' => 'nullable|string|max:100',
-            'buyers_order_date' => 'nullable|date',
-            'dispatch_doc_no' => 'nullable|string|max:100',
-            'dispatched_through' => 'nullable|string|max:100',
-            'destination' => 'nullable|string|max:100',
-            'terms_of_delivery' => 'nullable|string|max:255',
-            'mode_of_payment' => 'nullable|string|max:100',
             'generate_etims_receipt' => 'sometimes|boolean',
             'payment_type' => 'sometimes|in:cash,credit',
             'credit_terms_days' => 'nullable|integer|min:0',
@@ -505,18 +475,6 @@ class InvoiceController extends Controller
                 'payment_terms',
                 'notes',
                 'terms_and_conditions',
-                'delivery_note_number',
-                'delivery_note_date',
-                'reference_number',
-                'reference_date',
-                'other_references',
-                'buyers_order_no',
-                'buyers_order_date',
-                'dispatch_doc_no',
-                'dispatched_through',
-                'destination',
-                'terms_of_delivery',
-                'mode_of_payment',
                 'status',
                 'payment_type',
                 'credit_terms_days',
@@ -613,6 +571,68 @@ class InvoiceController extends Controller
     /**
      * Create invoice from an existing order.
      */
+    /**
+     * Delivery note / dispatch fields for an invoice, read from the order's latest dispatch.
+     * The dispatch's logistics entry is the source of truth for carrier and destination; the
+     * order's delivery details only record a generic method like "courier".
+     */
+    private function dispatchReferences(Order $order): array
+    {
+        $order->loadMissing(['latestOrderDispatch', 'deliveryDetails', 'deliveryLocation']);
+        $dispatch = $order->latestOrderDispatch;
+        $logistic = $dispatch
+            ? Logistic::where('order_dispatch_id', $dispatch->id)->latest()->first()
+            : null;
+        $deliveryNote = $dispatch
+            ? DeliveryNote::where('order_dispatch_id', $dispatch->id)->latest()->first()
+            : null;
+        $destination = collect([$logistic?->delivery_location, $logistic?->state])
+            ->filter()
+            ->implode(', ') ?: ($order->deliveryLocation?->estate ?: $order->deliveryLocation?->city);
+
+        return [
+            // A dispatch's delivery note and dispatch doc are the same physical document here.
+            'dispatch_doc_no' => $dispatch?->dispatch_number,
+            'delivery_note_number' => $dispatch?->dispatch_number,
+            'delivery_note_date' => $deliveryNote?->created_at?->toDateString()
+                ?? $dispatch?->dispatch_date?->toDateString()
+                ?? $dispatch?->created_at?->toDateString(),
+            'dispatched_through' => $logistic?->logistics_provider
+                ?: ($logistic?->delivery_method ?: $order->deliveryDetails->first()?->delivery_method),
+            'destination' => $destination ?: null,
+        ];
+    }
+
+    // "Other References" on the printed invoice: the customer's first director (name - phone).
+    private function customerPrimaryContact(?Customer $customer): ?string
+    {
+        $director = $customer?->account?->directors?->first();
+        return $director
+            ? trim($director->name . ($director->phone_number ? ' - ' . $director->phone_number : ''))
+            : null;
+    }
+
+    // Reference/dispatch fields are system-generated only. Re-derived whenever the invoice is
+    // opened, so an invoice raised before dispatch picks the details up once the order ships.
+    private function syncSystemReferences(Invoice $invoice): void
+    {
+        $refs = [
+            'mode_of_payment' => $invoice->payment_terms,
+            'other_references' => $this->customerPrimaryContact($invoice->order?->customer ?? $invoice->customer),
+        ];
+        if ($invoice->order) {
+            $refs += $this->dispatchReferences($invoice->order) + [
+                'reference_number' => $invoice->order->order_number,
+                'reference_date' => $invoice->order->order_date,
+                'buyers_order_date' => $invoice->order->order_date,
+            ];
+        }
+        $invoice->forceFill($refs);
+        if ($invoice->isDirty()) {
+            $invoice->saveQuietly();
+        }
+    }
+
     public function createFromOrder(Request $request, string $orderId): JsonResponse
     {
         $user = $request->user();
@@ -688,31 +708,8 @@ class InvoiceController extends Controller
             }
             $invoiceStatus = $this->calculateInvoiceStatus($amountPaid, $totalAmount, $credit['due_date']);
 
-            // Pull the reference/dispatch details straight from the order
-            // this invoice is being created from, rather than leaving them
-            // for manual re-entry - the data already exists in the system.
-            $dispatch = $order->latestOrderDispatch;
-            $deliveryDetail = $order->deliveryDetails->first();
-            // The dispatch's own logistics entry carries the delivery company
-            // and destination actually picked when the dispatch was created -
-            // that's the source of truth here, not the order's delivery
-            // details (which only records a generic method like "courier").
-            $logistic = $dispatch
-                ? Logistic::where('order_dispatch_id', $dispatch->id)->latest()->first()
-                : null;
-            $deliveryNote = $dispatch
-                ? DeliveryNote::where('order_dispatch_id', $dispatch->id)->latest()->first()
-                : null;
-            $destination = collect([$logistic?->delivery_location, $logistic?->state])
-                ->filter()
-                ->implode(', ') ?: ($order->deliveryLocation?->estate ?: $order->deliveryLocation?->city);
-            // "Other References" on the reference invoice format is the
-            // customer's primary contact - the first director on their
-            // credit account (name - phone).
-            $director1 = $order->customer?->account?->directors?->first();
-            $otherReferences = $director1
-                ? trim($director1->name . ($director1->phone_number ? ' - ' . $director1->phone_number : ''))
-                : null;
+            $dispatchRefs = $this->dispatchReferences($order);
+            $otherReferences = $this->customerPrimaryContact($order->customer);
 
             $invoice = Invoice::create([
                 'company_id' => $user->company_id,
@@ -733,15 +730,7 @@ class InvoiceController extends Controller
                 'buyers_order_no' => $this->generateBuyersOrderNo($user->company_id),
                 'buyers_order_date' => $order->order_date,
                 'mode_of_payment' => $credit['payment_terms'],
-                // A dispatch's delivery note and dispatch doc are the same
-                // physical document in this system, hence the shared number.
-                'dispatch_doc_no' => $dispatch?->dispatch_number,
-                'delivery_note_number' => $dispatch?->dispatch_number,
-                // The date the delivery note itself was generated, not the
-                // dispatch's estimated delivery date.
-                'delivery_note_date' => $deliveryNote?->created_at?->toDateString(),
-                'dispatched_through' => $logistic?->logistics_provider ?: ($logistic?->delivery_method ?: $deliveryDetail?->delivery_method),
-                'destination' => $destination,
+                ...$dispatchRefs,
                 // The order IS the buyer's reference document for this sale.
                 'reference_number' => $order->order_number,
                 'reference_date' => $order->order_date,
@@ -807,9 +796,9 @@ class InvoiceController extends Controller
                     'invoice_id' => $invoice->id,
                     'product_id' => $orderItem->product_id,
                     'variant_id' => $orderItem->variant_id,
-                    'description' => $orderItem->product->name . ($orderItem->variant ? ' - ' . $orderItem->variant->name : ''),
+                    'description' => \App\Models\ProductVariant::sizedName($orderItem->product->name, $orderItem->variant?->name),
                     'quantity' => $orderItem->quantity,
-                    'unit' => 'pcs',
+                    'unit' => $orderItem->price_unit ?: 'pcs',
                     'batch_number' => $batchNumber ?: null,
                     'expiry_date' => $expiryDate ?: null,
                     'unit_price' => $lineUnitPrice,

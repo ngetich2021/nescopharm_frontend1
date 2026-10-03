@@ -1010,10 +1010,9 @@ export function EditProductModal({ isOpen, onClose, product, onSuccess }: EditPr
               )}
             </TabsContent>
             <TabsContent value="variations" className="space-y-4">
-              <div className="flex items-center space-x-2 mb-4">
-                <Switch id="hasVariations" checked={hasVariations} onCheckedChange={setHasVariations} />
-                <Label htmlFor="hasVariations">This product has variations</Label>
-              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Variations are no longer used. Add each size or type as its own product with its own price codes.
+              </p>
               {hasVariations ? (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">

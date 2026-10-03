@@ -1,4 +1,5 @@
 "use client";
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react";
 import { updateOrderDispatch, type OrderDispatch } from "@/lib/order-dispatches";
 import { getProducts } from "@/lib/products";
@@ -294,7 +295,7 @@ export function EditDispatchModal({ open, onOpenChange, dispatch, onSuccess }: E
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-3">
                               <div>
-                                <h4 className="font-medium">{item.product?.name || 'Unknown Product'}</h4>
+                                <h4 className="font-medium">{item.product ? sizedName(item.product?.name, (item as any).variant?.name || (item as any).variant_name) : 'Unknown Product'}</h4>
                                 {item.variant && (
                                   <p className="text-sm text-gray-600">Variant: {item.variant?.name || 'Unknown Variant'}</p>
                                 )}

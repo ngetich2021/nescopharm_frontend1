@@ -113,7 +113,9 @@ export interface Dimensions {
 export interface PriceTierInput {
   id?: string
   tier_name: string
+  item_code?: string | null
   price: number
+  unit_of_measure?: string | null
 }
 
 export interface ProductData {
@@ -190,7 +192,7 @@ export interface Product {
   shipping_cost?: string | number | null
   logistics_cost?: string | number | null
   margin_amount?: string | number | null
-  minimum_valid_price?: string | number | null
+  item_number?: number | null
   price_tiers?: PriceTierInput[]
   last_price: string | null
   stock_quantity: number
@@ -586,9 +588,7 @@ export async function createProduct(productData: ProductData) {
       shipping_cost: productData.shipping_cost || 0,
       logistics_cost: productData.logistics_cost || 0,
       margin_amount: productData.margin_amount || 0,
-      price_tiers: Array.isArray(productData.price_tiers)
-        ? productData.price_tiers.filter(t => t.tier_name?.trim()).map(t => ({ tier_name: t.tier_name.trim(), price: t.price }))
-        : [],
+      price_tiers: productData.price_tiers ?? [],
       last_price: productData.last_price || null,
       store_id: productData.store_id,
       // Packaging fields

@@ -26,6 +26,7 @@ class QuoteItem extends Model
         'packaging_breakdown',
         'unit_price',
         'price_label',
+        'price_unit',
         'total_price',
         'tax_type_code',
         'tax_rate',
@@ -89,18 +90,24 @@ class QuoteItem extends Model
         return $this->belongsTo(\App\Models\ProductPackagingUnit::class, 'unit_id');
     }
 
+    // The price-list code used (e.g. "NSPD 001"), else the product's item number.
     public function itemCode(): ?string
     {
-        return $this->variant?->sku ?: ($this->product?->product_code ?: $this->product?->sku);
+        if ($this->price_label && preg_match('/\d/', $this->price_label)) {
+            return $this->price_label;
+        }
+        return $this->product?->item_number !== null ? (string) $this->product?->item_number : null;
     }
 
     public function packSize(): string
     {
+        if ($this->price_unit) {
+            return $this->price_unit;
+        }
         if ($this->packagingUnit) {
             return 'Per ' . strtolower($this->packagingUnit->unit_name);
         }
-        $unit = $this->product?->base_unit ?: $this->product?->unit_of_measurement;
-        return $unit ? 'Per ' . strtolower($unit) : 'Per piece';
+        return 'pcs';
     }
 
     /**

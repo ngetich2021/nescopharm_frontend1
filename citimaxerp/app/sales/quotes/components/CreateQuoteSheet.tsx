@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Trash2, Plus, Search, Package, ArrowLeft, Save } from "lucide-react"
+import { Plus, Search, ArrowLeft, Save } from "lucide-react"
 import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -21,8 +21,7 @@ import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
-import { formatPackagingForDisplay } from "@/lib/packaging-utils"
-import { DEFAULT_PRICE_CODE, priceOptionsFor } from "@/lib/price-codes"
+import { QuoteLineItemsTable } from "./QuoteLineItemsTable"
 
 const lineItemSchema = z.object({
   product_id: z.string().min(1, "Please select a product"),
@@ -34,6 +33,8 @@ const lineItemSchema = z.object({
   // came from, or "Custom" if hand-typed - internal-only, never printed on
   // the customer-facing quote.
   price_label: z.string().optional().nullable(),
+  // Unit of measure of the chosen price, e.g. "Box of 100".
+  price_unit: z.string().optional().nullable(),
 })
 
 const quoteSchema = z.object({
@@ -60,10 +61,6 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
   const [products, setProducts] = useState<any[]>([])
   const [productsError, setProductsError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [productSearchTerm, setProductSearchTerm] = useState("")
-  const [productSearchResults, setProductSearchResults] = useState<any[] | null>(null)
-  const [isSearchingProducts, setIsSearchingProducts] = useState(false)
-  const [showProductSearch, setShowProductSearch] = useState<number | null>(null)
   const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [showCustomerSearch, setShowCustomerSearch] = useState(false)
   const [showCreateCustomer, setShowCreateCustomer] = useState(false)
@@ -83,7 +80,7 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
       currency: 'KES',
       status: 'pending' as const,
       notes: '',
-      items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, price_label: null }],
+      items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, price_label: null, price_unit: null }],
     }
   })
 
@@ -148,62 +145,6 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
     customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
   )
 
-  // Search products server-side once the query is long enough, so results aren't
-  // limited to whatever happened to load in the initial page of products.
-  useEffect(() => {
-    if (!open) return
-    const term = productSearchTerm.trim()
-    if (term.length < 1) {
-      setProductSearchResults(null)
-      return
-    }
-    // For single-character searches, use client-side filter only
-    if (term.length === 1) {
-      setProductSearchResults(null)
-      return
-    }
-    setIsSearchingProducts(true)
-    const timer = setTimeout(async () => {
-      try {
-        const { data } = await getProducts(1, 100, { search: term })
-        setProductSearchResults(data || [])
-      } catch (error) {
-        console.error('Product search failed:', error)
-        setProductSearchResults([])
-      } finally {
-        setIsSearchingProducts(false)
-      }
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [productSearchTerm, open])
-
-  // Below the search threshold, fall back to filtering the initially loaded page.
-  // Uses fuzzy matching: checks if search term characters appear in sequence (case-insensitive)
-  const fuzzyMatch = (text: string | null | undefined, query: string) => {
-    if (!text) return false
-    const t = text.toLowerCase()
-    const q = query.toLowerCase()
-    let tIndex = 0
-    for (let i = 0; i < q.length; i++) {
-      tIndex = t.indexOf(q[i], tIndex)
-      if (tIndex === -1) return false
-      tIndex++
-    }
-    return true
-  }
-
-  const filteredProducts = productSearchResults !== null
-    ? productSearchResults
-    : products.filter(product => {
-        const searchTerm = productSearchTerm.toLowerCase().trim()
-        if (!searchTerm) return true
-        return (
-          fuzzyMatch(product.name, searchTerm) ||
-          fuzzyMatch(product.sku, searchTerm) ||
-          fuzzyMatch(product.description, searchTerm)
-        )
-      })
-
   const addLineItem = () => {
     append({
       product_id: '',
@@ -211,44 +152,8 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
       quantity: 1,
       unit_price: 0,
       price_label: null,
+      price_unit: null,
     })
-  }
-
-  const addProductToLineItem = (index: number, product: any, variant?: any) => {
-    const item = variant || product
-    const productId = product.id
-    const variantId = variant?.id || null
-    
-    // Check if this product/variant combination already exists in the quote
-    const existingIndex = fields.findIndex((field, idx) => {
-      const existingProductId = form.getValues(`items.${idx}.product_id`)
-      const existingVariantId = form.getValues(`items.${idx}.variant_id`)
-      return existingProductId === productId && existingVariantId === variantId
-    })
-    
-    if (existingIndex !== -1) {
-      // Product/variant already exists, update quantity
-      const currentQuantity = Number(form.getValues(`items.${existingIndex}.quantity`)) || 1
-      form.setValue(`items.${existingIndex}.quantity`, currentQuantity + 1)
-      toast({
-        title: "Quantity Updated",
-        description: `Increased quantity of ${item.name || product.name} to ${currentQuantity + 1}`,
-      })
-    } else {
-      // New product/variant, add to current line item
-      form.setValue(`items.${index}.product_id`, product.id)
-      if (variant) {
-        form.setValue(`items.${index}.variant_id`, variant.id)
-        form.setValue(`items.${index}.description`, `${product.name} - ${variant.name}`)
-      } else {
-        form.setValue(`items.${index}.description`, product.name)
-      }
-      form.setValue(`items.${index}.unit_price`, parseFloat(item.price || "0"))
-      form.setValue(`items.${index}.price_label`, DEFAULT_PRICE_CODE)
-    }
-
-    setShowProductSearch(null)
-    setProductSearchTerm("")
   }
 
   const handleCreateCustomer = async () => {
@@ -344,6 +249,7 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
           quantity: item.quantity,
           unit_price: item.unit_price.toString(),
           price_label: item.price_label || null,
+          price_unit: item.price_unit || null,
         }))
       }
       
@@ -365,7 +271,7 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
         currency: 'KES',
         status: 'pending' as const,
         notes: '',
-        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, price_label: null }],
+        items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, price_label: null, price_unit: null }],
       })
     } catch (error: any) {
       toast({
@@ -659,296 +565,7 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
                     </Button>
                   </div>
                 )}
-                {/* Column Headers */}
-                <div className="grid grid-cols-12 gap-4 pb-2 border-b">
-                  <div className="col-span-5">
-                    <Label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Description</Label>
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Qty</Label>
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Price</Label>
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Total</Label>
-                  </div>
-                  <div className="col-span-1"></div>
-                </div>
-
-                {fields.map((field, index) => (
-                  <div key={field.id} className="border rounded-lg p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                    {/* Single row layout for line item */}
-                    <div className="grid grid-cols-12 gap-4 items-start">
-                      {/* Description column */}
-                      <div className="col-span-5">
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <Textarea
-                              placeholder="Click search to select a product or enter description..."
-                              {...form.register(`items.${index}.description`)}
-                              className={cn(
-                                "flex-1 min-h-[80px] text-sm resize-none border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary",
-                                form.formState.errors.items?.[index]?.product_id && !form.watch(`items.${index}.product_id`) && "border-red-500 focus:border-red-500"
-                              )}
-                              rows={3}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => setShowProductSearch(showProductSearch === index ? null : index)}
-                              className={cn(
-                                "h-10 w-10 flex-shrink-0 border-gray-300 hover:border-primary hover:bg-primary/5",
-                                form.watch(`items.${index}.product_id`) && "border-primary bg-primary/10"
-                              )}
-                              tabIndex={0}
-                              aria-label="Search product"
-                            >
-                              <Search className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {/* Hidden field for product_id */}
-                          <input type="hidden" {...form.register(`items.${index}.product_id`)} />
-                          {form.formState.errors.items?.[index]?.product_id && !form.watch(`items.${index}.product_id`) && (
-                            <p className="text-xs text-red-600 font-medium">{form.formState.errors.items[index]?.product_id?.message}</p>
-                          )}
-                          {form.formState.errors.items?.[index]?.description && (
-                            <p className="text-xs text-red-600">{form.formState.errors.items[index]?.description?.message}</p>
-                          )}
-                          {/* Product Search Dropdown */}
-                          {showProductSearch === index && (
-                            <div className="relative z-50 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-80 overflow-auto">
-                              <div className="p-3 border-b flex items-center gap-2">
-                                <Input
-                                  placeholder="Search products..."
-                                  value={productSearchTerm}
-                                  onChange={(e) => setProductSearchTerm(e.target.value)}
-                                  className="flex-1"
-                                  autoFocus
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setShowProductSearch(null)}
-                                  className="px-2"
-                                >
-                                  ✕
-                                </Button>
-                              </div>
-                              <div className="max-h-60 overflow-y-auto">
-                                {isSearchingProducts ? (
-                                  <div className="p-3 text-sm text-gray-500 text-center">Searching...</div>
-                                ) : filteredProducts.length === 0 ? (
-                                  <div className="p-3 text-sm text-gray-500 text-center">
-                                    {productSearchTerm ? 'No products found' : 'No products available'}
-                                  </div>
-                                ) : (
-                                  filteredProducts.map((product) => (
-                                    <div key={product.id}>
-                                      {/* Main Product */}
-                                      <div
-                                        className={cn(
-                                          "p-3 hover:bg-gray-50 cursor-pointer border-b",
-                                          product.variants && product.variants.length > 0 
-                                            ? "bg-blue-50/50" 
-                                            : ""
-                                        )}
-                                        onClick={() => {
-                                          if (!product.variants || product.variants.length === 0) {
-                                            addProductToLineItem(index, product)
-                                          }
-                                        }}
-                                      >
-                                        <div className="flex items-start gap-3">
-                                          <Package className="h-5 w-5 text-gray-400 mt-0.5" />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                              <div className="font-medium text-sm">{product.name}</div>
-                                              {product.variants && product.variants.length > 0 && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                                                  {product.variants.length} variant{product.variants.length > 1 ? 's' : ''}
-                                                </span>
-                                              )}
-                                            </div>
-                                            {product.description && (
-                                              <div className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                                {product.description}
-                                              </div>
-                                            )}
-                                            <div className="text-xs text-gray-500 mt-1">
-                                              SKU: {product.sku || 'N/A'} | Price: {formatCurrency(product.price || 0)}
-                                              {product.variants && product.variants.length > 0 && (
-                                                <span className="ml-2 text-blue-600">• Click variants below to select</span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      
-                                      {/* Product Variants */}
-                                      {product.variants && product.variants.length > 0 && (
-                                        <div className="ml-8 border-l-2 border-blue-200 bg-blue-50/30">
-                                          {product.variants.map((variant: any) => (
-                                            <div
-                                              key={variant.id}
-                                              className="p-3 hover:bg-blue-100/50 cursor-pointer text-sm border-b border-blue-100 transition-colors"
-                                              onClick={() => addProductToLineItem(index, product, variant)}
-                                            >
-                                              <div className="flex items-start gap-2">
-                                                <div className="w-3 h-3 bg-blue-400 rounded-full mt-1"></div>
-                                                <div className="flex-1 min-w-0">
-                                                  <div className="font-medium text-blue-900">{variant.name}</div>
-                                                  {variant.description && (
-                                                    <div className="text-xs text-gray-700 mt-1">
-                                                      {variant.description}
-                                                    </div>
-                                                  )}
-                                                  <div className="text-xs text-gray-600 mt-1">
-                                                    SKU: {variant.sku || 'N/A'} | Price: {formatCurrency(variant.price || 0)}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Quantity */}
-                      <div className="col-span-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          placeholder="0"
-                          {...form.register(`items.${index}.quantity`, { valueAsNumber: true })}
-                          className="h-10 text-sm border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary"
-                        />
-                        {form.formState.errors.items?.[index]?.quantity && (
-                          <p className="text-xs text-red-600 mt-1">{form.formState.errors.items[index]?.quantity?.message}</p>
-                        )}
-                        {/* Packaging Breakdown Display */}
-                        {(() => {
-                          const productId = form.watch(`items.${index}.product_id`)
-                          const quantity = form.watch(`items.${index}.quantity`) || 0
-                          const product = products.find(p => p.id === productId)
-                          
-                          if (product && product.has_packaging && product.packaging_units && quantity > 0) {
-                            const packagingDisplay = formatPackagingForDisplay(quantity, product.packaging_units)
-                            if (packagingDisplay.hasPackaging && packagingDisplay.shortText) {
-                              return (
-                                <div className="mt-1.5 text-xs bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 px-2 py-1.5 rounded border border-blue-200 dark:border-blue-800">
-                                  <div className="flex items-center gap-1.5">
-                                    <Package className="h-3 w-3 flex-shrink-0" />
-                                    <span className="font-medium">{packagingDisplay.shortText}</span>
-                                  </div>
-                                </div>
-                              )
-                            }
-                          }
-                          return null
-                        })()}
-                      </div>
-                      
-                      {/* Unit Price */}
-                      <div className="col-span-2">
-                        {(() => {
-                          const productId = form.watch(`items.${index}.product_id`)
-                          const product = products.find(p => p.id === productId)
-                          const variantId = form.watch(`items.${index}.variant_id`)
-                          const variant = (product as any)?.variants?.find((v: any) => v.id === variantId)
-                          const options = priceOptionsFor(product, variant)
-                          if (options.length === 0) return null
-                          return (
-                            <Select
-                              value={form.watch(`items.${index}.price_label`) || ""}
-                              onValueChange={(code) => {
-                                const option = options.find(o => o.code === code)
-                                if (!option) return
-                                form.setValue(`items.${index}.unit_price`, option.price)
-                                form.setValue(`items.${index}.price_label`, code)
-                              }}
-                            >
-                              <SelectTrigger className="h-7 text-xs mb-1 px-2">
-                                <SelectValue placeholder="Select price..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {options.map((o) => (
-                                  <SelectItem key={o.code} value={o.code} className="text-xs">
-                                    {o.code} — {o.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )
-                        })()}
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="0.00"
-                          {...form.register(`items.${index}.unit_price`, {
-                            valueAsNumber: true,
-                            onChange: (e) => {
-                              const productId = form.getValues(`items.${index}.product_id`)
-                              const product = products.find(p => p.id === productId)
-                              const variantId = form.getValues(`items.${index}.variant_id`)
-                              const variant = (product as any)?.variants?.find((v: any) => v.id === variantId)
-                              const label = form.getValues(`items.${index}.price_label`)
-                              const option = priceOptionsFor(product, variant).find(o => o.code === label)
-                              const typed = parseFloat(e.target.value)
-                              if (!option || option.price !== typed) {
-                                form.setValue(`items.${index}.price_label`, "Custom")
-                              }
-                            },
-                          })}
-                          className="h-10 text-sm border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary"
-                        />
-                        {form.formState.errors.items?.[index]?.unit_price && (
-                          <p className="text-xs text-red-600 mt-1">{form.formState.errors.items[index]?.unit_price?.message}</p>
-                        )}
-                      </div>
-                      
-                      {/* Total */}
-                      <div className="col-span-2">
-                        <div className="flex items-center justify-end h-10 px-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border border-primary/20">
-                          <span className="text-base font-bold text-gray-900">{
-                            (((Number(form.watch(`items.${index}.quantity`)) || 0) * (Number(form.watch(`items.${index}.unit_price`)) || 0))
-                              .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            )
-                          }</span>
-                        </div>
-                      </div>
-                      
-                      {/* Remove button */}
-                      <div className="col-span-1 flex justify-center items-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            console.log('Remove clicked for index:', index)
-                            remove(index)
-                          }}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 h-10 w-10 rounded-lg transition-all"
-                          tabIndex={0}
-                          aria-label="Remove item"
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                <QuoteLineItemsTable form={form} fields={fields} remove={remove} products={products} />
 
                 {fields.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">

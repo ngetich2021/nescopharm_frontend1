@@ -242,11 +242,8 @@ export default function ProductDetailsPage() {
             {/* Header */}
             <div>
               <div className="flex items-center space-x-3 mb-4">
-                <Badge variant="outline" className="bg-violet-50 border-violet-200 text-violet-700">
-                  {typeof product.category === 'string' ? product.category || "Uncategorized" : (product.category as any)?.name || "Uncategorized"}
-                </Badge>
                 <Badge variant="outline" className="bg-gray-50 border-gray-200 text-gray-600 font-mono text-xs">
-                  {product.sku ?? "No SKU"}
+                  Item No. {product.item_number ?? "-"}
                 </Badge>
               </div>
 
@@ -254,15 +251,6 @@ export default function ProductDetailsPage() {
                 {product.name}
               </h1>
 
-              {product.brand && (
-                <p className="text-xl text-gray-600 mb-4">
-                  by <span className="font-semibold text-gray-800">{product.brand}</span>
-                </p>
-              )}
-
-              {product.short_description && (
-                <p className="text-lg text-gray-700 leading-relaxed">{product.short_description}</p>
-              )}
             </div>
 
             {/* Price Section */}
@@ -317,34 +305,6 @@ export default function ProductDetailsPage() {
               </div>
             </div>
 
-            {/* Tags */}
-            {product.tags && (
-              (Array.isArray(product.tags) && product.tags.length > 0) || 
-              (typeof product.tags === 'string' && (product.tags as string).length > 0)
-            ) && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-3">Tags</p>
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    Array.isArray(product.tags)
-                      ? product.tags
-                      : typeof product.tags === 'string'
-                        ? (product.tags as string).split(',').map((t: string) => t.trim()).filter((t: string) => t)
-                        : []
-                  ).map((tag: string, index: number) => (
-                    <Badge
-                      key={index}
-                      variant="outline"
-                      className="bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200 text-violet-700 hover:from-violet-100 hover:to-purple-100 transition-all duration-300"
-                    >
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Action Buttons */}
             <div className="flex space-x-4 pt-4">
               <Button
@@ -370,19 +330,6 @@ export default function ProductDetailsPage() {
 
         {/* Details Section */}
         <div className="space-y-12">
-          {/* Full Description */}
-          {product.description && (
-            <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-8 border border-white/20 shadow-lg">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                <Layers className="mr-3 h-6 w-6 text-violet-600" />
-                Product Description
-              </h2>
-              <div className="prose prose-lg max-w-none">
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{product.description}</p>
-              </div>
-            </div>
-          )}
-
           {/* Specifications Grid */}
           <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-8 border border-white/20 shadow-lg">
             <h2 className="text-2xl font-bold text-gray-900 mb-8 flex items-center">
@@ -396,8 +343,8 @@ export default function ProductDetailsPage() {
                 <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">Basic Information</h3>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center py-2">
-                    <span className="text-gray-600">SKU</span>
-                    <code className="bg-gray-100 px-3 py-1 rounded-lg text-sm font-mono">{product.sku ?? "N/A"}</code>
+                    <span className="text-gray-600">Item No.</span>
+                    <code className="bg-gray-100 px-3 py-1 rounded-lg text-sm font-mono">{product.item_number ?? "N/A"}</code>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-gray-600">Barcode</span>

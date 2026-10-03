@@ -1,7 +1,9 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Package, PackageCheck, DollarSign, AlertTriangle } from "lucide-react"
+import { Package, PackageCheck, DollarSign, AlertTriangle, Tags } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { ProductTable } from "./product-table"
 import { useState, useEffect, useCallback } from "react"
 import { getProducts, calculateProductSummary, type Product } from "@/lib/products"
@@ -79,11 +81,16 @@ export default function ProductsPage() {
   return (
     <PermissionGuard permissions={["can_view_products_menu","can_view_products",  "can_manage_system", "can_manage_company"]}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Products</h1>
-          <p className="text-sm text-gray-600">
-            Manage your product inventory and catalog
-          </p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Products</h1>
+            <p className="text-sm text-gray-600">
+              Manage your product inventory and catalog
+            </p>
+          </div>
+          <Button variant="outline" asChild>
+            <Link href="/inventory/price-lists"><Tags className="h-4 w-4 mr-2" />Import Price List</Link>
+          </Button>
         </div>
 
         {/* Summary Cards - Only 4 key metrics */}

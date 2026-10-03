@@ -19,6 +19,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { getProductById, type Product, type ProductSummary } from "@/lib/products"
+import { priceOptionsFor, priceListsFor, PRICE_LIST_CODES } from "@/lib/price-codes"
+import { sizedName } from "@/lib/product-sizes"
+import { ImportProductsDialog } from "./components/import-products-dialog"
 import * as XLSX from "xlsx"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -66,90 +69,86 @@ function getPrimaryImage(product: Product): string {
 // Helper function to check if a product matches search criteria
 function productMatchesSearch(product: Product, searchTerm: string): boolean {
   const term = searchTerm.toLowerCase()
-  
-  // Get supplier name for search, handling both string and object cases
-  let supplierName = ""
-  if (product.supplier) {
-    if (typeof product.supplier === 'object') {
-      supplierName = product.supplier.name || ""
-    } else if (typeof product.supplier === 'string') {
-      supplierName = product.supplier
-    }
-  }
-  
+  const compact = term.replace(/\s+/g, "")
   return (
     product.name.toLowerCase().includes(term) ||
-    (Boolean(product.sku) && product.sku!.toLowerCase().includes(term)) ||
-    (Boolean(product.category?.name) && product.category?.name.toLowerCase().includes(term)) ||
-    (Boolean(product.brand) && product.brand!.toLowerCase().includes(term)) ||
-    (Boolean(supplierName) && supplierName.toLowerCase().includes(term)) ||
-    (Boolean(product.product_number) && product.product_number!.toLowerCase().includes(term)) ||
-    (Boolean(product.product_code) && product.product_code!.toLowerCase().includes(term))
+    String(product.item_number ?? "") === term.trim() ||
+    priceOptionsFor(product).some(o => o.code.toLowerCase().replace(/\s+/g, "").includes(compact))
   )
 }
 
-// Helper function to download CSV template
-function downloadCSVTemplate(products: Product[], searchTerm: string) {
-  // Filter products based on search term
-  const filteredProducts = searchTerm 
-    ? products.filter(product => productMatchesSearch(product, searchTerm))
-    : products
+const productCodes = (product: Product) => priceOptionsFor(product).map(o => o.code).join(", ")
 
-  // Create CSV content
-  const headers = ["Name", "SKU", "Category", "Price", "Stock Quantity", "Description"]
-  const csvContent = [
-    headers.join(","),
-    ...filteredProducts.map(product => 
-      [
-        `"${product.name}"`,
-        `"${product.sku || ""}"`,
-        `"${product.category?.name || ""}"`,
-        `"${product.price}"`,
-        `"${product.stock_quantity}"`,
-        `"${product.description || ""}"`
-      ].join(",")
-    )
-  ].join("\n")
+const costOf = (product: Product) => parseFloat(String(product.unit_cost ?? "0")) || 0
 
-  // Create Create download link
+// Same layout the products import reads back: one row per item, then one row per size (164.1, 164.2 ...).
+const EXPORT_HEADERS = [
+  "S/No.", "Item No.", "Row Type", "Size", "Item Description", "Unit of Measure", "Cost Price",
+  "Tax Status", "Reorder Level",
+]
+
+const taxStatus = (product: Product) => {
+  const p = product as any
+  if (p.is_taxable === false || p.is_taxable === "false") return "Exempt"
+  const rate = Number(p.tax_rate ?? 0)
+  return rate > 0 ? `VAT ${rate}%` : "Zero rated"
+}
+
+const sortedSizes = (product: Product) =>
+  [...(((product as any).variants ?? []) as any[])].sort((a, b) =>
+    String(a.name ?? "").localeCompare(String(b.name ?? ""), undefined, { numeric: true }),
+  )
+
+function exportRows(product: Product): (string | number)[][] {
+  const p = product as any
+  const sizes = p.has_variations ? sortedSizes(product) : []
+  const itemNo = p.item_number ?? ""
+
+  const rows: (string | number)[][] = [[
+    itemNo, "Item", sizes.length ? `${sizes.length} sizes` : "", p.name,
+    p.unit_of_measurement ?? "", costOf(product), taxStatus(product),
+    p.low_stock_threshold ?? "",
+  ]]
+  sizes.forEach((v: any, i: number) => {
+    rows.push([
+      `${itemNo}.${i + 1}`, "Size", v.name ?? "", sizedName(p.name, v.name), "", Number(v.cost || 0),
+      "", "",
+    ])
+  })
+  return rows
+}
+
+// Every row - items and sizes alike - gets the next serial number.
+const exportSheet = (products: Product[]) => [
+  EXPORT_HEADERS,
+  ...products.flatMap(exportRows).map((row, i) => [i + 1, ...row]),
+]
+
+const exportFileName = (ext: string) => `products_${new Date().toISOString().split("T")[0]}.${ext}`
+
+function downloadCSVTemplate(products: Product[]) {
+  const csvContent = exportSheet(products)
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n")
+
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.setAttribute("href", url)
-  link.setAttribute("download", `products_${new Date().toISOString().split("T")[0]}.csv`)
+  link.setAttribute("download", exportFileName("csv"))
   link.style.visibility = "hidden"
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
-// Helper function to download Excel template
-function downloadExcelTemplate(products: Product[], searchTerm: string) {
-  // Filter products based on search term
-  const filteredProducts = searchTerm 
-    ? products.filter(product => productMatchesSearch(product, searchTerm))
-    : products
-
-  // Create worksheet data
-  const worksheetData = [
-    ["Name", "SKU", "Category", "Price", "Stock Quantity", "Description"],
-    ...filteredProducts.map(product => [
-      product.name,
-      product.sku || "",
-      product.category?.name || "",
-      product.price,
-      product.stock_quantity,
-      product.description || ""
-    ])
-  ]
-
-  // Create workbook and worksheet
-  const ws = XLSX.utils.aoa_to_sheet(worksheetData)
+function downloadExcelTemplate(products: Product[]) {
+  const ws = XLSX.utils.aoa_to_sheet(exportSheet(products))
+  ws["!cols"] = EXPORT_HEADERS.map((h) => ({ wch: h === "Item Description" ? 55 : h === "S/No." ? 7 : Math.max(h.length + 2, 10) }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, "Products")
-
-  // Download Excel file
-  XLSX.writeFile(wb, `products_${new Date().toISOString().split("T")[0]}.xlsx`)
+  XLSX.writeFile(wb, exportFileName("xlsx"))
 }
 
 interface ProductTableProps {
@@ -158,52 +157,27 @@ interface ProductTableProps {
   onProductUpdated: () => void
   isLoading?: boolean
   onRefresh?: () => void
-  pagination?: {
-    current_page: number
-    per_page: number
-    total: number
-    last_page: number
-  }
-  onPageChange?: (page: number) => void
-  onItemsPerPageChange?: (itemsPerPage: number) => void
-  onSearchChange?: (search: string) => void
-  onStatusFilterChange?: (status: string) => void
-  currentPage?: number
-  itemsPerPage?: number
-  searchTerm?: string
-  statusFilter?: string
 }
 
-export function ProductTable({ 
-  products, 
+const ALL_LISTS = "all"
+const PAGE_SIZES = [10, 20, 50, 100, "all"] as const
+type PageSize = (typeof PAGE_SIZES)[number]
+
+export function ProductTable({
+  products,
   summaryData,
   onProductUpdated,
   isLoading = false,
   onRefresh,
-  pagination,
-  onPageChange,
-  onItemsPerPageChange,
-  onSearchChange,
-  onStatusFilterChange,
-  currentPage = 1,
-  itemsPerPage = 20,
-  searchTerm: externalSearchTerm = "",
-  statusFilter: externalStatusFilter = "all"
 }: ProductTableProps) {
-  const [searchTerm, setSearchTerm] = useState(externalSearchTerm)
-  const [statusFilter, setStatusFilter] = useState(externalStatusFilter)
-  const [sortBy, setSortBy] = useState<"name" | "price" | "stock">("name")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [priceListFilter, setPriceListFilter] = useState<string>(ALL_LISTS)
+  const [sortBy, setSortBy] = useState<"name" | "cost" | "stock">("name")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  
-  // Remove API search debounce: search is now client-side only
-  
-  // Update status filter in parent
-  useEffect(() => {
-    if (onStatusFilterChange && statusFilter !== externalStatusFilter) {
-      onStatusFilterChange(statusFilter)
-    }
-  }, [statusFilter, onStatusFilterChange, externalStatusFilter])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(20)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false)
@@ -262,29 +236,34 @@ export function ProductTable({
     }
   }
 
-  // Sort products (filtering now happens on backend via API)
-  // Filter and sort products client-side
+  // Every list the catalog actually uses, so imported lists beyond the fixed four are filterable too.
+  const availableLists = useMemo(() => {
+    const found = new Set<string>(PRICE_LIST_CODES)
+    products.forEach((p) => priceListsFor(p).forEach((list) => found.add(list)))
+    return Array.from(found)
+  }, [products])
+
   const filteredAndSortedProducts = useMemo(() => {
     let result = [...products]
-    // Filter by search term
     if (searchTerm.trim()) {
       result = result.filter(product => productMatchesSearch(product, searchTerm))
     }
-    // Filter by status
     if (statusFilter !== "all") {
       result = result.filter(product =>
         statusFilter === "active" ? product.is_active : !product.is_active
       )
     }
-    // Sort
+    if (priceListFilter !== ALL_LISTS) {
+      result = result.filter(product => priceListsFor(product).includes(priceListFilter))
+    }
     result.sort((a, b) => {
       let comparison = 0
       switch (sortBy) {
         case "name":
           comparison = a.name.localeCompare(b.name)
           break
-        case "price":
-          comparison = parseFloat(a.price || "0") - parseFloat(b.price || "0")
+        case "cost":
+          comparison = costOf(a) - costOf(b)
           break
         case "stock":
           comparison = (a.stock_quantity || 0) - (b.stock_quantity || 0)
@@ -293,12 +272,20 @@ export function ProductTable({
       return sortOrder === "asc" ? comparison : -comparison
     })
     return result
-  }, [products, searchTerm, statusFilter, sortBy, sortOrder])
+  }, [products, searchTerm, statusFilter, priceListFilter, sortBy, sortOrder])
 
-  // Reset to first page when filters change
+  const total = filteredAndSortedProducts.length
+  const lastPage = pageSize === "all" ? 1 : Math.max(1, Math.ceil(total / pageSize))
+  const safePage = Math.min(page, lastPage)
+  const pagedProducts = useMemo(() => {
+    if (pageSize === "all") return filteredAndSortedProducts
+    const start = (safePage - 1) * pageSize
+    return filteredAndSortedProducts.slice(start, start + pageSize)
+  }, [filteredAndSortedProducts, safePage, pageSize])
+
   useEffect(() => {
-    // Note: We're not resetting pagination here since it's handled by the parent component
-  }, [searchTerm, statusFilter])
+    setPage(1)
+  }, [searchTerm, statusFilter, priceListFilter, pageSize])
 
   // Handle delete success
   const handleDeleteSuccess = () => {
@@ -311,12 +298,12 @@ export function ProductTable({
     })
   }
 
-  // Handle export
+  // Exports what the table currently shows, filters included.
   const handleExport = (format: "csv" | "excel") => {
     if (format === "csv") {
-      downloadCSVTemplate(products, searchTerm)
+      downloadCSVTemplate(filteredAndSortedProducts)
     } else {
-      downloadExcelTemplate(products, searchTerm)
+      downloadExcelTemplate(filteredAndSortedProducts)
     }
   }
 
@@ -333,7 +320,7 @@ export function ProductTable({
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search products..."
+                placeholder="Search by description, item no. or code (e.g. NSPD 001)..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
@@ -352,6 +339,18 @@ export function ProductTable({
                 </SelectContent>
               </Select>
               
+              <Select value={priceListFilter} onValueChange={setPriceListFilter}>
+                <SelectTrigger className="w-full sm:w-36">
+                  <SelectValue placeholder="Price list" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_LISTS}>All price lists</SelectItem>
+                  {availableLists.map((list) => (
+                    <SelectItem key={list} value={list}>{list}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
                 const [newSortBy, newSortOrder] = value.split('-') as [typeof sortBy, typeof sortOrder]
                 setSortBy(newSortBy)
@@ -363,8 +362,8 @@ export function ProductTable({
                 <SelectContent>
                   <SelectItem value="name-asc">Name (A-Z)</SelectItem>
                   <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-                  <SelectItem value="price-asc">Price (Low-High)</SelectItem>
-                  <SelectItem value="price-desc">Price (High-Low)</SelectItem>
+                  <SelectItem value="cost-asc">Cost (Low-High)</SelectItem>
+                  <SelectItem value="cost-desc">Cost (High-Low)</SelectItem>
                   <SelectItem value="stock-asc">Stock (Low-High)</SelectItem>
                   <SelectItem value="stock-desc">Stock (High-Low)</SelectItem>
                 </SelectContent>
@@ -400,6 +399,9 @@ export function ProductTable({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <PermissionGuard permissions={["can_create_products"]}>
+              <ImportProductsDialog onImported={onProductUpdated} />
+            </PermissionGuard>
             
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>
@@ -416,18 +418,17 @@ export function ProductTable({
             <TableHeader>
               <TableRow>
                 <TableHead className="font-semibold">Image</TableHead>
-                <TableHead className="font-semibold">Product #</TableHead>
-                <TableHead className="font-semibold">Product Code</TableHead>
-                <TableHead className="font-semibold">Name</TableHead>
-                <TableHead className="font-semibold">Price</TableHead>
+                <TableHead className="font-semibold">Item No.</TableHead>
+                <TableHead className="font-semibold">Item Description</TableHead>
+                <TableHead className="font-semibold">Cost Price</TableHead>
+                <TableHead className="font-semibold">Price Codes</TableHead>
                 <TableHead className="font-semibold">Stock</TableHead>
-                <TableHead className="font-semibold">Category</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="text-right font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAndSortedProducts.length === 0 ? (
+              {pagedProducts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="h-24 text-center">
                     <div className="text-gray-500">
@@ -437,7 +438,7 @@ export function ProductTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAndSortedProducts.map((product) => (
+                pagedProducts.map((product) => (
                   <TableRow 
                     key={product.id}
                     className="cursor-pointer hover:bg-gray-50"
@@ -454,31 +455,20 @@ export function ProductTable({
                     </TableCell>
                     <TableCell className="font-medium">
                       <div className="text-sm font-semibold text-[#1E2764]">
-                        {product.product_number || "-"}
+                        {product.item_number ?? "-"}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {product.product_code || "-"}
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{product.name}</div>
                     </TableCell>
                     <TableCell>
-                      KES {(() => {
-                        // If product has variants, show the highest variant price
-                        if (product.has_variations && product.variants && product.variants.length > 0) {
-                          const highestPrice = Math.max(...product.variants.map(v => v.price || 0))
-                          return highestPrice.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                          })
-                        }
-                        // Otherwise show the product's base price
-                        return parseFloat(product.price || "0").toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        })
-                      })()}
+                      KES {costOf(product).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </TableCell>
+                    <TableCell className="text-xs text-gray-600 max-w-[220px]">
+                      {productCodes(product) || "-"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center">
@@ -504,9 +494,6 @@ export function ProductTable({
                           return null
                         })()}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {product.category?.name || "Uncategorized"}
                     </TableCell>
                     <TableCell>
                       <Badge variant={product.is_active ? "default" : "secondary"} className={product.is_active ? "bg-green-500" : ""}>
@@ -565,64 +552,57 @@ export function ProductTable({
         </div>
 
         {/* Pagination */}
-        {pagination && pagination.total > 0 && (
-          <div className="flex items-center justify-between">
+        {total > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center space-x-2">
               <p className="text-sm font-medium">
-                Showing {(pagination.current_page - 1) * pagination.per_page + 1} to{" "}
-                {Math.min(pagination.current_page * pagination.per_page, pagination.total)} of{" "}
-                {pagination.total} products
+                {pageSize === "all"
+                  ? `Showing all ${total} products`
+                  : `Showing ${(safePage - 1) * pageSize + 1} to ${Math.min(safePage * pageSize, total)} of ${total} products`}
               </p>
               <Select
-                value={itemsPerPage.toString()}
-                onValueChange={(value) => {
-                  const newItemsPerPage = Number(value)
-                  if (onItemsPerPageChange) {
-                    onItemsPerPageChange(newItemsPerPage)
-                  }
-                  // Reset to first page when changing items per page
-                  if (onPageChange) {
-                    onPageChange(1)
-                  }
-                }}
+                value={String(pageSize)}
+                onValueChange={(value) => setPageSize(value === "all" ? "all" : (Number(value) as PageSize))}
               >
-                <SelectTrigger className="h-8 w-[70px]">
-                  <SelectValue placeholder={itemsPerPage.toString()} />
+                <SelectTrigger className="h-8 w-[80px]">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent side="top">
-                  {[5, 10, 20, 30, 40, 50].map((pageSize) => (
-                    <SelectItem key={pageSize} value={pageSize.toString()}>
-                      {pageSize}
+                  {PAGE_SIZES.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size === "all" ? "All" : size}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onPageChange && onPageChange(Math.max(1, pagination.current_page - 1))}
-                disabled={pagination.current_page === 1}
-                className="border-gray-200 hover:bg-[#1E2764]/10 hover:text-[#1E2764] hover:border-[#1E2764]"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <div className="flex items-center justify-center text-sm font-medium">
-                Page {pagination.current_page} of {pagination.last_page}
+            {pageSize !== "all" && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(Math.max(1, safePage - 1))}
+                  disabled={safePage === 1}
+                  className="border-gray-200 hover:bg-[#1E2764]/10 hover:text-[#1E2764] hover:border-[#1E2764]"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <div className="flex items-center justify-center text-sm font-medium">
+                  Page {safePage} of {lastPage}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(Math.min(lastPage, safePage + 1))}
+                  disabled={safePage === lastPage}
+                  className="border-gray-200 hover:bg-[#1E2764]/10 hover:text-[#1E2764] hover:border-[#1E2764]"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onPageChange && onPageChange(Math.min(pagination.last_page, pagination.current_page + 1))}
-                disabled={pagination.current_page === pagination.last_page}
-                className="border-gray-200 hover:bg-[#1E2764]/10 hover:text-[#1E2764] hover:border-[#1E2764]"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            )}
           </div>
         )}
       </div>

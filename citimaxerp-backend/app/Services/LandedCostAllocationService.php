@@ -22,8 +22,7 @@ class LandedCostAllocationService
      * ]
      * @param float $shippingCost Total shipping cost for this shipment.
      * @param float $logisticsCost Total logistics cost for this shipment.
-     * @return string[] Warnings for products whose current selling price no longer
-     *                   exceeds the new minimum valid price (cost + shipping + logistics + margin).
+     * @return string[] Always empty; prices are no longer checked against cost.
      */
     public function apply(array $lines, float $shippingCost, float $logisticsCost): array
     {
@@ -62,15 +61,6 @@ class LandedCostAllocationService
             }
 
             $product->update($updates);
-            $product->refresh();
-
-            $currentPrice = (float) $product->price;
-            $minPrice = $product->minimum_valid_price;
-            if ($currentPrice > 0 && $currentPrice <= $minPrice) {
-                $warnings[] = "{$product->name}: current selling price (" . number_format($currentPrice, 2)
-                    . ") no longer exceeds cost + shipping + logistics + margin (minimum "
-                    . number_format($minPrice, 2) . "). Please review its pricing.";
-            }
         }
 
         return $warnings;

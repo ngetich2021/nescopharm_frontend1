@@ -96,9 +96,19 @@ class InvoiceLineItem extends Model
         $this->line_total = $discountedSubtotal + $this->tax_amount;
     }
 
+    // The price-list code used (e.g. "NSPD 001"), else the product's item number.
     public function itemCode(): ?string
     {
-        return $this->variant?->sku ?: ($this->product?->product_code ?: $this->product?->sku);
+        $label = data_get($this->metadata, 'price_label');
+        if ($label && preg_match('/\d/', $label)) {
+            return $label;
+        }
+        return $this->product?->item_number !== null ? (string) $this->product?->item_number : null;
+    }
+
+    public function packSize(): string
+    {
+        return $this->unit ?: 'pcs';
     }
 
     public function unitPriceInclTax(): float

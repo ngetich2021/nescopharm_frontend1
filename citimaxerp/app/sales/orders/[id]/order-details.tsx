@@ -1,4 +1,5 @@
 "use client"
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -769,10 +770,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Item</TableHead>
-                      {/* Only show Variant column if any item has a variant */}
-                      {order.order_items?.some(item => item.variant || item.variant_id) && (
-                        <TableHead>Variant</TableHead>
-                      )}
                       <TableHead>Quantity</TableHead>
                       {/* Only show Packaging column if any item has packaging details */}
                       {order.order_items?.some(item => 
@@ -826,7 +823,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                       const totalPieces = item.base_quantity || item.quantity;
                       
                       // Check if we should show variant and packaging columns
-                      const hasAnyVariant = order.order_items?.some(item => item.variant || item.variant_id);
                       const hasAnyPackaging = order.order_items?.some(item => 
                         (item as any).packaging_breakdown?.display_text || 
                         (item.product?.has_packaging && item.quantity > 0)
@@ -835,7 +831,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                       return (
                         <TableRow key={item.id}>
                           <TableCell>
-                            {item.product?.name || 'Unknown Product'}
+                            {item.product ? sizedName(item.product.name, item.variant?.name || (item as any).variant_name) : 'Unknown Product'}
                             {item.batch_allocations && item.batch_allocations.length > 0 && (
                               <div className="text-xs text-muted-foreground mt-0.5">
                                 {item.batch_allocations.map((a, i) => (
@@ -848,12 +844,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                               </div>
                             )}
                           </TableCell>
-                          {/* Only show Variant cell if any item has variants */}
-                          {hasAnyVariant && (
-                            <TableCell>
-                              {item.variant?.name || ""}
-                            </TableCell>
-                          )}
                           <TableCell>
                             <div className="space-y-1">
                               <div className="font-medium">{displayQty}</div>
@@ -942,11 +932,24 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="payments" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
-                <div>
-                  <div className="text-xs sm:text-sm text-muted-foreground mb-1">STATUS:</div>
-                  <Badge variant="secondary" className={`text-xs sm:text-sm ${badgeStyles[paymentStatus]}`}>
-                    {paymentStatus}
-                  </Badge>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs sm:text-sm text-muted-foreground mb-1">STATUS:</div>
+                    <Badge variant="secondary" className={`text-xs sm:text-sm ${badgeStyles[paymentStatus]}`}>
+                      {paymentStatus}
+                    </Badge>
+                  </div>
+                  {paymentStatus !== 'Paid' && paymentStatus !== 'Overpayment' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsPaymentModalOpen(true)}
+                      className="text-xs h-8"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Payment
+                    </Button>
+                  )}
                 </div>
                 <div className="space-y-1 sm:space-y-2">
                   <div className="flex justify-between text-xs sm:text-sm">
@@ -976,15 +979,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                 ) : (
                   <div className="text-xs sm:text-sm text-muted-foreground">No payments recorded yet</div>
                 )}
-                <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t">
-                  <Button
-                    className="w-full bg-black hover:bg-gray-800 text-white text-xs sm:text-sm h-8 sm:h-9"
-                    onClick={() => setIsPaymentModalOpen(true)}
-                  >
-                    Receipt Payment
-                    <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
-                  </Button>
-                </div>
               </TabsContent>
               <TabsContent value="invoices" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
                 <div className="flex items-center justify-between">
@@ -1049,11 +1043,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                                   <div className="text-muted-foreground">
                                     {item.quantity} {item.unit} × KES {parseFloat(item.unit_price.toString()).toFixed(2)}
                                   </div>
-                                  {item.variant_id && (
-                                    <div className="text-muted-foreground text-xs">
-                                      Variant ID: {item.variant_id}
-                                    </div>
-                                  )}
                                 </div>
                                 <div className="text-right">
                                   <div className="font-medium">

@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState } from "react"
 import { Quote } from "@/lib/quotes"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -266,7 +267,7 @@ export function ConvertQuoteWithSelectionDialog({
                     <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                       {selectedQuote.quote_items.map((item, index) => (
                         <div key={index} className="text-xs text-gray-600 pl-6">
-                          • {item.product?.name || 'Product'} - Qty: {item.quantity} @ {selectedQuote.currency} {Number(item.unit_price).toLocaleString()}
+                          • {item.product ? sizedName(item.product?.name, (item as any).variant?.name || (item as any).variant_name) : 'Product'} - Qty: {item.quantity} @ {selectedQuote.currency} {Number(item.unit_price).toLocaleString()}
                         </div>
                       ))}
                     </div>

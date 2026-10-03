@@ -478,6 +478,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/products/{id}', [ProductController::class, 'show'])->name('products.show');
     Route::post('/products', [ProductController::class, 'store'])->name('products.store');
     Route::post('products/bulk', [ProductController::class, 'bulkStore']);
+    Route::post('/products/import', [ProductController::class, 'importProducts'])->name('products.import');
+    Route::post('/price-lists/import', [ProductController::class, 'importPriceList'])->name('price-lists.import');
+    Route::get('/price-lists/export', [ProductController::class, 'exportPriceList'])->name('price-lists.export');
     Route::match(['patch', 'put'], '/products/{id}', [ProductController::class, 'update'])->name('products.update');
     Route::delete('/products/{id}', [ProductController::class, 'destroy'])->name('products.destroy');
 

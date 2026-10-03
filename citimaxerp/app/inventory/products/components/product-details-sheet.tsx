@@ -34,6 +34,7 @@ import {
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/lib/products"
+import { priceOptionsFor } from "@/lib/price-codes"
 
 interface ProductDetailsSheetProps {
   open: boolean
@@ -225,16 +226,9 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
               {/* Product Info */}
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="bg-gradient-to-r from-violet-100 to-indigo-100 text-violet-800 hover:from-violet-200 hover:to-indigo-200 border-violet-200 text-xs px-3 py-1">
-                    {typeof product.category === 'string' 
-                      ? product.category || "Uncategorized" 
-                      : (product.category as any)?.name || "Uncategorized"}
+                  <Badge variant="outline" className="font-mono bg-white text-xs px-3 py-1">
+                    Item No. {product.item_number ?? "-"}
                   </Badge>
-                  {product.sku && (
-                    <Badge variant="outline" className="font-mono bg-white text-xs px-3 py-1">
-                      {product.sku}
-                    </Badge>
-                  )}
                   <Badge className={cn(
                     "border-0 text-xs px-3 py-1",
                     product.is_active 
@@ -248,16 +242,6 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                 
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
-                  
-                  {product.brand && (
-                    <p className="text-lg text-gray-600 mb-4">
-                      by <span className="font-semibold text-gray-800">{product.brand}</span>
-                    </p>
-                  )}
-                  
-                  {product.short_description && (
-                    <p className="text-gray-700 leading-relaxed mb-6">{product.short_description}</p>
-                  )}
                 </div>
                 
                 {/* Pricing Card */}
@@ -291,7 +275,31 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                     </span>
                   </div>
                 </div>
-                
+
+                {/* Price lists */}
+                {priceOptionsFor(product).length > 0 && (
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-xs text-gray-600">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Code</th>
+                          <th className="text-right px-3 py-2 font-medium">Price</th>
+                          <th className="text-left px-3 py-2 font-medium">Unit of measure</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceOptionsFor(product).map((o) => (
+                          <tr key={o.code} className="border-t border-gray-100">
+                            <td className="px-3 py-2 font-semibold">{o.code}</td>
+                            <td className="px-3 py-2 text-right">KES {o.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="px-3 py-2 text-gray-600">{o.unit || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
                 {/* Quick Stats */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 border border-blue-100">
@@ -326,19 +334,6 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
           
           {/* Product Details - New Layout */}
           <div className="space-y-6">
-            {/* Description - Full Width Card */}
-            {product.description && (
-              <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-violet-600" />
-                  Product Description
-                </h3>
-                <div className="prose prose-lg max-w-none">
-                  <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{product.description}</p>
-                </div>
-              </div>
-            )}
-            
             {/* Inventory, Product Details, and Physical Properties in Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Inventory Card */}
@@ -391,10 +386,10 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                 <div className="space-y-4">
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600 flex items-center gap-1">
-                      <Hash className="h-4 w-4" /> SKU
+                      <Hash className="h-4 w-4" /> Item No.
                     </span>
                     <code className="bg-gray-100 px-3 py-1 rounded-lg text-sm font-mono">
-                      {product.sku || "N/A"}
+                      {product.item_number ?? "N/A"}
                     </code>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -414,10 +409,6 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                           ? (product.supplier as any).name || "N/A"
                           : "N/A"}
                     </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-gray-600">Product Number</span>
-                    <span className="font-medium text-sm">{product.product_number || "N/A"}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">Store</span>
@@ -682,14 +673,11 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
               <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
                 <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                   <Layers className="h-5 w-5 text-gray-600" />
-                  Product Variants <Badge className="ml-2 bg-violet-100 text-violet-800">{product.variants.length}</Badge>
+                  Sizes <Badge className="ml-2 bg-violet-100 text-violet-800">{product.variants.length}</Badge>
                 </h3>
                 
                 <div className="grid grid-cols-1 gap-4">
                   {product.variants.map((variant, index) => {
-                    const variantPrice = Number(variant.price || 0)
-                    const variantCost = Number(variant.cost || 0)
-                    const variantMargin = variantPrice > 0 ? ((variantPrice - variantCost) / variantPrice) * 100 : 0
                     const variantStock = Number(variant.stock_quantity || 0)
                     // Use image_urls if available, otherwise fall back to images array and normalize
                     const variantImages = (variant.image_urls && variant.image_urls.length > 0) 
@@ -745,33 +733,10 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                               </div>
                             </div>
                             
-                            {/* Variant Details Grid */}
-                            <div className="grid grid-cols-4 gap-2">
-                              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-2 border border-blue-100 text-center">
-                                <p className="text-xs text-gray-600 mb-1">Price</p>
-                                <p className="font-bold text-blue-900 text-sm">KES {variantPrice.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2
-                                })}</p>
-                              </div>
-                              
-                              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-2 border border-green-100 text-center">
-                                <p className="text-xs text-gray-600 mb-1">Cost</p>
-                                <p className="font-bold text-green-900 text-sm">KES {variantCost.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2
-                                })}</p>
-                              </div>
-                              
-                              <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-2 border border-amber-100 text-center">
-                                <p className="text-xs text-gray-600 mb-1">Stock</p>
-                                <p className="font-bold text-amber-900 text-sm">{variantStock}</p>
-                              </div>
-                              
-                              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-2 border border-purple-100 text-center">
-                                <p className="text-xs text-gray-600 mb-1">Margin</p>
-                                <p className="font-bold text-purple-900 text-sm">{variantMargin.toFixed(1)}%</p>
-                              </div>
+                            {/* Sizes share the item's price code, so only stock differs between them */}
+                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-2 border border-amber-100 text-center w-32">
+                              <p className="text-xs text-gray-600 mb-1">Stock</p>
+                              <p className="font-bold text-amber-900 text-sm">{variantStock}</p>
                             </div>
                           </div>
                           

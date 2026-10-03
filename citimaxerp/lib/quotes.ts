@@ -94,6 +94,7 @@ export interface Quote {
     // was used for this line, or "Custom" for a hand-typed price - internal
     // reference only, never shown on a customer-facing quote document.
     price_label?: string | null
+    price_unit?: string | null
     item_code?: string | null
     pack_size?: string
     tax_label?: string
@@ -406,7 +407,7 @@ export async function getQuoteById(quoteId: string): Promise<Quote | null> {
 export async function createQuote(quoteData: {
   customer_id: string;
   sales_rep_id?: string | null;
-  items: { product_id: string; variant_id?: string | null; quantity: number; unit_price: string; price_label?: string | null }[];
+  items: { product_id: string; variant_id?: string | null; quantity: number; unit_price: string; price_label?: string | null; price_unit?: string | null }[];
   notes?: string;
   valid_until?: string;
   status?: string;
@@ -465,7 +466,7 @@ export async function updateQuote(
   quoteId: string, 
   quoteData: {
     customer_id?: string;
-    items?: { product_id: string; variant_id?: string | null; quantity: number; unit_price: string; price_label?: string | null }[];
+    items?: { product_id: string; variant_id?: string | null; quantity: number; unit_price: string; price_label?: string | null; price_unit?: string | null }[];
     notes?: string;
     valid_until?: string;
     status?: string;

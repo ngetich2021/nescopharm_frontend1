@@ -68,6 +68,7 @@ export interface OrderDetail extends Order {
     // was used for this line, or "Custom" for a hand-typed price - internal
     // reference only, never shown on a customer-facing order document.
     price_label?: string | null
+    price_unit?: string | null
     total_price: string
     packaging_breakdown?: {
       total_base_quantity: number

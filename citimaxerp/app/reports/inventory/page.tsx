@@ -179,6 +179,13 @@ export default function InventoryReportPage() {
   useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, status, dateFrom, dateTo])
 
   const columns = useMemo<Column[]>(() => {
+    const serialNo: Column = {
+      key: "_sno",
+      header: "S/No.",
+      className: "w-12",
+      align: "center",
+      render: (r) => <span className="text-gray-700">{r._sno || "-"}</span>,
+    }
     const itemNo: Column = {
       key: "item_no",
       header: "Item No.",
@@ -216,6 +223,7 @@ export default function InventoryReportPage() {
     switch (reportType) {
       case "low_stock":
         return [
+          serialNo,
           itemNo,
           description,
           { key: "stock_quantity", header: "In Stock", align: "right", render: (r) => qty(r.stock_quantity), total: (rows) => qty(sumOf(rows, "stock_quantity")) },
@@ -232,6 +240,7 @@ export default function InventoryReportPage() {
         ]
       case "movement":
         return [
+          serialNo,
           {
             key: "movement_date",
             header: "Date",
@@ -269,6 +278,7 @@ export default function InventoryReportPage() {
         ]
       case "stock_management":
         return [
+          serialNo,
           itemNo,
           description,
           { key: "opening_stock", header: "Opening", align: "right", render: (r) => qty(r.opening_stock), total: (rows) => qty(sumOf(rows, "opening_stock")) },
@@ -301,6 +311,7 @@ export default function InventoryReportPage() {
         ]
       default:
         return [
+          serialNo,
           itemNo,
           description,
           { key: "stock_quantity", header: "In Stock", align: "right", render: (r) => qty(r.stock_quantity), total: (rows) => qty(sumOf(rows, "stock_quantity")) },
@@ -345,18 +356,21 @@ export default function InventoryReportPage() {
 
   const exportReport = () => {
     const header = columns.map((c) => c.header)
-    const body = visibleRows.map((r) =>
-      columns.map((c) => {
+    let rowIndex = 0
+    const body = visibleRows.map((r) => {
+      const sno = ++rowIndex
+      return columns.map((c) => {
+        if (c.key === "_sno") return sno
         if (c.exportValue) return c.exportValue(r) ?? ""
         if (c.key === "nearest_expiry") return r.nearest_expiry ?? ""
         if (c.key === "stock_status") return String(r.stock_status ?? "").replace(/_/g, " ")
         if (c.key === "months_of_stock") return r.months_of_stock ?? ""
         const v = r[c.key]
         return v === null || v === undefined ? "" : v
-      }),
-    )
+      })
+    })
     const sheet = XLSX.utils.aoa_to_sheet([header, ...body])
-    sheet["!cols"] = header.map((h) => ({ wch: h === "Item Description" ? 55 : Math.max(h.length + 2, 12) }))
+    sheet["!cols"] = header.map((h) => ({ wch: h === "Item Description" ? 55 : h === "S/No." ? 8 : Math.max(h.length + 2, 12) }))
     const book = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(book, sheet, "Report")
     XLSX.writeFile(book, `inventory_${reportType}_${new Date().toISOString().slice(0, 10)}.xlsx`)
@@ -376,7 +390,7 @@ export default function InventoryReportPage() {
     if (reportType === "stock_management") {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Closing Stock" value={qty(summary.total_closing_stock)} hint={period ? `as of ${period.date_to}` : undefined} icon={<Boxes className="h-5 w-5" />} />
+          <SummaryCard label="Closing Stock" value={qty(summary.total_closing_stock)} hint={`as of ${new Date().toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })}`} icon={<Boxes className="h-5 w-5" />} />
           <SummaryCard label="Closing Value" value={`KES ${money(summary.total_closing_stock_value)}`} hint="at buying price" icon={<Wallet className="h-5 w-5" />} />
           <SummaryCard label="Gross Profit" value={`KES ${money(summary.total_gross_profit)}`} hint={period ? `${period.date_from} to ${period.date_to}` : undefined} icon={<TrendingUp className="h-5 w-5" />} tone="green" />
           <button type="button" className="text-left" onClick={() => setReorderOnly((v) => !v)} disabled={!summary.reorder_alert_count}>
@@ -523,29 +537,37 @@ export default function InventoryReportPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pageGroups.map((group) => (
-                    <Fragment key={`${group[0].item_no}-${group[0].id ?? group[0].product_id}`}>
-                      {group.map((row, i) => {
-                        if (row.row_type === "size" && collapsed.has(group[0].item_no)) return null
-                        return (
-                          <TableRow
-                            key={row.id ?? `${row.product_id}-${row.variant_id ?? ""}-${i}`}
-                            className={cn(
-                              row.row_type === "parent" && "bg-slate-50 hover:bg-slate-100",
-                              row.row_type === "size" && "border-b-slate-100",
-                              row.stock_status === "out_of_stock" && reportType === "balance" && "bg-red-50/40",
-                            )}
-                          >
-                            {columns.map((c) => (
-                              <TableCell key={c.key} className={cn("py-2.5 text-sm tabular-nums", c.align === "right" && "text-right", c.align === "center" && "text-center", c.className)}>
-                                {c.render ? c.render(row) : row[c.key] ?? "-"}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        )
-                      })}
-                    </Fragment>
-                  ))
+                  (() => {
+                    let rowIndex = 0
+                    const baseNum = (currentPage - 1) * (pageSize === "all" ? Math.max(totalGroups, 1) : Number(pageSize))
+                    return pageGroups.map((group) => (
+                      <Fragment key={`${group[0].item_no}-${group[0].id ?? group[0].product_id}`}>
+                        {group.map((row, i) => {
+                          if (row.row_type === "size" && collapsed.has(group[0].item_no)) return null
+                          const sno = baseNum + (++rowIndex)
+                          return (
+                            <TableRow
+                              key={row.id ?? `${row.product_id}-${row.variant_id ?? ""}-${i}`}
+                              className={cn(
+                                row.row_type === "parent" && "bg-slate-50 hover:bg-slate-100",
+                                row.row_type === "size" && "border-b-slate-100",
+                                row.stock_status === "out_of_stock" && reportType === "balance" && "bg-red-50/40",
+                              )}
+                            >
+                              {columns.map((c) => {
+                                const cellRow = c.key === "_sno" ? { ...row, _sno: sno } : row
+                                return (
+                                  <TableCell key={c.key} className={cn("py-2.5 text-sm tabular-nums", c.align === "right" && "text-right", c.align === "center" && "text-center", c.className)}>
+                                    {c.render ? c.render(cellRow) : cellRow[c.key] ?? "-"}
+                                  </TableCell>
+                                )
+                              })}
+                            </TableRow>
+                          )
+                        })}
+                      </Fragment>
+                    ))
+                  })()
                 )}
               </TableBody>
               {hasTotals && !loading && visibleRows.length > 0 && (
@@ -553,7 +575,7 @@ export default function InventoryReportPage() {
                   <TableRow>
                     {columns.map((c, i) => (
                       <TableCell key={c.key} className={cn("py-2.5 text-sm font-semibold tabular-nums", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                        {i === 0 ? "Total" : c.total ? c.total(visibleRows) : ""}
+                        {i <= 1 ? (i === 0 ? "" : "Total") : c.total ? c.total(visibleRows) : ""}
                       </TableCell>
                     ))}
                   </TableRow>

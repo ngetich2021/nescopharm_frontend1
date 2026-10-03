@@ -68,21 +68,23 @@
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 12%;">Item Code</th>
-                    <th>Item Description</th>
-                    <th style="width: 12%;">Pack Size</th>
-                    <th class="num" style="width: 14%;">Unit Price incl. VAT ({{ $currency }})</th>
+                    <th style="width: 5%;">S/No</th>
+                    <th style="width: 11%;">Code No.</th>
+                    <th>Item Name</th>
+                    <th style="width: 14%;">Pack Size</th>
+                    <th class="num" style="width: 13%;">Price per Pack ({{ $currency }})</th>
                     <th class="num" style="width: 8%;">Order Qty</th>
-                    <th class="num" style="width: 15%;">Amount incl. VAT</th>
+                    <th class="num" style="width: 14%;">Total Value ({{ $currency }})</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($quote->quoteItems as $item)
                 @php $vatRate = $item->taxInfo()['rate']; $vatFactor = 1 + $vatRate / 100; @endphp
                 <tr>
+                    <td>{{ $loop->iteration }}</td>
                     <td>{{ $item->itemCode() ?? '-' }}</td>
                     <td>
-                        {{ $item->product->name ?? '' }}{{ $item->variant ? ' - ' . $item->variant->name : '' }}
+                        {{ \App\Models\ProductVariant::sizedName($item->product->name ?? '', $item->variant?->name) }}
                         @if($vatRate > 0)
                             <br><span style="display:inline-block; border:1px solid #6b7280; padding:0 4px; font-size:9px; font-weight:bold;">VAT {{ rtrim(rtrim(number_format($vatRate, 2), '0'), '.') }}% inclusive</span>
                         @endif
@@ -94,27 +96,31 @@
                 </tr>
                 @endforeach
                 <tr>
-                    <td colspan="5" class="num">Subtotal</td>
+                    <td colspan="6" class="num">Subtotal</td>
                     <td class="num">{{ number_format($totals['subtotal'], 2) }}</td>
                 </tr>
                 @if($totals['discount'] > 0)
                 <tr>
-                    <td colspan="5" class="num">Discount</td>
+                    <td colspan="6" class="num">Discount</td>
                     <td class="num">-{{ number_format($totals['discount'], 2) }}</td>
                 </tr>
                 @endif
+                @if($totals['vat'] > 0)
                 <tr>
-                    <td colspan="5" class="num">VAT</td>
+                    <td colspan="6" class="num">VAT</td>
                     <td class="num">{{ number_format($totals['vat'], 2) }}</td>
                 </tr>
+                @endif
                 <tr class="total-row">
-                    <td colspan="5" class="num">Total ({{ $currency }})</td>
+                    <td colspan="6" class="num">Total ({{ $currency }})</td>
                     <td class="num">{{ number_format($totals['total'], 2) }}</td>
                 </tr>
             </tbody>
         </table>
 
-        <div class="vat-note">Unit prices and amounts are inclusive of VAT.</div>
+        @if($totals['vat'] > 0)
+        <div class="vat-note">Prices for items marked VAT are inclusive of VAT.</div>
+        @endif
 
         @if($quote->valid_until)
         <div class="valid-until">

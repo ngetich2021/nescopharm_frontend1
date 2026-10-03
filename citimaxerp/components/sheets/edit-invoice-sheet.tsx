@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useEffect, useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -315,15 +316,15 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
   }
 
   const addProductToLineItem = (index: number, product: any, variant?: any) => {
-    const item = variant || product
     form.setValue(`line_items.${index}.product_id`, product.id)
     if (variant) {
       form.setValue(`line_items.${index}.variant_id`, variant.id)
-      form.setValue(`line_items.${index}.description`, `${product.name} - ${variant.name}`)
+      form.setValue(`line_items.${index}.description`, sizedName(product.name, variant.name))
     } else {
       form.setValue(`line_items.${index}.description`, product.name)
     }
-    form.setValue(`line_items.${index}.unit_price`, parseFloat(item.price || "0"))
+    // Sizes share the item's price.
+    form.setValue(`line_items.${index}.unit_price`, parseFloat(product.price || "0"))
     form.setValue(`line_items.${index}.etims_tax_type_code`, invoiceTaxCodeForProduct(product))
     setShowProductSearch(null)
     setProductSearchTerm("")
@@ -453,18 +454,6 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
         payment_type: paymentType,
         notes: data.notes,
         terms_and_conditions: data.terms_and_conditions,
-        delivery_note_number: data.delivery_note_number || undefined,
-        delivery_note_date: data.delivery_note_date || undefined,
-        reference_number: data.reference_number || undefined,
-        reference_date: data.reference_date || undefined,
-        other_references: data.other_references || undefined,
-        buyers_order_no: data.buyers_order_no || undefined,
-        buyers_order_date: data.buyers_order_date || undefined,
-        dispatch_doc_no: data.dispatch_doc_no || undefined,
-        dispatched_through: data.dispatched_through || undefined,
-        destination: data.destination || undefined,
-        terms_of_delivery: data.terms_of_delivery || undefined,
-        mode_of_payment: data.mode_of_payment || undefined,
         line_items: data.line_items.map(item => {
           const lineSubtotal = Number(item.quantity) * Number(item.unit_price)
           
@@ -854,60 +843,31 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
                 </div>
               </div>
 
-              {/* Reference & Dispatch Details - all optional, printed on the invoice document */}
+              {/* Reference & Dispatch Details - system-generated from the order and its dispatch, read-only */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Reference &amp; Dispatch Details (optional)</CardTitle>
+                  <CardTitle className="text-base">Reference &amp; Dispatch Details</CardTitle>
+                  <p className="text-xs text-muted-foreground">Filled automatically from the order and its dispatch.</p>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Delivery Note No.</Label>
-                    <Input {...form.register('delivery_note_number')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Delivery Note Date</Label>
-                    <Input type="date" {...form.register('delivery_note_date')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Mode/Terms of Payment</Label>
-                    <Input {...form.register('mode_of_payment')} placeholder="e.g. Cash On Delivery" className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Reference No.</Label>
-                    <Input {...form.register('reference_number')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Reference Date</Label>
-                    <Input type="date" {...form.register('reference_date')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Other References</Label>
-                    <Input {...form.register('other_references')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Buyer's Order No.</Label>
-                    <Input {...form.register('buyers_order_no')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Buyer's Order Date</Label>
-                    <Input type="date" {...form.register('buyers_order_date')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Dispatch Doc No.</Label>
-                    <Input {...form.register('dispatch_doc_no')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Dispatched Through</Label>
-                    <Input {...form.register('dispatched_through')} placeholder="e.g. Local Riders" className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Destination</Label>
-                    <Input {...form.register('destination')} className="h-8 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Terms of Delivery</Label>
-                    <Input {...form.register('terms_of_delivery')} className="h-8 text-sm" />
-                  </div>
+                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                  {([
+                    ["Delivery Note No.", form.watch('delivery_note_number')],
+                    ["Delivery Note Date", form.watch('delivery_note_date')],
+                    ["Mode/Terms of Payment", form.watch('mode_of_payment')],
+                    ["Reference No.", form.watch('reference_number')],
+                    ["Reference Date", form.watch('reference_date')],
+                    ["Other References", form.watch('other_references')],
+                    ["Buyer's Order No.", form.watch('buyers_order_no')],
+                    ["Buyer's Order Date", form.watch('buyers_order_date')],
+                    ["Dispatch Doc No.", form.watch('dispatch_doc_no')],
+                    ["Dispatched Through", form.watch('dispatched_through')],
+                    ["Destination", form.watch('destination')],
+                  ] as [string, string | undefined][]).map(([label, value]) => (
+                    <div key={label} className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                      <p className="font-medium">{value ? (/^\d{4}-\d{2}-\d{2}/.test(value) ? new Date(value).toLocaleDateString() : value) : "-"}</p>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
 
@@ -1013,7 +973,7 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
                                                 <div className="flex items-start gap-2">
                                                   <div className="w-3 h-3 bg-gray-300 rounded-full mt-1"></div>
                                                   <div className="flex-1 min-w-0">
-                                                    <div className="font-medium">{variant.name}</div>
+                                                    <div className="font-medium">{sizedName(product.name, variant.name)}</div>
                                                     {variant.description && (
                                                       <div className="text-xs text-gray-600 mt-1">
                                                         {variant.description}

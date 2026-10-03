@@ -1,6 +1,5 @@
 "use client"
 
-import { priceFloorErrors } from "../price-floor"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -13,9 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, Plus, Image as ImageIcon, Package, Trash2, X, Check, ChevronsUpDown } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { createProduct, fileToDataUrl, type PackagingUnit, type PriceTierInput } from "@/lib/products"
-import { tierRowsForForm } from "@/lib/price-codes"
-import { PriceCodeFields } from "./price-code-fields"
+import { createProduct, fileToDataUrl, type PackagingUnit } from "@/lib/products"
 import { getProductCategories } from "@/lib/product-categories"
 import { getSuppliers } from "@/lib/suppliers"
 import { getStores } from "@/lib/stores"
@@ -25,32 +22,32 @@ import { cn } from "@/lib/utils"
 import type { ProductCategory } from "@/lib/product-categories"
 import type { Supplier } from "@/lib/suppliers"
 import type { Store } from "@/lib/stores"
-import type { ProductVariant as LibProductVariant } from "@/lib/products"
-import { CreateCategoryModal } from "@/components/modals/create-category-modal"
-
-interface ProductVariant {
-  id: string
-  name: string
-  sku: string
-  price: string
-  cost: string
-  stock_quantity: string
-  is_active: boolean
-  store_id?: string
-  images: string[]
-  attributes: { key: string; value: string }[]
-  allocated: number
-  on_hand: number
-  options: string[]
-  damaged: number
-  on_hold: number
-  price_tiers: PriceTierInput[]
-}
 
 interface Dimensions {
   length: string
   width: string
   height: string
+}
+
+const EMPTY_FORM = {
+  name: "",
+  cost: "",
+  barcode: "",
+  stock: "",
+  lowStockThreshold: "10",
+  trackInventory: true,
+  isActive: true,
+  weight: "",
+  dimensions: { length: "", width: "", height: "" } as Dimensions,
+  shippingClass: "standard",
+  images: [] as string[],
+  primaryImageIndex: 0,
+  hasPackaging: false,
+  baseUnit: "",
+  store_id: "",
+  isTaxable: true,
+  taxRate: "",
+  hsCode: "",
 }
 
 interface CreateProductSheetProps {
@@ -64,46 +61,7 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
-  // Form data
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    category: "",
-    brand: "",
-    supplier: "",
-    tags: "",
-    price: "",
-    cost: "",
-    shipping_cost: "",
-    logistics_cost: "",
-    margin_amount: "",
-    last_price: "",
-    sku: "",
-    barcode: "",
-    product_code: "",
-    unit_of_measurement: "piece",
-    stock: "",
-    lowStockThreshold: "10",
-    trackInventory: true,
-    isActive: true,
-    weight: "",
-    dimensions: {
-      length: "",
-      width: "",
-      height: ""
-    } as Dimensions,
-    shippingClass: "standard",
-    images: [] as string[],
-    primaryImageIndex: 0,
-    hasVariations: false,
-    hasPackaging: false,
-    baseUnit: "",
-    store_id: "",
-    // Tax fields
-    isTaxable: true,
-    taxRate: "",
-    hsCode: ""
-  })
+  const [formData, setFormData] = useState(EMPTY_FORM)
   
   // Packaging units
   const [packagingUnits, setPackagingUnits] = useState<PackagingUnit[]>([
@@ -156,46 +114,12 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
   const [unitNameOpen, setUnitNameOpen] = useState<{ [key: number]: boolean }>({})
   const [customUnitName, setCustomUnitName] = useState<{ [key: number]: string }>({})
   
-  // Variants
-  const [variants, setVariants] = useState<ProductVariant[]>([
-    {
-      id: Date.now().toString(),
-      name: "",
-      sku: "",
-      price: "",
-      cost: "",
-      stock_quantity: "",
-      is_active: true,
-      store_id: "",
-      images: [],
-      attributes: [],
-      allocated: 0,
-      on_hand: 0,
-      options: [],
-      damaged: 0,
-      on_hold: 0,
-      price_tiers: tierRowsForForm([])
-    }
-  ])
-  
-  const [priceTiers, setPriceTiers] = useState<PriceTierInput[]>(() => tierRowsForForm([]))
-
-  // Minimum valid price = unit cost + shipping cost + logistics cost + margin. No price
-  // (selling price, last price, or any tier price) may be at or below this.
-  const minimumValidPrice =
-    (parseFloat(formData.cost) || 0) +
-    (parseFloat(formData.shipping_cost) || 0) +
-    (parseFloat(formData.logistics_cost) || 0) +
-    (parseFloat(formData.margin_amount) || 0)
 
   // Dropdown data
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [stores, setStores] = useState<Store[]>([])
   
-  // Category modal state
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
-  const [categorySearchOpen, setCategorySearchOpen] = useState(false)
   
   // Load dropdown data
   useEffect(() => {
@@ -313,21 +237,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
     }
   }
   
-  const handleCategoryCreated = (newCategory: ProductCategory) => {
-    // Add new category to the list
-    setCategories(prev => [...prev, newCategory])
-    // Set the newly created category as selected
-    setFormData(prev => ({
-      ...prev,
-      category: newCategory.id
-    }))
-    // Show success notification
-    toast({
-      title: "Category Created",
-      description: `${newCategory.name} has been added successfully`
-    })
-  }
-  
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
@@ -343,168 +252,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
         [field]: value
       }
     }))
-  }
-  
-  const handleVariantChange = (id: string, field: keyof ProductVariant, value: string | boolean) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === id 
-          ? { ...variant, [field]: value } 
-          : variant
-      )
-    )
-  }
-  
-  const addVariant = () => {
-    setVariants(prev => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        name: "",
-        sku: "",
-        price: formData.price,
-        cost: formData.cost,
-        stock_quantity: "",
-        is_active: true,
-        store_id: formData.store_id,
-        images: [],
-        attributes: [],
-        allocated: 0,
-        on_hand: 0,
-        options: [],
-        damaged: 0,
-        on_hold: 0,
-        price_tiers: tierRowsForForm([])
-      }
-    ])
-  }
-
-  const setVariantTiers = (id: string, tiers: PriceTierInput[]) => {
-    setVariants(prev => prev.map(variant => variant.id === id ? { ...variant, price_tiers: tiers } : variant))
-  }
-  
-  const removeVariant = (id: string) => {
-    if (variants.length > 1) {
-      setVariants(prev => prev.filter(variant => variant.id !== id))
-    }
-  }
-  
-  const addVariantAttribute = (variantId: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              attributes: [...variant.attributes, { key: "", value: "" }] 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const updateVariantAttribute = (variantId: string, index: number, field: "key" | "value", value: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              attributes: variant.attributes.map((attr, i) => 
-                i === index ? { ...attr, [field]: value } : attr
-              ) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const removeVariantAttribute = (variantId: string, index: number) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              attributes: variant.attributes.filter((_, i) => i !== index) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const addVariantOption = (variantId: string, option: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              options: [...variant.options, option] 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const removeVariantOption = (variantId: string, optionIndex: number) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              options: variant.options.filter((_, i) => i !== optionIndex) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const updateVariantOption = (variantId: string, optionIndex: number, value: string) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              options: variant.options.map((option, i) => 
-                i === optionIndex ? value : option
-              ) 
-            } 
-          : variant
-      )
-    )
-  }
-  
-  const handleVariantImageUpload = async (variantId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-
-    // Read files as base64 data URIs - the backend decodes and persists these
-    // (it rejects blob: URLs, which are only ever valid in this browser tab).
-    const newImages = await Promise.all(Array.from(files).map((file) => fileToDataUrl(file)))
-
-    setVariants(prev =>
-      prev.map(variant =>
-        variant.id === variantId
-          ? {
-              ...variant,
-              images: [...variant.images, ...newImages]
-            }
-          : variant
-      )
-    )
-
-    // Reset the file input
-    e.target.value = ""
-  }
-  
-  const removeVariantImage = (variantId: string, imageIndex: number) => {
-    setVariants(prev => 
-      prev.map(variant => 
-        variant.id === variantId 
-          ? { 
-              ...variant, 
-              images: variant.images.filter((_, i) => i !== imageIndex) 
-            } 
-          : variant
-      )
-    )
   }
   
   const triggerFileInput = (inputId: string) => {
@@ -649,27 +396,14 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
     setIsSubmitting(true)
     
     try {
-      // Prepare product data to match the ProductData interface
+      // Selling prices come from the imported price lists, never from this form.
       const productData = {
         name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        category_id: formData.category || undefined,
-        brand: formData.brand.trim() || undefined,
-        supplier_id: formData.supplier || undefined,
-        tags: formData.tags 
-          ? formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
-          : [],
-        price: parseFloat(formData.price) || 0,
+        tags: [],
+        price: 0,
         cost: parseFloat(formData.cost) || 0,
-        shipping_cost: parseFloat(formData.shipping_cost) || 0,
-        logistics_cost: parseFloat(formData.logistics_cost) || 0,
-        margin_amount: parseFloat(formData.margin_amount) || 0,
-        price_tiers: priceTiers.filter(t => t.tier_name.trim() && t.price > 0),
-        last_price: formData.last_price ? parseFloat(formData.last_price) : undefined,
-        sku: formData.sku.trim() || undefined,
         barcode: formData.barcode.trim() || undefined,
-        product_code: formData.product_code.trim() || undefined,
-        unit_of_measurement: formData.unit_of_measurement,
+        unit_of_measurement: "piece",
         stock: parseInt(formData.stock) || 0,
         lowStockThreshold: parseInt(formData.lowStockThreshold) || 10,
         trackInventory: formData.trackInventory,
@@ -687,54 +421,17 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
         shippingClass: formData.shippingClass,
         images: formData.images,
         primaryImageIndex: formData.primaryImageIndex,
-        hasVariations: formData.hasVariations,
+        hasVariations: false,
+        variants: [],
         // Packaging fields
         has_packaging: formData.hasPackaging,
         base_unit: formData.hasPackaging ? formData.baseUnit : undefined,
         packaging_units: formData.hasPackaging ? packagingUnits : undefined,
-        variants: formData.hasVariations 
-          ? variants.map(variant => ({
-              name: variant.name.trim(),
-              sku: variant.sku.trim() || "",
-              price: parseFloat(variant.price) || 0,
-              cost: parseFloat(variant.cost) || 0,
-              stock_quantity: parseInt(variant.stock_quantity) || 0,
-              is_active: variant.is_active,
-              options: variant.options || [],
-              images: variant.images,
-              store_id: variant.store_id || formData.store_id,
-              allocated: variant.allocated,
-              on_hand: variant.on_hand,
-              attributes: variant.attributes.reduce((acc, attr) => {
-                if (attr.key && attr.value) {
-                  acc[attr.key] = attr.value;
-                }
-                return acc;
-              }, {} as Record<string, string | string[]>),
-              damaged: variant.damaged,
-              on_hold: variant.on_hold,
-              price_tiers: variant.price_tiers,
-              id: 0 // New variants don't have IDs yet
-            }))
-          : [],
         store_id: formData.store_id
       }
-      
-      console.log('Prepared product data:', JSON.stringify(productData, null, 2))
-      console.log('Has variations:', productData.hasVariations)
-      console.log('Number of variants:', productData.variants.length)
-      
-      if (productData.hasVariations) {
-        console.log('Variants data:', JSON.stringify(productData.variants, null, 2))
-      }
-      
-      // Validate that we have required data
+
       if (!productData.name) {
-        throw new Error("Product name is required");
-      }
-      
-      if (productData.hasVariations && productData.variants.length === 0) {
-        throw new Error("Product has variations enabled but no variants provided");
+        throw new Error("Item description is required");
       }
       
       // Validate packaging units if packaging is enabled
@@ -770,31 +467,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
           }
         }
       }
-      
-      // Validate each variant if we have variations
-      if (productData.hasVariations) {
-        for (let i = 0; i < productData.variants.length; i++) {
-          const variant = productData.variants[i];
-          if (!variant.name) {
-            throw new Error(`Variant ${i + 1} name is required`);
-          }
-        }
-      }
-      
-      const floorErrors = priceFloorErrors({
-        hasVariations: productData.hasVariations,
-        unitCost: parseFloat(formData.cost) || 0,
-        shippingCost: parseFloat(formData.shipping_cost) || 0,
-        logisticsCost: parseFloat(formData.logistics_cost) || 0,
-        marginAmount: parseFloat(formData.margin_amount) || 0,
-        price: productData.price,
-        lastPrice: productData.last_price,
-        tiers: priceTiers,
-        variants: productData.variants,
-      })
-      if (floorErrors.length > 0) {
-        throw new Error(`${floorErrors.join("; ")} (cost + shipping + logistics + margin).`)
-      }
 
       const result = await createProduct(productData)
 
@@ -808,46 +480,7 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
           description: "Product created successfully."
         })
         
-        // Reset form
-        setFormData({
-          name: "",
-          description: "",
-          category: "",
-          brand: "",
-          supplier: "",
-          tags: "",
-          price: "",
-          cost: "",
-          shipping_cost: "",
-          logistics_cost: "",
-          margin_amount: "",
-          last_price: "",
-          sku: "",
-          barcode: "",
-          product_code: "",
-          unit_of_measurement: "piece",
-          stock: "",
-          lowStockThreshold: "10",
-          trackInventory: true,
-          isActive: true,
-          weight: "",
-          dimensions: {
-            length: "",
-            width: "",
-            height: ""
-          },
-          shippingClass: "standard",
-          images: [],
-          primaryImageIndex: 0,
-          hasVariations: false,
-          hasPackaging: false,
-          baseUnit: "",
-          store_id: "",
-          isTaxable: true,
-          taxRate: "",
-          hsCode: ""
-        })
-        setPriceTiers(tierRowsForForm([]))
+        setFormData(EMPTY_FORM)
 
         setPackagingUnits([
           {
@@ -859,27 +492,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
             is_purchasable: true,
             is_active: true,
             display_order: 1
-          }
-        ])
-        
-        setVariants([
-          {
-            id: Date.now().toString(),
-            name: "",
-            sku: "",
-            price: "",
-            cost: "",
-            stock_quantity: "",
-            is_active: true,
-            store_id: "",
-            images: [],
-            attributes: [],
-            allocated: 0,
-            on_hand: 0,
-            options: [],
-            damaged: 0,
-            on_hold: 0,
-            price_tiers: tierRowsForForm([])
           }
         ])
 
@@ -929,131 +541,18 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Product Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => handleInputChange("name", e.target.value)}
-                      placeholder="Enter product name"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="brand">Brand</Label>
-                    <Input
-                      id="brand"
-                      value={formData.brand}
-                      onChange={(e) => handleInputChange("brand", e.target.value)}
-                      placeholder="Enter brand"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => handleInputChange("description", e.target.value)}
-                      placeholder="Enter product description"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Popover open={categorySearchOpen} onOpenChange={setCategorySearchOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={categorySearchOpen}
-                          className="w-full justify-between"
-                        >
-                          {formData.category 
-                            ? categories.find(cat => cat.id === formData.category)?.name 
-                            : "Select category..."}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search categories..." />
-                          <CommandList>
-                            <CommandEmpty>
-                              <div className="p-2 text-center">
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  No category found.
-                                </p>
-                                <Button
-                                  size="sm"
-                                  className="w-full"
-                                  onClick={() => {
-                                    setCategorySearchOpen(false)
-                                    setIsCategoryModalOpen(true)
-                                  }}
-                                >
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Create New Category
-                                </Button>
-                              </div>
-                            </CommandEmpty>
-                            <CommandGroup>
-                              <CommandItem
-                                onSelect={() => {
-                                  setCategorySearchOpen(false)
-                                  setIsCategoryModalOpen(true)
-                                }}
-                                className="bg-primary/5 font-medium"
-                              >
-                                <Plus className="mr-2 h-4 w-4" />
-                                Create New Category
-                              </CommandItem>
-                              {categories
-                                .filter(cat => cat.is_active)
-                                .map((category) => (
-                                  <CommandItem
-                                    key={category.id}
-                                    value={category.name}
-                                    onSelect={() => {
-                                      handleInputChange("category", category.id)
-                                      setCategorySearchOpen(false)
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        formData.category === category.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <div className="flex items-center gap-2 flex-1">
-                                      <div
-                                        className="w-3 h-3 rounded-full"
-                                        style={{ backgroundColor: category.color }}
-                                      />
-                                      <span>{category.name}</span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tags">Tags (comma-separated)</Label>
-                    <Input
-                      id="tags"
-                      value={formData.tags}
-                      onChange={(e) => handleInputChange("tags", e.target.value)}
-                      placeholder="clothing, premium, cotton"
-                    />
-                  </div>
-                </div>
+              <CardContent className="space-y-2">
+                <Label htmlFor="name">Item Description *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  placeholder="e.g. Syringe 5ml"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  The item number (1, 2, 3...) is assigned automatically. Price lists you import are matched to this description.
+                </p>
               </CardContent>
             </Card>
             
@@ -1075,109 +574,11 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
                       placeholder="0.00"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="last_price">Last Price</Label>
-                    <Input
-                      id="last_price"
-                      type="number"
-                      step="0.01"
-                      value={formData.last_price}
-                      onChange={(e) => handleInputChange("last_price", e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit_of_measurement">Unit of Measurement</Label>
-                    <Select
-                      value={formData.unit_of_measurement}
-                      onValueChange={(value) => handleInputChange("unit_of_measurement", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="piece">Piece</SelectItem>
-                        <SelectItem value="kg">Kilogram</SelectItem>
-                        <SelectItem value="g">Gram</SelectItem>
-                        <SelectItem value="lb">Pound</SelectItem>
-                        <SelectItem value="oz">Ounce</SelectItem>
-                        <SelectItem value="liter">Liter</SelectItem>
-                        <SelectItem value="ml">Milliliter</SelectItem>
-                        <SelectItem value="m">Meter</SelectItem>
-                        <SelectItem value="cm">Centimeter</SelectItem>
-                        <SelectItem value="ft">Foot</SelectItem>
-                        <SelectItem value="inch">Inch</SelectItem>
-                        <SelectItem value="box">Box</SelectItem>
-                        <SelectItem value="pack">Pack</SelectItem>
-                        <SelectItem value="pair">Pair</SelectItem>
-                        <SelectItem value="set">Set</SelectItem>
-                        <SelectItem value="dozen">Dozen</SelectItem>
-                        <SelectItem value="roll">Roll</SelectItem>
-                        <SelectItem value="bottle">Bottle</SelectItem>
-                        <SelectItem value="can">Can</SelectItem>
-                        <SelectItem value="bag">Bag</SelectItem>
-                        <SelectItem value="carton">Carton</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
-                {/* Landed cost + margin */}
-                <Separator />
-                <div className="space-y-4">
-                  <h4 className="font-medium text-sm">Landed Cost &amp; Margin</h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="shipping_cost">Shipping Cost</Label>
-                      <Input
-                        id="shipping_cost"
-                        type="number"
-                        step="0.01"
-                        value={formData.shipping_cost}
-                        onChange={(e) => handleInputChange("shipping_cost", e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="logistics_cost">Logistics Cost</Label>
-                      <Input
-                        id="logistics_cost"
-                        type="number"
-                        step="0.01"
-                        value={formData.logistics_cost}
-                        onChange={(e) => handleInputChange("logistics_cost", e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="margin_amount">Margin (KES)</Label>
-                      <Input
-                        id="margin_amount"
-                        type="number"
-                        step="0.01"
-                        value={formData.margin_amount}
-                        onChange={(e) => handleInputChange("margin_amount", e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Minimum valid price: <span className="font-medium text-foreground">KES {minimumValidPrice.toFixed(2)}</span> (cost + shipping + logistics + margin). NSPV, last price, and every other price must be greater than this.
-                  </p>
-                </div>
-
-                {/* Price tiers */}
-                <Separator />
-                {formData.hasVariations ? (
-                  <p className="text-sm text-muted-foreground">This product has variations - set NSPV, NSPH, NSPO, NSPD for each variation under Variations.</p>
-                ) : (
-                  <PriceCodeFields
-                    nspv={formData.price}
-                    onNspvChange={(value) => handleInputChange("price", value)}
-                    tiers={priceTiers}
-                    onTiersChange={setPriceTiers}
-                  />
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Selling prices come from the imported price lists (NSPV, NSPH, NSPO, NSPD) - import them under Inventory &gt; Price Lists.
+                </p>
 
                 {/* Tax Settings */}
                 <Separator />
@@ -1252,24 +653,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sku">SKU</Label>
-                    <Input
-                      id="sku"
-                      value={formData.sku}
-                      onChange={(e) => handleInputChange("sku", e.target.value)}
-                      placeholder="Enter SKU"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="product_code">Product Code</Label>
-                    <Input
-                      id="product_code"
-                      value={formData.product_code}
-                      onChange={(e) => handleInputChange("product_code", e.target.value)}
-                      placeholder="Enter product code"
-                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="barcode">Barcode</Label>
@@ -1800,239 +1183,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
               </CardContent>
             </Card>
             
-            {/* Variations */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Variations</span>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="hasVariations"
-                      checked={formData.hasVariations}
-                      onCheckedChange={(checked) => handleInputChange("hasVariations", checked)}
-                    />
-                    <Label htmlFor="hasVariations">Has Variations</Label>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {formData.hasVariations && (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <p className="text-sm text-muted-foreground">
-                        Add product variations (e.g., size, color)
-                      </p>
-                      <Button type="button" variant="outline" size="sm" onClick={addVariant}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Variation
-                      </Button>
-                    </div>
-                    
-                    {variants.map((variant, index) => (
-                      <div key={variant.id} className="border rounded-lg p-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">Variation {index + 1}</h4>
-                          {variants.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removeVariant(variant.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-name-${variant.id}`}>Name *</Label>
-                            <Input
-                              id={`variant-name-${variant.id}`}
-                              value={variant.name}
-                              onChange={(e) => handleVariantChange(variant.id, "name", e.target.value)}
-                              placeholder="e.g., Small - Red"
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-sku-${variant.id}`}>SKU</Label>
-                            <Input
-                              id={`variant-sku-${variant.id}`}
-                              value={variant.sku}
-                              onChange={(e) => handleVariantChange(variant.id, "sku", e.target.value)}
-                              placeholder="Enter SKU"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <PriceCodeFields
-                              idPrefix={`variant-${variant.id}-`}
-                              title="Variation Prices"
-                              nspv={variant.price}
-                              onNspvChange={(value) => handleVariantChange(variant.id, "price", value)}
-                              tiers={variant.price_tiers}
-                              onTiersChange={(tiers) => setVariantTiers(variant.id, tiers)}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-cost-${variant.id}`}>Cost</Label>
-                            <Input
-                              id={`variant-cost-${variant.id}`}
-                              type="number"
-                              step="0.01"
-                              value={variant.cost}
-                              onChange={(e) => handleVariantChange(variant.id, "cost", e.target.value)}
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`variant-stock-${variant.id}`}>Stock Quantity</Label>
-                            <Input
-                              id={`variant-stock-${variant.id}`}
-                              type="number"
-                              value={variant.stock_quantity}
-                              onChange={(e) => handleVariantChange(variant.id, "stock_quantity", e.target.value)}
-                              placeholder="0"
-                            />
-                          </div>
-                          <div className="flex items-center space-x-2 mt-6">
-                            <Switch
-                              id={`variant-active-${variant.id}`}
-                              checked={variant.is_active}
-                              onCheckedChange={(checked) => handleVariantChange(variant.id, "is_active", checked)}
-                            />
-                            <Label htmlFor={`variant-active-${variant.id}`}>Active</Label>
-                          </div>
-                        </div>
-                        
-                        {/* Variant Attributes */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>Attributes</Label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addVariantAttribute(variant.id)}
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add Attribute
-                            </Button>
-                          </div>
-                          
-                          {variant.attributes.map((attr, attrIndex) => (
-                            <div key={attrIndex} className="flex gap-2 items-center">
-                              <Input
-                                value={attr.key}
-                                onChange={(e) => updateVariantAttribute(variant.id, attrIndex, "key", e.target.value)}
-                                placeholder="Attribute name"
-                                className="flex-1"
-                              />
-                              <Input
-                                value={attr.value}
-                                onChange={(e) => updateVariantAttribute(variant.id, attrIndex, "value", e.target.value)}
-                                placeholder="Attribute value"
-                                className="flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeVariantAttribute(variant.id, attrIndex)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Variant Options */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>Options</Label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addVariantOption(variant.id, "")}
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add Option
-                            </Button>
-                          </div>
-                          
-                          {variant.options.map((option, optionIndex) => (
-                            <div key={optionIndex} className="flex gap-2 items-center">
-                              <Input
-                                value={option}
-                                onChange={(e) => updateVariantOption(variant.id, optionIndex, e.target.value)}
-                                placeholder="Option value (e.g., size, color)"
-                                className="flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeVariantOption(variant.id, optionIndex)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Variant Images */}
-                        <div className="space-y-2">
-                          <Label>Variant Images</Label>
-                          <div className="space-y-2">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              onChange={(e) => handleVariantImageUpload(variant.id, e)}
-                              className="hidden"
-                              id={`variant-image-upload-${variant.id}`}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => triggerFileInput(`variant-image-upload-${variant.id}`)}
-                            >
-                              <ImageIcon className="h-4 w-4 mr-2" />
-                              Upload Images
-                            </Button>
-                            
-                            {variant.images.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mt-2">
-                                {variant.images.map((image, imgIndex) => (
-                                  <div key={imgIndex} className="relative">
-                                    <img 
-                                      src={image} 
-                                      alt={`Variant ${index + 1} Image ${imgIndex + 1}`} 
-                                      className="w-16 h-16 object-cover rounded border"
-                                    />
-                                    <Button
-                                      type="button"
-                                      variant="destructive"
-                                      size="sm"
-                                      className="absolute -top-2 -right-2 h-5 w-5 p-0"
-                                      onClick={() => removeVariantImage(variant.id, imgIndex)}
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            
             {/* Product Images */}
             <Card>
               <CardHeader>
@@ -2111,13 +1261,6 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
             </div>
           </form>
         )}
-        
-        {/* Create Category Modal */}
-        <CreateCategoryModal
-          open={isCategoryModalOpen}
-          onOpenChange={setIsCategoryModalOpen}
-          onCategoryCreated={handleCategoryCreated}
-        />
       </SheetContent>
     </Sheet>
   )

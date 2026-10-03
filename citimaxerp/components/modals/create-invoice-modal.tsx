@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -405,18 +406,6 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
         payment_terms: paymentOption === 'credit' ? (data.payment_terms || undefined) : undefined,
         notes: data.notes,
         terms_and_conditions: data.terms_and_conditions,
-        delivery_note_number: data.delivery_note_number || undefined,
-        delivery_note_date: data.delivery_note_date || undefined,
-        reference_number: data.reference_number || undefined,
-        reference_date: data.reference_date || undefined,
-        other_references: data.other_references || undefined,
-        buyers_order_no: data.buyers_order_no || undefined,
-        buyers_order_date: data.buyers_order_date || undefined,
-        dispatch_doc_no: data.dispatch_doc_no || undefined,
-        dispatched_through: data.dispatched_through || undefined,
-        destination: data.destination || undefined,
-        terms_of_delivery: data.terms_of_delivery || undefined,
-        mode_of_payment: data.mode_of_payment || undefined,
         generate_etims_receipt: data.generate_etims_receipt,
         line_items: lineItemsWithCalculations
       }
@@ -484,7 +473,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
     // Create description with product name and description if it exists
     let description = product.name
     if (variant) {
-      description = `${product.name} - ${variant.name}`
+      description = sizedName(product.name, variant.name)
       if (product.description) {
         description += `\n${product.description}`
       }
@@ -497,7 +486,8 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
       product_id: product.id,
       variant_id: variant?.id,
       description: description,
-      unit_price: parseFloat(variant?.price || product.price || "0"),
+      // Sizes share the item's price.
+      unit_price: parseFloat(product.price || "0"),
       unit: product.unit || 'pcs',
       etims_tax_type_code: invoiceTaxCodeForProduct(product),
     })
@@ -915,62 +905,9 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
             </div>
           </div>
 
-          {/* Reference & Dispatch Details - all optional, printed on the invoice document */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Reference &amp; Dispatch Details (optional)</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Delivery Note No.</Label>
-                <Input {...form.register('delivery_note_number')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Delivery Note Date</Label>
-                <Input type="date" {...form.register('delivery_note_date')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Mode/Terms of Payment</Label>
-                <Input {...form.register('mode_of_payment')} placeholder="e.g. Cash On Delivery" className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Reference No.</Label>
-                <Input {...form.register('reference_number')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Reference Date</Label>
-                <Input type="date" {...form.register('reference_date')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Other References</Label>
-                <Input {...form.register('other_references')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Buyer's Order No.</Label>
-                <Input {...form.register('buyers_order_no')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Buyer's Order Date</Label>
-                <Input type="date" {...form.register('buyers_order_date')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Dispatch Doc No.</Label>
-                <Input {...form.register('dispatch_doc_no')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Dispatched Through</Label>
-                <Input {...form.register('dispatched_through')} placeholder="e.g. Local Riders" className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Destination</Label>
-                <Input {...form.register('destination')} className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Terms of Delivery</Label>
-                <Input {...form.register('terms_of_delivery')} className="h-8 text-sm" />
-              </div>
-            </CardContent>
-          </Card>
+          <p className="text-xs text-muted-foreground">
+            Reference &amp; dispatch details (delivery note, dispatch doc, destination, etc.) are filled automatically by the system.
+          </p>
 
           {/* Line Items */}
           <Card>
@@ -1071,7 +1008,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
                                             <div className="flex items-start gap-2">
                                               <div className="w-3 h-3 bg-gray-300 rounded-full mt-1"></div>
                                               <div className="flex-1 min-w-0">
-                                                <div className="font-medium">{variant.name}</div>
+                                                <div className="font-medium">{sizedName(product.name, variant.name)}</div>
                                                 {variant.description && (
                                                   <div className="text-xs text-gray-600 mt-1">
                                                     {variant.description}

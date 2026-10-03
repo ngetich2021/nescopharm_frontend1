@@ -22,6 +22,7 @@ class Product extends Model
         'company_id',
         'store_id',
         'product_number',
+        'item_number',
         'product_code',
         'name',
         'type',
@@ -113,8 +114,18 @@ class Product extends Model
     protected $appends = [
         'image_urls',
         'primary_image_url',
-        'minimum_valid_price',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Product $product) {
+            if (empty($product->item_number) && $product->company_id) {
+                $product->item_number = (int) static::withTrashed()
+                    ->where('company_id', $product->company_id)
+                    ->max('item_number') + 1;
+            }
+        });
+    }
 
     // Scopes for PostgreSQL boolean queries
     public function scopeActive($query)
@@ -276,9 +287,12 @@ class Product extends Model
         return $this->type === 'service';
     }
 
+    // Sizes read as numbers, so order them that way: Fr26 before Fr31, 2.0 before 10.
+    // Labels with no digits fall to the end, alphabetically.
     public function variants()
     {
-        return $this->hasMany(ProductVariant::class, 'product_id');
+        return $this->hasMany(ProductVariant::class, 'product_id')
+            ->orderByRaw('coalesce(substring(name from \'[0-9]+\.?[0-9]*\')::numeric, 999999), name');
     }
 
     public function priceTiers()
@@ -289,18 +303,6 @@ class Product extends Model
     public function receiptItems()
     {
         return $this->hasMany(ProductReceiptItem::class, 'product_id');
-    }
-
-    /**
-     * Minimum price allowed for this product (and its variants): landed cost + required margin.
-     * Selling price, last price, and every price tier must be strictly greater than this.
-     */
-    public function getMinimumValidPriceAttribute(): float
-    {
-        return round(
-            (float) $this->unit_cost + (float) $this->shipping_cost + (float) $this->logistics_cost + (float) $this->margin_amount,
-            2
-        );
     }
 
     public function variantsByStore($storeId)
