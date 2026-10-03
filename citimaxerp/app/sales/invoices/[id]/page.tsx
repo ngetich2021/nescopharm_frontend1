@@ -971,7 +971,7 @@ export default function InvoiceDetailPage() {
                           return (
                             <tr key={item.id} className="border-b border-gray-200">
                               <td className="py-3 text-xs lg:text-sm pr-4 font-mono whitespace-nowrap">
-                                {item.variant?.sku || item.product?.product_code || item.product?.sku || "—"}
+                                {(item.product as any)?.item_number ?? "—"}
                               </td>
                               <td className="py-3 text-xs lg:text-sm pr-4">
                                 <div>{item.description}</div>
@@ -991,6 +991,12 @@ export default function InvoiceDetailPage() {
                         })}
                       </tbody>
                     </table>
+                  ) : isLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
                       No line items available
@@ -1012,10 +1018,12 @@ export default function InvoiceDetailPage() {
                           <span>-{formatCurrency(invoice.discount_amount)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between">
-                        <span>VAT</span>
-                        <span>{formatCurrency(invoice.tax_amount)}</span>
-                      </div>
+                      {parseFloat(invoice.tax_amount.toString()) > 0 && (
+                        <div className="flex justify-between">
+                          <span>VAT</span>
+                          <span>{formatCurrency(invoice.tax_amount)}</span>
+                        </div>
+                      )}
                       <div className="border-t pt-2">
                         <div className="flex justify-between font-bold text-base lg:text-lg">
                           <span>Total</span>

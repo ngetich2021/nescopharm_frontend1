@@ -1,5 +1,6 @@
 "use client"
 
+import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { getCustomerProfile, CustomerProfileData } from "@/lib/customers"
 import { getCustomerDisplayName } from "@/lib/customers"
 import { getEtimsConfig } from "@/lib/etims"
 import { COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
+import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
 import { format } from "date-fns"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -148,6 +150,13 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
     { label: "Dispatched through", value: dispatch.logistic?.logistics_provider || dispatch.logistic?.delivery_method || "N/A" },
     { label: "Destination", value: destination },
   ]
+  // Lines are sold in packs (e.g. "Per pack of 100's"); the note counts pieces handed over.
+  const lines = (dispatch.items || []).map((item) => {
+    const packs = Number(item.quantity || 0)
+    const perPack = piecesPerPack(dispatchItemUnit(item))
+    return { item, packs, perPack, pieces: perPack ? packs * perPack : packs }
+  })
+  const totalPieces = lines.reduce((sum, l) => sum + l.pieces, 0)
   const referenceRows: (typeof referenceCells)[] = []
   for (let i = 0; i < referenceCells.length; i += 2) referenceRows.push(referenceCells.slice(i, i + 2))
 
@@ -255,13 +264,27 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
                 </tr>
               </thead>
               <tbody>
-                {dispatch.items?.map((item, idx) => (
+                {lines.map(({ item, packs, perPack, pieces }, idx) => (
                   <tr key={idx}>
-                    <td className={`border-r border-gray-300 px-2 ${idx === 0 ? 'pt-4' : 'pt-0.5'} font-bold text-gray-900`}>{item.product?.name || 'Product'}</td>
-                    <td className={`text-right px-2 ${idx === 0 ? 'pt-4' : 'pt-0.5'} font-bold text-gray-900`}>{Number(item.quantity).toLocaleString()} PCS</td>
+                    <td className={`border-r border-gray-300 px-2 ${idx === 0 ? 'pt-4' : 'pt-0.5'} font-bold text-gray-900`}>
+                      {item.product ? sizedName(item.product.name, item.variant?.name) : 'Product'}
+                    </td>
+                    <td className={`text-right px-2 ${idx === 0 ? 'pt-4' : 'pt-0.5'} text-gray-900 whitespace-nowrap`}>
+                      {perPack && (
+                        <span className="text-gray-600">({perPack.toLocaleString()} x {packs.toLocaleString()}) = </span>
+                      )}
+                      <span className="font-bold">{pieces.toLocaleString()} PCS</span>
+                    </td>
                   </tr>
                 ))}
-                {(!dispatch.items || dispatch.items.length === 0) && (
+                {isLoading && (
+                  <tr>
+                    <td colSpan={2} className="border-r border-gray-300 px-2 pt-4 text-center">
+                      <Loader2 className="h-5 w-5 animate-spin inline text-gray-400" />
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && (!dispatch.items || dispatch.items.length === 0) && (
                   <tr>
                     <td className="border-r border-gray-300 px-2 pt-4 text-gray-500">No items</td>
                     <td />
@@ -275,7 +298,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
                 <tr className="border-t border-gray-300">
                   <td className="border-r border-gray-300 px-2 py-0.5 text-right text-gray-700">Total</td>
                   <td className="px-2 py-0.5 text-right font-bold text-gray-900">
-                    {(dispatch.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0).toLocaleString()} PCS
+                    {totalPieces.toLocaleString()} PCS
                   </td>
                 </tr>
               </tbody>
@@ -293,16 +316,16 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
               </div>
               <div className="border-l border-gray-300 flex flex-col justify-between min-h-[90px]">
                 <p className="px-2 pt-1 text-right font-bold text-gray-900">for {company?.name || 'the Company'}</p>
-                <div className="grid grid-cols-3 px-2 pb-1 items-end">
+                <div className="grid grid-cols-3 gap-3 px-2 pb-1 items-end">
                   <div>
-                    <p className="font-semibold text-gray-900 truncate">{warehouseManagerName || ''}</p>
-                    <p className="text-gray-700">Prepared by</p>
+                    <p className="text-sm font-bold text-black break-words">{warehouseManagerName || ''}</p>
+                    <p className="border-t border-gray-500 pt-0.5 text-gray-700">Prepared by</p>
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 truncate">{approverName || ''}</p>
-                    <p className="text-gray-700">Verified by</p>
+                    <p className="text-sm font-bold text-black break-words">{approverName || ''}</p>
+                    <p className="border-t border-gray-500 pt-0.5 text-gray-700">Verified by</p>
                   </div>
-                  <p className="text-right text-gray-700">Authorised Signatory</p>
+                  <p className="border-t border-gray-500 pt-0.5 text-right text-gray-700">Authorised Signatory</p>
                 </div>
               </div>
             </div>
