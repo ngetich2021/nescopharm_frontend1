@@ -77,10 +77,13 @@ class DeliveryNoteController extends Controller
             return $existing;
         }
 
-        $items = $dispatch->items()->with('product')->get()->map(function ($item) {
+        $items = $dispatch->items()->with(['product', 'variant'])->get()->map(function ($item) {
             return [
                 'product_id' => $item->product_id,
-                'product_name' => $item->product->name ?? 'Unknown Product',
+                'variant_id' => $item->variant_id,
+                'product_name' => $item->product
+                    ? \App\Models\ProductVariant::sizedName($item->product->name, $item->variant?->name)
+                    : 'Unknown Product',
                 'sku' => $item->product->sku ?? null,
                 'quantity_dispatched' => $item->quantity,
                 'delivered_quantity' => $item->delivered_quantity,
