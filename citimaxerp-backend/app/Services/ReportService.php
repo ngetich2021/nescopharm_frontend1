@@ -239,7 +239,7 @@ class ReportService
             ->where('orders.company_id', $this->companyId)
             ->where('orders.status', '!=', 'cancelled')
             ->whereIn('order_items.variant_id', $variantIds)
-            ->whereBetween('orders.order_date', [$dateFrom, $dateTo])
+            ->whereRaw('COALESCE(orders.order_date, orders.created_at) BETWEEN ? AND ?', [$dateFrom, $dateTo])
             ->groupBy('order_items.variant_id')
             ->select(
                 'order_items.variant_id',
@@ -259,7 +259,7 @@ class ReportService
             ->where('orders.status', '!=', 'cancelled')
             ->whereIn('order_items.product_id', $productIds)
             ->whereNull('order_items.variant_id')
-            ->whereBetween('orders.order_date', [$dateFrom, $dateTo])
+            ->whereRaw('COALESCE(orders.order_date, orders.created_at) BETWEEN ? AND ?', [$dateFrom, $dateTo])
             ->groupBy('order_items.product_id')
             ->select(
                 'order_items.product_id',

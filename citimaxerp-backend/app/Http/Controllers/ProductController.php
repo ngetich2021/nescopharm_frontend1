@@ -110,77 +110,33 @@ class ProductController extends Controller
     }
 
     /**
-     * Compute the minimum valid price (landed cost + margin) from raw input values,
-     * so it can be checked before a Product model instance necessarily reflects them.
+     * Each price-list code (e.g. "NSPD 001") must belong to one product only within a company.
      */
-    protected function computeMinimumValidPrice(?float $unitCost, ?float $shippingCost, ?float $logisticsCost, ?float $marginAmount): float
-    {
-        return round(($unitCost ?? 0) + ($shippingCost ?? 0) + ($logisticsCost ?? 0) + ($marginAmount ?? 0), 2);
-    }
-
-    /**
-     * Validate that a set of prices (selling price, last price, variant prices, tier prices)
-     * all exceed the minimum valid price. Returns an array of error strings (empty if all pass).
-     */
-    /**
-     * Price-floor errors for a product create/update payload. Mirrors what actually gets saved:
-     * variant rows only count on products with variations, blank rows are skipped (the save
-     * skips them too), and each variant is measured against its own cost when it has one.
-     */
-    protected function collectPriceFloorErrors(Request $request, bool $hasVariations, ?float $unitCost, ?float $shippingCost, ?float $logisticsCost, ?float $marginAmount, $price, $lastPrice): array
-    {
-        $minPrice = $this->computeMinimumValidPrice($unitCost, $shippingCost, $logisticsCost, $marginAmount);
-
-        // A variation product is priced per variant, so an unset parent price is fine;
-        // a last price of 0 means "no previous price".
-        $errors = $this->validatePricesAgainstMinimum($minPrice, [
-            'NSPV (selling price)' => ($hasVariations && (float) $price <= 0) ? null : $price,
-            'Last price' => ((float) $lastPrice > 0) ? $lastPrice : null,
-        ]);
-
-        foreach ((array) $request->input('price_tiers', []) as $tier) {
-            if (isset($tier['price'])) {
-                $errors = array_merge($errors, $this->validatePricesAgainstMinimum($minPrice, [
-                    ($tier['tier_name'] ?? 'Price tier') => $tier['price'],
-                ]));
-            }
-        }
-
-        if ($hasVariations) {
-            foreach ((array) $request->input('variations', []) as $variant) {
-                if (!is_array($variant) || (empty($variant['name']) && empty($variant['sku']) && empty($variant['price']))) {
-                    continue;
-                }
-                if (!isset($variant['price'])) {
-                    continue;
-                }
-                $variantCost = (float) ($variant['cost'] ?? 0) > 0 ? (float) $variant['cost'] : $unitCost;
-                $variantMin = $this->computeMinimumValidPrice($variantCost, $shippingCost, $logisticsCost, $marginAmount);
-                $errors = array_merge($errors, $this->validatePricesAgainstMinimum($variantMin, [
-                    ('Variant "' . ($variant['name'] ?? '') . '" NSPV') => $variant['price'],
-                ]));
-                foreach ((array) ($variant['price_tiers'] ?? []) as $tier) {
-                    if (isset($tier['price'])) {
-                        $errors = array_merge($errors, $this->validatePricesAgainstMinimum($variantMin, [
-                            ('Variant "' . ($variant['name'] ?? '') . '" ' . ($tier['tier_name'] ?? 'price')) => $tier['price'],
-                        ]));
-                    }
-                }
-            }
-        }
-
-        return $errors;
-    }
-
-    protected function validatePricesAgainstMinimum(float $minPrice, array $pricesToCheck): array
+    protected function priceCodeConflicts(string $companyId, array $tiers, ?string $productId): array
     {
         $errors = [];
-        foreach ($pricesToCheck as $label => $price) {
-            if ($price === null) {
+        $seen = [];
+        foreach ($tiers as $tier) {
+            $name = trim((string) ($tier['tier_name'] ?? ''));
+            $code = trim((string) ($tier['item_code'] ?? ''));
+            if ($name === '' || $code === '') {
                 continue;
             }
-            if ((float) $price <= $minPrice) {
-                $errors[] = "{$label} (" . number_format((float) $price, 2) . ") must be greater than the minimum valid price of " . number_format($minPrice, 2) . " (cost + shipping + logistics + margin).";
+            $key = strtoupper("{$name} {$code}");
+            if (isset($seen[$key])) {
+                $errors[] = "{$key} is entered more than once.";
+                continue;
+            }
+            $seen[$key] = true;
+
+            $taken = ProductPriceTier::with('product:id,name')
+                ->where('company_id', $companyId)
+                ->where('tier_name', $name)
+                ->where('item_code', $code)
+                ->when($productId, fn ($q) => $q->where('product_id', '!=', $productId))
+                ->first();
+            if ($taken) {
+                $errors[] = "{$key} is already used by \"" . ($taken->product?->name ?? 'another product') . '".';
             }
         }
         return $errors;
@@ -207,21 +163,23 @@ class ProductController extends Controller
             $id = $tier['id'] ?? null;
             $existing = $id ? $scoped()->find($id) : null;
 
+            $fields = [
+                'tier_name' => $tier['tier_name'],
+                'item_code' => ($tier['item_code'] ?? null) !== null && trim($tier['item_code']) !== '' ? trim($tier['item_code']) : null,
+                'price' => $tier['price'],
+                'unit_of_measure' => trim((string) ($tier['unit_of_measure'] ?? '')) ?: 'pcs',
+            ];
+
             if ($existing) {
-                $existing->update([
-                    'tier_name' => $tier['tier_name'],
-                    'price' => $tier['price'],
-                ]);
+                $existing->update($fields);
                 $keepIds[] = $existing->id;
             } else {
-                $created = ProductPriceTier::create([
+                $created = ProductPriceTier::create(array_merge($fields, [
                     'id' => (string) Str::uuid(),
                     'company_id' => $product->company_id,
                     'product_id' => $product->id,
                     'variant_id' => $variant?->id,
-                    'tier_name' => $tier['tier_name'],
-                    'price' => $tier['price'],
-                ]);
+                ]));
                 $keepIds[] = $created->id;
             }
         }
@@ -275,11 +233,17 @@ class ProductController extends Controller
         }
 
         if ($request->filled('search')) {
-            $term = $request->input('search');
-            $query->where(function ($q) use ($term) {
+            $term = trim($request->input('search'));
+            // "NSPD 001" and "nspd001" both find the NSPD list's item 001.
+            $compact = preg_replace('/\s+/', '', $term);
+            $query->where(function ($q) use ($term, $compact) {
                 $q->where('name', 'ilike', '%' . $term . '%')
                     ->orWhere('sku', 'ilike', '%' . $term . '%')
-                    ->orWhere('description', 'ilike', '%' . $term . '%');
+                    ->orWhere('description', 'ilike', '%' . $term . '%')
+                    ->orWhereHas('priceTiers', fn ($t) => $t->whereRaw("(tier_name || coalesce(item_code, '')) ilike ?", ['%' . $compact . '%']));
+                if (ctype_digit($term)) {
+                    $q->orWhere('item_number', (int) $term);
+                }
             });
         }
 
@@ -340,6 +304,322 @@ class ProductController extends Controller
         ], 200);
     }
 
+    private const PRICE_LIST_HEADERS = [
+        'item_code' => ['itemcode', 'code', 'itemno', 'itemnumber', 'no'],
+        'description' => ['itemdescription', 'description', 'item', 'itemname', 'productname', 'name', 'product'],
+        'price' => ['price', 'unitprice', 'sellingprice', 'amount', 'rate'],
+        'uom' => ['unitofmeasure', 'unitofmeasurement', 'uom', 'unit', 'packsize'],
+        'tax' => ['taxstatus', 'tax', 'vat', 'vatstatus', 'taxcode', 'taxtype'],
+    ];
+
+    /**
+     * Import one price list (NSPV, NSPH, NSPO, NSPD...) from Excel/CSV. Rows are matched to products by
+     * item description (case-insensitive); products that don't exist yet are created. With dry_run=1
+     * nothing is saved and the per-row result is returned for review.
+     */
+    public function importPriceList(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            'list_name' => 'required|string|max:20',
+            'store_id' => 'nullable|uuid|exists:stores,id',
+            'dry_run' => 'nullable|boolean',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()], 400);
+        }
+
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_create_products', $user->company_id)
+            || !$this->hasPermission($request, 'can_update_products', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to import price lists.'], 403);
+        }
+
+        $companyId = $user->company_id;
+        $listName = strtoupper(trim($request->input('list_name')));
+        $dryRun = $request->boolean('dry_run');
+        $storeId = $request->input('store_id')
+            ?: DB::table('stores')->where('company_id', $companyId)->orderBy('created_at')->value('id');
+
+        try {
+            $rows = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file')->getRealPath())
+                ->getActiveSheet()
+                ->toArray(null, true, true, false);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 'failed', 'message' => 'Could not read the file: ' . $e->getMessage()], 422);
+        }
+
+        $columns = $this->mapPriceListHeaders($rows[0] ?? []);
+        if (!isset($columns['description'], $columns['price'])) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'The first row must have column headings including "Item Description" and "Price" '
+                    . '(optional: "Item Code", "Unit of Measure", "Tax Status").',
+            ], 422);
+        }
+
+        $results = [];
+        $summary = ['rows' => 0, 'products_created' => 0, 'products_matched' => 0, 'prices_added' => 0, 'prices_updated' => 0, 'errors' => 0];
+
+        DB::beginTransaction();
+        try {
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $cell = fn ($key) => isset($columns[$key]) ? trim((string) ($row[$columns[$key]] ?? '')) : '';
+                $description = preg_replace('/\s+/', ' ', $cell('description'));
+                if ($description === '' && $cell('price') === '') {
+                    continue;
+                }
+
+                $summary['rows']++;
+                $itemCode = $this->priceListItemCode($cell('item_code'), $listName);
+                $result = ['row' => $i + 1, 'code' => trim($listName . ' ' . ($itemCode ?? '')), 'description' => $description];
+
+                $rawPrice = str_replace([',', ' '], '', preg_replace('/^(KES|KSH|KSHS)\.?/i', '', $cell('price')));
+                if ($description === '' || !is_numeric($rawPrice)) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => $description === '' ? 'Item description is missing.' : 'Price is missing or not a number.'];
+                    continue;
+                }
+                $price = round((float) $rawPrice, 2);
+                // Price lists without a unit of measure are sold in pieces.
+                $uom = $cell('uom') !== '' ? $cell('uom') : 'pcs';
+                $tax = $this->parseTaxStatus($cell('tax'));
+                if ($tax === false) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => "Tax status \"{$cell('tax')}\" not recognised (use e.g. VAT 16%, Zero rated, Exempt, Non-VAT)."];
+                    continue;
+                }
+
+                // Match order: this list's code already on a product, then a product whose SKU is the
+                // code (older data stored codes there), then the item description.
+                $code = trim($listName . ' ' . ($itemCode ?? ''));
+                $matches = collect();
+                if ($itemCode !== null) {
+                    $tierOwner = ProductPriceTier::where('company_id', $companyId)->where('tier_name', $listName)->where('item_code', $itemCode)->value('product_id');
+                    $matches = $tierOwner
+                        ? Product::where('id', $tierOwner)->get()
+                        : Product::where('company_id', $companyId)
+                            ->whereRaw("upper(regexp_replace(coalesce(sku, ''), '\\s+', '', 'g')) = ?", [strtoupper(preg_replace('/\s+/', '', $code))])
+                            ->get();
+                }
+                if ($matches->isEmpty()) {
+                    $matches = Product::where('company_id', $companyId)
+                        ->whereRaw("lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = ?", [mb_strtolower($description)])
+                        ->get();
+                }
+                if ($matches->count() > 1) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => "{$matches->count()} products share this description - rename them so each is unique."];
+                    continue;
+                }
+
+                $product = $matches->first();
+                $notes = [];
+                if (!$product) {
+                    $product = Product::create([
+                        'id' => (string) Str::uuid(),
+                        'company_id' => $companyId,
+                        'store_id' => $storeId,
+                        'product_number' => $this->generateProductNumber($companyId),
+                        'name' => $description,
+                        'price' => $listName === 'NSPV' ? $price : 0,
+                        'unit_cost' => 0,
+                        'unit_of_measurement' => $uom,
+                        'is_active' => true,
+                        'track_inventory' => true,
+                        'is_taxable' => $tax['is_taxable'] ?? true,
+                        'tax_rate' => $tax['tax_rate'] ?? null,
+                    ]);
+                    $summary['products_created']++;
+                    $status = 'created';
+                } else {
+                    $updates = [];
+                    if ($listName === 'NSPV') {
+                        $updates['price'] = $price;
+                        $updates['unit_of_measurement'] = $uom;
+                    }
+                    if ($tax !== null) {
+                        $updates['is_taxable'] = $tax['is_taxable'];
+                        $updates['tax_rate'] = $tax['tax_rate'];
+                    }
+                    if ($updates) {
+                        $product->update($updates);
+                    }
+                    $summary['products_matched']++;
+                    $status = 'matched';
+                }
+
+                $tier = ProductPriceTier::where('company_id', $companyId)
+                    ->where('tier_name', $listName)
+                    ->when($itemCode !== null,
+                        fn ($q) => $q->where('item_code', $itemCode),
+                        fn ($q) => $q->whereNull('item_code')->where('product_id', $product->id))
+                    ->first();
+
+                if ($tier) {
+                    if ($tier->product_id !== $product->id) {
+                        $notes[] = "{$result['code']} moved here from another product.";
+                    }
+                    $tier->update(['product_id' => $product->id, 'variant_id' => null, 'price' => $price, 'unit_of_measure' => $uom]);
+                    $summary['prices_updated']++;
+                } else {
+                    ProductPriceTier::create([
+                        'id' => (string) Str::uuid(),
+                        'company_id' => $companyId,
+                        'product_id' => $product->id,
+                        'tier_name' => $listName,
+                        'item_code' => $itemCode,
+                        'price' => $price,
+                        'unit_of_measure' => $uom,
+                    ]);
+                    $summary['prices_added']++;
+                }
+
+                $results[] = $result + [
+                    'status' => $status,
+                    'item_number' => $product->item_number,
+                    'price' => $price,
+                    'unit_of_measure' => $uom,
+                    'message' => implode(' ', $notes) ?: null,
+                ];
+            }
+
+            $dryRun ? DB::rollBack() : DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Price list import failed', ['error' => $e->getMessage()]);
+            return response()->json(['status' => 'failed', 'message' => 'Import failed: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $dryRun ? 'Preview only - nothing was saved.' : "{$listName} price list imported.",
+            'dry_run' => $dryRun,
+            'list_name' => $listName,
+            'summary' => $summary,
+            'rows' => $results,
+        ]);
+    }
+
+    /**
+     * The "Item Code" column may hold the full code (NSPH001, "NSPH 001") or just the number
+     * (001) - the list is already known from the import, so only the number is stored. Without
+     * this, a sheet exported from here and uploaded back would turn 001 into "NSPH NSPH001".
+     */
+    private function priceListItemCode(string $raw, string $listName): ?string
+    {
+        $value = preg_replace('/\s+/', '', trim($raw));
+        if (stripos($value, $listName) === 0) {
+            $value = substr($value, strlen($listName));
+        }
+        return $value !== '' ? $value : null;
+    }
+
+    /**
+     * Every price currently on one list (NSPV, NSPH, NSPO, NSPD...), in the same shape the
+     * importer reads. A GM/Director downloads this, edits the prices in Excel and re-imports
+     * it, so the sheet must round-trip: same columns, same codes.
+     */
+    public function exportPriceList(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'list_name' => 'required|string|max:20',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()], 400);
+        }
+
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_update_products', $user->company_id)
+            && !$this->hasPermission($request, 'can_manage_pricing', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to export price lists.'], 403);
+        }
+
+        $listName = strtoupper(trim($request->input('list_name')));
+
+        $rows = ProductPriceTier::with('product:id,name,item_number,is_taxable,tax_rate')
+            ->where('company_id', $user->company_id)
+            ->where('tier_name', $listName)
+            ->get()
+            // Codes are strings like "001"/"57", so sort them as numbers where possible.
+            ->sortBy(fn ($tier) => [is_numeric($tier->item_code) ? 0 : 1, is_numeric($tier->item_code) ? (float) $tier->item_code : 0, (string) $tier->item_code])
+            ->values()
+            ->map(fn ($tier) => [
+                // What goes in the sheet's "Item Code" column: the full code staff know it by
+                // (NSPH001), not the bare number, so the file reads the same as the ones supplied.
+                'sheet_code' => $listName . $tier->item_code,
+                'item_code' => $tier->item_code,
+                'code' => $tier->code,
+                'description' => $tier->product?->name,
+                'price' => (float) $tier->price,
+                'unit_of_measure' => $tier->unit_of_measure,
+                'tax_status' => $this->describeTaxStatus($tier->product),
+                'item_number' => $tier->product?->item_number,
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $rows->isEmpty() ? "No prices are on the {$listName} list yet." : "{$listName} price list retrieved.",
+            'list_name' => $listName,
+            'rows' => $rows,
+        ]);
+    }
+
+    /**
+     * The inverse of parseTaxStatus(), so an exported sheet re-imports with the same tax.
+     */
+    private function describeTaxStatus(?Product $product): string
+    {
+        if (!$product || !$product->is_taxable) {
+            return 'Exempt';
+        }
+        $rate = (float) ($product->tax_rate ?? 0);
+        return $rate > 0 ? 'VAT ' . rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') . '%' : 'Zero rated';
+    }
+
+    private function mapPriceListHeaders(array $header): array
+    {
+        $columns = [];
+        foreach ($header as $index => $heading) {
+            $normalized = preg_replace('/[^a-z0-9]/', '', strtolower((string) $heading));
+            foreach (self::PRICE_LIST_HEADERS as $field => $aliases) {
+                if (!isset($columns[$field]) && in_array($normalized, $aliases, true)) {
+                    $columns[$field] = $index;
+                }
+            }
+        }
+        return $columns;
+    }
+
+    /**
+     * Blank means "leave the product's tax as it is" (null); unrecognised text returns false.
+     * Exempt is stored as non-VAT: the product form has no separate exempt setting either.
+     */
+    private function parseTaxStatus(string $value): array|false|null
+    {
+        $v = strtolower(trim($value));
+        if ($v === '') {
+            return null;
+        }
+        if (str_contains($v, 'exempt') || str_contains($v, 'non') || in_array($v, ['a', 'd', 'no', 'none', 'no vat'], true)) {
+            return ['is_taxable' => false, 'tax_rate' => null];
+        }
+        if (str_contains($v, 'zero') || $v === 'c') {
+            return ['is_taxable' => true, 'tax_rate' => 0];
+        }
+        if (preg_match('/(\d+(?:\.\d+)?)/', $v, $m)) {
+            return ['is_taxable' => true, 'tax_rate' => (float) $m[1]];
+        }
+        if ($v === 'e') {
+            return ['is_taxable' => true, 'tax_rate' => 8];
+        }
+        if (in_array($v, ['b', 'vat', 'vatable', 'taxable', 'standard', 'yes', 'v'], true)) {
+            return ['is_taxable' => true, 'tax_rate' => 16];
+        }
+        return false;
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -354,6 +634,8 @@ class ProductController extends Controller
             'price_tiers' => 'nullable|array',
             'price_tiers.*.tier_name' => 'required_with:price_tiers|string|max:100',
             'price_tiers.*.price' => 'required_with:price_tiers|numeric|min:0',
+            'price_tiers.*.item_code' => 'nullable|string|max:30',
+            'price_tiers.*.unit_of_measure' => 'nullable|string|max:50',
             'stock_quantity' => 'nullable|integer|min:0',
             'category' => 'nullable|string|max:255',
             'category_id' => 'nullable|uuid|exists:product_categories,id',
@@ -461,17 +743,10 @@ class ProductController extends Controller
                 );
             }
 
-            // Enforce: price / last price / variant prices / tier prices must exceed
-            // (unit cost + shipping cost + logistics cost + margin amount).
-            $priceErrors = $this->collectPriceFloorErrors(
-                $request,
-                filter_var($request->input('has_variations'), FILTER_VALIDATE_BOOLEAN),
-                $productData['unit_cost'] ?? null,
-                $productData['shipping_cost'] ?? null,
-                $productData['logistics_cost'] ?? null,
-                $productData['margin_amount'] ?? null,
-                $productData['price'] ?? null,
-                $productData['last_price'] ?? null
+            $priceErrors = $this->priceCodeConflicts(
+                $request->input('company_id', $user->company_id),
+                (array) $request->input('price_tiers', []),
+                null
             );
             if (!empty($priceErrors)) {
                 return response()->json([
@@ -532,7 +807,7 @@ class ProductController extends Controller
                 'is_taxable' => ($productData['is_taxable'] ?? true) ? 'true' : 'false',
                 'tax_rate' => $productData['tax_rate'] ?? null,
                 'hs_code' => $productData['hs_code'] ?? null,
-                'track_inventory' => ($productData['track_inventory'] ?? false) ? 'true' : 'false',
+                'track_inventory' => filter_var($productData['track_inventory'] ?? true, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false',
                 'has_packaging' => ($productData['has_packaging'] ?? false) ? 'true' : 'false',
                 'base_unit' => $productData['base_unit'] ?? null,
                 'weight' => $productData['weight'] ?? null,
@@ -678,6 +953,8 @@ class ProductController extends Controller
             'price_tiers.*.id' => 'nullable|uuid',
             'price_tiers.*.tier_name' => 'required_with:price_tiers|string|max:100',
             'price_tiers.*.price' => 'required_with:price_tiers|numeric|min:0',
+            'price_tiers.*.item_code' => 'nullable|string|max:30',
+            'price_tiers.*.unit_of_measure' => 'nullable|string|max:50',
             // stock_quantity is intentionally NOT accepted here - quantity may only change via
             // Stock Adjustment or Purchase Order receiving, never through a product edit.
             'category' => 'nullable|string|max:255',
@@ -801,20 +1078,10 @@ class ProductController extends Controller
                 $updateData['category_id'] = $this->resolveCategoryId($product->company_id, $updateData['category']);
             }
 
-            // Enforce: price / last price / variant prices / tier prices must exceed
-            // (unit cost + shipping cost + logistics cost + margin amount), using whichever
-            // of these values are being submitted vs. already on the product.
-            $priceErrors = $this->collectPriceFloorErrors(
-                $request,
-                $request->has('has_variations')
-                    ? filter_var($request->input('has_variations'), FILTER_VALIDATE_BOOLEAN)
-                    : (bool) $product->has_variations,
-                $updateData['unit_cost'] ?? $product->unit_cost,
-                $updateData['shipping_cost'] ?? $product->shipping_cost,
-                $updateData['logistics_cost'] ?? $product->logistics_cost,
-                $updateData['margin_amount'] ?? $product->margin_amount,
-                $updateData['price'] ?? null,
-                $updateData['last_price'] ?? null
+            $priceErrors = $this->priceCodeConflicts(
+                $product->company_id,
+                (array) $request->input('price_tiers', []),
+                $product->id
             );
             if (!empty($priceErrors)) {
                 return response()->json([
@@ -882,6 +1149,7 @@ class ProductController extends Controller
                     'all_files' => array_keys($request->allFiles())
                 ]);
 
+                $keptVariantIds = [];
                 foreach ($request->input('variations') as $index => $variantData) {
                     // Handle variant images using ProductImageService
                     $variantImages = [];
@@ -966,7 +1234,12 @@ class ProductController extends Controller
                         $variant = $this->createNewVariant($variantData, $product);
                     }
                     $this->syncPriceTiers($product, $variantTiers, $variant);
+                    if ($variant) {
+                        $keptVariantIds[] = $variant->id;
+                    }
                 }
+
+                $this->pruneRemovedVariants($product, $keptVariantIds);
             }
             // Clean up any variants that might have been left in an invalid state
             $this->cleanupInvalidVariants($product);
@@ -1221,6 +1494,14 @@ class ProductController extends Controller
                 'message' => 'No products provided or invalid format.',
             ], 400);
         }
+        foreach ($productsData as $row) {
+            if (filter_var($row['has_variations'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => 'Product variations are no longer supported. List each variation as its own product row.',
+                ], 422);
+            }
+        }
         $created = [];
         $errors = [];
         // Group products by main product SKU
@@ -1400,7 +1681,7 @@ class ProductController extends Controller
                     'is_taxable' => $toBool($productData['is_taxable'] ?? null, true),
                     'tax_rate' => $productData['tax_rate'] ?? null,
                     'hs_code' => $productData['hs_code'] ?? null,
-                    'track_inventory' => $toBool($productData['track_inventory'] ?? null, false),
+                    'track_inventory' => $toBool($productData['track_inventory'] ?? null, true),
                     'has_packaging' => $toBool($productData['has_packaging'] ?? null, false),
                     'weight' => $productData['weight'] ?? null,
                     'length' => $productData['length'] ?? null,
@@ -1508,6 +1789,26 @@ class ProductController extends Controller
     /**
      * Clean up invalid variants for a product
      */
+    /**
+     * Sizes dropped from the edit form. One that still holds stock or has batches is only
+     * deactivated - deleting it would orphan batches that dispatch and stock history rely on.
+     */
+    protected function pruneRemovedVariants(Product $product, array $keptIds): void
+    {
+        $removed = ProductVariant::where('product_id', $product->id)
+            ->whereNotIn('id', $keptIds)
+            ->get();
+
+        foreach ($removed as $variant) {
+            if ($variant->stock_quantity > 0 || $variant->inventoryBatches()->exists()) {
+                $variant->update(['is_active' => false]);
+                continue;
+            }
+            ProductPriceTier::where('variant_id', $variant->id)->delete();
+            $variant->delete();
+        }
+    }
+
     protected function cleanupInvalidVariants(Product $product)
     {
         // Remove variants that have no meaningful data

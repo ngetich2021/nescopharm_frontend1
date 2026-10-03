@@ -120,6 +120,17 @@ class Order extends Model
         'order_date' => 'datetime',
     ];
 
+    // Forms send order_date: null when the field is left blank, and sales reports
+    // filter on it, so an order must never be saved without one.
+    protected static function booted(): void
+    {
+        static::saving(function (Order $order) {
+            if (empty($order->order_date)) {
+                $order->order_date = $order->getOriginal('order_date') ?? $order->created_at ?? now();
+            }
+        });
+    }
+
     public function customer()
     {
         return $this->belongsTo(Customer::class);
