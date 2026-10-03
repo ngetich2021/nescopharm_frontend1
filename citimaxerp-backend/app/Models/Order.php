@@ -118,6 +118,7 @@ class Order extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'order_date' => 'datetime',
+        'stock_deducted_at' => 'datetime',
     ];
 
     // Forms send order_date: null when the field is left blank, and sales reports

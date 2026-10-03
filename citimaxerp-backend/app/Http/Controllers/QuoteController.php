@@ -125,6 +125,7 @@ class QuoteController extends Controller
             'items.*.quantity' => 'required|numeric|min:0.0001',
             'items.*.unit_price' => 'required|numeric|min:0|max:999999.99',
             'items.*.price_label' => 'nullable|string|max:100',
+            'items.*.price_unit' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -398,6 +399,7 @@ class QuoteController extends Controller
                         'packaging_breakdown' => $packagingBreakdown,
                         'unit_price' => $item['unit_price'],
                         'price_label' => $item['price_label'] ?? null,
+                        'price_unit' => $item['price_unit'] ?? null,
                         'total_price' => $item['quantity'] * $item['unit_price'],
                         'company_id' => $user->company_id,
                     ]);
@@ -455,6 +457,7 @@ class QuoteController extends Controller
             'items.*.quantity' => 'required|numeric|min:0.0001',
             'items.*.unit_price' => 'required|numeric|min:0|max:999999.99',
             'items.*.price_label' => 'nullable|string|max:100',
+            'items.*.price_unit' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -612,6 +615,7 @@ class QuoteController extends Controller
                                     'packaging_breakdown' => $packagingBreakdown,
                                     'unit_price' => $item['unit_price'],
                                     'price_label' => $item['price_label'] ?? null,
+                                    'price_unit' => $item['price_unit'] ?? null,
                                     'total_price' => $item['quantity'] * $item['unit_price'],
                                 ]);
                                 $existingItemIds[] = $item['id'];
@@ -629,6 +633,7 @@ class QuoteController extends Controller
                                 'packaging_breakdown' => $packagingBreakdown,
                                 'unit_price' => $item['unit_price'],
                                 'price_label' => $item['price_label'] ?? null,
+                                'price_unit' => $item['price_unit'] ?? null,
                                 'total_price' => $item['quantity'] * $item['unit_price'],
                                 'company_id' => $quote->company_id,
                             ]);
@@ -828,23 +833,13 @@ class QuoteController extends Controller
                         'packaging_breakdown' => $item->packaging_breakdown,
                         'unit_price' => $item->unit_price,
                         'price_label' => $item->price_label,
+                        'price_unit' => $item->price_unit,
                         'total_price' => $item->total_price,
                         'tax_rate' => $itemTaxRate,
                         'tax_amount' => round($item->netAmount() * $itemTaxRate / 100, 2),
                         'company_id' => $quote->company_id,
                     ]);
-
-                    // Update stock if track_inventory - decrement the variant's own
-                    // stock when the line is for a specific variant, not the parent
-                    // product's base stock.
-                    if ($item->product->track_inventory) {
-                        if ($item->variant_id) {
-                            $variant = $item->variant ?? \App\Models\ProductVariant::find($item->variant_id);
-                            $variant?->decrement('stock_quantity', $item->quantity);
-                        } else {
-                            $item->product->decrement('stock_quantity', $item->quantity);
-                        }
-                    }
+                    // Stock is taken when the order is receipted - see OrderStockService.
                 }
 
                 // Create delivery details
@@ -1091,10 +1086,10 @@ class QuoteController extends Controller
                         $query->select('*');
                     },
                     'quoteItems' => function ($query) {
-                        $query->select('id', 'quote_id', 'product_id', 'variant_id', 'unit_id', 'quantity', 'unit_quantity', 'base_quantity', 'packaging_breakdown', 'unit_price', 'price_label', 'total_price')
+                        $query->select('id', 'quote_id', 'product_id', 'variant_id', 'unit_id', 'quantity', 'unit_quantity', 'base_quantity', 'packaging_breakdown', 'unit_price', 'price_label', 'price_unit', 'total_price')
                             ->with([
                                 'product' => function ($query) {
-                                    $query->select('id', 'name', 'price', 'store_id', 'has_packaging', 'base_unit', 'unit_of_measurement', 'product_code', 'sku', 'is_taxable', 'tax_rate', 'vat_category_id')
+                                    $query->select('id', 'name', 'item_number', 'price', 'store_id', 'has_packaging', 'base_unit', 'unit_of_measurement', 'product_code', 'sku', 'is_taxable', 'tax_rate', 'vat_category_id')
                                         ->with([
                                             'vatCategory' => function ($query) {
                                                 $query->select('id', 'etims_tax_type_code');

@@ -272,6 +272,7 @@ class OrderController extends Controller
             'items.*.quantity' => 'required|numeric|min:0.0001',
             'items.*.unit_price' => 'required|numeric|min:0|max:999999.99',
             'items.*.price_label' => 'nullable|string|max:100',
+            'items.*.price_unit' => 'nullable|string|max:50',
             'order_date' => 'nullable|date',
         ]);
 
@@ -520,24 +521,8 @@ class OrderController extends Controller
                     // Use unit price from request
                     $unitPrice = $item['unit_price'];
 
-                    // FEFO: draw down whichever batch expires soonest first.
-                    // This is best-effort - not every product has batches set
-                    // up, so an empty/partial allocation isn't an error; the
-                    // flat stock_quantity decrement below still runs as the
-                    // authoritative stock check regardless of batch coverage.
+                    // Stock (and FEFO batches) are only taken once the order is receipted - see OrderStockService.
                     $batchAllocations = null;
-                    if ($product->track_inventory) {
-                        $allocationTarget = $variant ?? $product;
-                        $fefoResult = $allocationTarget->allocateStockFEFO($baseQuantity, [
-                            'reference_type' => 'order',
-                            'reference_id' => $order->id,
-                            'reference_number' => $order->order_number,
-                            'notes' => "Order {$order->order_number}",
-                        ]);
-                        if (!empty($fefoResult['allocations'])) {
-                            $batchAllocations = $fefoResult['allocations'];
-                        }
-                    }
 
                     OrderItem::create([
                         'id' => (string) Str::uuid(),
@@ -552,20 +537,18 @@ class OrderController extends Controller
                         'batch_allocations' => $batchAllocations,
                         'unit_price' => $unitPrice,
                         'price_label' => $item['price_label'] ?? null,
+                        'price_unit' => $item['price_unit'] ?? null,
                         'total_price' => $baseQuantity * $unitPrice,
                         'tax_rate' => EtimsTaxType::rateForProduct($product),
                         'tax_amount' => round($unitPrice * $baseQuantity * EtimsTaxType::rateForProduct($product) / 100, 2),
                         'company_id' => $user->company_id,
                     ]);
+                }
 
-                    // Update stock if track_inventory
-                    if ($product->track_inventory) {
-                        if ($variant) {
-                            $variant->decrement('stock_quantity', $baseQuantity);
-                        } else {
-                            $product->decrement('stock_quantity', $baseQuantity);
-                        }
-                    }
+                // Orders created already paid come with their receipt.
+                $orderStock = app(\App\Services\OrderStockService::class);
+                if ($orderStock->hasReceipt($order)) {
+                    $orderStock->deduct($order);
                 }
 
                 $message = 'Order created successfully.';
@@ -648,6 +631,7 @@ class OrderController extends Controller
             'items.*.quantity' => 'required_with:items|integer|min:1',
             'items.*.unit_price' => 'required_with:items|numeric|min:0|max:999999.99',
             'items.*.price_label' => 'nullable|string|max:100',
+            'items.*.price_unit' => 'nullable|string|max:50',
             'order_date' => 'nullable|date',
         ]);
 
@@ -687,31 +671,9 @@ class OrderController extends Controller
 
                 // Handle updating items if provided
                 if ($request->has('items')) {
-                    // Restore stock for old items
-                    foreach ($order->orderItems as $oldItem) {
-                        $product = $oldItem->product;
-                        if ($product && $product->track_inventory) {
-                            if ($oldItem->variant_id) {
-                                $variant = ProductVariant::find($oldItem->variant_id);
-                                if ($variant) {
-                                    $variant->increment('stock_quantity', $oldItem->quantity);
-                                }
-                            } else {
-                                $product->increment('stock_quantity', $oldItem->quantity);
-                            }
-                        }
-                        // Reverse whichever batches this line originally drew from
-                        foreach ($oldItem->batch_allocations ?? [] as $allocation) {
-                            $batch = InventoryBatch::find($allocation['batch_id'] ?? null);
-                            if ($batch) {
-                                $batch->restoreFromSale((int) $allocation['quantity'], [
-                                    'reference_type' => 'order',
-                                    'reference_id' => $order->id,
-                                    'reference_number' => $order->order_number,
-                                ], "Order {$order->order_number} edited");
-                            }
-                        }
-                    }
+                    $orderStock = app(\App\Services\OrderStockService::class);
+                    $wasDeducted = (bool) $order->stock_deducted_at;
+                    $orderStock->restore($order, "Order {$order->order_number} edited");
                     // Delete old items
                     $order->orderItems()->delete();
 
@@ -785,18 +747,6 @@ class OrderController extends Controller
                         $variant = !empty($item['variant_id']) ? ProductVariant::find($item['variant_id']) : null;
 
                         $batchAllocations = null;
-                        if ($product->track_inventory) {
-                            $allocationTarget = $variant ?? $product;
-                            $fefoResult = $allocationTarget->allocateStockFEFO((int) $item['quantity'], [
-                                'reference_type' => 'order',
-                                'reference_id' => $order->id,
-                                'reference_number' => $order->order_number,
-                                'notes' => "Order {$order->order_number} edited",
-                            ]);
-                            if (!empty($fefoResult['allocations'])) {
-                                $batchAllocations = $fefoResult['allocations'];
-                            }
-                        }
 
                         OrderItem::create([
                             'id' => (string) Str::uuid(),
@@ -807,17 +757,15 @@ class OrderController extends Controller
                             'batch_allocations' => $batchAllocations,
                             'unit_price' => $item['unit_price'],
                             'price_label' => $item['price_label'] ?? null,
+                            'price_unit' => $item['price_unit'] ?? null,
                             'total_price' => $item['quantity'] * $item['unit_price'],
                             'tax_rate' => EtimsTaxType::rateForProduct($product),
                             'tax_amount' => round($item['unit_price'] * $item['quantity'] * EtimsTaxType::rateForProduct($product) / 100, 2),
                         ]);
-                        if ($product->track_inventory) {
-                            if ($variant) {
-                                $variant->decrement('stock_quantity', $item['quantity']);
-                            } else {
-                                $product->decrement('stock_quantity', $item['quantity']);
-                            }
-                        }
+                    }
+
+                    if ($wasDeducted) {
+                        $orderStock->deduct($order->fresh());
                     }
                 }
 
@@ -913,29 +861,7 @@ class OrderController extends Controller
                 'order_id' => $id,
             ]);
             return DB::transaction(function () use ($order, $request) {
-                // Restore stock for items
-                foreach ($order->orderItems as $item) {
-                    if ($item->product->track_inventory) {
-                        if ($item->variant_id) {
-                            $variant = ProductVariant::find($item->variant_id);
-                            if ($variant) {
-                                $variant->increment('stock_quantity', $item->quantity);
-                            }
-                        } else {
-                            $item->product->increment('stock_quantity', $item->quantity);
-                        }
-                    }
-                    foreach ($item->batch_allocations ?? [] as $allocation) {
-                        $batch = InventoryBatch::find($allocation['batch_id'] ?? null);
-                        if ($batch) {
-                            $batch->restoreFromSale((int) $allocation['quantity'], [
-                                'reference_type' => 'order',
-                                'reference_id' => $order->id,
-                                'reference_number' => $order->order_number,
-                            ], "Order {$order->order_number} deleted");
-                        }
-                    }
-                }
+                app(\App\Services\OrderStockService::class)->restore($order, "Order {$order->order_number} deleted");
 
                 // Delete related records
                 $order->orderItems()->delete();

@@ -58,4 +58,16 @@ class PaymentAllocation extends Model
     {
         return $this->belongsTo(Invoice::class);
     }
+
+    // Allocating a receipt to an invoice makes it a receipt for that invoice's order.
+    protected static function booted(): void
+    {
+        static::created(function (PaymentAllocation $allocation) {
+            $order = $allocation->invoice?->order_id ? Order::find($allocation->invoice->order_id) : null;
+            $stock = app(\App\Services\OrderStockService::class);
+            if ($order && $stock->hasReceipt($order)) {
+                $stock->deduct($order);
+            }
+        });
+    }
 }
