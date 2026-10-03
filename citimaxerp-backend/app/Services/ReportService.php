@@ -29,55 +29,181 @@ class ReportService
      * 1. INVENTORY REPORTS
      */
 
-    public function getStockBalanceReport(array $filters = []): array
+    /**
+     * One row per stock-holding line. A product with sizes yields a parent row (item 164)
+     * followed by one row per size (164.1, 164.2, ...), each carrying its own stock and value;
+     * the parent row only totals its sizes. Products without sizes yield a single row.
+     */
+    protected function stockLines(array $filters = []): \Illuminate\Support\Collection
     {
         $query = Product::query()->where('company_id', $this->companyId);
-
         $this->applyInventoryFilters($query, $filters);
 
-        $summaryQuery = clone $query;
+        $products = $query
+            ->with(['variants' => function ($q) use ($filters) {
+                if (isset($filters['store_id'])) {
+                    $q->where('store_id', $filters['store_id']);
+                }
+            }])
+            ->orderBy('item_number')
+            ->orderBy('name')
+            ->get();
 
-        $items = $query->select(
-            'id',
-            'name',
-            'sku',
-            'stock_quantity',
-            'on_hand',
-            'allocated',
-            'low_stock_threshold',
-            'category',
-            'unit_cost',
-            'price'
-        )->get();
+        $batchStats = DB::table('inventory_batches')
+            ->where('company_id', $this->companyId)
+            ->whereIn('product_id', $products->pluck('id'))
+            ->where('quantity_available', '>', 0)
+            ->groupBy('product_id', 'variant_id')
+            ->select(
+                'product_id',
+                'variant_id',
+                DB::raw('COUNT(*) as batch_count'),
+                DB::raw('MIN(expiry_date) as nearest_expiry'),
+                DB::raw('SUM(quantity_available * unit_cost) / NULLIF(SUM(quantity_available), 0) as avg_cost')
+            )
+            ->get()
+            ->keyBy(fn ($b) => $b->product_id . '|' . ($b->variant_id ?? ''));
+
+        $line = function (Product $product, $variant, string $itemNo) use ($batchStats) {
+            $source = $variant ?? $product;
+            $batch = $batchStats->get($product->id . '|' . ($variant->id ?? ''));
+            $stock = (int) $source->stock_quantity;
+            $allocated = (int) ($source->allocated ?? 0);
+            $threshold = (int) ($product->low_stock_threshold ?? 0);
+
+            // Sizes share the parent's price code and usually its cost; fall back through
+            // the size's own cost, then what its batches were received at, then the parent.
+            $unitCost = (float) ($variant->cost ?? 0);
+            if ($unitCost <= 0) $unitCost = (float) ($batch->avg_cost ?? 0);
+            if ($unitCost <= 0) $unitCost = (float) ($product->unit_cost ?? 0);
+
+            return [
+                'row_type' => $variant ? 'size' : 'item',
+                'item_no' => $itemNo,
+                'product_id' => $product->id,
+                'variant_id' => $variant->id ?? null,
+                'parent_item_no' => $variant ? (string) $product->item_number : null,
+                'name' => $variant ? \App\Models\ProductVariant::sizedName($product->name, $variant->name) : $product->name,
+                'size' => $variant->name ?? null,
+                'category' => $product->category,
+                'unit' => $product->unit_of_measurement,
+                'is_active' => (bool) ($variant ? $variant->is_active : $product->is_active),
+                'stock_quantity' => $stock,
+                'allocated' => $allocated,
+                'available' => max($stock - $allocated, 0),
+                'low_stock_threshold' => $threshold,
+                'stock_status' => $stock <= 0 ? 'out_of_stock' : ($stock <= $threshold ? 'low_stock' : 'in_stock'),
+                'unit_cost' => round($unitCost, 2),
+                'stock_value' => round($stock * $unitCost, 2),
+                'batch_count' => (int) ($batch->batch_count ?? 0),
+                'nearest_expiry' => $batch->nearest_expiry ?? null,
+            ];
+        };
+
+        $rows = collect();
+        foreach ($products as $product) {
+            $itemNo = (string) ($product->item_number ?? '');
+
+            if (!$product->has_variations || $product->variants->isEmpty()) {
+                $rows->push($line($product, null, $itemNo));
+                continue;
+            }
+
+            $sizes = $product->variants
+                ->filter(fn ($v) => $v->is_active || (int) $v->stock_quantity !== 0)
+                ->values()
+                ->map(fn ($v, $i) => $line($product, $v, $itemNo . '.' . ($i + 1)));
+
+            $expiries = $sizes->pluck('nearest_expiry')->filter();
+            $rows->push([
+                'row_type' => 'parent',
+                'item_no' => $itemNo,
+                'product_id' => $product->id,
+                'variant_id' => null,
+                'parent_item_no' => null,
+                'name' => $product->name,
+                'size' => null,
+                'size_count' => $sizes->count(),
+                'category' => $product->category,
+                'unit' => $product->unit_of_measurement,
+                'is_active' => (bool) $product->is_active,
+                'stock_quantity' => $sizes->sum('stock_quantity'),
+                'allocated' => $sizes->sum('allocated'),
+                'available' => $sizes->sum('available'),
+                'low_stock_threshold' => (int) ($product->low_stock_threshold ?? 0),
+                'stock_status' => null,
+                'unit_cost' => null,
+                'stock_value' => round($sizes->sum('stock_value'), 2),
+                'batch_count' => $sizes->sum('batch_count'),
+                'nearest_expiry' => $expiries->isEmpty() ? null : $expiries->min(),
+            ]);
+            $rows = $rows->concat($sizes);
+        }
+
+        return $rows->values();
+    }
+
+    /**
+     * Keeps only the stock lines matching $keep, plus the parent row of any size that matched,
+     * so sizes are never shown without the item they belong to.
+     */
+    protected function filterStockLines(\Illuminate\Support\Collection $rows, callable $keep): \Illuminate\Support\Collection
+    {
+        $keptNos = $rows->filter(fn ($r) => $r['row_type'] !== 'parent' && $keep($r))->pluck('item_no')->flip();
+
+        return $rows->map(function ($r) use ($rows, $keptNos) {
+            if ($r['row_type'] !== 'parent') {
+                return $keptNos->has($r['item_no']) ? $r : null;
+            }
+            $sizes = $rows->filter(fn ($s) => $s['row_type'] === 'size' && $s['product_id'] === $r['product_id'] && $keptNos->has($s['item_no']));
+            if ($sizes->isEmpty()) {
+                return null;
+            }
+            foreach (['stock_quantity', 'allocated', 'available', 'batch_count'] as $field) {
+                $r[$field] = $sizes->sum($field);
+            }
+            $r['stock_value'] = round($sizes->sum('stock_value'), 2);
+            $r['size_count'] = $sizes->count();
+            return $r;
+        })->filter()->values();
+    }
+
+    protected function stockSummary(\Illuminate\Support\Collection $rows): array
+    {
+        $lines = $rows->where('row_type', '!=', 'parent');
 
         return [
-            'data' => $items->toArray(),
-            'summary' => [
-                'total_items' => $summaryQuery->count(),
-                'total_stock' => $summaryQuery->sum('stock_quantity'),
-                'total_on_hand' => $summaryQuery->sum('on_hand'),
-                'total_allocated' => $summaryQuery->sum('allocated'),
-                'total_value' => $summaryQuery->select(DB::raw('SUM(unit_cost * stock_quantity) as total_value'))->value('total_value') ?? 0,
-            ]
+            'total_items' => $lines->count(),
+            'total_products' => $rows->whereIn('row_type', ['item', 'parent'])->count(),
+            'total_stock' => $lines->sum('stock_quantity'),
+            'total_allocated' => $lines->sum('allocated'),
+            'total_available' => $lines->sum('available'),
+            'total_value' => round($lines->sum('stock_value'), 2),
+            'low_stock_count' => $lines->where('stock_status', 'low_stock')->count(),
+            'out_of_stock_count' => $lines->where('stock_status', 'out_of_stock')->count(),
+        ];
+    }
+
+    public function getStockBalanceReport(array $filters = []): array
+    {
+        $rows = $this->stockLines($filters);
+
+        return [
+            'data' => $rows->toArray(),
+            'summary' => $this->stockSummary($rows),
         ];
     }
 
     public function getLowStockReport(array $filters = []): array
     {
-        $query = Product::query()->where('company_id', $this->companyId)
-            ->whereRaw('stock_quantity <= low_stock_threshold');
-
-        $this->applyInventoryFilters($query, $filters);
-
-        $summaryQuery = clone $query;
+        $rows = $this->filterStockLines(
+            $this->stockLines($filters),
+            fn ($r) => in_array($r['stock_status'], ['low_stock', 'out_of_stock'], true)
+        );
 
         return [
-            'data' => $query->get()->toArray(),
-            'summary' => [
-                'total_low_stock_items' => $summaryQuery->count(),
-                'total_stock' => $summaryQuery->sum('stock_quantity'),
-                'total_on_hand' => $summaryQuery->sum('on_hand'),
-            ]
+            'data' => $rows->toArray(),
+            'summary' => $this->stockSummary($rows),
         ];
     }
 
@@ -87,11 +213,8 @@ class ReportService
      * of stock cover" figure (closing stock / average monthly sales) and a
      * reorder flag when that cover drops below 3 months.
      *
-     * A "stock line" is a product variant for products that have variants
-     * (each variant carries its own independent stock_quantity/cost - the
-     * parent product's own stock_quantity is a separate, unrelated counter
-     * that sales against a variant never touch), or the product itself for
-     * products without variants.
+     * Lines come from stockLines(): each size is its own line (164.1, 164.2, ...) and the
+     * sized item's parent row (164) totals them.
      *
      * Opening stock is derived rather than stored: Opening + Receipts -
      * Sales = Closing, rearranged as Opening = Closing - Receipts + Sales,
@@ -107,18 +230,9 @@ class ReportService
         // period's total sales into an average monthly sales rate.
         $periodMonths = max($dateFrom->diffInDays($dateTo) / 30, 1 / 30);
 
-        $productQuery = Product::query()->where('company_id', $this->companyId);
-        $this->applyInventoryFilters($productQuery, $filters);
-        $products = $productQuery->select('id', 'name', 'sku', 'stock_quantity', 'unit_cost', 'category', 'store_id')
-            ->with(['variants' => function ($q) use ($filters) {
-                if (isset($filters['store_id'])) {
-                    $q->where('store_id', $filters['store_id']);
-                }
-                $q->select('id', 'product_id', 'name', 'sku', 'stock_quantity', 'cost', 'store_id');
-            }])
-            ->get();
-        $productIds = $products->pluck('id');
-        $variantIds = $products->flatMap(fn ($p) => $p->variants->pluck('id'));
+        $stockRows = $this->stockLines($filters);
+        $productIds = $stockRows->pluck('product_id')->unique()->values();
+        $variantIds = $stockRows->pluck('variant_id')->filter()->values();
 
         $salesByVariant = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
@@ -176,138 +290,135 @@ class ReportService
             ->get()
             ->keyBy('product_id');
 
-        $buildLine = function (
-            string $id,
-            string $name,
-            ?string $sku,
-            int $closingStock,
-            float $unitCost,
-            ?string $category,
-            ?string $storeId,
-            ?string $productId,
-            ?string $variantId
-        ) use ($salesByVariant, $salesByProduct, $receiptsByVariant, $receiptsByProduct, $periodMonths) {
-            $sales = $variantId ? $salesByVariant->get($variantId) : $salesByProduct->get($productId);
+        $withPeriod = function (array $row) use ($salesByVariant, $salesByProduct, $receiptsByVariant, $receiptsByProduct, $periodMonths) {
+            $variantId = $row['variant_id'];
+            $sales = $variantId ? $salesByVariant->get($variantId) : $salesByProduct->get($row['product_id']);
+            $received = $variantId ? $receiptsByVariant->get($variantId) : $receiptsByProduct->get($row['product_id']);
             $quantitySold = (int) ($sales->quantity_sold ?? 0);
             $revenue = (float) ($sales->revenue ?? 0);
-            $quantityReceived = (int) (($variantId ? $receiptsByVariant->get($variantId) : $receiptsByProduct->get($productId))->quantity_received ?? 0);
-
-            $openingStock = $closingStock - $quantityReceived + $quantitySold;
-            $closingStockValue = $closingStock * $unitCost;
-            $grossProfit = $revenue - ($quantitySold * $unitCost);
+            $quantityReceived = (int) ($received->quantity_received ?? 0);
+            $closingStock = (int) $row['stock_quantity'];
+            $unitCost = (float) $row['unit_cost'];
 
             $avgMonthlySales = $quantitySold / $periodMonths;
             $monthsOfStock = $avgMonthlySales > 0 ? round($closingStock / $avgMonthlySales, 1) : null;
-            $needsReorder = $avgMonthlySales > 0 && $monthsOfStock < 3;
 
-            return [
-                'id' => $id,
-                'product_id' => $productId,
-                'variant_id' => $variantId,
-                'name' => $name,
-                'sku' => $sku,
-                'category' => $category,
-                'store_id' => $storeId,
-                'opening_stock' => $openingStock,
+            return $row + [
+                'opening_stock' => $closingStock - $quantityReceived + $quantitySold,
                 'stock_received' => $quantityReceived,
                 'sales_quantity' => $quantitySold,
                 'closing_stock' => $closingStock,
-                'unit_cost' => $unitCost,
-                'closing_stock_value' => $closingStockValue,
-                'sales_revenue' => $revenue,
-                'gross_profit' => $grossProfit,
+                'closing_stock_value' => round($closingStock * $unitCost, 2),
+                'sales_revenue' => round($revenue, 2),
+                'gross_profit' => round($revenue - ($quantitySold * $unitCost), 2),
                 'avg_monthly_sales' => round($avgMonthlySales, 1),
                 'months_of_stock' => $monthsOfStock,
-                'needs_reorder' => $needsReorder,
+                'needs_reorder' => $avgMonthlySales > 0 && $monthsOfStock < 3,
             ];
         };
 
-        $items = collect();
-        foreach ($products as $product) {
-            if ($product->variants->isEmpty()) {
-                $items->push($buildLine(
-                    $product->id,
-                    $product->name,
-                    $product->sku,
-                    (int) $product->stock_quantity,
-                    (float) ($product->unit_cost ?? 0),
-                    $product->category,
-                    $product->store_id,
-                    $product->id,
-                    null
-                ));
-                continue;
-            }
+        $lines = $stockRows->where('row_type', '!=', 'parent')->map($withPeriod)->keyBy('item_no');
 
-            foreach ($product->variants as $variant) {
-                $items->push($buildLine(
-                    $variant->id,
-                    $product->name . ' - ' . $variant->name,
-                    $variant->sku,
-                    (int) $variant->stock_quantity,
-                    (float) ($variant->cost ?? 0),
-                    $product->category,
-                    $variant->store_id ?? $product->store_id,
-                    $product->id,
-                    $variant->id
-                ));
+        $items = $stockRows->map(function ($row) use ($lines, $salesByProduct) {
+            if ($row['row_type'] !== 'parent') {
+                return $lines->get($row['item_no']);
             }
+            $sizes = $lines->where('product_id', $row['product_id']);
+            // Sales placed on a sized item without choosing a size count towards the item itself.
+            $unsized = $salesByProduct->get($row['product_id']);
+            $row['opening_stock'] = $sizes->sum('opening_stock') + (int) ($unsized->quantity_sold ?? 0);
+            foreach (['stock_received', 'closing_stock'] as $field) {
+                $row[$field] = $sizes->sum($field);
+            }
+            $row['sales_quantity'] = $sizes->sum('sales_quantity') + (int) ($unsized->quantity_sold ?? 0);
+            $row['closing_stock_value'] = round($sizes->sum('closing_stock_value'), 2);
+            $row['sales_revenue'] = round($sizes->sum('sales_revenue') + (float) ($unsized->revenue ?? 0), 2);
+            $row['gross_profit'] = round($sizes->sum('gross_profit') + (float) ($unsized->revenue ?? 0), 2);
+            $row['avg_monthly_sales'] = null;
+            $row['months_of_stock'] = null;
+            $row['needs_reorder'] = $sizes->contains('needs_reorder', true);
+            return $row;
+        })->values();
 
-            // The parent product's own stock_quantity is a separate counter
-            // that variant sales never touch - only surface it as its own
-            // line when it actually holds stock or has sales of its own,
-            // rather than padding every variant-bearing product with a
-            // pointless all-zero row.
-            $unassignedSales = $salesByProduct->get($product->id);
-            if ((int) $product->stock_quantity !== 0 || $unassignedSales) {
-                $items->push($buildLine(
-                    $product->id . '-unassigned',
-                    $product->name . ' - (unassigned)',
-                    $product->sku,
-                    (int) $product->stock_quantity,
-                    (float) ($product->unit_cost ?? 0),
-                    $product->category,
-                    $product->store_id,
-                    $product->id,
-                    null
-                ));
-            }
-        }
+        $summaryLines = $items->where('row_type', '!=', 'parent');
 
         return [
-            'data' => $items->values()->toArray(),
+            'data' => $items->toArray(),
             'period' => [
                 'date_from' => $dateFrom->toDateString(),
                 'date_to' => $dateTo->toDateString(),
                 'months' => round($periodMonths, 2),
             ],
             'summary' => [
-                'total_items' => $items->count(),
-                'total_closing_stock' => $items->sum('closing_stock'),
-                'total_closing_stock_value' => $items->sum('closing_stock_value'),
-                'total_gross_profit' => $items->sum('gross_profit'),
-                'reorder_alert_count' => $items->where('needs_reorder', true)->count(),
+                'total_items' => $summaryLines->count(),
+                'total_closing_stock' => $summaryLines->sum('closing_stock'),
+                'total_closing_stock_value' => round($summaryLines->sum('closing_stock_value'), 2),
+                'total_sales_quantity' => $summaryLines->sum('sales_quantity'),
+                'total_gross_profit' => round($items->whereIn('row_type', ['item', 'parent'])->sum('gross_profit'), 2),
+                'reorder_alert_count' => $summaryLines->where('needs_reorder', true)->count(),
             ],
         ];
     }
 
     public function getInventoryMovementLog(array $filters = []): array
     {
-        $query = InventoryMovement::whereHas('product', function ($q) {
+        $query = InventoryMovement::whereHas('product', function ($q) use ($filters) {
             $q->where('company_id', $this->companyId);
+            $this->applyInventoryFilters($q, array_diff_key($filters, ['store_id' => true]));
         });
 
         if (isset($filters['date_from'])) {
-            $query->where('created_at', '>=', $filters['date_from']);
+            $query->where('movement_date', '>=', Carbon::parse($filters['date_from'])->startOfDay());
         }
         if (isset($filters['date_to'])) {
-            $query->where('created_at', '<=', $filters['date_to']);
+            $query->where('movement_date', '<=', Carbon::parse($filters['date_to'])->endOfDay());
+        }
+        if (isset($filters['store_id'])) {
+            $query->where('store_id', $filters['store_id']);
         }
         if (isset($filters['product_id'])) {
             $query->where('product_id', $filters['product_id']);
         }
 
-        return $query->with('product:id,name,sku')->orderBy('created_at', 'desc')->get()->toArray();
+        $lineNos = $this->stockLines()
+            ->where('row_type', '!=', 'parent')
+            ->mapWithKeys(fn ($r) => [$r['product_id'] . '|' . ($r['variant_id'] ?? '') => $r]);
+
+        $movements = $query->with(['product:id,name,item_number', 'variant:id,name'])
+            ->orderBy('movement_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($m) use ($lineNos) {
+                $line = $lineNos->get($m->product_id . '|' . ($m->variant_id ?? ''));
+                $inbound = (int) $m->quantity >= 0
+                    && !in_array($m->type, ['sale', 'dispatch', 'damage', 'expired', 'adjustment_out', 'transfer_out'], true);
+                return [
+                    'id' => $m->id,
+                    'movement_date' => $m->movement_date ?? $m->created_at,
+                    'item_no' => $line['item_no'] ?? (string) ($m->product->item_number ?? ''),
+                    'name' => $m->product
+                        ? \App\Models\ProductVariant::sizedName($m->product->name, $m->variant?->name)
+                        : 'Unknown item',
+                    'type' => $m->type,
+                    'direction' => $inbound ? 'in' : 'out',
+                    'quantity' => abs((int) $m->quantity),
+                    'quantity_before' => $m->quantity_before,
+                    'quantity_after' => $m->quantity_after,
+                    'reference_type' => $m->reference_type ? class_basename($m->reference_type) : null,
+                    'reference_number' => $m->reference_number,
+                    'unit_cost' => $m->unit_cost !== null ? (float) $m->unit_cost : null,
+                    'total_cost' => $m->total_cost !== null ? (float) $m->total_cost : null,
+                ];
+            });
+
+        return [
+            'data' => $movements->values()->toArray(),
+            'summary' => [
+                'total_movements' => $movements->count(),
+                'total_in' => $movements->where('direction', 'in')->sum('quantity'),
+                'total_out' => $movements->where('direction', 'out')->sum('quantity'),
+            ],
+        ];
     }
 
     /**
