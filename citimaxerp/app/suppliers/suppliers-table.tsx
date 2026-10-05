@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SupplierDetailsSheet } from "./supplier-details-sheet"
 import { CreateSupplierSheet } from "./components/create-supplier-sheet"
 import { Supplier, getSuppliers, deleteSupplier } from "@/lib/suppliers"
+import { exportSuppliersToExcel, downloadSupplierTemplate, importSuppliersFromFile } from "@/lib/supplier-excel"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SuppliersTableSkeleton } from "./suppliers-table-skeleton"
 import { useToast } from "@/hooks/use-toast"
@@ -65,6 +66,8 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null)
   const [isSupplierDetailsOpen, setIsSupplierDetailsOpen] = useState(false)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   // Cache utility functions
   function getCachedSuppliers(): Supplier[] | null {
@@ -156,10 +159,9 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
        (statusFilter === "active" && supplier.is_active) ||
        (statusFilter === "inactive" && !supplier.is_active)) &&
       (search === "" || 
-        supplier.name.toLowerCase().includes(search.toLowerCase()) ||
-        supplier.email.toLowerCase().includes(search.toLowerCase()) ||
-        supplier.phone.toLowerCase().includes(search.toLowerCase()) ||
-        supplier.contact_person.toLowerCase().includes(search.toLowerCase()))
+        [supplier.name, supplier.email, supplier.phone, supplier.contact_person].some((value) =>
+          (value ?? "").toLowerCase().includes(search.toLowerCase())
+        ))
   )
 
   const totalPages = Math.ceil(filteredSuppliers.length / rowsPerPage)
@@ -237,6 +239,70 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
     }
   }
 
+  const handleExport = (selectedOnly: boolean) => {
+    const toExport = selectedOnly
+      ? suppliers.filter((s) => selectedSuppliers.includes(s.id))
+      : filteredSuppliers
+    if (toExport.length === 0) {
+      toast({ title: "No Data", description: "No suppliers to export." })
+      return
+    }
+    try {
+      exportSuppliersToExcel(toExport)
+      toast({ title: "Export Successful", description: `Exported ${toExport.length} suppliers to Excel.` })
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Failed to export suppliers",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    // Clear the input so choosing the same file again still triggers a change.
+    if (importFileRef.current) importFileRef.current.value = ""
+    if (!file) return
+
+    setImportProgress({ done: 0, total: 0 })
+    try {
+      // The list endpoint returns active suppliers by default; match against inactive ones too.
+      const [active, inactive] = await Promise.all([
+        getSuppliers({ is_active: true }),
+        getSuppliers({ is_active: false }),
+      ])
+      const result = await importSuppliersFromFile(file, [...active, ...inactive], (done, total) =>
+        setImportProgress({ done, total })
+      )
+
+      const summary = `${result.created} created, ${result.updated} updated` +
+        (result.skipped ? `, ${result.skipped} skipped` : "")
+      const firstErrors = result.errors
+        .slice(0, 3)
+        .map((e) => `Row ${e.row}${e.name ? ` (${e.name})` : ""}: ${e.message}`)
+        .join("\n")
+      toast({
+        title: result.errors.length ? "Import finished with errors" : "Import Successful",
+        description: firstErrors ? `${summary}.\n${firstErrors}${result.errors.length > 3 ? "\n…" : ""}` : `${summary}.`,
+        variant: result.errors.length && !result.created && !result.updated ? "destructive" : "default",
+      })
+
+      if (result.created || result.updated) {
+        await fetchSuppliers()
+        if (onDataChanged) onDataChanged()
+      }
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: error instanceof Error ? error.message : "Failed to import suppliers",
+        variant: "destructive",
+      })
+    } finally {
+      setImportProgress(null)
+    }
+  }
+
   const getStatusBadgeClass = (isActive: boolean) => {
     return isActive 
       ? "bg-green-100 text-green-800" 
@@ -297,17 +363,61 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                 Add Supplier
               </Button>
             </PermissionGuard>
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
-            <div className="relative">
-              <input type="file" id="import-suppliers-file" className="hidden" accept=".csv" onChange={() => {}} />
-              <Button onClick={() => document.getElementById("import-suppliers-file")?.click()} variant="outline" size="sm">
-                <Upload className="mr-2 h-4 w-4" />
-                Import
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExport(false)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Export to Excel
+                </DropdownMenuItem>
+                {selectedSuppliers.length > 0 && (
+                  <DropdownMenuItem onClick={() => handleExport(true)}>
+                    <CheckSquare className="h-4 w-4 mr-2" />
+                    Export selected ({selectedSuppliers.length})
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <PermissionGuard permissions={["can_create_suppliers", "can_manage_suppliers", "can_manage_system", "can_manage_company"]} hideOnDenied>
+              <input
+                type="file"
+                ref={importFileRef}
+                className="hidden"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleImport}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={importProgress !== null}>
+                    {importProgress ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-2 h-4 w-4" />
+                    )}
+                    {importProgress
+                      ? importProgress.total
+                        ? `Importing ${importProgress.done}/${importProgress.total}`
+                        : "Reading file…"
+                      : "Import"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => importFileRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import from Excel / CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadSupplierTemplate}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download template
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </PermissionGuard>
           </div>
         </div>
 
