@@ -15,7 +15,9 @@ import { PermissionGuard } from "@/components/PermissionGuard";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 // Revalidation configuration
-const REVALIDATE_INTERVAL = 4000; // 4 seconds
+// Each list fetch makes several round trips to the remote database; polling faster than this
+// kept the single-threaded dev server busy and stalled every other request on the page.
+const REVALIDATE_INTERVAL = 60000;
 const STALE_TIME = 2000; // Data is considered fresh for 2 seconds
 
 export function ProductReceiptPage() {
@@ -37,6 +39,17 @@ export function ProductReceiptPage() {
 
   const { toast } = useToast();
   const { hasPermission, isAdmin } = usePermissions();
+  const [receivePurchaseOrderId, setReceivePurchaseOrderId] = useState<string | null>(null);
+
+  // "Receive goods" on a purchase order lands here with ?purchase_order=<id>.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("purchase_order");
+    if (id) {
+      setReceivePurchaseOrderId(id);
+      setCreateModalOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   // Track last fetch time for stale-time management
   const lastFetchTime = useRef<number>(0);
@@ -290,8 +303,12 @@ export function ProductReceiptPage() {
         <PermissionGuard permissions={["can_create_product_receipts", "can_manage_system", "can_manage_company"]} hideOnDenied>
           <CreateProductReceiptModal
             open={createModalOpen}
-            onOpenChange={setCreateModalOpen}
+            onOpenChange={(open) => {
+              setCreateModalOpen(open);
+              if (!open) setReceivePurchaseOrderId(null);
+            }}
             onSuccess={handleCreateSuccess}
+            initialPurchaseOrderId={receivePurchaseOrderId}
           />
         </PermissionGuard>
 

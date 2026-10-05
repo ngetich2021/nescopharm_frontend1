@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getSalesReport, getCustomerLocationData, CustomerLocationData } from "@/lib/reports"
@@ -211,7 +211,10 @@ export default function SalesReportPage() {
     }
   }
 
+  const latestRequest = useRef(0)
+
   const fetchReport = useCallback(async () => {
+    const requestId = ++latestRequest.current
     setLoading(true)
     try {
       const params: any = { type: 'performance' }
@@ -226,7 +229,8 @@ export default function SalesReportPage() {
 
       console.log("Fetching report with params:", params)
       const resp = await getSalesReport(params)
-      
+      if (requestId !== latestRequest.current) return
+
       if (resp.status === "success") {
         setData(resp.data)
       } else {
@@ -239,13 +243,14 @@ export default function SalesReportPage() {
         // In real app, maybe don't overwrite with mock data if real fetch failed, providing the mock was just for dev
       }
     } catch (error: any) {
+      if (requestId !== latestRequest.current) return
       toast({
         title: "Error",
         description: error.message || "Failed to fetch sales report",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (requestId === latestRequest.current) setLoading(false)
     }
   }, [dateRange, dateFrom, dateTo, city, orderStatus, paymentStatus, customerId, categoryId, toast])
 

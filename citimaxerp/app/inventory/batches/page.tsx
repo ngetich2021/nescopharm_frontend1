@@ -21,8 +21,8 @@ export default function BatchesPage() {
     error,
     invalidateCache
   } = useDataCache<{data: Batch[], total: number, current_page: number, per_page: number, last_page?: number}>(
-    `batches_page_${currentPage}_${itemsPerPage}`, 
-    () => getBatches({ page: currentPage, per_page: itemsPerPage }), // Fetch with pagination
+    `batches_in_stock_page_${currentPage}_${itemsPerPage}`,
+    () => getBatches({ page: currentPage, per_page: itemsPerPage, in_stock: true }),
     {
       expirationMs: 5 * 60 * 1000 // 5 minutes cache
     }
@@ -84,7 +84,7 @@ export default function BatchesPage() {
   // Handle items per page change
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     // Invalidate cache for the new configuration before changing state
-    invalidateCacheKey(`batches_page_1_${newItemsPerPage}`)
+    invalidateCacheKey(`batches_in_stock_page_1_${newItemsPerPage}`)
     setItemsPerPage(newItemsPerPage)
     setCurrentPage(1) // Reset to first page when changing items per page
   }
@@ -102,7 +102,7 @@ export default function BatchesPage() {
   }
 
   return (
-    <PermissionGuard permissions={["can_view_products_menu", "can_manage_system", "can_manage_company"]}>
+    <PermissionGuard permissions={["can_view_inventory_menu", "can_view_products_menu", "can_manage_system", "can_manage_company"]}>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Batch Tracking</h1>

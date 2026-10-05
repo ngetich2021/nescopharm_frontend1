@@ -311,9 +311,27 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
     })
   }
 
-  const handleDownloadPDF = (invoiceId: string) => {
-    // Open document page with download triggered via URL param
-    window.open(`/sales/invoices/${invoiceId}/document?download=1`, '_blank')
+  const handleDownloadPDF = async (invoiceId: string) => {
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}/download-pdf`)
+      if (!response.ok) throw new Error('Failed to download PDF')
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `invoice-${invoiceId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to download PDF",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleDownloadCSV = (invoice: Invoice) => {

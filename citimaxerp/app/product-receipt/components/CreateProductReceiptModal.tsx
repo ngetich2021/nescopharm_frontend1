@@ -28,9 +28,9 @@ import { getProductCategories, type ProductCategory } from "@/lib/product-catego
 import { createProduct } from "@/app/inventory/actions";
 import { CreateProductModal } from "@/components/modals/create-product-modal";
 import { createProductReceipt } from "@/lib/productreceipt";
+import { getReceivablePurchaseOrders, itemLabel, type PurchaseOrder } from "@/lib/purchaseorders";
 import { 
   Package, 
-  Plus, 
   Trash2, 
   Upload, 
   FileText, 
@@ -46,8 +46,16 @@ import {
   Save,
   ShieldAlert,
   Check,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Download
 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  PRODUCT_RECEIPT_SCHEMA_KEY,
+  downloadTemplate,
+  fetchImportSchema,
+  parseProductReceiptSheet,
+} from "@/lib/data-import";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
@@ -73,6 +81,8 @@ interface ProductReceiptItem {
   serial_number?: string;
   manufacture_date?: string;
   individual_serials?: string[];
+  // Set when the line is receiving against a purchase order line.
+  purchase_order_item_id?: string | null;
 }
 
 interface ProductVariant {
@@ -80,6 +90,7 @@ interface ProductVariant {
   name: string;
   sku?: string;
   price: number;
+  cost?: number;
   stock_quantity: number;
 }
 
@@ -87,6 +98,8 @@ interface CreateProductReceiptModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  // Opens the receipt already filled from this purchase order.
+  initialPurchaseOrderId?: string | null;
 }
 
 const formSchema = z.object({
@@ -116,10 +129,22 @@ export function CreateProductReceiptModal({
   open,
   onOpenChange,
   onSuccess,
+  initialPurchaseOrderId,
 }: CreateProductReceiptModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Purchase order this delivery is against
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [purchaseOrderId, setPurchaseOrderId] = useState<string>("");
+  const [poSearchOpen, setPoSearchOpen] = useState(false);
+  const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(false);
+  const selectedPurchaseOrder = purchaseOrders.find((po) => po.id === purchaseOrderId) || null;
+  const poLines = React.useMemo(
+    () => new Map((selectedPurchaseOrder?.items || []).map((line) => [line.id as string, line])),
+    [selectedPurchaseOrder]
+  );
 
   // Form state
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -160,6 +185,10 @@ export function CreateProductReceiptModal({
   const [showCreateProductModal, setShowCreateProductModal] = useState(false);
   const [savedReceiptState, setSavedReceiptState] = useState<any>(null);
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProblems, setImportProblems] = useState<{ row: number; message: string }[]>([]);
+
   const { hasPermission, isAdmin } = usePermissions();
 
   const form = useForm<ProductReceiptFormValues>({
@@ -183,10 +212,166 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
       loadProducts();
       loadCategories();
       resetForm();
+      loadPurchaseOrders(initialPurchaseOrderId);
     } else {
       resetForm();
     }
-  }, [open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialPurchaseOrderId]);
+
+  const loadPurchaseOrders = async (applyId?: string | null) => {
+    setLoadingPurchaseOrders(true);
+    try {
+      const list = await getReceivablePurchaseOrders();
+      setPurchaseOrders(list);
+      const po = applyId ? list.find((p) => p.id === applyId) : null;
+      if (po) applyPurchaseOrder(po);
+      else if (applyId) {
+        toast({ title: "Purchase order not open", description: "It may be unapproved, cancelled or already fully received.", variant: "destructive" });
+      }
+    } catch {
+      // Receipts can still be recorded without a purchase order.
+      setPurchaseOrders([]);
+    } finally {
+      setLoadingPurchaseOrders(false);
+    }
+  };
+
+  // Fill the receipt with the order's outstanding lines; staff then adjust to what actually arrived.
+  const applyPurchaseOrder = (po: PurchaseOrder | null) => {
+    setPurchaseOrderId(po?.id ?? "");
+    setImportProblems([]);
+    if (!po) {
+      setItems([]);
+      form.setValue("items", []);
+      return;
+    }
+    if (po.supplier_id) setSupplierId(po.supplier_id);
+    if (po.store_id) {
+      setStoreId(po.store_id);
+      form.setValue("store_id", po.store_id);
+    }
+    const stamp = Date.now();
+    const lines: ProductReceiptItem[] = po.items
+      .filter((line) => (line.pending_quantity ?? 0) > 0)
+      .map((line, index) => ({
+        id: `${stamp}-${index}`,
+        product_id: line.product_id,
+        variant_id: line.variant_id ?? null,
+        quantity: line.pending_quantity ?? 0,
+        unit_price: Number(line.unit_price) || 0,
+        expiry_date: null,
+        notes: null,
+        product: line.product,
+        variant: line.variant,
+        enable_batch_tracking: true,
+        purchase_order_item_id: line.id ?? null,
+      }));
+    setItems(lines);
+    form.setValue("items", lines);
+  };
+
+  // A PO line can arrive in several batches: add another receipt line for it.
+  const splitBatch = (itemId: string) => {
+    const index = items.findIndex((i) => i.id === itemId);
+    if (index === -1) return;
+    const source = items[index];
+    const lineId = source.purchase_order_item_id as string;
+    // Starts with whatever the earlier batches leave; if they still cover everything, it starts at 0
+    // and fills in as soon as an earlier batch is lowered.
+    const remaining = Math.max(0, (poLines.get(lineId)?.pending_quantity ?? 0) - receivingForLine(lineId));
+    const siblings = items.filter((i) => i.purchase_order_item_id === lineId);
+    const insertAt = items.findIndex((i) => i.id === siblings[siblings.length - 1].id) + 1;
+    const copy: ProductReceiptItem = {
+      ...source,
+      id: `${Date.now()}-split`,
+      quantity: remaining,
+      enable_batch_tracking: true,
+      batch_number: "",
+      lot_number: "",
+      manufacture_date: "",
+      expiry_date: null,
+      individual_serials: undefined,
+    };
+    const next = [...items.slice(0, insertAt), copy, ...items.slice(insertAt)];
+    setItems(next);
+    form.setValue("items", next);
+  };
+
+  // Quantity on this receipt for a PO line, summed over its batch lines.
+  const receivingForLine = (lineId: string) =>
+    items.filter((i) => i.purchase_order_item_id === lineId).reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+  // With an order chosen the sheet comes out already listing its outstanding lines, so the delivery
+  // is edited rather than typed from nothing; without one it is just the blank format.
+  const handleTemplate = async () => {
+    try {
+      const schema = await fetchImportSchema(PRODUCT_RECEIPT_SCHEMA_KEY);
+      const outstanding = (selectedPurchaseOrder?.items ?? []).filter((l) => (l.pending_quantity ?? 0) > 0);
+      downloadTemplate(schema, {
+        rows: outstanding.map((line) => ({
+          item_name: itemLabel(line),
+          quantity: line.pending_quantity ?? 0,
+          unit_price: Number(line.unit_price) || 0,
+        })),
+        fileName: selectedPurchaseOrder ? `receipt-${selectedPurchaseOrder.order_number}.xlsx` : undefined,
+      });
+    } catch (e) {
+      toast({ title: "Error", description: e instanceof Error ? e.message : "Could not build the template.", variant: "destructive" });
+    }
+  };
+
+  // The sheet is the delivery, so it replaces the lines prefilled from the order: anything it
+  // doesn't mention didn't arrive and stays outstanding. Nothing is saved until Save is pressed.
+  const handleSheet = async (file: File) => {
+    if (!purchaseOrderId) return;
+    setImporting(true);
+    try {
+      const { header, lines: parsed, problems } = await parseProductReceiptSheet(file, purchaseOrderId);
+      const stamp = Date.now();
+      const next: ProductReceiptItem[] = parsed.map((l, index) => {
+        const poLine = selectedPurchaseOrder?.items.find((i) => i.id === l.purchase_order_item_id);
+        return {
+          id: `${stamp}-x-${index}`,
+          product_id: l.product_id,
+          variant_id: l.variant_id,
+          quantity: l.quantity,
+          unit_price: l.unit_price,
+          expiry_date: l.expiry_date,
+          notes: l.notes,
+          product: poLine?.product,
+          variant: poLine?.variant,
+          enable_batch_tracking: true,
+          batch_number: l.batch_number ?? "",
+          lot_number: l.lot_number ?? "",
+          manufacture_date: l.manufacture_date ?? "",
+          purchase_order_item_id: l.purchase_order_item_id,
+        };
+      });
+      setItems(next);
+      form.setValue("items", next as any);
+
+      if (header.reference_number) {
+        setReferenceNumber(header.reference_number);
+        form.setValue("reference_number", header.reference_number);
+      }
+      if (header.shipping_cost !== null) setShippingCost(String(header.shipping_cost));
+      if (header.logistics_cost !== null) setLogisticsCost(String(header.logistics_cost));
+
+      setImportProblems(problems);
+      setImportOpen(false);
+      toast({
+        title: `${next.length} line${next.length === 1 ? "" : "s"} loaded`,
+        description: problems.length
+          ? `${problems.length} row${problems.length === 1 ? "" : "s"} need a look - see the note above the items.`
+          : "Check the delivery and save when you're happy with it.",
+      });
+    } catch (e) {
+      toast({ title: "Could not read the sheet", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const resetForm = () => {
     form.reset({
@@ -197,6 +382,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     });
     setReferenceNumber("");
     setDocumentType("receipt");
+    setPurchaseOrderId("");
     setSupplierId("");
     setStoreId("");
     setDocument(null);
@@ -290,29 +476,63 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     }
   };
 
-  const addItem = () => {
-    const newItem: ProductReceiptItem = {
-      id: Date.now().toString(),
-      product_id: "",
-      variant_id: null,
-      quantity: 1,
-      unit_price: 0,
-      expiry_date: null,
-      notes: null,
-      // individual_serials not initialized by default
-    };
-    const updatedItems = [...items, newItem];
-    setItems(updatedItems);
-    form.setValue("items", updatedItems);
-  };
-
   const removeItem = (itemId: string) => {
     const updatedItems = items.filter(item => item.id !== itemId);
     setItems(updatedItems);
     form.setValue("items", updatedItems);
   };
 
+  const resizeSerials = (item: ProductReceiptItem, qty: number): ProductReceiptItem => {
+    if (item.individual_serials === undefined) return { ...item, quantity: qty };
+    const serials = item.individual_serials;
+    return {
+      ...item,
+      quantity: qty,
+      individual_serials: qty > serials.length ? [...serials, ...Array(qty - serials.length).fill("")] : serials.slice(0, qty),
+    };
+  };
+
+  // A PO line's batch lines share its outstanding quantity: a batch can't take more than what the
+  // others leave, and the last batch line soaks up the remainder when an earlier one changes.
+  const updateBatchQuantity = (itemId: string, rawQty: number) => {
+    const item = items.find((i) => i.id === itemId);
+    const lineId = item?.purchase_order_item_id;
+    const outstanding = lineId ? poLines.get(lineId)?.pending_quantity ?? 0 : 0;
+    if (!item || !lineId) return;
+
+    const siblings = items.filter((i) => i.purchase_order_item_id === lineId);
+    const last = siblings[siblings.length - 1];
+    const othersExceptLast = siblings
+      .filter((i) => i.id !== itemId && i.id !== last.id)
+      .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+
+    let qty = Math.max(0, Math.floor(rawQty) || 0);
+    const editingLast = last.id === itemId;
+    // When an earlier batch changes, the last batch is the one that gives way.
+    const cap = outstanding - othersExceptLast;
+    if (qty > cap) {
+      toast({
+        title: "More than ordered",
+        description: `Only ${Math.max(0, cap)} left to receive on this order line. Raise a new purchase order for the extra ${qty - Math.max(0, cap)}.`,
+        variant: "destructive",
+      });
+      qty = Math.max(0, cap);
+    }
+
+    const next = items.map((i) => {
+      if (i.id === itemId) return resizeSerials(i, qty);
+      if (!editingLast && i.id === last.id) return resizeSerials(i, Math.max(0, outstanding - othersExceptLast - qty));
+      return i;
+    });
+    setItems(next);
+    form.setValue("items", next);
+  };
+
   const updateItem = (itemId: string, field: keyof ProductReceiptItem, value: any) => {
+    if (field === "quantity" && items.find((i) => i.id === itemId)?.purchase_order_item_id) {
+      updateBatchQuantity(itemId, Number(value));
+      return;
+    }
     const updatedItems = items.map(item => {
       if (item.id === itemId) {
         const updatedItem = { ...item, [field]: value };
@@ -323,9 +543,10 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
           updatedItem.product = product;
           updatedItem.variant_id = null;
           updatedItem.variant = null;
-          // Set default unit price from product
+          updatedItem.purchase_order_item_id = null;
+          // Receipts value stock at cost; selling prices live in the price lists.
           if (product) {
-            updatedItem.unit_price = parseFloat((product.price || 0).toString());
+            updatedItem.unit_price = parseFloat((product.unit_cost || product.price || 0).toString());
           }
           // Initialize individual_serials array with empty strings when quantity changes
           if (updatedItem.quantity && updatedItem.individual_serials !== undefined) {
@@ -335,12 +556,15 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
         
         // If variant_id changed, update variant reference and price
         if (field === "variant_id" && value) {
+          if (value !== item.variant_id) updatedItem.purchase_order_item_id = null;
           const product = updatedItem.product;
           if (product && product.variants) {
             const variant = product.variants.find((v: any) => v.id === value);
             if (variant) {
               updatedItem.variant = variant;
-              updatedItem.unit_price = parseFloat((variant.price || product.price || 0).toString());
+              if (!item.purchase_order_item_id) {
+                updatedItem.unit_price = parseFloat((Number(variant.cost) || product.unit_cost || 0).toString());
+              }
             }
           }
         }
@@ -393,7 +617,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
         product_id: product.id,
         variant_id: variant?.id || null,
         quantity: 1,
-        unit_price: parseFloat((variant?.price || product.price || 0).toString()),
+        unit_price: parseFloat((Number(variant?.cost) || product.unit_cost || product.price || 0).toString()),
         expiry_date: null,
         notes: null,
         product: product,
@@ -485,10 +709,19 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
       return false;
     }
 
-    if (items.length === 0) {
+    if (!purchaseOrderId) {
       toast({
         title: "Validation Error",
-        description: "Please add at least one product item",
+        description: "Select the purchase order this delivery is for. Stock can only be received against an approved purchase order.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (items.length === 0 || items.every((i) => !i.quantity)) {
+      toast({
+        title: "Validation Error",
+        description: "Enter the quantity received for at least one line",
         variant: "destructive",
       });
       return false;
@@ -585,9 +818,12 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
         store_id: storeId,
         shipping_cost: shippingCost ? parseFloat(shippingCost) : 0,
         logistics_cost: logisticsCost ? parseFloat(logisticsCost) : 0,
-        items: items.map(item => ({
+        purchase_order_id: purchaseOrderId || null,
+        // Lines left at 0 didn't arrive in this delivery and stay outstanding on the order.
+        items: items.filter((item) => item.quantity > 0).map(item => ({
           product_id: item.product_id,
           variant_id: item.variant_id,
+          purchase_order_item_id: purchaseOrderId ? item.purchase_order_item_id || null : null,
           quantity: item.quantity,
           unit_price: item.unit_price,
           expiry_date: item.expiry_date,
@@ -660,6 +896,63 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
             {/* Check if user has permission to create before showing form */}
             {hasPermission("can_create_product_receipts") || isAdmin() ? (
               <>
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                  <Label>Purchase order *</Label>
+                  <Popover open={poSearchOpen} onOpenChange={setPoSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between font-normal bg-background"
+                        disabled={isSubmitting || loadingPurchaseOrders}
+                      >
+                        <span className="truncate">
+                          {selectedPurchaseOrder
+                            ? `${selectedPurchaseOrder.order_number} · ${selectedPurchaseOrder.supplier?.name || ""}`
+                            : loadingPurchaseOrders
+                              ? "Loading open purchase orders..."
+                              : purchaseOrders.length === 0
+                                ? "No approved purchase orders awaiting goods"
+                                : "Select the purchase order this delivery is for"}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search PO number or supplier..." />
+                        <CommandList>
+                          <CommandEmpty>No approved purchase orders awaiting goods.</CommandEmpty>
+                          <CommandGroup>
+                            {purchaseOrders.map((po) => {
+                              const outstanding = po.items.reduce((s, l) => s + (l.pending_quantity ?? 0), 0);
+                              return (
+                                <CommandItem
+                                  key={po.id}
+                                  value={`${po.order_number} ${po.supplier?.name || ""}`}
+                                  onSelect={() => { applyPurchaseOrder(po); setPoSearchOpen(false); }}
+                                >
+                                  <Check className={cn("mr-2 h-4 w-4", purchaseOrderId === po.id ? "opacity-100" : "opacity-0")} />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{po.order_number} · {po.supplier?.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {po.items.length} lines · {outstanding} units outstanding{po.status === "partial" ? " · partly received" : ""}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Only items on the order can be received, up to what is still outstanding; anything extra needs a new purchase order. Use "Split batch" when one line came in several batches: the last batch takes whatever the earlier ones leave.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="referenceNumber">Reference Number *</Label>
@@ -867,149 +1160,49 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={addItem}
-                          disabled={isSubmitting}
-                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Manually
+                        <Button type="button" variant="ghost" size="sm" onClick={handleTemplate}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {purchaseOrderId ? "Download order as Excel" : "Excel template"}
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={handleOpenCreateProduct}
-                          disabled={isSubmitting}
-                          className="text-green-600 border-green-200 hover:bg-green-50"
+                          disabled={!purchaseOrderId}
+                          title={purchaseOrderId ? undefined : "Pick the purchase order first"}
+                          onClick={() => setImportOpen(true)}
                         >
-                          <Package className="h-4 w-4 mr-2" />
-                          Create Product
+                          <Upload className="mr-2 h-4 w-4" />
+                          Import from Excel
                         </Button>
                       </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {/* Product Search Section */}
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Search className="h-4 w-4 text-gray-500" />
-                        <Label className="text-sm font-medium text-gray-700">Quick Add Products</Label>
+                    {importProblems.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                        <div className="flex items-center gap-2 font-medium text-amber-900">
+                          <AlertCircle className="h-4 w-4" />
+                          {importProblems.length} row{importProblems.length !== 1 ? "s" : ""} from the sheet need a look
+                        </div>
+                        <ul className="mt-2 space-y-1 text-amber-800">
+                          {importProblems.map((p, i) => (
+                            <li key={i}>Row {p.row}: {p.message}</li>
+                          ))}
+                        </ul>
+                        <Button type="button" variant="ghost" size="sm" className="mt-1 h-7 px-2 text-amber-900" onClick={() => setImportProblems([])}>
+                          Dismiss
+                        </Button>
                       </div>
-                      <div className="relative">
-                        <Input
-                          id="productSearch"
-                          type="text"
-                          placeholder="Search by product name or SKU to quickly add..."
-                          value={productSearchQuery}
-                          onChange={(e) => {
-                            setProductSearchQuery(e.target.value);
-                            setShowProductDropdown(e.target.value.length > 0);
-                          }}
-                          onFocus={() => setShowProductDropdown(productSearchQuery.length > 0)}
-                          className="bg-white"
-                          disabled={isSubmitting || loadingProducts}
-                        />
-                        
-                        {/* Product Dropdown */}
-                        {showProductDropdown && productSearchQuery.length > 0 && (
-                          <div className="absolute top-full left-0 right-0 z-[200] mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {loadingProducts ? (
-                              <div className="p-4 text-center text-gray-500">
-                                <div className="flex items-center justify-center gap-2">
-                                  <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-                                  Loading products...
-                                </div>
-                              </div>
-                            ) : filteredProducts.length > 0 ? (
-                              <>
-                                {filteredProducts.map((product) => (
-                                  <button
-                                    key={product.id}
-                                    type="button"
-                                    className="w-full text-left p-4 hover:bg-blue-50 border-b border-gray-100 last:border-0 flex items-center justify-between transition-colors"
-                                    onClick={() => handleProductClick(product)}
-                                  >
-                                    <div className="flex-1">
-                                      <div className="font-medium text-gray-900">{product.name}</div>
-                                      <div className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-                                        <span>SKU: {product.sku || 'N/A'}</span>
-                                        <span>Stock: {product.stock_quantity || 0}</span>
-                                        {product.has_variations && product.variants && product.variants.length > 0 && (
-                                          <Badge variant="secondary" className="text-xs">
-                                            {product.variants.length} variants
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="text-right ml-4">
-                                      <div className="font-bold text-green-600">
-                                        {formatCurrency(product.price || 0)}
-                                      </div>
-                                      <div className="text-xs text-gray-500">Click to add</div>
-                                    </div>
-                                  </button>
-                                ))}
-                                <div className="border-t border-gray-100">
-                                  <button
-                                    type="button"
-                                    className="w-full text-left p-4 hover:bg-blue-50 text-blue-600 font-medium flex items-center gap-2 transition-colors"
-                                    onClick={handleOpenCreateProduct}
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                    Create new product
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="p-4 text-center text-gray-500">
-                                  <div className="mb-2">No products found for "{productSearchQuery}"</div>
-                                  <div className="text-xs text-gray-400">Try a different search term or create a new product</div>
-                                </div>
-                                <div className="border-t border-gray-100">
-                                  <button
-                                    type="button"
-                                    className="w-full text-left p-4 hover:bg-blue-50 text-blue-600 font-medium flex items-center gap-2 transition-colors"
-                                    onClick={handleOpenCreateProduct}
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                    Create "{productSearchQuery}" as new product
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        💡 Tip: Start typing to search products, or use "Add Manually" to configure items step by step
-                      </div>
-                    </div>
+                    )}
 
                     {/* Items List */}
                     <div className="space-y-4">
                       {items.length === 0 ? (
                         <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
                           <Package className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                          <h3 className="font-medium text-gray-900 mb-2">No items added yet</h3>
-                          <p className="text-sm mb-4">Add products using the search above or manually configure items</p>
-                          <div className="flex items-center justify-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={addItem}
-                              disabled={loading}
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Add First Item
-                            </Button>
-                          </div>
+                          <h3 className="font-medium text-gray-900 mb-2">No items yet</h3>
+                          <p className="text-sm">Pick the purchase order above. Only items on the order can be received; anything extra needs a new purchase order.</p>
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -1034,17 +1227,47 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                     </div>
                                   )}
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeItem(item.id)}
-                                  disabled={isSubmitting}
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => splitBatch(item.id)}
+                                    disabled={isSubmitting || !item.product_id}
+                                    title="Add another batch line for this item"
+                                  >
+                                    <Layers className="h-4 w-4 mr-1" />
+                                    Split batch
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeItem(item.id)}
+                                    disabled={isSubmitting}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
+
+                              {(() => {
+                                const line = item.purchase_order_item_id ? poLines.get(item.purchase_order_item_id) : undefined;
+                                if (!line) return null;
+                                const outstanding = line.pending_quantity ?? 0;
+                                const receiving = receivingForLine(line.id as string);
+                                return (
+                                  <div className="rounded-md px-3 py-2 text-xs flex flex-wrap gap-x-4 gap-y-1 bg-muted/50 text-muted-foreground">
+                                    <span>{selectedPurchaseOrder?.order_number}: {itemLabel(line)}</span>
+                                    <span>Ordered {line.quantity}</span>
+                                    <span>Received before {line.received_quantity || 0}</span>
+                                    <span>Outstanding {outstanding}</span>
+                                    <span className="font-medium text-foreground">Receiving now {receiving}</span>
+                                    <span>Still to come {Math.max(0, outstanding - receiving)}</span>
+                                  </div>
+                                );
+                              })()}
                               
                               {/* Batch Tracking Toggle */}
                               <div className="flex items-center gap-2 pt-2">
@@ -1182,9 +1405,9 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                         role="combobox"
                                         aria-expanded={productRowSearchOpen[item.id] || false}
                                         className="w-full justify-between font-normal h-10"
-                                        disabled={isSubmitting}
+                                        disabled={isSubmitting || !!item.purchase_order_item_id}
                                       >
-                                        {item.product_id ? products.find((product) => product.id === item.product_id)?.name : "Select product"}
+                                        {item.product_id ? (item.product?.name || products.find((product) => product.id === item.product_id)?.name) : "Select product"}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                       </Button>
                                     </PopoverTrigger>
@@ -1251,7 +1474,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                           form.setValue("items", updatedItems);
                                         }
                                       }}
-                                      disabled={isSubmitting}
+                                      disabled={isSubmitting || !!item.purchase_order_item_id}
                                     >
                                       <SelectTrigger className="h-10">
                                         <SelectValue placeholder="Select variant" />
@@ -1350,20 +1573,6 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                               </div>
                             </div>
                           ))}
-                          
-                          {/* Add Item Button after cards */}
-                          <div className="flex justify-center pt-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={addItem}
-                              disabled={loading}
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Add Another Item
-                            </Button>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -1433,6 +1642,47 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
           onClose={() => setShowCreateProductModal(false)}
           onSuccess={handleProductCreated}
         />
+
+        <Dialog open={importOpen} onOpenChange={(next) => !importing && setImportOpen(next)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Import from Excel</DialogTitle>
+              <DialogDescription>
+                Download {selectedPurchaseOrder?.order_number ?? "the order"} as Excel and it comes out already listing
+                what is still outstanding. Change the quantities to what actually arrived, add batch numbers and expiry
+                dates, delete any line that didn&apos;t come, then upload it here. Two rows for the same item become two
+                batch lines. Nothing is saved until you press Create Receipt.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) handleSheet(file);
+                }}
+              />
+              {importing && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Reading the sheet...
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={handleTemplate} disabled={importing}>
+                <Download className="mr-2 h-4 w-4" />
+                {purchaseOrderId ? "Download order as Excel" : "Download template"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SheetContent>
     </Sheet>
   );

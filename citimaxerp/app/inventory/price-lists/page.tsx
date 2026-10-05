@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,12 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft, Download, Eye, FileSpreadsheet, Loader2, Upload } from "lucide-react"
+import { ArrowLeft, Clock, Download, Eye, FileSpreadsheet, Loader2, Upload } from "lucide-react"
 import { PRICE_LIST_CODES } from "@/lib/price-codes"
 import {
+  downloadImportFile,
   fetchPriceList,
+  fetchPriceListHistory,
   importPriceList,
   PRICE_LIST_TEMPLATE_HEADERS,
+  type PriceListImportRecord,
   type PriceListImportResult,
 } from "@/lib/price-lists"
 import * as XLSX from "xlsx"
@@ -51,8 +54,21 @@ export default function PriceListsPage() {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState<"preview" | "import" | "export" | null>(null)
   const [result, setResult] = useState<PriceListImportResult | null>(null)
+  const [history, setHistory] = useState<PriceListImportRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const listName = (listChoice === OTHER ? customList : listChoice).trim().toUpperCase()
+
+  const loadHistory = useCallback(async (name: string) => {
+    if (!name) { setHistory([]); return }
+    setHistoryLoading(true)
+    try {
+      setHistory(await fetchPriceListHistory(name))
+    } catch { setHistory([]) }
+    finally { setHistoryLoading(false) }
+  }, [])
+
+  useEffect(() => { loadHistory(listName) }, [listName, loadHistory])
 
   // Downloads the list as it stands now, in the importer's own columns, so prices can be
   // edited in Excel and the same sheet uploaded back.
@@ -87,6 +103,7 @@ export default function PriceListsPage() {
       const res = await importPriceList(file, listName, dryRun)
       setResult(res)
       toast({ title: dryRun ? "Preview ready" : "Import complete", description: res.message })
+      if (!dryRun) loadHistory(listName)
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message || "Could not import the price list.", variant: "destructive" })
     } finally {
@@ -164,6 +181,80 @@ export default function PriceListsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {history.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                {listName} Import History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Version</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>File</TableHead>
+                      <TableHead className="text-right">Rows</TableHead>
+                      <TableHead className="text-right">Matched</TableHead>
+                      <TableHead className="text-right">New</TableHead>
+                      <TableHead className="text-right">Added</TableHead>
+                      <TableHead className="text-right">Updated</TableHead>
+                      <TableHead className="text-right">Errors</TableHead>
+                      <TableHead>Uploaded by</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map((h) => {
+                      const d = new Date(h.created_at)
+                      const dateStr = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                      return (
+                        <TableRow key={h.id}>
+                          <TableCell className="font-semibold">{h.list_name}{h.version}</TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {dateStr} at {timeStr}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                            {h.file_path ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:underline cursor-pointer"
+                                onClick={() => downloadImportFile(h.id, h.file_name || `${h.list_name}${h.version}`)}
+                              >
+                                <Download className="h-3 w-3" />{h.file_name || "-"}
+                              </button>
+                            ) : (h.file_name || "-")}
+                          </TableCell>
+                          <TableCell className="text-right">{h.rows_count}</TableCell>
+                          <TableCell className="text-right">{h.products_matched}</TableCell>
+                          <TableCell className="text-right">{h.products_created}</TableCell>
+                          <TableCell className="text-right">{h.prices_added}</TableCell>
+                          <TableCell className="text-right">{h.prices_updated}</TableCell>
+                          <TableCell className="text-right">
+                            {h.errors_count > 0
+                              ? <span className="text-red-600 font-medium">{h.errors_count}</span>
+                              : <span className="text-muted-foreground">0</span>}
+                          </TableCell>
+                          <TableCell className="text-sm">{h.uploader?.name || "-"}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {historyLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading history...
+          </div>
+        )}
 
         {result && (
           <Card>

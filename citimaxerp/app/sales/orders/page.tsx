@@ -3,8 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, Clock, ShoppingCart, DollarSign } from "lucide-react"
 import { OrdersTable } from "./orders-table"
+import { OrdersTableSkeleton } from "./orders-table-skeleton"
 import { formatCurrency } from "@/lib/utils"
-import { useState, useEffect } from "react"
 import { fetchOrders } from "@/lib/orders"
 import { useDataCache } from "@/lib/data-cache"
 import { PermissionGuard } from "@/components/PermissionGuard"
@@ -12,20 +12,21 @@ import { Order } from "@/lib/orders"
 
 export default function OrdersPage() {
   // Use the data cache hook for orders
-  const { 
-    data: orders = [],
+  const {
+    data: orders,
     isLoading: isLoadingOrders,
     refetch: refreshOrders
   } = useDataCache<Order[]>(
-    'orders', 
+    'orders',
     fetchOrders,
     {
       expirationMs: 5 * 60 * 1000 // 5 minutes cache
     }
   )
 
-  // Ensure orders is always an array
+  // null/undefined = not yet fetched (show full skeleton); [] = fetched but empty
   const safeOrders = Array.isArray(orders) ? orders : []
+  const isFirstLoad = orders == null && isLoadingOrders
 
   // Calculate summary data for orders dynamically
   const ordersSummaryData = {
@@ -44,54 +45,60 @@ export default function OrdersPage() {
           <h1 className="text-2xl sm:text-3xl font-bold">Orders</h1>
         </div>
 
-        {/* Summary Cards for Orders */}
-        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Total Orders</CardTitle>
-              <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg sm:text-2xl font-bold">{ordersSummaryData.totalOrders}</div>
-              <p className="text-xs text-muted-foreground hidden sm:block">All time orders</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Completed Orders</CardTitle>
-              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg sm:text-2xl font-bold">{ordersSummaryData.completedOrders}</div>
-              <p className="text-xs text-muted-foreground hidden sm:block">Successfully delivered</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Pending Orders</CardTitle>
-              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg sm:text-2xl font-bold">{ordersSummaryData.pendingOrders}</div>
-              <p className="text-xs text-muted-foreground hidden sm:block">Awaiting processing</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg sm:text-2xl font-bold">{formatCurrency(ordersSummaryData.totalRevenue)}</div>
-              <p className="text-xs text-muted-foreground hidden sm:block">Total value of all orders</p>
-            </CardContent>
-          </Card>
-        </div>
+        {isFirstLoad ? (
+          <OrdersTableSkeleton />
+        ) : (
+          <>
+            {/* Summary Cards for Orders */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Total Orders</CardTitle>
+                  <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-lg sm:text-2xl font-bold">{ordersSummaryData.totalOrders}</div>
+                  <p className="text-xs text-muted-foreground hidden sm:block">All time orders</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Completed Orders</CardTitle>
+                  <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-lg sm:text-2xl font-bold">{ordersSummaryData.completedOrders}</div>
+                  <p className="text-xs text-muted-foreground hidden sm:block">Successfully delivered</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Pending Orders</CardTitle>
+                  <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-lg sm:text-2xl font-bold">{ordersSummaryData.pendingOrders}</div>
+                  <p className="text-xs text-muted-foreground hidden sm:block">Awaiting processing</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
+                  <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-lg sm:text-2xl font-bold">{formatCurrency(ordersSummaryData.totalRevenue)}</div>
+                  <p className="text-xs text-muted-foreground hidden sm:block">Total value of all orders</p>
+                </CardContent>
+              </Card>
+            </div>
 
-        <div className="grid gap-4">
-          <h3 className="text-xl font-semibold">Recent Orders</h3>
-          <OrdersTable initialOrders={safeOrders} isLoading={isLoadingOrders} />
-        </div>
+            <div className="grid gap-4">
+              <h3 className="text-xl font-semibold">Recent Orders</h3>
+              <OrdersTable initialOrders={safeOrders} isLoading={isLoadingOrders} />
+            </div>
+          </>
+        )}
       </div>
     </PermissionGuard>
   )

@@ -462,6 +462,14 @@ export async function createQuote(quoteData: {
 /**
  * Updates an existing quote.
  */
+// Saving a quote with no items deletes it; allowed for anyone who may edit the quote.
+export async function deleteEmptiedQuote(quoteId: string): Promise<void> {
+  const response = await apiCall<{ status: string; message?: any }>(`/quotes/${quoteId}`, "PUT", { items: [] }, true)
+  if (response.status !== "success") {
+    throw new Error(typeof response.message === "string" ? response.message : "Failed to delete quote")
+  }
+}
+
 export async function updateQuote(
   quoteId: string, 
   quoteData: {

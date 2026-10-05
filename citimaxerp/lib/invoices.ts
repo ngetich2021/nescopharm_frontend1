@@ -353,6 +353,12 @@ export interface InvoicePayment {
   applied_date: string;
   created_at: string;
   updated_at: string;
+  // Set when this row came from a cheque: approved (cleared/truly paid) or still
+  // pending/bounced/cancelled, regardless of what the generic `status` above says.
+  is_cheque?: boolean;
+  cheque_status?: "pending" | "approved" | "bounced" | "cancelled" | null;
+  cheque_number?: string | null;
+  maturity_date?: string | null;
 }
 
 export interface PaymentHistoryResponse {

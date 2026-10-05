@@ -32,10 +32,12 @@ import {
   Package,
   RotateCcw,
   CheckCircle,
+  XCircle,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { getPurchaseOrders, deletePurchaseOrder, approvePurchaseOrder, PurchaseOrder } from "@/lib/purchaseorders"
+import { getPurchaseOrders, deletePurchaseOrder, approvePurchaseOrder, updatePurchaseOrder, itemLabel, receiveGoodsUrl, PurchaseOrder } from "@/lib/purchaseorders"
+import { useRouter } from "next/navigation"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,14 +50,14 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { PurchaseOrderDetailsSheet } from "./purchase-order-details-sheet"
-import { EditPurchaseOrderSheet } from "./components/edit-purchase-order-sheet"
-import { ReceiptPurchaseOrderSheet } from "./components/receipt-purchase-order-sheet"
 import { ReturnPurchaseOrderSheet } from "./components/return-purchase-order-sheet"
-import { CreatePurchaseOrderSheet } from "./components/create-purchase-order-sheet"
+import { PurchaseOrderFormSheet } from "./components/purchase-order-form-sheet"
 import { getSuppliers, Supplier } from "@/lib/suppliers"
 import { formatDate, formatCurrency } from "@/lib/utils"
 import { PurchaseOrdersTableSkeleton } from "./purchase-orders-table-skeleton"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { useAuth } from "@/lib/auth-context"
+import { hasExplicitPermission } from "@/lib/rbac"
 
 interface PurchaseOrdersTableProps {
   onDataChanged?: () => void
@@ -63,6 +65,7 @@ interface PurchaseOrdersTableProps {
 
 export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps) {
   const { toast } = useToast()
+  const router = useRouter()
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -75,12 +78,12 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
   const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false)
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false)
   const [editOrder, setEditOrder] = useState<PurchaseOrder | null>(null)
-  const [isReceiptSheetOpen, setIsReceiptSheetOpen] = useState(false)
-  const [receiptOrder, setReceiptOrder] = useState<PurchaseOrder | null>(null)
   const [isReturnSheetOpen, setIsReturnSheetOpen] = useState(false)
   const [returnOrder, setReturnOrder] = useState<PurchaseOrder | null>(null)
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const { userProfile } = useAuth()
+  const canApprove = hasExplicitPermission(userProfile, "can_approve_purchase_orders")
   const [approveOrder, setApproveOrder] = useState<PurchaseOrder | null>(null)
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
@@ -93,7 +96,7 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
   async function fetchOrders() {
     setIsLoading(true)
     try {
-      const data = await getPurchaseOrders({ status: statusFilter !== 'all' ? statusFilter : undefined })
+      const data = await getPurchaseOrders()
       setOrders(data)
     } catch (err) {
       toast({
@@ -121,17 +124,34 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
   }
 
   function getOrderSubtotal(order: PurchaseOrder) {
-    return order.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0)
+    return order.items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0)
   }
 
-  // Filtering and search
-  const filteredOrders = orders.filter(
-    (order) =>
-      (statusFilter === "all" || order.status === statusFilter) &&
-      (search === "" ||
-        order.order_number.toLowerCase().includes(search.toLowerCase())
-      )
-  )
+  const receivedUnits = (order: PurchaseOrder) => order.items.reduce((s, i) => s + (i.received_quantity || 0), 0)
+  const returnableUnits = (order: PurchaseOrder) =>
+    order.items.reduce((s, i) => s + (i.returnable_quantity ?? Math.max(0, (i.received_quantity || 0) - (i.returned_quantity || 0))), 0)
+  const isEditable = (order: PurchaseOrder) => order.status === "pending" && receivedUnits(order) === 0
+  const isReceivable = (order: PurchaseOrder) =>
+    ["pending", "partial"].includes(order.status) && order.approval_status === "approved" && order.items.length > 0
+
+  const term = search.trim().toLowerCase()
+  const filteredOrders = orders.filter((order) => {
+    if (statusFilter === "awaiting_approval") {
+      if (order.status !== "pending" || (order.approval_status && order.approval_status !== "pending")) return false
+    } else if (statusFilter !== "all" && order.status !== statusFilter) {
+      return false
+    }
+    if (!term) return true
+    return (
+      order.order_number.toLowerCase().includes(term) ||
+      (order.supplier?.name || getSupplierName(order.supplier_id)).toLowerCase().includes(term) ||
+      order.items.some((item) => itemLabel(item).toLowerCase().includes(term))
+    )
+  })
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, statusFilter])
 
   const totalPages = Math.ceil(filteredOrders.length / rowsPerPage)
   const paginatedOrders = filteredOrders.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
@@ -176,8 +196,7 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
   }
 
   const handleReceiptClick = (order: PurchaseOrder) => {
-    setReceiptOrder(order)
-    setIsReceiptSheetOpen(true)
+    router.push(receiveGoodsUrl(order.id))
   }
 
   const handleReturnClick = (order: PurchaseOrder) => {
@@ -214,6 +233,22 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
     }
   }
 
+  const handleCancelClick = async (order: PurchaseOrder) => {
+    if (!confirm(`Cancel purchase order ${order.order_number}? It can no longer be approved or received.`)) return
+    try {
+      await updatePurchaseOrder(order.id, { status: "cancelled" })
+      toast({ title: "Purchase order cancelled", description: order.order_number })
+      fetchOrders()
+      if (onDataChanged) onDataChanged()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cancel purchase order",
+        variant: "destructive"
+      })
+    }
+  }
+
   const handleDeleteClick = async (order: PurchaseOrder) => {
     if (confirm(`Are you sure you want to delete purchase order ${order.order_number}?`)) {
       try {
@@ -246,7 +281,7 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
             <Input
               className="pl-8 max-w-sm"
-              placeholder="Search purchase orders..."
+              placeholder="Search PO, supplier or item..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -254,17 +289,15 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
           <div className="relative">
             <Filter className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="pl-8 w-32">
+              <SelectTrigger className="pl-8 w-48">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="awaiting_approval">Awaiting approval</SelectItem>
+                <SelectItem value="pending">Awaiting goods</SelectItem>
+                <SelectItem value="partial">Partially received</SelectItem>
                 <SelectItem value="received">Received</SelectItem>
-                <SelectItem value="partially_received">Partially Received</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
@@ -272,10 +305,10 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
         </div>
         <div className="flex space-x-2">
           <PermissionGuard permissions={["can_create_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-            <CreatePurchaseOrderSheet
+            <PurchaseOrderFormSheet
               open={isCreateSheetOpen}
               onOpenChange={setIsCreateSheetOpen}
-              onPurchaseOrderCreated={() => {
+              onSaved={() => {
                 setIsCreateSheetOpen(false)
                 fetchOrders()
                 if (onDataChanged) onDataChanged()
@@ -343,8 +376,13 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
                   <TableCell className="font-medium">{order.order_number}</TableCell>
                   <TableCell>{order.supplier?.name || getSupplierName(order.supplier_id)}</TableCell>
                   <TableCell>{formatDate(order.order_date)}</TableCell>
-                  <TableCell>{order.items?.length || 0}</TableCell>
-                  <TableCell>{formatCurrency(parseFloat(order.total_amount || '0') || getOrderSubtotal(order))}</TableCell>
+                  <TableCell>
+                    <span>{order.items?.length || 0}</span>
+                    {order.items?.length > 0 && (
+                      <span className="text-xs text-muted-foreground"> · {order.items.reduce((s, i) => s + i.quantity, 0)} units</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{formatCurrency(order.total_amount != null ? Number(order.total_amount) : getOrderSubtotal(order))}</TableCell>
                   <TableCell>
                     <Badge variant={
                       order.payment_status === 'paid' ? 'default' :
@@ -365,15 +403,12 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
                   </TableCell>
                   <TableCell>
                     <Badge variant={
-                      order.status === 'draft' ? 'secondary' :
                       order.status === 'pending' ? 'outline' :
-                      order.status === 'approved' ? 'default' :
-                      order.status === 'rejected' ? 'destructive' :
                       order.status === 'received' ? 'default' :
-                      order.status === 'partially_received' ? 'outline' :
+                      order.status === 'cancelled' ? 'destructive' :
                       'secondary'
                     } className="capitalize">
-                      {order.status.replace('_', ' ')}
+                      {order.status === 'partial' ? 'Partially received' : order.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -389,40 +424,56 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <PermissionGuard permissions={["can_update_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditClick(order); }}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                        </PermissionGuard>
-                        <PermissionGuard permissions={["can_receive_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleReceiptClick(order); }}>
-                            <Package className="h-4 w-4 mr-2" />
-                            Receipt
-                          </DropdownMenuItem>
-                        </PermissionGuard>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleReturnClick(order); }}>
-                          <RotateCcw className="h-4 w-4 mr-2" />
-                          Return
-                        </DropdownMenuItem>
-                        {(order.approval_status === 'pending' || !order.approval_status) && (
-                          <PermissionGuard permissions={["can_approve_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleApproveClick(order); }}>
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Approve
+                        {isEditable(order) && (
+                          <PermissionGuard permissions={["can_update_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditClick(order); }}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
                             </DropdownMenuItem>
                           </PermissionGuard>
                         )}
-                        <PermissionGuard permissions={["can_delete_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            className="text-primary"
-                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(order); }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
+                        {canApprove && order.status === 'pending' && order.items.length > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleApproveClick(order); }}>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Approve
                           </DropdownMenuItem>
-                        </PermissionGuard>
+                        )}
+                        {isReceivable(order) && (
+                          <PermissionGuard permissions={["can_create_product_receipts", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleReceiptClick(order); }}>
+                              <Package className="h-4 w-4 mr-2" />
+                              Receive goods
+                            </DropdownMenuItem>
+                          </PermissionGuard>
+                        )}
+                        {returnableUnits(order) > 0 && (
+                          <PermissionGuard permissions={["can_receive_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleReturnClick(order); }}>
+                              <RotateCcw className="h-4 w-4 mr-2" />
+                              Return to supplier
+                            </DropdownMenuItem>
+                          </PermissionGuard>
+                        )}
+                        {isEditable(order) && (
+                          <PermissionGuard permissions={["can_update_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleCancelClick(order); }}>
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Cancel order
+                            </DropdownMenuItem>
+                          </PermissionGuard>
+                        )}
+                        {receivedUnits(order) === 0 && Number(order.amount_paid || 0) === 0 && (
+                          <PermissionGuard permissions={["can_delete_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteClick(order); }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </PermissionGuard>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -487,26 +538,13 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
         }}
       />
       <PermissionGuard permissions={["can_update_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-        <EditPurchaseOrderSheet
+        <PurchaseOrderFormSheet
           open={isEditSheetOpen}
           onOpenChange={setIsEditSheetOpen}
           order={editOrder}
-          onPurchaseOrderUpdated={() => {
+          onSaved={() => {
             setIsEditSheetOpen(false)
             setEditOrder(null)
-            fetchOrders()
-            if (onDataChanged) onDataChanged()
-          }}
-        />
-      </PermissionGuard>
-      <PermissionGuard permissions={["can_receive_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-        <ReceiptPurchaseOrderSheet
-          open={isReceiptSheetOpen}
-          onOpenChange={setIsReceiptSheetOpen}
-          order={receiptOrder}
-          onPurchaseOrderReceipted={() => {
-            setIsReceiptSheetOpen(false)
-            setReceiptOrder(null)
             fetchOrders()
             if (onDataChanged) onDataChanged()
           }}

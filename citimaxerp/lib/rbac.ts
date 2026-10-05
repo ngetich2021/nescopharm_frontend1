@@ -104,6 +104,11 @@ export function hasPermission(userProfile: UserProfile | ApiUser, permission: st
   return userProfile.role.permissions?.some((perm) => perm.key === permission) || false;
 }
 
+// For permissions that admin rights must not imply, e.g. purchase order approval (GM/Director only).
+export function hasExplicitPermission(userProfile: UserProfile | ApiUser | null | undefined, permission: string): boolean {
+  return userProfile?.role?.permissions?.some((perm) => perm.key === permission) || false;
+}
+
 export function hasRole(userProfile: UserProfile | ApiUser, role: string): boolean {
   if (!userProfile) return false;
   

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Trash2, Loader2 } from "lucide-react"
 import { getProducts } from "@/lib/products"
-import { DEFAULT_UNIT, findByPriceCode, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { DEFAULT_UNIT, findByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { activeSizesOf, sizedName } from "@/lib/product-sizes"
 
 interface Props {
@@ -47,7 +47,7 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
             <th className="text-left py-2 pr-2">Item Name</th>
             <th className="text-left py-2 pr-2 w-36">Pack Size</th>
             <th className="text-right py-2 pr-2 w-28">Price per Pack (Ksh)</th>
-            <th className="text-right py-2 pr-2 w-24">Order Qty</th>
+            <th className="text-right py-2 pr-2 w-32">Order Qty (packs)</th>
             <th className="text-right py-2 pr-2 w-32">Total Value (Ksh)</th>
             <th className="w-10" />
           </tr>
@@ -57,6 +57,16 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
             const qty = Number(form.watch(`items.${index}.quantity`)) || 0
             const price = Number(form.watch(`items.${index}.unit_price`)) || 0
             const errors = (form.formState.errors as any).items?.[index]
+            const product = productById(form.watch(`items.${index}.product_id`))
+            const variantId = form.watch(`items.${index}.variant_id`) as string | null
+            const perPack = piecesPerPack(form.watch(`items.${index}.price_unit`)) ?? 1
+            const pieces = qty * perPack
+            const variant = variantId ? activeSizesOf(product).find((s) => s.id === variantId) : undefined
+            const stock = product && (!activeSizesOf(product).length || variant)
+              ? Number((variant ?? product).stock_quantity ?? 0)
+              : null
+            const tracksStock = product?.track_inventory !== false
+            const overStock = tracksStock && stock !== null && pieces > stock
             return (
               <tr key={field.id} className="border-b align-top">
                 <td className="py-2 pr-2 pt-4 text-gray-600">{index + 1}</td>
@@ -80,11 +90,21 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
                     type="number"
                     step="1"
                     min="1"
-                    className="h-10 text-right"
-                    aria-label={`Order quantity for row ${index + 1}`}
+                    className={`h-10 text-right ${overStock ? "border-red-500" : ""}`}
+                    aria-label={`Order quantity in packs for row ${index + 1}`}
                     {...form.register(`items.${index}.quantity`, { valueAsNumber: true })}
                   />
                   {errors?.quantity && <p className="text-xs text-red-600 mt-1">{errors.quantity.message}</p>}
+                  {product && qty > 0 && (
+                    <p className={`text-xs mt-1 text-right ${overStock ? "text-red-600 font-medium" : "text-gray-500"}`}>
+                      = {pieces.toLocaleString()} pcs
+                      {stock !== null && tracksStock && (
+                        overStock
+                          ? <> - only {stock.toLocaleString()} pcs in stock (max {Math.floor(stock / perPack).toLocaleString()} packs)</>
+                          : <> of {stock.toLocaleString()}</>
+                      )}
+                    </p>
+                  )}
                 </td>
                 <td className="py-2 pr-2 pt-4 text-right font-semibold">{money(qty * price)}</td>
                 <td className="py-2">

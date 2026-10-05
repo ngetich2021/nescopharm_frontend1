@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import * as XLSX from "xlsx"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -150,7 +150,11 @@ export default function InventoryReportPage() {
       .catch((error) => console.error("Error fetching filters:", error))
   }, [])
 
+  // A slower earlier request (e.g. the previous tab) must not overwrite the latest one.
+  const latestRequest = useRef(0)
+
   const fetchReport = useCallback(async () => {
+    const requestId = ++latestRequest.current
     setLoading(true)
     try {
       const params: Record<string, string> = { type: reportType }
@@ -161,15 +165,17 @@ export default function InventoryReportPage() {
       if (usesDates && dateTo) params.date_to = dateTo
 
       const resp = await getInventoryReport(params as any)
+      if (requestId !== latestRequest.current) return
       setData(Array.isArray(resp?.data) ? resp.data : [])
       setSummary(resp?.summary ?? null)
       setPeriod(resp?.period ?? null)
     } catch (error: any) {
+      if (requestId !== latestRequest.current) return
       setData([])
       setSummary(null)
       toast({ title: "Error", description: error.message || "Failed to fetch inventory report", variant: "destructive" })
     } finally {
-      setLoading(false)
+      if (requestId === latestRequest.current) setLoading(false)
     }
   }, [reportType, categoryId, storeId, status, usesDates, dateFrom, dateTo, toast])
 

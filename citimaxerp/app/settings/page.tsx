@@ -17,6 +17,7 @@ import ChatSetup from "./components/chat-setup";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import EtimsSettingsPage from "@/app/settings/etims/page";
+import DataImportPage from "@/app/settings/data-import/page";
 
 type ActiveSection =
   | "profile"
@@ -30,6 +31,7 @@ type ActiveSection =
   | "user-management"
   | "approvers"
   | "etims"
+  | "data-import"
 
 export default function SettingsPage() {
   // Renamed from ProfilePage to SettingsPage for clarity
@@ -108,6 +110,8 @@ export default function SettingsPage() {
         return <ApproversManagementPage />
       case "etims":
         return <EtimsSettingsPage />
+      case "data-import":
+        return <DataImportPage />
       case "payments":
       //     return <PaymentSettings />;
       // case 'chats':
@@ -149,7 +153,7 @@ export default function SettingsPage() {
           onValueChange={setActiveSection as any}
           className="w-full"
         >
-          <TabsList className="grid w-fit grid-cols-10 bg-gray-100 rounded-lg p-1 mb-8">
+          <TabsList className="grid w-fit grid-cols-11 bg-gray-100 rounded-lg p-1 mb-8">
             <TabsTrigger value="profile" className="text-sm">My Profile</TabsTrigger>
             <TabsTrigger value="company" className="text-sm">Company</TabsTrigger>
             <TabsTrigger value="subscriptions" className="text-sm">Subscriptions</TabsTrigger>
@@ -164,6 +168,9 @@ export default function SettingsPage() {
             <PermissionGuard permissions={["can_manage_system", "can_manage_company"]} hideOnDenied>
               <TabsTrigger value="etims" className="text-sm">eTIMS</TabsTrigger>
             </PermissionGuard>
+            <PermissionGuard permissions={["can_manage_system", "can_manage_company"]} hideOnDenied>
+              <TabsTrigger value="data-import" className="text-sm">Data Import</TabsTrigger>
+            </PermissionGuard>
             <TabsTrigger value="data-export" className="text-sm">Data Export</TabsTrigger>
             <TabsTrigger value="delete-account" className="text-sm">Delete Account</TabsTrigger>
           </TabsList>
@@ -176,6 +183,7 @@ export default function SettingsPage() {
             <TabsContent value="payments">{activeSection === "payments" && renderActiveSection()}</TabsContent>
             <TabsContent value="chat-setup">{activeSection === "chat-setup" && renderActiveSection()}</TabsContent>
             <TabsContent value="etims">{activeSection === "etims" && renderActiveSection()}</TabsContent>
+            <TabsContent value="data-import">{activeSection === "data-import" && renderActiveSection()}</TabsContent>
             <TabsContent value="data-export">{activeSection === "data-export" && renderActiveSection()}</TabsContent>
             <TabsContent value="delete-account">{activeSection === "delete-account" && renderActiveSection()}</TabsContent>
           </div>

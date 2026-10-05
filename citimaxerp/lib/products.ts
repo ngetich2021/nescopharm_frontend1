@@ -323,6 +323,8 @@ export async function getProducts(
   pageSize = 20,
   filters: {
     search?: string
+    // Matches the item name only, unlike search which also matches codes and item numbers.
+    name?: string
     status?: string
     category?: string
   } = {}
@@ -334,6 +336,7 @@ export async function getProducts(
     queryParams.append('per_page', pageSize.toString())
 
     if (filters.search) queryParams.append('search', filters.search)
+    if (filters.name) queryParams.append('name', filters.name)
     if (filters.status && filters.status !== 'all') queryParams.append('status', filters.status)
     if (filters.category && filters.category !== 'all') queryParams.append('category', filters.category)
 

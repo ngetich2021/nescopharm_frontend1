@@ -23,7 +23,7 @@ import { PermissionGuard } from "@/components/PermissionGuard"
 import { SendQuoteModal } from "@/components/modals/send-quote-modal"
 import apiCall from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import { documentCode } from "@/lib/price-codes"
+import { documentCode, piecesPerPack } from "@/lib/price-codes"
 
 interface ViewQuoteSheetProps {
   open: boolean
@@ -322,7 +322,7 @@ export function ViewQuoteSheet({
                       <TableHead className="min-w-[250px]">Item Name</TableHead>
                       <TableHead>Pack Size</TableHead>
                       <TableHead className="text-right">Price per Pack (Ksh)</TableHead>
-                      <TableHead className="text-right">Order Qty</TableHead>
+                      <TableHead className="text-right">Order Qty (packs)</TableHead>
                       <TableHead className="text-right">Total Value (Ksh)</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -343,7 +343,12 @@ export function ViewQuoteSheet({
                         </TableCell>
                         <TableCell className="text-sm">{item.pack_size || "-"}</TableCell>
                         <TableCell className="text-right">{formatCurrency(Number(item.unit_price) * vatFactor(item))}</TableCell>
-                        <TableCell className="text-right">{(item.unit_id && item.unit_quantity ? Number(item.unit_quantity) : item.quantity).toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          {(item.unit_id && item.unit_quantity ? Number(item.unit_quantity) : item.quantity).toLocaleString()}
+                          {!item.unit_id && piecesPerPack(item.pack_size) && (
+                            <div className="text-xs text-gray-500">= {(Number(item.quantity) * (piecesPerPack(item.pack_size) ?? 1)).toLocaleString()} pcs</div>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(item.quantity * Number(item.unit_price) * vatFactor(item))}
                         </TableCell>

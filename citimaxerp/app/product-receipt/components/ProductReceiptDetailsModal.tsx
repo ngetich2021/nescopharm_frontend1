@@ -251,6 +251,7 @@ export function ProductReceiptDetailsModal({
                           <div className="flex justify-between items-start mb-2">
                             <div className="flex-1">
                               <h4 className="font-medium text-gray-900">
+                                <span className="text-gray-500 tabular-nums mr-2">{index + 1}.</span>
                                 {item.product?.name || `Product ${item.product_id}`}
                               </h4>
                               {item.variant && (

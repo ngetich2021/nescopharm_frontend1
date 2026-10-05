@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, RotateCcw, Building2, Calendar, Store, AlertCircle, MessageSquare } from "lucide-react"
-import { returnPurchaseOrder, PurchaseOrder } from "@/lib/purchaseorders"
+import { returnPurchaseOrder, itemLabel, PurchaseOrder } from "@/lib/purchaseorders"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency, formatDate } from "@/lib/utils"
 
@@ -22,13 +22,13 @@ interface ReturnPurchaseOrderSheetProps {
 
 interface ReturnItem {
   id: string
-  product_id: string
-  variant_id: string | null
+  name: string
+  item_number?: number | null
   received_quantity: number
+  already_returned: number
+  returnable: number
   returned_quantity: number
   price: number
-  product?: any
-  variant?: any
 }
 
 export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchaseOrderReturned }: ReturnPurchaseOrderSheetProps) {
@@ -39,16 +39,20 @@ export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchase
 
   useEffect(() => {
     if (order && order.items) {
-      setReturnItems(order.items.map(item => ({
-        id: item.id || "",
-        product_id: item.product_id || "",
-        variant_id: item.variant_id || null,
-        received_quantity: item.received_quantity || 0,
-        returned_quantity: 0,
-        price: typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : item.unit_price,
-        product: item.product,
-        variant: item.variant
-      })))
+      setReturnItems(order.items.map(item => {
+        const received = item.received_quantity || 0
+        const alreadyReturned = item.returned_quantity || 0
+        return {
+          id: item.id || "",
+          name: itemLabel(item),
+          item_number: item.item_number,
+          received_quantity: received,
+          already_returned: alreadyReturned,
+          returnable: item.returnable_quantity ?? Math.max(0, received - alreadyReturned),
+          returned_quantity: 0,
+          price: Number(item.unit_price),
+        }
+      }))
       setReturnReason("")
     }
   }, [order])
@@ -82,8 +86,8 @@ export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchase
   }
 
   const handleQuantityChange = (index: number, value: number) => {
-    setReturnItems(prev => prev.map((item, i) => 
-      i === index ? { ...item, returned_quantity: value } : item
+    setReturnItems(prev => prev.map((item, i) =>
+      i === index ? { ...item, returned_quantity: Math.min(Math.max(0, value), item.returnable) } : item
     ))
   }
 
@@ -180,9 +184,11 @@ export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchase
                   <table className="min-w-full">
                     <thead className="bg-muted/50">
                       <tr>
-                        <th className="text-left text-sm font-medium px-4 py-3">Product</th>
-                        <th className="text-right text-sm font-medium px-4 py-3">Price</th>
+                        <th className="text-left text-sm font-medium px-4 py-3 whitespace-nowrap">S/No</th>
+                        <th className="text-left text-sm font-medium px-4 py-3">Item</th>
+                        <th className="text-right text-sm font-medium px-4 py-3">Cost</th>
                         <th className="text-right text-sm font-medium px-4 py-3">Received</th>
+                        <th className="text-right text-sm font-medium px-4 py-3">Returnable</th>
                         <th className="text-center text-sm font-medium px-4 py-3">Return Qty</th>
                         <th className="text-right text-sm font-medium px-4 py-3">Return Value</th>
                       </tr>
@@ -190,10 +196,14 @@ export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchase
                     <tbody className="divide-y">
                       {returnItems.map((item, index) => (
                         <tr key={index} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 text-sm tabular-nums">{index + 1}</td>
                           <td className="px-4 py-3">
-                            <div className="text-sm font-medium">{item.product?.name || '-'}</div>
-                            {item.variant?.name && (
-                              <div className="text-xs text-muted-foreground">{item.variant.name}</div>
+                            <div className="text-sm font-medium">
+                              {item.item_number ? <span className="text-muted-foreground">#{item.item_number} · </span> : null}
+                              {item.name}
+                            </div>
+                            {item.already_returned > 0 && (
+                              <div className="text-xs text-muted-foreground">{item.already_returned} already returned</div>
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-right">{formatCurrency(item.price)}</td>
@@ -202,15 +212,17 @@ export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchase
                               {item.received_quantity}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-sm text-right">{item.returnable}</td>
                           <td className="px-4 py-3">
                             <Input
                               type="number"
                               min="0"
-                              max={item.received_quantity}
+                              max={item.returnable}
+                              aria-label={`Quantity to return for ${item.name}`}
                               value={item.returned_quantity}
                               onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 0)}
                               className="h-9 w-24 mx-auto text-center"
-                              disabled={item.received_quantity === 0}
+                              disabled={item.returnable === 0}
                             />
                           </td>
                           <td className="px-4 py-3 text-sm text-right font-medium text-destructive">
@@ -221,7 +233,7 @@ export function ReturnPurchaseOrderSheet({ open, onOpenChange, order, onPurchase
                     </tbody>
                     <tfoot className="bg-muted/50">
                       <tr>
-                        <td colSpan={3} className="px-4 py-3 text-sm font-medium text-right">
+                        <td colSpan={5} className="px-4 py-3 text-sm font-medium text-right">
                           Total Return:
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-center">

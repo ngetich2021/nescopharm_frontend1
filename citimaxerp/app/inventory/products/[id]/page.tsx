@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { DeleteProductModal } from "./delete-product-modal"
 import { getProductById } from "@/lib/products"
+import { fetchProductPriceHistory, type ProductPriceHistoryRecord } from "@/lib/price-lists"
 import { ProductDetailsSkeleton } from "./product-details-skeleton"
 import { cn } from "@/lib/utils"
 import type { Product, ProductVariant } from "@/lib/products"
@@ -62,10 +63,12 @@ export default function ProductDetailsPage() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [isLiked, setIsLiked] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
+  const [priceHistory, setPriceHistory] = useState<ProductPriceHistoryRecord[]>([])
 
   useEffect(() => {
     if (id) {
       loadProductData()
+      fetchProductPriceHistory(id as string).then(setPriceHistory).catch(() => setPriceHistory([]))
     }
   }, [id])
 
@@ -628,6 +631,68 @@ export default function ProductDetailsPage() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Price History Section */}
+          {priceHistory.length > 0 && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-8 border border-white/20 shadow-lg">
+              <h2 className="text-2xl font-bold text-gray-900 mb-8 flex items-center">
+                <TrendingUp className="mr-3 h-6 w-6 text-green-600" />
+                Price History
+              </h2>
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50/50">
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Date</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Price List</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">Old Price</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">New Price</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">Change</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Source</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {priceHistory.map((h) => {
+                      const d = new Date(h.created_at)
+                      const dateStr = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                      const change = h.change_amount ? parseFloat(h.change_amount) : null
+                      return (
+                        <tr key={h.id} className="border-b last:border-b-0 hover:bg-gray-50/30">
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div>{dateStr}</div>
+                            <div className="text-xs text-gray-400">{timeStr}</div>
+                          </td>
+                          <td className="py-3 px-4 font-medium">{h.price_type}</td>
+                          <td className="py-3 px-4 text-right text-gray-500">
+                            {h.old_value != null ? `Ksh ${parseFloat(h.old_value).toFixed(2)}` : "-"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-medium">
+                            Ksh {parseFloat(h.new_value).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {change !== null ? (
+                              <span className={change > 0 ? "text-red-600" : change < 0 ? "text-green-600" : "text-gray-400"}>
+                                {change > 0 ? "+" : ""}{change.toFixed(2)}
+                                {h.change_percentage ? ` (${parseFloat(h.change_percentage) > 0 ? "+" : ""}${parseFloat(h.change_percentage).toFixed(1)}%)` : ""}
+                              </span>
+                            ) : (
+                              <span className="text-blue-600 text-xs">New</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-gray-500">
+                            {h.source_reference || h.source.replace(/_/g, " ")}
+                          </td>
+                          <td className="py-3 px-4 text-sm">{h.changed_by_user?.name || "-"}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

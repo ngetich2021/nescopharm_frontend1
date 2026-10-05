@@ -7,6 +7,8 @@ export interface Batch {
   lot_number?: string
   product_id: string
   variant_id?: string
+  product?: { id: string; name: string; product_number?: string | number | null } | null
+  variant?: { id: string; name: string } | null
   quantity_received: number
   quantity_available: number
   quantity_allocated: number

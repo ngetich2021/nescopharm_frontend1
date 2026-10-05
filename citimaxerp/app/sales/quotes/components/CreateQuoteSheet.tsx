@@ -310,8 +310,10 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
                 <h4 className="text-sm font-medium text-red-800 mb-2">Please fix the following errors:</h4>
                 <ul className="text-sm text-red-700 space-y-1">
                   {Object.entries(form.formState.errors).map(([field, error]: [string, any]) => {
-                    if (field === 'items' && error?.message) {
-                      return <li key={field}>• {error.message}</li>
+                    // useFieldArray keeps array-level errors (e.g. "at least one item") under .root
+                    const itemsMessage = field === 'items' ? error?.message || error?.root?.message : null
+                    if (itemsMessage) {
+                      return <li key={field}>• {itemsMessage}</li>
                     }
                     if (field === 'items' && Array.isArray(error)) {
                       return null // Item-specific errors are shown inline

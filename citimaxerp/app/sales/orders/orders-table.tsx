@@ -41,7 +41,9 @@ interface OrdersTableProps {
 export function OrdersTable({ initialOrders = [], isLoading: initialLoading = false }: OrdersTableProps) {
   const router = useRouter()
   const [orders, setOrders] = useState<Order[]>(initialOrders)
-  const [isLoading, setIsLoading] = useState(initialLoading)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  // Combine parent-driven loading (initial fetch) with internal refresh loading
+  const isLoading = initialLoading || isRefreshing
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -58,7 +60,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null)
 
   const refreshOrders = useCallback(async () => {
-    setIsLoading(true)
+    setIsRefreshing(true)
     try {
       const fetchedOrders = await fetchOrders()
       setOrders(fetchedOrders)
@@ -73,7 +75,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsRefreshing(false)
     }
   }, [])
 
@@ -110,7 +112,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
   // Function to handle editing an order
   const handleEditOrder = async (orderId: string) => {
     try {
-      setIsLoading(true)
+      setIsRefreshing(true)
       const orderDetail = await fetchOrderById(orderId)
       if (orderDetail) {
         setSelectedOrder(orderDetail)
@@ -123,7 +125,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsRefreshing(false)
     }
   }
 

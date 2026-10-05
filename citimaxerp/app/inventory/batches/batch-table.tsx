@@ -22,6 +22,31 @@ import { useRouter } from "next/navigation"
 import { BatchDetailsSheet } from "@/app/inventory/components/batch-details-sheet"
 import type { Batch } from "@/types/batches"
 
+function RemainingCell({ available, received }: { available: number; received: number }) {
+  const pct = received > 0 ? Math.min(Math.max(available / received, 0), 1) : 0
+  const tone = available <= 0 ? "bg-red-500" : pct <= 0.2 ? "bg-amber-500" : "bg-emerald-500"
+  return (
+    <div className="min-w-[120px]">
+      <div className="text-sm tabular-nums">
+        <span className={available <= 0 ? "font-semibold text-red-600" : "font-semibold text-gray-900"}>{Number(available || 0).toLocaleString()}</span>
+        <span className="text-gray-500"> / {Number(received || 0).toLocaleString()}</span>
+      </div>
+      <div className="mt-1 h-1.5 w-full rounded-full bg-gray-100">
+        <div className={`h-1.5 rounded-full ${tone}`} style={{ width: `${pct * 100}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function ExpiryCell({ date }: { date?: string }) {
+  if (!date) return <span className="text-gray-400">-</span>
+  const days = Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000)
+  const label = new Date(date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
+  if (days < 0) return <div><div className="font-medium text-red-600">{label}</div><div className="text-xs text-red-600">Expired</div></div>
+  const tone = days <= 90 ? "text-amber-600" : "text-gray-500"
+  return <div><div className={days <= 90 ? "font-medium text-amber-600" : "text-gray-900"}>{label}</div><div className={`text-xs ${tone}`}>{days} days left</div></div>
+}
+
 // Helper function to check if a batch matches search criteria
 function batchMatchesSearch(batch: Batch, searchTerm: string): boolean {
   const term = searchTerm.toLowerCase()
@@ -40,6 +65,8 @@ function batchMatchesSearch(batch: Batch, searchTerm: string): boolean {
     batch.batch_number.toLowerCase().includes(term) ||
     (batch.lot_number?.toLowerCase().includes(term) ?? false) ||
     batch.product_id.toLowerCase().includes(term) ||
+    (batch.product?.name?.toLowerCase().includes(term) ?? false) ||
+    (batch.variant?.name?.toLowerCase().includes(term) ?? false) ||
     getSupplierName(batch.supplier).toLowerCase().includes(term) ||
     (batch.serial_number?.toLowerCase().includes(term) ?? false)
   )
@@ -270,10 +297,12 @@ export function BatchTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-14 text-center font-semibold">S/No.</TableHead>
               <TableHead className="font-semibold">Batch Number</TableHead>
+              <TableHead className="font-semibold">Product</TableHead>
+              <TableHead className="font-semibold">Size</TableHead>
               <TableHead className="font-semibold">Lot Number</TableHead>
-              <TableHead className="font-semibold">Qty Received</TableHead>
-              <TableHead className="font-semibold">Qty Available</TableHead>
+              <TableHead className="font-semibold">Remaining / Received</TableHead>
               <TableHead className="font-semibold">Qty Sold</TableHead>
               <TableHead className="font-semibold">Manufacture Date</TableHead>
               <TableHead className="font-semibold">Expiry Date</TableHead>
@@ -284,7 +313,7 @@ export function BatchTable({
           <TableBody>
             {Array.from({ length: 5 }).map((_, index) => (
               <TableRow key={index}>
-                <TableCell colSpan={9} className="h-16">
+                <TableCell colSpan={11} className="h-16">
                   <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
                 </TableCell>
               </TableRow>
@@ -399,10 +428,12 @@ export function BatchTable({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-14 text-center font-semibold">S/No.</TableHead>
                 <TableHead className="font-semibold">Batch Number</TableHead>
+                <TableHead className="font-semibold">Product</TableHead>
+                <TableHead className="font-semibold">Size</TableHead>
                 <TableHead className="font-semibold">Lot Number</TableHead>
-                <TableHead className="font-semibold">Qty Received</TableHead>
-                <TableHead className="font-semibold">Qty Available</TableHead>
+                <TableHead className="font-semibold">Remaining / Received</TableHead>
                 <TableHead className="font-semibold">Qty Sold</TableHead>
                 <TableHead className="font-semibold">Manufacture Date</TableHead>
                 <TableHead className="font-semibold">Expiry Date</TableHead>
@@ -413,7 +444,7 @@ export function BatchTable({
             <TableBody>
               {filteredAndSortedBatches.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center">
+                  <TableCell colSpan={11} className="h-24 text-center">
                     <div className="text-gray-500">
                       <p className="font-semibold">No batches found</p>
                       <p className="text-sm">Try adjusting your search or filter criteria</p>
@@ -421,16 +452,20 @@ export function BatchTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAndSortedBatches.map((batch) => (
-                  <TableRow 
+                filteredAndSortedBatches.map((batch, index) => (
+                  <TableRow
                     key={batch.id}
                     className="cursor-pointer hover:bg-gray-50"
                   >
+                    <TableCell className="text-center text-gray-700">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
                     <TableCell className="font-medium">{batch.batch_number}</TableCell>
+                    <TableCell>{batch.product?.name || "-"}</TableCell>
+                    <TableCell>{batch.variant?.name || "-"}</TableCell>
                     <TableCell>{batch.lot_number || "N/A"}</TableCell>
-                    <TableCell>{batch.quantity_received}</TableCell>
-                    <TableCell>{batch.quantity_available}</TableCell>
-                    <TableCell>{batch.quantity_sold}</TableCell>
+                    <TableCell>
+                      <RemainingCell available={batch.quantity_available} received={batch.quantity_received} />
+                    </TableCell>
+                    <TableCell className="tabular-nums">{Number(batch.quantity_sold || 0).toLocaleString()}</TableCell>
                     <TableCell>
                       {batch.manufacture_date ? (
                         new Date(batch.manufacture_date).toLocaleDateString()
@@ -439,11 +474,7 @@ export function BatchTable({
                       )}
                     </TableCell>
                     <TableCell>
-                      {batch.expiry_date ? (
-                        new Date(batch.expiry_date).toLocaleDateString()
-                      ) : (
-                        "N/A"
-                      )}
+                      <ExpiryCell date={batch.expiry_date} />
                     </TableCell>
                     <TableCell>
                       {typeof batch.supplier === 'string' 

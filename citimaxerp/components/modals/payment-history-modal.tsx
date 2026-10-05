@@ -101,6 +101,34 @@ export function PaymentHistoryModal({
     }
   }
 
+  // A cheque is only truly paid once it has matured and cleared (approved); until then it
+  // hasn't touched the invoice balance at all, however old the maturity date is.
+  const getChequeStatusLabel = (chequeStatus?: string | null) => {
+    switch (chequeStatus) {
+      case 'approved':
+        return 'Paid'
+      case 'bounced':
+        return 'Bounced'
+      case 'cancelled':
+        return 'Cancelled'
+      default:
+        return 'Pending'
+    }
+  }
+
+  const getChequeStatusColor = (chequeStatus?: string | null) => {
+    switch (chequeStatus) {
+      case 'approved':
+        return 'bg-green-100 text-green-800'
+      case 'bounced':
+        return 'bg-red-100 text-red-800'
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800'
+      default:
+        return 'bg-yellow-100 text-yellow-800'
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl max-h-[80vh]">
@@ -169,18 +197,33 @@ export function PaymentHistoryModal({
                             <span className="font-medium">
                               {getPaymentMethodLabel(payment.payment_method)}
                             </span>
-                            <Badge 
-                              variant="secondary" 
-                              className={`text-xs ${getPaymentStatusColor(payment.status)}`}
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs ${
+                                payment.is_cheque
+                                  ? getChequeStatusColor(payment.cheque_status)
+                                  : getPaymentStatusColor(payment.status)
+                              }`}
                             >
-                              {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                              {payment.is_cheque
+                                ? getChequeStatusLabel(payment.cheque_status)
+                                : payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              <span>Paid: {formatDate(payment.payment_date)}</span>
+                              <span>
+                                {payment.is_cheque && payment.cheque_status !== 'approved' ? 'Issued' : 'Paid'}:{' '}
+                                {formatDate(payment.payment_date)}
+                              </span>
                             </div>
+                            {payment.is_cheque && payment.maturity_date && payment.cheque_status === 'pending' && (
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                <span>Matures: {formatDate(payment.maturity_date)}</span>
+                              </div>
+                            )}
                             {payment.transaction_id && (
                               <div className="flex items-center gap-1">
                                 <Hash className="h-3 w-3" />
@@ -201,9 +244,11 @@ export function PaymentHistoryModal({
                         </div>
                       </div>
 
-                      <div className="text-xs text-muted-foreground">
-                        Applied: {formatDateTime(payment.applied_date)}
-                      </div>
+                      {(!payment.is_cheque || payment.cheque_status === 'approved') && (
+                        <div className="text-xs text-muted-foreground">
+                          Applied: {formatDateTime(payment.applied_date)}
+                        </div>
+                      )}
 
                       {payment.available_to_refund > 0 && (
                         <div className="flex items-center justify-between rounded-md bg-amber-50 border border-amber-200 p-2">

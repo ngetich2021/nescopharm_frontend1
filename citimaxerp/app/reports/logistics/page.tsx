@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getLogisticsReport } from "@/lib/reports"
@@ -17,21 +17,26 @@ export default function LogisticsReportPage() {
 
   const { toast } = useToast()
 
+  const latestRequest = useRef(0)
+
   const fetchReport = useCallback(async () => {
+    const requestId = ++latestRequest.current
     setLoading(true)
     try {
       const resp = await getLogisticsReport(reportType)
+      if (requestId !== latestRequest.current) return
       if (resp.status === "success") {
         setData(resp.data)
       }
     } catch (error: any) {
+      if (requestId !== latestRequest.current) return
       toast({
         title: "Error",
         description: error.message || "Failed to fetch logistics report",
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (requestId === latestRequest.current) setLoading(false)
     }
   }, [reportType, toast])
 

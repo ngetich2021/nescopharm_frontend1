@@ -207,9 +207,12 @@ export async function createProductReceipt(payload: {
   // the received items to update each product's landed-cost basis.
   shipping_cost?: number;
   logistics_cost?: number;
+  // The purchase order this delivery is against; its lines' received quantities follow this receipt.
+  purchase_order_id?: string | null;
   items: Array<{
     product_id: string;
     variant_id?: string | null;
+    purchase_order_item_id?: string | null;
     quantity: number;
     unit_price: number;
     expiry_date?: string | null;
@@ -243,6 +246,7 @@ export async function createProductReceipt(payload: {
       formData.append('store_id', payload.store_id);
       if (payload.shipping_cost !== undefined) formData.append('shipping_cost', String(payload.shipping_cost));
       if (payload.logistics_cost !== undefined) formData.append('logistics_cost', String(payload.logistics_cost));
+      if (payload.purchase_order_id) formData.append('purchase_order_id', payload.purchase_order_id);
 
       // Add items array
       formData.append('items', JSON.stringify(payload.items));
@@ -261,6 +265,7 @@ export async function createProductReceipt(payload: {
         store_id: payload.store_id,
         shipping_cost: payload.shipping_cost,
         logistics_cost: payload.logistics_cost,
+        ...(payload.purchase_order_id ? { purchase_order_id: payload.purchase_order_id } : {}),
         items: payload.items
       };
     }
@@ -367,9 +372,12 @@ export async function updateProductReceiptFull(id: string, payload: {
   store_id: string;
   shipping_cost?: number;
   logistics_cost?: number;
+  // The purchase order this delivery is against; its lines' received quantities follow this receipt.
+  purchase_order_id?: string | null;
   items: Array<{
     product_id: string;
     variant_id?: string | null;
+    purchase_order_item_id?: string | null;
     quantity: number;
     unit_price: number;
     expiry_date?: string | null;
@@ -403,6 +411,7 @@ export async function updateProductReceiptFull(id: string, payload: {
       formData.append('store_id', payload.store_id);
       if (payload.shipping_cost !== undefined) formData.append('shipping_cost', String(payload.shipping_cost));
       if (payload.logistics_cost !== undefined) formData.append('logistics_cost', String(payload.logistics_cost));
+      if (payload.purchase_order_id) formData.append('purchase_order_id', payload.purchase_order_id);
 
       // Add items array
       formData.append('items', JSON.stringify(payload.items));
@@ -421,6 +430,7 @@ export async function updateProductReceiptFull(id: string, payload: {
         store_id: payload.store_id,
         shipping_cost: payload.shipping_cost,
         logistics_cost: payload.logistics_cost,
+        ...(payload.purchase_order_id ? { purchase_order_id: payload.purchase_order_id } : {}),
         items: payload.items
       };
     }

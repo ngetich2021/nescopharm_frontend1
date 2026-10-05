@@ -74,6 +74,15 @@ export interface ChequeFilters {
   supplier_id?: string
 }
 
+// The Cheques page caches its list for 5 minutes (useDataCache). Every mutation below is reachable
+// from elsewhere in the app too - most often Record Payment on an invoice, far from that page - so
+// each one invalidates that cache directly rather than relying on whoever calls it to remember to.
+async function invalidateChequesCache(): Promise<void> {
+  if (typeof window === "undefined") return
+  const { invalidateCacheKey } = await import("@/lib/data-cache")
+  invalidateCacheKey("cheques")
+}
+
 export async function fetchCheques(filters?: ChequeFilters): Promise<Cheque[]> {
   const params = new URLSearchParams()
   if (filters?.status) params.append("status", filters.status)
@@ -100,6 +109,7 @@ export async function createCheque(data: CreateChequeRequest): Promise<Cheque> {
   }
 
   const response = await apiCall<{ message: string; data: Cheque }>("/cheques", "POST", formData, true)
+  await invalidateChequesCache()
   return response.data
 }
 
@@ -115,21 +125,25 @@ export async function createIssuedCheque(data: CreateIssuedChequeRequest): Promi
     { ...data, direction: "issued" },
     true
   )
+  await invalidateChequesCache()
   return response.data
 }
 
 export async function approveCheque(id: string): Promise<Cheque> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/approve`, "POST", undefined, true)
+  await invalidateChequesCache()
   return response.data
 }
 
 export async function bounceCheque(id: string): Promise<Cheque> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/bounce`, "POST", undefined, true)
+  await invalidateChequesCache()
   return response.data
 }
 
 export async function cancelCheque(id: string): Promise<Cheque> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/cancel`, "POST", undefined, true)
+  await invalidateChequesCache()
   return response.data
 }
 

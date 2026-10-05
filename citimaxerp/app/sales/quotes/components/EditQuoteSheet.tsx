@@ -14,7 +14,7 @@ import { Plus, Search, ArrowLeft, Save } from "lucide-react"
 import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { updateQuote, Quote } from "@/lib/quotes"
+import { updateQuote, deleteEmptiedQuote, Quote } from "@/lib/quotes"
 import { getCustomers, createCustomer, getCustomerDisplayName } from "@/lib/customers"
 import { getProducts } from "@/lib/products"
 import { useToast } from "@/hooks/use-toast"
@@ -42,7 +42,8 @@ const quoteSchema = z.object({
   currency: z.string().min(1, "Currency is required"),
   notes: z.string().optional(),
   status: z.enum(["pending", "accepted", "rejected", "expired"]),
-  items: z.array(lineItemSchema).min(1, "At least one item is required"),
+  // Saving with no items deletes the quote (see onSubmit).
+  items: z.array(lineItemSchema),
 })
 
 type QuoteFormData = z.infer<typeof quoteSchema>
@@ -243,12 +244,14 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
       const validItems = data.items.filter(item => item.product_id && item.product_id.trim() !== '')
       
       if (validItems.length === 0) {
-        toast({
-          title: "Error",
-          description: "Please add at least one product to the quote",
-          variant: "destructive",
-        })
-        setIsSaving(false)
+        const label = quote.quote_number || "This quote"
+        if (!window.confirm(`${label} has no items left. Saving will delete the quote. Continue?`)) {
+          return
+        }
+        await deleteEmptiedQuote(quote.id)
+        toast({ title: "Quote deleted", description: `${label} had no items and was deleted.` })
+        onSuccess?.()
+        onClose()
         return
       }
       
@@ -316,8 +319,10 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                 <h4 className="text-sm font-medium text-red-800 mb-2">Please fix the following errors:</h4>
                 <ul className="text-sm text-red-700 space-y-1">
                   {Object.entries(form.formState.errors).map(([field, error]: [string, any]) => {
-                    if (field === 'items' && error?.message) {
-                      return <li key={field}>• {error.message}</li>
+                    // useFieldArray keeps array-level errors (e.g. "at least one item") under .root
+                    const itemsMessage = field === 'items' ? error?.message || error?.root?.message : null
+                    if (itemsMessage) {
+                      return <li key={field}>• {itemsMessage}</li>
                     }
                     if (field === 'items' && Array.isArray(error)) {
                       return null // Item-specific errors are shown inline

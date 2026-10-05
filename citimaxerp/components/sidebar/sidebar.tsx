@@ -38,6 +38,7 @@ import {
   FileText,
   Banknote,
   BriefcaseBusiness,
+  Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -154,6 +155,7 @@ function Sidebar() {
   const inventoryDropdownItems = [
     { name: "Products", href: "/inventory/products", icon: Package, permission: "can_view_inventory_menu" },
     { name: "Price Lists", href: "/inventory/price-lists", icon: Tags, permission: "can_create_products" },
+    { name: "Batches", href: "/inventory/batches", icon: Layers, permission: "can_view_inventory_menu" },
     { name: "Product Receipts", href: "/product-receipt", icon: ReceiptText, permission: "can_view_product_receipt_menu" },
     { name: "Stock Counts", href: "/inventory/stock-counts", icon: ClipboardList, permission: "can_view_inventory_menu" },
     { name: "Stock Adjustments", href: "/inventory/stock-adjustments", icon: FileEdit, permission: "can_view_inventory_menu" },

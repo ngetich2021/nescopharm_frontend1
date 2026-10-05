@@ -17,6 +17,7 @@ export async function getBatches(filters: {
   status?: string
   expiring_soon?: boolean
   batch_number?: string
+  in_stock?: boolean
   sort_by?: string
   sort_order?: string
   page?: number

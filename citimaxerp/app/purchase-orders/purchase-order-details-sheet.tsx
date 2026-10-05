@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Separator } from "@/components/ui/separator"
 import { 
   ReceiptText, 
   Edit, 
@@ -20,11 +19,9 @@ import {
   Coins,
   X
 } from "lucide-react"
-import { getPurchaseOrder, approvePurchaseOrder, PurchaseOrder } from "@/lib/purchaseorders"
+import { getPurchaseOrder, approvePurchaseOrder, itemLabel, receiveGoodsUrl, PurchaseOrder } from "@/lib/purchaseorders"
+import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { getSuppliers, Supplier } from "@/lib/suppliers"
-import { getStores, Store as StoreType, getStoreById } from "@/lib/stores"
-import { getProducts, Product as ProductType, getProductById } from "@/lib/products"
 import { formatDate, formatCurrency } from "@/lib/utils"
 import {
   AlertDialog,
@@ -37,6 +34,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { useAuth } from "@/lib/auth-context"
+import { hasExplicitPermission } from "@/lib/rbac"
 
 interface PurchaseOrderDetailsSheetProps {
   orderId: string | null
@@ -48,9 +47,12 @@ interface PurchaseOrderDetailsSheetProps {
 
 export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrderUpdated, onEdit }: PurchaseOrderDetailsSheetProps) {
   const { toast } = useToast()
+  const router = useRouter()
   const [order, setOrder] = useState<PurchaseOrder | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const { userProfile } = useAuth()
+  const canApprove = hasExplicitPermission(userProfile, "can_approve_purchase_orders")
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
 
@@ -106,10 +108,14 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
     }
   }
 
-  // Calculate totals
-  const orderTotal = order?.items?.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0) || 0
+  const orderTotal = order?.items?.reduce((sum, item) => sum + Number(item.subtotal ?? Number(item.unit_price) * item.quantity), 0) || 0
   const itemCount = order?.items?.length || 0
   const totalReceived = order?.items?.reduce((sum, item) => sum + (item.received_quantity || 0), 0) || 0
+  const totalReturned = order?.items?.reduce((sum, item) => sum + (item.returned_quantity || 0), 0) || 0
+  const canEdit = !!order && order.status === "pending" && totalReceived === 0
+  const approver = order && typeof order.approved_by === "object" && order.approved_by
+    ? [order.approved_by.first_name, order.approved_by.last_name].filter(Boolean).join(" ")
+    : ""
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
@@ -212,7 +218,7 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                         <Calendar className="h-3.5 w-3.5" />
                         Expected Delivery
                       </div>
-                      <div className="font-medium text-base">{formatDate(order.delivery_date)}</div>
+                      <div className="font-medium text-base">{order.delivery_date ? formatDate(order.delivery_date) : '-'}</div>
                     </div>
 
                     <div className="space-y-1">
@@ -233,15 +239,29 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                       </div>
                     )}
 
-                    {order.discount && order.discount > 0 && (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Coins className="h-3.5 w-3.5" />
-                          Discount
-                        </div>
-                        <div className="font-medium text-base">{order.discount}%</div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Approval
                       </div>
-                    )}
+                      <div className="font-medium text-base capitalize">
+                        {order.approval_status || "pending"}
+                        {approver && order.approval_status !== "pending" ? <span className="text-sm font-normal text-muted-foreground"> by {approver}</span> : null}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Coins className="h-3.5 w-3.5" />
+                        Payment
+                      </div>
+                      <div className="font-medium text-base">
+                        <span className="capitalize">{order.payment_status || "unpaid"}</span>
+                        <span className="text-sm font-normal text-muted-foreground">
+                          {" "}· {formatCurrency(Number(order.amount_paid || 0))} of {formatCurrency(Number(order.total_amount || 0))}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   {order.comments && (
@@ -271,36 +291,57 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                     <table className="min-w-full">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="text-left text-sm font-medium px-4 py-3">Product</th>
-                          <th className="text-left text-sm font-medium px-4 py-3">Variant</th>
-                          <th className="text-right text-sm font-medium px-4 py-3">Unit Price</th>
-                          <th className="text-right text-sm font-medium px-4 py-3">Ordered</th>
-                          <th className="text-right text-sm font-medium px-4 py-3">Received</th>
-                          <th className="text-right text-sm font-medium px-4 py-3">Total</th>
+                          <th className="text-left text-sm font-medium px-3 py-3 whitespace-nowrap">S/No</th>
+                          <th className="text-left text-sm font-medium px-3 py-3 whitespace-nowrap">Item #</th>
+                          <th className="text-left text-sm font-medium px-3 py-3">Description</th>
+                          <th className="text-right text-sm font-medium px-3 py-3">Cost</th>
+                          <th className="text-right text-sm font-medium px-3 py-3">Ordered</th>
+                          <th className="text-right text-sm font-medium px-3 py-3">Received</th>
+                          <th className="text-right text-sm font-medium px-3 py-3">Outstanding</th>
+                          {totalReturned > 0 && <th className="text-right text-sm font-medium px-3 py-3">Returned</th>}
+                          <th className="text-right text-sm font-medium px-3 py-3">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {order.items.map((item) => (
+                        {order.items.map((item, index) => (
                           <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium">{item.product?.name || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-muted-foreground">{item.variant?.name || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-right">{formatCurrency(item.unit_price)}</td>
-                            <td className="px-4 py-3 text-sm text-right">{item.quantity}</td>
-                            <td className="px-4 py-3 text-sm text-right">
-                              <span className={item.received_quantity === item.quantity ? 'text-green-600' : item.received_quantity ? 'text-amber-600' : ''}>
+                            <td className="px-3 py-3 text-sm tabular-nums">{index + 1}</td>
+                            <td className="px-3 py-3 text-sm text-muted-foreground tabular-nums">{item.item_number ?? "-"}</td>
+                            <td className="px-3 py-3 text-sm">
+                              <div className="font-medium">{itemLabel(item)}</div>
+                            </td>
+                            <td className="px-3 py-3 text-sm text-right">{formatCurrency(Number(item.unit_price))}</td>
+                            <td className="px-3 py-3 text-sm text-right">{item.quantity}</td>
+                            <td className="px-3 py-3 text-sm text-right">
+                              <span className={item.received_quantity >= item.quantity ? 'text-green-600' : item.received_quantity ? 'text-amber-600' : ''}>
                                 {item.received_quantity ?? 0}
                               </span>
+                              {(item.over_received_quantity ?? 0) > 0 && (
+                                <Badge variant="outline" className="ml-1 border-amber-400 text-amber-700 text-[10px] px-1 py-0">
+                                  +{item.over_received_quantity} over
+                                </Badge>
+                              )}
                             </td>
-                            <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(item.unit_price * item.quantity)}</td>
+                            <td className="px-3 py-3 text-sm text-right">{item.pending_quantity ?? Math.max(0, item.quantity - (item.received_quantity || 0))}</td>
+                            {totalReturned > 0 && (
+                              <td className="px-3 py-3 text-sm text-right text-destructive">{item.returned_quantity || "-"}</td>
+                            )}
+                            <td className="px-3 py-3 text-sm text-right font-medium">
+                              {formatCurrency(Number(item.subtotal ?? Number(item.unit_price) * item.quantity))}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot className="bg-muted/50">
                         <tr>
-                          <td colSpan={3} className="px-4 py-3 text-sm font-medium">Totals</td>
-                          <td className="px-4 py-3 text-sm font-medium text-right">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
-                          <td className="px-4 py-3 text-sm font-medium text-right">{totalReceived}</td>
-                          <td className="px-4 py-3 text-sm font-bold text-right text-primary">{formatCurrency(orderTotal)}</td>
+                          <td colSpan={4} className="px-3 py-3 text-sm font-medium">Totals</td>
+                          <td className="px-3 py-3 text-sm font-medium text-right">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                          <td className="px-3 py-3 text-sm font-medium text-right">{totalReceived}</td>
+                          <td className="px-3 py-3 text-sm font-medium text-right">
+                            {order.items.reduce((sum, item) => sum + (item.pending_quantity ?? 0), 0)}
+                          </td>
+                          {totalReturned > 0 && <td className="px-3 py-3 text-sm font-medium text-right">{totalReturned}</td>}
+                          <td className="px-3 py-3 text-sm font-bold text-right text-primary">{formatCurrency(orderTotal)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -308,40 +349,33 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                 </CardContent>
               </Card>
 
-              {/* Landed Cost - captured at creation, previously never shown here */}
-              {(Number(order.shipping_cost) > 0 || Number(order.logistics_cost) > 0) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Coins className="h-4 w-4" />
-                      Landed Cost
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Items Subtotal</span>
-                      <span>{formatCurrency(orderTotal)}</span>
-                    </div>
-                    {Number(order.shipping_cost) > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Shipping Cost</span>
-                        <span>{formatCurrency(order.shipping_cost || 0)}</span>
-                      </div>
-                    )}
-                    {Number(order.logistics_cost) > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Logistics Cost</span>
-                        <span>{formatCurrency(order.logistics_cost || 0)}</span>
-                      </div>
-                    )}
-                    <Separator />
-                    <div className="flex justify-between text-sm font-bold text-primary">
-                      <span>Landed Total</span>
-                      <span>{formatCurrency(orderTotal + Number(order.shipping_cost || 0) + Number(order.logistics_cost || 0))}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              <Card className="border-0 shadow-sm bg-card/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ReceiptText className="h-4 w-4 text-primary" />
+                    Goods received
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {order.product_receipts && order.product_receipts.length > 0 ? (
+                    <ul className="divide-y text-sm">
+                      {order.product_receipts.map((r) => (
+                        <li key={r.id} className="flex items-center justify-between py-2">
+                          <span className="font-medium">{r.product_receipt_number}</span>
+                          <span className="text-muted-foreground">
+                            {r.reference_number ? `${r.reference_number} · ` : ""}{formatDate(r.created_at)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Nothing received yet. Goods are received with a Product Receipt against this order, which adds them to stock with their batches.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
             </>
           ) : null}
         </div>
@@ -352,7 +386,7 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
             <div className="text-sm text-muted-foreground">
               {order && (
                 <span>
-                  {itemCount} item{itemCount !== 1 ? 's' : ''} • Total: <span className="font-semibold text-foreground">{formatCurrency(orderTotal)}</span>
+                  {itemCount} line{itemCount !== 1 ? 's' : ''} • Total: <span className="font-semibold text-foreground">{formatCurrency(Number(order.total_amount ?? orderTotal))}</span>
                 </span>
               )}
             </div>
@@ -366,8 +400,18 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                 Close
               </Button>
               
+              {order && order.approval_status === "approved" && ["pending", "partial"].includes(order.status) && (
+                <PermissionGuard permissions={["can_create_product_receipts", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                  <Button variant="outline" onClick={() => router.push(receiveGoodsUrl(order.id))}>
+                    <Package className="h-4 w-4 mr-2" />
+                    Receive goods
+                  </Button>
+                </PermissionGuard>
+              )}
+
+              {canEdit && (
               <PermissionGuard permissions={["can_update_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => {
                     if (order && onEdit) {
@@ -380,17 +424,16 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                   Edit
                 </Button>
               </PermissionGuard>
+              )}
 
-              {order && (order.approval_status === 'pending' || !order.approval_status) && (
-                <PermissionGuard permissions={["can_approve_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-                  <Button 
-                    onClick={() => setIsApproveDialogOpen(true)}
-                    className="min-w-[120px]"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Approve
-                  </Button>
-                </PermissionGuard>
+              {canApprove && order && order.status === 'pending' && itemCount > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
+                <Button
+                  onClick={() => setIsApproveDialogOpen(true)}
+                  className="min-w-[120px]"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve
+                </Button>
               )}
             </div>
           </div>
