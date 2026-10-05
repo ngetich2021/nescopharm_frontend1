@@ -553,6 +553,16 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                   <div className="text-sm text-gray-600">Errors</div>
                 </div>
               </div>
+              {importPreviewData.summary.errors > 0 && (importPreviewData.summary.created + importPreviewData.summary.updated) > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
+                  {importPreviewData.summary.errors} row(s) have problems and will be skipped. The {importPreviewData.summary.created + importPreviewData.summary.updated} valid row(s) will still be imported.
+                </div>
+              )}
+              {importPreviewData.summary.errors > 0 && (importPreviewData.summary.created + importPreviewData.summary.updated) === 0 && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                  No valid rows to import. Every row is missing a Supplier Name or has another problem. Make sure the Supplier Name column is filled in, then try again.
+                </div>
+              )}
               {importPreviewData.rows && importPreviewData.rows.length > 0 && (
                 <div className="mt-4">
                   <h3 className="font-semibold mb-2">Details ({importPreviewData.rows.length} rows):</h3>
@@ -603,10 +613,12 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
               </Button>
               <Button
                 onClick={handleConfirmImport}
-                disabled={isImporting || importPreviewData.summary.errors > 0}
+                disabled={isImporting || (importPreviewData.summary.created + importPreviewData.summary.updated) === 0}
               >
                 {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Confirm Import
+                {importPreviewData.summary.errors > 0
+                  ? `Import ${importPreviewData.summary.created + importPreviewData.summary.updated} valid row(s)`
+                  : "Confirm Import"}
               </Button>
             </div>
           </div>

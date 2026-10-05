@@ -1,4 +1,5 @@
 import apiCall from "./api"
+import * as XLSX from "xlsx"
 
 function toQueryString(params: Record<string, any>): string {
   return (
@@ -193,20 +194,32 @@ export async function getSupplierSummaryFromDB(): Promise<SupplierSummary> {
   };
 }
 
-// Export suppliers as CSV
+// Export suppliers as Excel
 export async function exportSuppliers(): Promise<void> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suppliers/export`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) throw new Error("Export failed")
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = "suppliers.csv"
-  a.click()
-  URL.revokeObjectURL(url)
+  const suppliers = await getSuppliers()
+
+  const rows = suppliers.map((s) => ({
+    "Supplier Name": s.name,
+    "Contact Person": s.contact_person || "",
+    "Email": s.email || "",
+    "Phone": s.phone || "",
+    "Address": s.address || "",
+    "Terms Type": s.payment_terms_type || "",
+    "Terms Days": s.payment_terms_days || "",
+    "Terms Notes": s.payment_terms_description || "",
+    "Bank Name": s.bank_name || "",
+    "Bank Account Number": s.bank_account_number || "",
+    "Bank Branch": s.bank_branch || "",
+    "Bank Swift Code": s.bank_swift_code || "",
+    "Notes": s.notes || "",
+    "Active": s.is_active ? "Yes" : "No",
+  }))
+
+  const sheet = XLSX.utils.json_to_sheet(rows)
+  sheet["!cols"] = Object.keys(rows[0] ?? {}).map((k) => ({ wch: Math.max(k.length + 2, 18) }))
+  const book = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(book, sheet, "Suppliers")
+  XLSX.writeFile(book, `suppliers_${new Date().toISOString().split("T")[0]}.xlsx`)
 }
 
 // Import suppliers from file
