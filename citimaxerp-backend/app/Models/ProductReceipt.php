@@ -29,6 +29,12 @@ class ProductReceipt extends Model
 
     public function getItemsCountAttribute()
     {
+        if (array_key_exists('product_receipt_items_count', $this->attributes)) {
+            return (int) $this->attributes['product_receipt_items_count'];
+        }
+        if ($this->relationLoaded('productReceiptItems')) {
+            return $this->productReceiptItems->count();
+        }
         return $this->productReceiptItems()->count();
     }
   
@@ -52,6 +58,7 @@ class ProductReceipt extends Model
         'status',            // Receipt status (pending, confirmed, processed, etc.)
         'notes',             // General notes about the receipt
         'tracking_number',   // Delivery tracking number
+        'purchase_order_id',
     ];
 
     protected $casts = [
@@ -76,6 +83,11 @@ class ProductReceipt extends Model
     public function recipient()
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    public function purchaseOrder()
+    {
+        return $this->belongsTo(PurchaseOrder::class, 'purchase_order_id');
     }
 
     public function productReceiptItems()

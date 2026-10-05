@@ -1465,6 +1465,17 @@ class InvoiceController extends Controller
             $invoice = Invoice::where('company_id', $user->company_id)
                 ->findOrFail($id);
 
+            // Cheques received against this invoice. An approved one already has a Payment/
+            // allocation (created when it cleared) and is keyed here by that payment_id so it can
+            // be annotated rather than duplicated; a pending/bounced/cancelled one never touched
+            // the balance and has no Payment at all, so it needs its own row to be visible here.
+            $chequesForInvoice = Cheque::where('company_id', $user->company_id)
+                ->where('invoice_id', $id)
+                ->where('direction', 'received')
+                ->get();
+            $chequesByPaymentId = $chequesForInvoice->whereNotNull('payment_id')->keyBy('payment_id');
+            $standaloneCheques = $chequesForInvoice->whereNull('payment_id');
+
             // Get all payment allocations for this invoice
             $payments = PaymentAllocation::where('invoice_id', $id)
                 ->with([
@@ -1477,7 +1488,8 @@ class InvoiceController extends Controller
                 })
                 ->orderBy('allocated_date', 'desc')
                 ->get()
-                ->map(function ($allocation) {
+                ->map(function ($allocation) use ($chequesByPaymentId) {
+                    $cheque = $chequesByPaymentId->get($allocation->payment->id);
                     return [
                         'id' => $allocation->payment->id,
                         'order_id' => $allocation->payment->order_id,
@@ -1499,11 +1511,47 @@ class InvoiceController extends Controller
                         'notes' => $allocation->notes,
                         'created_at' => $allocation->created_at,
                         'updated_at' => $allocation->updated_at,
+                        // A cheque only counts as truly paid once it has matured and cleared
+                        // (status 'approved', which is the moment this Payment was created).
+                        'is_cheque' => (bool) $cheque,
+                        'cheque_status' => $cheque?->status,
+                        'cheque_number' => $cheque?->cheque_number,
+                        'maturity_date' => $cheque?->maturity_date,
                     ];
                 });
 
-            // Calculate totals from allocations
+            // Calculate totals from allocations only - a pending cheque has not touched the
+            // invoice balance yet, so it must never be counted into what's "paid".
             $totalAllocated = $payments->sum('amount_applied');
+
+            $pendingChequeRows = $standaloneCheques->map(function (Cheque $cheque) {
+                return [
+                    'id' => 'cheque-' . $cheque->id,
+                    'order_id' => null,
+                    'invoice_id' => $cheque->invoice_id,
+                    'customer_id' => $cheque->customer_id,
+                    'company_id' => $cheque->company_id,
+                    'payment_method' => 'cheque',
+                    'transaction_id' => $cheque->cheque_number,
+                    'amount_paid' => $cheque->amount,
+                    'amount_applied' => $cheque->amount,
+                    'available_to_refund' => 0,
+                    'status' => $cheque->status,
+                    'payment_date' => $cheque->issue_date,
+                    'applied_date' => $cheque->approved_at ?? $cheque->maturity_date,
+                    'notes' => $cheque->notes,
+                    'created_at' => $cheque->created_at,
+                    'updated_at' => $cheque->updated_at,
+                    'is_cheque' => true,
+                    'cheque_status' => $cheque->status,
+                    'cheque_number' => $cheque->cheque_number,
+                    'maturity_date' => $cheque->maturity_date,
+                ];
+            });
+
+            $allEntries = $payments->concat($pendingChequeRows)
+                ->sortByDesc(fn ($row) => \Carbon\Carbon::parse($row['payment_date']))
+                ->values();
 
             return response()->json([
                 'message' => 'Payment history retrieved successfully',
@@ -1514,7 +1562,7 @@ class InvoiceController extends Controller
                     'amount_paid' => $totalAllocated,
                     'balance_amount' => $invoice->total_amount - $totalAllocated,
                     'payment_count' => $payments->count(),
-                    'payments' => $payments,
+                    'payments' => $allEntries,
                 ]
             ]);
 
@@ -1951,6 +1999,26 @@ class InvoiceController extends Controller
         }
 
         return response()->json(array_values($productBatches));
+    }
+
+    public function downloadPdf(Request $request, $invoiceId)
+    {
+        $invoice = Invoice::find($invoiceId);
+        if (!$invoice) {
+            return response()->json(['error' => 'Invoice not found'], 404);
+        }
+
+        if (!$this->hasPermission($request, 'can_view_invoices', $invoice->company_id)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('invoice.pdf', ['invoice' => $invoice]);
+            $fileName = 'invoice-' . $invoice->invoice_number . '.pdf';
+            return $pdf->download($fileName);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to generate PDF'], 500);
+        }
     }
 
     private function getCompanyFromRequest()

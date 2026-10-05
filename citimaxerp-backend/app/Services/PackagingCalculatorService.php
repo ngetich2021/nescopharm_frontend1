@@ -8,6 +8,36 @@ use Illuminate\Support\Collection;
 
 class PackagingCalculatorService
 {
+    // Pieces in one pack from a price-list unit like "Per pack of 100's" or "Box of 50"; 1 for single pieces.
+    // Mirrors piecesPerPack() in the frontend's lib/price-codes.ts.
+    public static function piecesPerPack(?string $unit): int
+    {
+        if ($unit && preg_match('/(\d[\d,]*)/', $unit, $m)) {
+            $n = (int) str_replace(',', '', $m[1]);
+            if ($n > 1) {
+                return $n;
+            }
+        }
+        return 1;
+    }
+
+    // Stock pieces for a line: packs ordered x pieces per pack of its price-list unit.
+    public static function piecesFor($quantity, ?string $priceUnit): int
+    {
+        return (int) round((float) $quantity * self::piecesPerPack($priceUnit));
+    }
+
+    public static function packStockMessage(int $index, string $name, $quantity, ?string $priceUnit, int $piecesNeeded, int $available): string
+    {
+        $perPack = self::piecesPerPack($priceUnit);
+        $requested = $perPack > 1
+            ? number_format((float) $quantity) . " packs x {$perPack} = " . number_format($piecesNeeded) . ' pcs'
+            : number_format($piecesNeeded) . ' pcs';
+        $maxPacks = $perPack > 1 ? ' (max ' . number_format(intdiv($available, $perPack)) . ' packs)' : '';
+
+        return "Line " . ($index + 1) . ": not enough stock for {$name}. Requested {$requested}, only " . number_format($available) . " pcs available{$maxPacks}.";
+    }
+
     /**
      * Convert quantity from one unit to base units
      * 

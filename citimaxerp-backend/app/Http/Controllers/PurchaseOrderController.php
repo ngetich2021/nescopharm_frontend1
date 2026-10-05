@@ -2,25 +2,43 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InventoryBatch;
+use App\Models\InventoryMovement;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Models\PurchaseOrderReturn;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Services\LandedCostAllocationService;
+use App\Services\PurchaseOrderReceivingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+/**
+ * A purchase order records what was ordered. Stock arrives through product receipts raised
+ * against it (see PurchaseOrderReceivingService), which keep its received quantities current.
+ */
 class PurchaseOrderController extends Controller
 {
-    protected LandedCostAllocationService $landedCostService;
+    protected PurchaseOrderReceivingService $receiving;
 
-    public function __construct(LandedCostAllocationService $landedCostService)
+    // variant.product lets ProductVariant::display_name resolve without a query per size.
+    protected const RELATIONS = [
+        'items.product',
+        'items.variant.product:id,name',
+        'items.store:id,name',
+        'supplier:id,name,phone,email',
+        'store:id,name',
+        'approvedBy:id,first_name,last_name',
+        'productReceipts:id,purchase_order_id,product_receipt_number,reference_number,created_at',
+    ];
+
+    public function __construct(PurchaseOrderReceivingService $receiving)
     {
         $this->middleware('auth:sanctum');
-        $this->landedCostService = $landedCostService;
+        $this->receiving = $receiving;
     }
 
     protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
@@ -42,16 +60,15 @@ class PurchaseOrderController extends Controller
         return $role->hasPermission($permission);
     }
 
-    // Generate a unique purchase order number for the company
     protected function generateOrderNumber($companyId)
     {
         $prefix = 'PO-' . substr($companyId, 0, 8) . '-';
 
-        // Use raw query to avoid model accessors interfering
         $lastPO = DB::table('purchase_orders')
             ->select('order_number')
             ->where('company_id', $companyId)
             ->where('order_number', 'like', $prefix . '%')
+            ->whereRaw("order_number ~ ?", ['^' . preg_quote($prefix) . '[0-9]+$'])
             ->orderBy('order_number', 'desc')
             ->lockForUpdate()
             ->first();
@@ -60,99 +77,190 @@ class PurchaseOrderController extends Controller
         return $prefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
 
-    /**
-     * Recompute and persist total_amount from the order's current items plus
-     * shipping/logistics minus discount, and refresh payment_status against
-     * whatever amount_paid already is. Must run after items are created,
-     * updated or removed - nothing else keeps total_amount in sync.
-     */
     protected function recalculateTotal(PurchaseOrder $purchaseOrder): void
     {
-        $itemsTotal = (float) $purchaseOrder->items()->sum('subtotal');
-        $totalAmount = $itemsTotal
-            + (float) $purchaseOrder->shipping_cost
-            + (float) $purchaseOrder->logistics_cost
-            - (float) $purchaseOrder->discount;
-        $totalAmount = max(0, $totalAmount);
-
-        $amountPaid = (float) $purchaseOrder->amount_paid;
-        $status = 'unpaid';
-        if ($totalAmount > 0 && $amountPaid >= $totalAmount) {
-            $status = 'paid';
-        } elseif ($amountPaid > 0) {
-            $status = 'partial';
-        }
-
-        $purchaseOrder->update([
-            'total_amount' => $totalAmount,
-            'payment_status' => $status,
-        ]);
+        $this->receiving->recalculateTotal($purchaseOrder);
     }
 
-    // List all purchase orders for the user's company
+    protected function itemName(?Product $product, ?ProductVariant $variant, ?string $fallback = null): string
+    {
+        if ($variant) {
+            return ProductVariant::sizedName($product?->name, $variant->name);
+        }
+        return $product?->name ?? $fallback ?? '';
+    }
+
+    protected function present(PurchaseOrder $order): array
+    {
+        $order->loadMissing(self::RELATIONS);
+        $data = $order->toArray();
+        $data['items'] = $order->items->map(function (PurchaseOrderItem $item) {
+            $row = $item->toArray();
+            $row['item_name'] = $this->itemName($item->product, $item->variant, $item->description);
+            $row['item_number'] = $item->product?->item_number;
+            $row['size'] = $item->variant?->name;
+            $row['pending_quantity'] = max(0, $item->quantity - $item->received_quantity);
+            $row['over_received_quantity'] = max(0, $item->received_quantity - $item->quantity);
+            $row['returnable_quantity'] = max(0, $item->received_quantity - $item->returned_quantity);
+            return $row;
+        })->values()->all();
+        return $data;
+    }
+
+    protected function findForCompany(Request $request, $id): ?PurchaseOrder
+    {
+        $query = PurchaseOrder::where('id', $id);
+        if (!$this->hasPermission($request, 'can_manage_all_purchase_orders')) {
+            $query->where('company_id', $request->user()->company_id);
+        }
+        return $query->first();
+    }
+
+    protected function hasReceipts(PurchaseOrder $order): bool
+    {
+        return $order->productReceipts()->exists()
+            || $order->items()->where('received_quantity', '>', 0)->exists();
+    }
+
+    /**
+     * Resolve requested lines against the catalogue. Sized items need a size, the size must
+     * belong to the item and still be active, and repeated item+size lines are merged.
+     *
+     * @return array{0: array, 1: string|null} [lines, error]
+     */
+    protected function resolveLines(array $items, string $companyId, ?string $defaultStoreId): array
+    {
+        $lines = [];
+        foreach ($items as $index => $itemData) {
+            $row = $index + 1;
+            $product = Product::where('company_id', $companyId)->find($itemData['product_id']);
+            if (!$product) {
+                return [[], "Line {$row}: item not found."];
+            }
+
+            $variant = null;
+            if (!empty($itemData['variant_id'])) {
+                $variant = ProductVariant::where('id', $itemData['variant_id'])
+                    ->where('product_id', $product->id)
+                    ->first();
+                if (!$variant) {
+                    return [[], "Line {$row}: that size does not belong to {$product->name}."];
+                }
+            } elseif ($product->has_variations && $product->variants()->exists()) {
+                return [[], "Line {$row}: pick a size for {$product->name}."];
+            }
+
+            $key = $product->id . '|' . ($variant?->id ?? '');
+            $quantity = (int) $itemData['quantity'];
+            $unitPrice = (float) $itemData['unit_price'];
+
+            if (isset($lines[$key])) {
+                $lines[$key]['quantity'] += $quantity;
+                $lines[$key]['subtotal'] = $lines[$key]['quantity'] * $lines[$key]['unit_price'];
+                continue;
+            }
+
+            $lines[$key] = [
+                'product_id' => $product->id,
+                'variant_id' => $variant?->id,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'subtotal' => $quantity * $unitPrice,
+                'sku' => $variant?->sku ?: $product->sku,
+                'description' => $this->itemName($product, $variant),
+                'store_id' => $itemData['store_id'] ?? $defaultStoreId,
+            ];
+        }
+        return [array_values($lines), null];
+    }
+
+    protected function createLines(PurchaseOrder $purchaseOrder, array $lines): void
+    {
+        foreach ($lines as $line) {
+            PurchaseOrderItem::create(array_merge($line, [
+                'id' => (string) Str::uuid(),
+                'purchase_order_id' => $purchaseOrder->id,
+                'received_quantity' => 0,
+                'returned_quantity' => 0,
+            ]));
+        }
+    }
+
+    protected function linesSignature(iterable $lines): string
+    {
+        return collect($lines)
+            ->map(fn ($l) => implode('|', [
+                $l['product_id'],
+                $l['variant_id'] ?? '',
+                (int) $l['quantity'],
+                number_format((float) $l['unit_price'], 2, '.', ''),
+            ]))
+            ->sort()
+            ->implode(';');
+    }
+
+    protected function lineRules(string $prefix = ''): array
+    {
+        return [
+            'items' => $prefix . 'required|array|min:1',
+            'items.*.product_id' => 'required|string|exists:products,id',
+            'items.*.variant_id' => 'nullable|string|exists:product_variants,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.unit_price' => 'required|numeric|min:0',
+            'items.*.store_id' => 'nullable|string|exists:stores,id',
+        ];
+    }
+
+    protected function syncParentStock(Product $product): void
+    {
+        $this->receiving->syncParentStock($product);
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_view_purchase_orders', $user->company_id)) {
+        // Whoever records product receipts needs the open orders to receive against.
+        $receivable = $request->boolean('receivable');
+        $allowed = $this->hasPermission($request, 'can_view_purchase_orders', $user->company_id)
+            || ($receivable && $this->hasPermission($request, 'can_create_product_receipts', $user->company_id));
+        if (!$allowed) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to view purchase orders.',
             ], 403);
         }
-        $query = PurchaseOrder::with([
-            'items.product' => function ($q) {
-                $q->with(['store', 'company', 'variants']);
-            },
-            'items.variant',
-            'items.store',
-            'supplier',
-            'store'
-        ]);
-        $query->where('company_id', $user->company_id);
+        $query = PurchaseOrder::with(self::RELATIONS)->where('company_id', $user->company_id);
+        if ($receivable) {
+            $query->where('approval_status', 'approved')->whereIn('status', ['pending', 'partial']);
+        }
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
+        if ($request->filled('supplier_id')) {
+            $query->where('supplier_id', $request->input('supplier_id'));
+        }
         $orders = $query->orderBy('created_at', 'desc')->get();
+
         return response()->json([
             'status' => 'success',
             'message' => 'Purchase orders retrieved successfully.',
-            'data' => $orders,
+            'data' => $orders->map(fn ($o) => $this->present($o))->values(),
         ], 200);
     }
 
-    // Show a single purchase order
     public function show(Request $request, $id)
     {
-        $user = $request->user();
-        $query = PurchaseOrder::with([
-            'items.product' => function ($q) {
-                $q->with(['store', 'company', 'variants']);
-            },
-            'items.variant',
-            'items.store',
-            'supplier',
-            'store'
-        ])->where('id', $id);
-        if (!$this->hasPermission($request, 'can_manage_all_purchase_orders')) {
-            $query->where('company_id', $user->company_id);
-        }
-        $order = $query->first();
+        $order = $this->findForCompany($request, $id);
         if (!$order) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Purchase order not found or not authorized.',
             ], 404);
         }
-        $orderArray = $order->toArray();
-        $orderArray['items'] = array_map(function ($item) {
-            $item['product_name'] = isset($item['product']['name']) ? $item['product']['name'] : null;
-            $item['variant_name'] = isset($item['variant']['name']) ? $item['variant']['name'] : null;
-            return $item;
-        }, $orderArray['items'] ?? []);
         return response()->json([
             'status' => 'success',
             'message' => 'Purchase order retrieved successfully.',
-            'data' => $orderArray,
+            'data' => $this->present($order),
         ], 200);
     }
 
@@ -166,102 +274,56 @@ class PurchaseOrderController extends Controller
             ], 403);
         }
 
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), array_merge([
             'supplier_id' => 'required|string|exists:suppliers,id',
             'order_date' => 'required|date',
             'delivery_date' => 'nullable|date|after_or_equal:order_date',
             'store_id' => 'nullable|string|exists:stores,id',
             'currency_code' => 'nullable|string|size:3',
-            'shipping_cost' => 'nullable|numeric|min:0',
-            'logistics_cost' => 'nullable|numeric|min:0',
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|string|exists:products,id',
-            'items.*.variant_id' => 'nullable|string|exists:product_variants,id',
-            'items.*.quantity' => 'required|integer|min:1',
-            'items.*.unit_price' => 'required|numeric|min:0',
-            'items.*.store_id' => 'nullable|string|exists:stores,id',
-        ]);
+            'comments' => 'nullable|string|max:2000',
+        ], $this->lineRules()));
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => $validator->errors(),
-            ], 400);
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        [$lines, $error] = $this->resolveLines($request->input('items'), $user->company_id, $request->input('store_id') ?: null);
+        if ($error) {
+            return response()->json(['status' => 'failed', 'message' => $error], 422);
         }
 
         try {
-            DB::beginTransaction();
-
-            $user = $request->user();
-            $purchaseOrder = PurchaseOrder::create([
-                'id' => (string) Str::uuid(),
-                'company_id' => $user->company_id,
-                'supplier_id' => $request->input('supplier_id'),
-                'order_number' => $this->generateOrderNumber($user->company_id),
-                'order_date' => $request->input('order_date'),
-                'delivery_date' => $request->input('delivery_date'),
-                'store_id' => $request->input('store_id'),
-                'currency_code' => $request->input('currency_code', 'KES'),
-                'shipping_cost' => $request->input('shipping_cost', 0),
-                'logistics_cost' => $request->input('logistics_cost', 0),
-                'status' => 'pending',
-                'created_by' => $user->id,
-            ]);
-
-            foreach ($request->input('items') as $itemData) {
-                $product = Product::find($itemData['product_id']);
-                if (!$product || !$this->hasPermission($request, 'can_create_purchase_orders', $product->company_id)) {
-                    throw new \Exception("Unauthorized or invalid product: {$itemData['product_id']}");
-                }
-
-                $variant = null;
-                if (($itemData['variant_id'] ?? null)) {
-                    $variant = ProductVariant::where('id', ($itemData['variant_id'] ?? null))
-                        ->where('product_id', $itemData['product_id'])
-                        ->first();
-                    if (!$variant) {
-                        throw new \Exception("Invalid variant for product: {$itemData['product_id']}");
-                    }
-                    if ($variant->track_inventory && $variant->stock_quantity !== null && $itemData['quantity'] > $variant->stock_quantity) {
-                        throw new \Exception("Insufficient stock for variant: {$variant->sku}");
-                    }
-                } elseif ($product->has_variations) {
-                    throw new \Exception("Product {$product->name} requires a variant selection.");
-                }
-
-                $subtotal = $itemData['quantity'] * $itemData['unit_price'];
-                PurchaseOrderItem::create([
+            $purchaseOrder = DB::transaction(function () use ($request, $user, $lines) {
+                $purchaseOrder = PurchaseOrder::create([
                     'id' => (string) Str::uuid(),
-                    'purchase_order_id' => $purchaseOrder->id,
-                    'product_id' => $itemData['product_id'],
-                    'variant_id' => ($itemData['variant_id'] ?? null),
-                    'quantity' => $itemData['quantity'],
-                    'received_quantity' => 0, // Initialize as 0
-                    'unit_price' => $itemData['unit_price'],
-                    'subtotal' => $subtotal,
-                    'sku' => $variant ? $variant->sku : $product->sku,
-                    'store_id' => $itemData['store_id'] ?? $request->input('store_id'),
+                    'company_id' => $user->company_id,
+                    'supplier_id' => $request->input('supplier_id'),
+                    'order_number' => $this->generateOrderNumber($user->company_id),
+                    'order_date' => $request->input('order_date'),
+                    'delivery_date' => $request->input('delivery_date') ?: null,
+                    'store_id' => $request->input('store_id') ?: null,
+                    'currency_code' => $request->input('currency_code', 'KES'),
+                    'comments' => $request->input('comments'),
+                    'status' => 'pending',
+                    'approval_status' => 'pending',
+                    'amount_paid' => 0,
+                    'created_by' => $user->id,
                 ]);
-            }
+                $this->createLines($purchaseOrder, $lines);
+                $this->recalculateTotal($purchaseOrder);
+                return $purchaseOrder;
+            });
 
-            $this->recalculateTotal($purchaseOrder);
-
-            DB::commit();
             return response()->json([
                 'status' => 'success',
                 'message' => 'Purchase order created successfully.',
-                'data' => $purchaseOrder->load([
-                    'items.product.store',
-                    'items.product.company',
-                    'items.product.variants',
-                    'items.variant:id,sku,product_id',
-                    'items.store:id,name',
-                    'supplier:id,name',
-                    'store:id,name'
-                ]),
+                'data' => $this->present($purchaseOrder->fresh()),
             ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
             Log::error('Failed to create purchase order', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',
@@ -272,7 +334,7 @@ class PurchaseOrderController extends Controller
 
     public function update(Request $request, $id)
     {
-        $purchaseOrder = PurchaseOrder::find($id);
+        $purchaseOrder = $this->findForCompany($request, $id);
         if (!$purchaseOrder) {
             return response()->json([
                 'status' => 'failed',
@@ -281,13 +343,6 @@ class PurchaseOrderController extends Controller
         }
 
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_update_purchase_orders', $user->company_id)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Unauthorized to edit purchase orders.',
-            ], 403);
-        }
-
         if (!$this->hasPermission($request, 'can_update_purchase_orders', $purchaseOrder->company_id)) {
             return response()->json([
                 'status' => 'failed',
@@ -295,106 +350,94 @@ class PurchaseOrderController extends Controller
             ], 403);
         }
 
-        $validator = Validator::make($request->all(), [
+        $received = $this->hasReceipts($purchaseOrder);
+        if ($received && collect($request->except(['comments']))->keys()->diff(['delivery_date', 'status'])->isNotEmpty()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Stock has already been received against this purchase order, so only its comments can be changed.',
+            ], 422);
+        }
+        if ($purchaseOrder->status === 'cancelled') {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'This purchase order is cancelled.',
+            ], 422);
+        }
+
+        $validator = Validator::make($request->all(), array_merge([
             'supplier_id' => 'sometimes|required|string|exists:suppliers,id',
             'order_date' => 'sometimes|required|date',
-            'delivery_date' => 'nullable|date|after_or_equal:order_date',
+            'delivery_date' => 'nullable|date',
             'store_id' => 'nullable|string|exists:stores,id',
-            'status' => 'sometimes|required|string|in:pending,confirmed,received,cancelled',
-            'shipping_cost' => 'nullable|numeric|min:0',
-            'logistics_cost' => 'nullable|numeric|min:0',
-            'items' => 'sometimes|required|array|min:1',
-            'items.*.product_id' => 'required|string|exists:products,id',
-            'items.*.variant_id' => 'nullable|string|exists:product_variants,id',
-            'items.*.quantity' => 'required|integer|min:1',
-            'items.*.unit_price' => 'required|numeric|min:0',
-            'items.*.store_id' => 'nullable|string|exists:stores,id',
-        ]);
+            'currency_code' => 'nullable|string|size:3',
+            'status' => 'sometimes|required|string|in:pending,cancelled',
+            'comments' => 'nullable|string|max:2000',
+        ], $this->lineRules('sometimes|')));
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => $validator->errors(),
-            ], 400);
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+        if ($received && $request->input('status') === 'cancelled') {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'A purchase order with received stock cannot be cancelled. Return the stock instead.',
+            ], 422);
+        }
+
+        $lines = null;
+        if ($request->has('items')) {
+            [$lines, $error] = $this->resolveLines(
+                $request->input('items'),
+                $purchaseOrder->company_id,
+                $request->input('store_id', $purchaseOrder->store_id) ?: null
+            );
+            if ($error) {
+                return response()->json(['status' => 'failed', 'message' => $error], 422);
+            }
         }
 
         try {
-            $user = $request->user();
-            DB::beginTransaction();
-
-            $purchaseOrder->update(array_merge(
-                $request->only([
-                    'supplier_id',
-                    'order_date',
-                    'delivery_date',
-                    'store_id',
-                    'currency_code',
-                    'status',
-                    'comments',
-                    'shipping_cost',
-                    'logistics_cost',
-                ]),
-                ['updated_by' => $user->id]
-            ));
-
-            if ($request->has('items')) {
-                PurchaseOrderItem::where('purchase_order_id', $purchaseOrder->id)->delete();
-                foreach ($request->input('items') as $itemData) {
-                    $product = Product::find($itemData['product_id']);
-                    if (!$product || !$this->hasPermission($request, 'can_update_purchase_orders', $product->company_id)) {
-                        throw new \Exception("Unauthorized or invalid product: {$itemData['product_id']}");
+            DB::transaction(function () use ($request, $user, $purchaseOrder, $lines) {
+                $fields = $request->only([
+                    'supplier_id', 'order_date', 'delivery_date', 'store_id', 'currency_code',
+                    'status', 'comments',
+                ]);
+                foreach (['delivery_date', 'store_id'] as $nullable) {
+                    if (array_key_exists($nullable, $fields) && $fields[$nullable] === '') {
+                        $fields[$nullable] = null;
                     }
-
-                    $variant = null;
-                    if (($itemData['variant_id'] ?? null)) {
-                        $variant = ProductVariant::where('id', ($itemData['variant_id'] ?? null))
-                            ->where('product_id', $itemData['product_id'])
-                            ->first();
-                        if (!$variant) {
-                            throw new \Exception("Invalid variant for product: {$itemData['product_id']}");
-                        }
-                        if ($variant->track_inventory && $variant->stock_quantity !== null && $itemData['quantity'] > $variant->stock_quantity) {
-                            throw new \Exception("Insufficient stock for variant: {$variant->sku}");
-                        }
-                    } elseif ($product->has_variations) {
-                        throw new \Exception("Product {$product->name} requires a variant selection.");
-                    }
-
-                    $subtotal = $itemData['quantity'] * $itemData['unit_price'];
-                    PurchaseOrderItem::create([
-                        'id' => (string) Str::uuid(),
-                        'purchase_order_id' => $purchaseOrder->id,
-                        'product_id' => $itemData['product_id'],
-                        'variant_id' => ($itemData['variant_id'] ?? null),
-                        'quantity' => $itemData['quantity'],
-                        'received_quantity' => 0, // Initialize as 0
-                        'unit_price' => $itemData['unit_price'],
-                        'subtotal' => $subtotal,
-                        'sku' => $variant ? $variant->sku : $product->sku,
-                        'store_id' => $itemData['store_id'] ?? $request->input('store_id'),
-                    ]);
                 }
-            }
 
-            $this->recalculateTotal($purchaseOrder);
+                $changesTerms = $lines !== null
+                    && $this->linesSignature($lines) !== $this->linesSignature($purchaseOrder->items->toArray());
+                $changesTerms = $changesTerms || (isset($fields['supplier_id']) && $fields['supplier_id'] !== $purchaseOrder->supplier_id);
 
-            DB::commit();
+                // Approval was given for specific items, quantities and prices.
+                if ($changesTerms && $purchaseOrder->approval_status === 'approved') {
+                    $fields['approval_status'] = 'pending';
+                    $fields['approved_by'] = null;
+                }
+
+                $purchaseOrder->update(array_merge($fields, ['updated_by' => $user->id]));
+
+                if ($lines !== null) {
+                    $purchaseOrder->items()->delete();
+                    $this->createLines($purchaseOrder, $lines);
+                }
+
+                $this->recalculateTotal($purchaseOrder);
+            });
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Purchase order updated successfully.',
-                'data' => $purchaseOrder->load([
-                    'items.product.store',
-                    'items.product.company',
-                    'items.product.variants',
-                    'items.variant:id,sku,product_id',
-                    'items.store:id,name',
-                    'supplier:id,name',
-                    'store:id,name'
-                ]),
-                'order_number' => $purchaseOrder->order_number,
+                'data' => $this->present($purchaseOrder->fresh()),
             ], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
             Log::error('Failed to update purchase order', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',
@@ -403,225 +446,178 @@ class PurchaseOrderController extends Controller
         }
     }
 
-    public function receive(Request $request, $id)
+    /**
+     * Send received stock back to the supplier. Stock leaves this PO's receipt batches first,
+     * and the PO total drops by the returned value.
+     */
+    public function returnItems(Request $request, $id)
     {
-        $purchaseOrder = PurchaseOrder::find($id);
+        $purchaseOrder = $this->findForCompany($request, $id);
         if (!$purchaseOrder) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Purchase order not found.',
-            ], 404);
+            return response()->json(['status' => 'failed', 'message' => 'Purchase order not found.'], 404);
         }
 
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_receive_purchase_orders', $user->company_id)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Unauthorized to receive purchase orders.',
-            ], 403);
-        }
-
         if (!$this->hasPermission($request, 'can_receive_purchase_orders', $purchaseOrder->company_id)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Unauthorized to receive this purchase order.',
-            ], 403);
-        }
-
-        if ($purchaseOrder->status === 'received' || $purchaseOrder->status === 'partial') {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Purchase order already received or partially receipted. Please receipt the latest split PO.',
-            ], 400);
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to return stock on this purchase order.'], 403);
         }
 
         $validator = Validator::make($request->all(), [
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|string|exists:purchase_order_items,id',
-            'items.*.received_quantity' => 'required|integer|min:0',
-            'shipping_cost' => 'nullable|numeric|min:0',
-            'logistics_cost' => 'nullable|numeric|min:0',
+            'items.*.returned_quantity' => 'required|integer|min:0',
+            'reason' => 'required|string|max:1000',
         ]);
-
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => $validator->errors(),
-            ], 400);
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $requested = collect($request->input('items'))->filter(fn ($i) => (int) $i['returned_quantity'] > 0)->keyBy('id');
+        if ($requested->isEmpty()) {
+            return response()->json(['status' => 'failed', 'message' => 'Enter a quantity to return for at least one line.'], 422);
+        }
+
+        $purchaseOrder->load('items.product', 'items.variant');
+        $items = $purchaseOrder->items->keyBy('id');
+
+        foreach ($requested as $itemId => $input) {
+            $item = $items[$itemId] ?? null;
+            if (!$item) {
+                return response()->json(['status' => 'failed', 'message' => 'A line does not belong to this purchase order.'], 422);
+            }
+            $qty = (int) $input['returned_quantity'];
+            $returnable = $item->received_quantity - $item->returned_quantity;
+            $name = $this->itemName($item->product, $item->variant, $item->description);
+            if ($qty > $returnable) {
+                return response()->json(['status' => 'failed', 'message' => "{$name}: returning {$qty} but only {$returnable} received and not yet returned."], 422);
+            }
+            $target = $item->variant ?: $item->product;
+            if ($item->product?->track_inventory !== false && $target && (int) $target->stock_quantity < $qty) {
+                return response()->json(['status' => 'failed', 'message' => "{$name}: only {$target->stock_quantity} left in stock."], 422);
+            }
         }
 
         try {
-            DB::beginTransaction();
+            $orderNumber = $purchaseOrder->order_number;
+            DB::transaction(function () use ($purchaseOrder, $requested, $items, $user, $orderNumber, $request) {
+                $summary = [];
+                foreach ($requested as $itemId => $input) {
+                    $item = $items[$itemId];
+                    $qty = (int) $input['returned_quantity'];
+                    $product = $item->product;
+                    $variant = $item->variant;
+                    $summary[] = $this->itemName($product, $variant, $item->description) . " x{$qty}";
 
-            $user = $request->user();
-            $remainingItems = [];
-            $receivedItems = $request->input('items');
-            $shippingCost = (float) $request->input('shipping_cost', 0);
-            $logisticsCost = (float) $request->input('logistics_cost', 0);
-            $landedCostLines = [];
+                    if ($product && $product->track_inventory !== false) {
+                        $target = $variant ?: $product;
+                        $target->stock_quantity = max(0, (int) $target->stock_quantity - $qty);
+                        $target->on_hand = max(0, (int) $target->on_hand - $qty);
+                        $target->save();
 
-            foreach ($receivedItems as $receivedItem) {
-                $item = PurchaseOrderItem::where('id', $receivedItem['id'])
-                    ->where('purchase_order_id', $purchaseOrder->id)
-                    ->first();
-                if (!$item) {
-                    throw new \Exception("Invalid item ID: {$receivedItem['id']}");
-                }
-                if ($receivedItem['received_quantity'] > $item->quantity) {
-                    throw new \Exception("Received quantity for item {$item->sku} exceeds ordered quantity.");
-                }
-                if ($receivedItem['received_quantity'] > 0) {
-                    if ($item->variant_id) {
-                        $variant = ProductVariant::find($item->variant_id);
-                        if ($variant) {
-                            $variant->stock_quantity = (int) $variant->stock_quantity + (int) $receivedItem['received_quantity'];
-                            $variant->on_hand = (int) $variant->on_hand + (int) $receivedItem['received_quantity'];
-                            $variant->save();
-                        } else {
-                            throw new \Exception("Variant not found: {$item->variant_id}");
+                        $movement = [
+                            'company_id' => $purchaseOrder->company_id,
+                            'product_id' => $product->id,
+                            'variant_id' => $variant?->id,
+                            'type' => 'return',
+                            'unit_cost' => $item->unit_price,
+                            'reference_type' => 'purchase_order_return',
+                            'reference_id' => $purchaseOrder->id,
+                            'reference_number' => $orderNumber,
+                            'movement_date' => now(),
+                            'created_by' => $user->id,
+                            'notes' => "Returned to supplier from {$orderNumber}: " . $request->input('reason'),
+                        ];
+
+                        // Take it from the batches this PO's receipts brought in first.
+                        $left = $qty;
+                        $batches = InventoryBatch::where('product_id', $product->id)
+                            ->when($variant, fn ($q) => $q->where('variant_id', $variant->id), fn ($q) => $q->whereNull('variant_id'))
+                            ->where('quantity_available', '>', 0)
+                            ->orderByRaw('CASE WHEN product_receipt_id IN (SELECT id FROM product_receipts WHERE purchase_order_id = ?) THEN 0 ELSE 1 END', [$purchaseOrder->id])
+                            ->orderBy('received_date', 'desc')
+                            ->lockForUpdate()
+                            ->get();
+                        foreach ($batches as $batch) {
+                            if ($left <= 0) {
+                                break;
+                            }
+                            $take = min($left, (int) $batch->quantity_available);
+                            $batchBefore = (int) $batch->quantity_available;
+                            $batch->quantity_available -= $take;
+                            $batch->quantity_received = max(0, (int) $batch->quantity_received - $take);
+                            $batch->save();
+                            $batch->updateStatus();
+                            $left -= $take;
+
+                            InventoryMovement::create($movement + [
+                                'store_id' => $batch->store_id,
+                                'batch_id' => $batch->id,
+                                'quantity' => -$take,
+                                'quantity_before' => $batchBefore,
+                                'quantity_after' => $batch->quantity_available,
+                                'total_cost' => $take * (float) $item->unit_price,
+                            ]);
                         }
-                    } else {
-                        $product = Product::find($item->product_id);
-                        if ($product && !$product->has_variations) {
-                            $product->stock_quantity = (int) $product->stock_quantity + (int) $receivedItem['received_quantity'];
-                            $product->on_hand = (int) $product->on_hand + (int) $receivedItem['received_quantity'];
-                            $product->save();
-                        } else {
-                            throw new \Exception("Product {$item->product_id} requires a variant or is invalid.");
+                        // Stock received without a batch.
+                        if ($left > 0) {
+                            InventoryMovement::create($movement + [
+                                'store_id' => $item->store_id ?: ($purchaseOrder->store_id ?: ($variant?->store_id ?: $product->store_id)),
+                                'quantity' => -$left,
+                                'quantity_before' => (int) $target->stock_quantity + $left,
+                                'quantity_after' => (int) $target->stock_quantity,
+                                'total_cost' => $left * (float) $item->unit_price,
+                            ]);
+                        }
+
+                        if ($variant) {
+                            $this->syncParentStock($product);
                         }
                     }
-                    // Update received_quantity for the item
-                    $item->received_quantity += (int) $receivedItem['received_quantity'];
+
+                    $item->returned_quantity += $qty;
                     $item->save();
+                }
 
-                    // Track this line for landed-cost allocation below - the cost basis
-                    // (unit_price paid) and quantity actually received in this call.
-                    $landedCostLines[] = [
-                        'product' => Product::find($item->product_id),
-                        'quantity' => (int) $receivedItem['received_quantity'],
-                        'unit_value' => (float) $item->unit_price,
-                        'unit_cost' => (float) $item->unit_price,
-                    ];
-                }
-                if ($receivedItem['received_quantity'] < $item->quantity) {
-                    $remainingItems[] = [
-                        'product_id' => $item->product_id,
-                        'variant_id' => $item->variant_id,
-                        'quantity' => $item->quantity - $receivedItem['received_quantity'],
-                        'unit_price' => $item->unit_price,
-                        'store_id' => $item->store_id,
-                        'sku' => $item->sku,
-                    ];
-                }
-            }
-
-            $newPurchaseOrder = null;
-            if (!empty($remainingItems)) {
-                // Always use the original PO number as prefix for splits
-                $originalOrderNumber = $purchaseOrder->order_number;
-                // If this PO is already a split, get the root/original order number
-                if (preg_match('/^(PO-[^-]+-[^-]+)(?:-\d+)*$/', $purchaseOrder->order_number, $matches)) {
-                    $originalOrderNumber = $matches[1];
-                }
-                $existingSplits = PurchaseOrder::where('order_number', 'like', $originalOrderNumber . '-%')->count();
-                $splitNumber = str_pad($existingSplits + 1, 2, '0', STR_PAD_LEFT);
-                $splitOrderNumber = $originalOrderNumber . '-' . $splitNumber;
-                $newPurchaseOrder = PurchaseOrder::create([
-                    'id' => (string) Str::uuid(),
-                    'company_id' => $purchaseOrder->company_id,
+                PurchaseOrderReturn::create([
                     'supplier_id' => $purchaseOrder->supplier_id,
-                    'order_number' => $splitOrderNumber,
-                    'order_date' => $purchaseOrder->order_date,
-                    'delivery_date' => $purchaseOrder->delivery_date,
-                    'store_id' => $purchaseOrder->store_id,
-                    'currency_code' => $purchaseOrder->currency_code ?? 'KES',
-                    'status' => 'pending',
-                    'comments' => "Remaining quantities from {$originalOrderNumber}",
-                    'created_by' => $user->id,
-                    'parent_id' => $purchaseOrder->id,
+                    'purchase_order_id' => $purchaseOrder->id,
+                    'reason' => $request->input('reason'),
+                    'return_date' => now(),
+                    'status' => 'completed',
+                    'notes' => implode(', ', $summary),
                 ]);
-                // Only add the remaining (unreceived) quantities to the new PO
-                foreach ($remainingItems as $itemData) {
-                    $subtotal = $itemData['quantity'] * $itemData['unit_price'];
-                    PurchaseOrderItem::create([
-                        'id' => (string) Str::uuid(),
-                        'purchase_order_id' => $newPurchaseOrder->id,
-                        'product_id' => $itemData['product_id'],
-                        'variant_id' => ($itemData['variant_id'] ?? null),
-                        'quantity' => $itemData['quantity'],
-                        'unit_price' => $itemData['unit_price'],
-                        'subtotal' => $subtotal,
-                        'sku' => $itemData['sku'],
-                        'store_id' => $itemData['store_id'],
-                    ]);
-                }
-            }
 
-            // Set status
-            if (!empty($remainingItems)) {
-                $purchaseOrder->status = 'partial';
-            } else {
-                $purchaseOrder->status = 'received';
-            }
-            $purchaseOrder->updated_by = $user->id;
-            $purchaseOrder->shipping_cost = $shippingCost;
-            $purchaseOrder->logistics_cost = $logisticsCost;
-            $purchaseOrder->save();
+                $purchaseOrder->updated_by = $user->id;
+                $purchaseOrder->save();
+                $this->receiving->sync($purchaseOrder->fresh());
+            });
 
-            // Distribute the shipment's shipping/logistics cost across the products
-            // actually received in this call, updating each product's landed-cost
-            // basis (unit_cost, shipping_cost, logistics_cost).
-            $pricingWarnings = $this->landedCostService->apply($landedCostLines, $shippingCost, $logisticsCost);
-
-            DB::commit();
-            $response = [
+            return response()->json([
                 'status' => 'success',
-                'message' => 'Purchase order received successfully.',
-                // The frontend (lib/purchaseorders.ts receiptPurchaseOrder) reads
-                // `purchase_order`, not `data` - keep both so any other caller
-                // relying on `data` doesn't break.
-                'data' => $purchaseOrder,
-                'purchase_order' => $purchaseOrder,
-                'pricing_warnings' => $pricingWarnings,
-            ];
-            if ($newPurchaseOrder) {
-                $response['new_purchase_order'] = $newPurchaseOrder->load([
-                    'items.product.store',
-                    'items.product.company',
-                    'items.product.variants',
-                    'items.variant:id,sku,product_id',
-                    'items.store:id,name',
-                    'supplier:id,name',
-                    'store:id,name'
-                ]);
-            }
-            return response()->json($response, 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Failed to receive purchase order', ['error' => $e->getMessage()]);
+                'message' => 'Return recorded and stock removed.',
+                'data' => $this->present($purchaseOrder->fresh()),
+            ], 200);
+        } catch (\Throwable $e) {
+            Log::error('Failed to return purchase order stock', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Failed to receive purchase order: ' . $e->getMessage(),
+                'message' => 'Failed to record return: ' . $e->getMessage(),
             ], 500);
         }
     }
 
-    // Delete a purchase order
     public function destroy(Request $request, $id)
     {
-        $purchaseOrder = PurchaseOrder::find($id);
+        $purchaseOrder = $this->findForCompany($request, $id);
         if (!$purchaseOrder) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Purchase order not found.',
             ], 404);
-        }
-        $user = $request->user();
-        if (!$this->hasPermission($request, 'can_delete_purchase_orders', $user->company_id)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Unauthorized to delete purchase orders.',
-            ], 403);
         }
         if (!$this->hasPermission($request, 'can_delete_purchase_orders', $purchaseOrder->company_id)) {
             return response()->json([
@@ -629,17 +625,28 @@ class PurchaseOrderController extends Controller
                 'message' => 'Unauthorized to delete this purchase order.',
             ], 403);
         }
+        if ($this->hasReceipts($purchaseOrder)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Stock has been received against this purchase order, so it cannot be deleted.',
+            ], 422);
+        }
+        if ((float) $purchaseOrder->amount_paid > 0) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Payments have been made against this purchase order, so it cannot be deleted.',
+            ], 422);
+        }
         try {
-            DB::beginTransaction();
-            $purchaseOrder->items()->delete();
-            $purchaseOrder->delete();
-            DB::commit();
+            DB::transaction(function () use ($purchaseOrder) {
+                $purchaseOrder->items()->delete();
+                $purchaseOrder->delete();
+            });
             return response()->json([
                 'status' => 'success',
                 'message' => 'Purchase order deleted successfully.'
             ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
             Log::error('Failed to delete purchase order', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',
@@ -648,12 +655,9 @@ class PurchaseOrderController extends Controller
         }
     }
 
-    /**
-     * Approve or reject a purchase order
-     */
     public function approve(Request $request, $id)
     {
-        $purchaseOrder = PurchaseOrder::find($id);
+        $purchaseOrder = $this->findForCompany($request, $id);
         if (!$purchaseOrder) {
             return response()->json([
                 'status' => 'failed',
@@ -662,12 +666,11 @@ class PurchaseOrderController extends Controller
         }
 
         $user = $request->user();
-
-        // Check permission for approving purchase orders
-        if (!$this->hasPermission($request, 'can_approve_purchase_orders', $purchaseOrder->company_id)) {
+        // Held only by the GM and Director roles; company/system admin rights deliberately don't imply it.
+        if (!$user->role?->hasPermission('can_approve_purchase_orders') || $user->company_id !== $purchaseOrder->company_id) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Unauthorized to approve purchase orders.',
+                'message' => 'Only the GM or a Director can approve purchase orders.',
             ], 403);
         }
 
@@ -675,40 +678,35 @@ class PurchaseOrderController extends Controller
             'approval_status' => 'required|string|in:approved,rejected',
             'notes' => 'nullable|string',
         ]);
-
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => $validator->errors(),
-            ], 400);
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+        if ($purchaseOrder->status === 'cancelled') {
+            return response()->json(['status' => 'failed', 'message' => 'This purchase order is cancelled.'], 422);
+        }
+        if (!$purchaseOrder->items()->exists()) {
+            return response()->json(['status' => 'failed', 'message' => 'This purchase order has no items to approve.'], 422);
         }
 
         try {
             $purchaseOrder->update([
                 'approval_status' => $request->input('approval_status'),
                 'approved_by' => $user->id,
-                'comments' => $request->input('notes') ?? $purchaseOrder->comments,
+                'comments' => $request->input('notes') ?: $purchaseOrder->comments,
             ]);
-
-            $statusMessage = $request->input('approval_status') === 'approved'
-                ? 'Purchase order approved successfully.'
-                : 'Purchase order rejected.';
 
             return response()->json([
                 'status' => 'success',
-                'message' => $statusMessage,
-                'data' => $purchaseOrder->fresh([
-                    'items.product.store',
-                    'items.product.company',
-                    'items.product.variants',
-                    'items.variant:id,sku,product_id',
-                    'items.store:id,name',
-                    'supplier:id,name',
-                    'store:id,name',
-                    'approvedBy:id,first_name,last_name,email'
-                ]),
+                'message' => $request->input('approval_status') === 'approved'
+                    ? 'Purchase order approved successfully.'
+                    : 'Purchase order rejected.',
+                'data' => $this->present($purchaseOrder->fresh()),
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Failed to approve purchase order', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',

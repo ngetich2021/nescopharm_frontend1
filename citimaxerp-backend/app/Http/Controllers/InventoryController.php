@@ -190,7 +190,12 @@ class InventoryController extends Controller
             $batchNumber = $request->batch_number ?? InventoryBatch::generateBatchNumber($companyId, $request->product_id);
 
             // Check for duplicate batch number
-            $existingBatch = InventoryBatch::where('batch_number', $batchNumber)->first();
+            $existingBatch = InventoryBatch::where('company_id', $companyId)
+                ->where('product_id', $request->product_id)
+                ->where('variant_id', $request->variant_id)
+                ->where('store_id', $request->store_id)
+                ->where('batch_number', $batchNumber)
+                ->first();
             if ($existingBatch) {
                 return response()->json(['message' => 'Batch number already exists'], 422);
             }

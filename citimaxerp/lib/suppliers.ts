@@ -191,4 +191,38 @@ export async function getSupplierSummaryFromDB(): Promise<SupplierSummary> {
     inactiveSuppliers,
     averagePaymentTerms
   };
+}
+
+// Export suppliers as CSV
+export async function exportSuppliers(): Promise<void> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suppliers/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new Error("Export failed")
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = "suppliers.csv"
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// Import suppliers from file
+export async function importSuppliers(file: File, dryRun: boolean = true): Promise<any> {
+  const form = new FormData()
+  form.append("file", file)
+  form.append("dry_run", dryRun ? "1" : "0")
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/data-import/suppliers`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.message || "Import failed")
+  }
+  return res.json()
 } 

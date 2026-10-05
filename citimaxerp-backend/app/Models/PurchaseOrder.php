@@ -15,9 +15,9 @@ class PurchaseOrder extends Model
 
     public function getOrderNumberAttribute($value)
     {
-        // If order_number is like PO-853b296e-0074, return PO-0074
-        if (preg_match('/^(PO)-(?:[\w-]+)-(\d{4})$/', $value, $matches)) {
-            return $matches[1] . '-' . $matches[2];
+        // PO-853b296e-0074 reads PO-0074; its split PO-853b296e-0074-01 reads PO-0074-01.
+        if (preg_match('/^PO-[0-9a-f]{8}-(\d{4}(?:-\d+)*)$/i', (string) $value, $matches)) {
+            return 'PO-' . $matches[1];
         }
         // Fallback: return original
         return $value;
@@ -123,6 +123,11 @@ class PurchaseOrder extends Model
     public function payments()
     {
         return $this->hasMany(SupplierPayment::class);
+    }
+
+    public function productReceipts()
+    {
+        return $this->hasMany(ProductReceipt::class, 'purchase_order_id');
     }
 
     public function approvedBy()

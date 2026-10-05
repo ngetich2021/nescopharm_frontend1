@@ -278,11 +278,12 @@ class QuoteController extends Controller
                     ]);
                 }
 
-                // Validate stock if track_inventory is true
-                if ($product->track_inventory && $item['quantity'] > $stockQuantity) {
+                // Validate stock if track_inventory is true. Quantity is in packs; stock is in pieces.
+                $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
+                if ($product->track_inventory && $piecesNeeded > $stockQuantity) {
                     return response()->json([
                         'status' => 'failed',
-                        'message' => "Item at index {$index}: Insufficient stock for product/variant {$product->name} (available: {$stockQuantity}).",
+                        'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, (int) $stockQuantity),
                     ], 400);
                 }
 
@@ -311,8 +312,7 @@ class QuoteController extends Controller
                     $baseQuantity = (int) $this->calculator->convertToBaseUnits($product, $unitQuantity, $unitId);
                     $packagingBreakdown = $this->calculator->calculatePackagingBreakdown($product, $baseQuantity);
                 } else {
-                    // No unit selected, treat quantity as base units
-                    $baseQuantity = (int) $item['quantity'];
+                    $baseQuantity = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
                     if ($product->has_packaging) {
                         $packagingBreakdown = $this->calculator->calculatePackagingBreakdown($product, $baseQuantity);
                     }
@@ -381,7 +381,7 @@ class QuoteController extends Controller
                         $baseQuantity = (int) $this->calculator->convertToBaseUnits($product, $unitQuantity, $unitId);
                         $packagingBreakdown = $this->calculator->calculatePackagingBreakdown($product, $baseQuantity);
                     } else {
-                        $baseQuantity = (int) $item['quantity'];
+                        $baseQuantity = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
                         if ($product->has_packaging) {
                             $packagingBreakdown = $this->calculator->calculatePackagingBreakdown($product, $baseQuantity);
                         }
@@ -449,7 +449,8 @@ class QuoteController extends Controller
             'valid_until' => 'sometimes|required|date|after:today',
             'notes' => 'nullable|string',
             'discount' => 'sometimes|numeric|min:0|max:999999.99',
-            'items' => 'sometimes|required|array|min:1',
+            // An empty list deletes the quote (handled below).
+            'items' => 'sometimes|present|array',
             'items.*.id' => 'nullable|uuid|exists:quote_items,id',
             'items.*.product_id' => 'required|uuid|exists:products,id',
             'items.*.variant_id' => 'nullable|uuid|exists:product_variants,id',
@@ -488,6 +489,29 @@ class QuoteController extends Controller
                 'status' => 'failed',
                 'message' => 'Unauthorized to edit quotes for this company.',
             ], 403);
+        }
+
+        // Removing every item is part of editing, so a user who may edit the quote may also empty it,
+        // which deletes it - no separate delete permission needed.
+        if ($request->has('items') && count($request->input('items', [])) === 0) {
+            if ($quote->status === 'accepted') {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => 'An accepted quote cannot be emptied. Reject it instead.',
+                ], 400);
+            }
+            DB::transaction(function () use ($quote) {
+                $quote->quoteItems()->delete();
+                $quote->quoteNotes()->delete();
+                $quote->delete();
+            });
+            Log::info('Quote deleted by removing all items', ['user_id' => $user->id, 'quote_id' => $quote->id]);
+
+            return response()->json([
+                'status' => 'success',
+                'deleted' => true,
+                'message' => "Quote {$quote->quote_number} had no items and was deleted.",
+            ], 200);
         }
 
         try {
@@ -560,11 +584,15 @@ class QuoteController extends Controller
                             ], 400);
                         }
 
-                        // Validate stock
-                        if ($product->track_inventory && $item['quantity'] > $product->stock_quantity) {
+                        // Validate stock. Quantity is in packs; stock is in pieces.
+                        $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
+                        $stockQuantity = !empty($item['variant_id'])
+                            ? (int) (\App\Models\ProductVariant::whereKey($item['variant_id'])->value('stock_quantity') ?? 0)
+                            : (int) $product->stock_quantity;
+                        if ($product->track_inventory && $piecesNeeded > $stockQuantity) {
                             return response()->json([
                                 'status' => 'failed',
-                                'message' => "Item at index {$index}: Insufficient stock for product {$product->name} (available: {$product->stock_quantity}).",
+                                'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, $stockQuantity),
                             ], 400);
                         }
 
@@ -595,7 +623,7 @@ class QuoteController extends Controller
                             $baseQuantity = (int) $this->calculator->convertToBaseUnits($product, $unitQuantity, $unitId);
                             $packagingBreakdown = $this->calculator->calculatePackagingBreakdown($product, $baseQuantity);
                         } else {
-                            $baseQuantity = (int) $item['quantity'];
+                            $baseQuantity = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
                             if ($product->has_packaging) {
                                 $packagingBreakdown = $this->calculator->calculatePackagingBreakdown($product, $baseQuantity);
                             }
@@ -771,7 +799,7 @@ class QuoteController extends Controller
                 foreach ($quote->quoteItems as $index => $item) {
                     $product = $item->product;
                     $variant = $item->variant_id ? ($item->variant ?? \App\Models\ProductVariant::find($item->variant_id)) : null;
-                    if ($error = $this->insufficientStockMessage($product, $variant, (int) $item->quantity)) {
+                    if ($error = $this->insufficientStockMessage($product, $variant, PackagingCalculatorService::piecesFor($item->quantity, $item->price_unit))) {
                         return response()->json([
                             'status' => 'failed',
                             'message' => "Item at index {$index}: {$error}",
@@ -829,7 +857,7 @@ class QuoteController extends Controller
                         'unit_id' => $item->unit_id,
                         'quantity' => $item->quantity,
                         'unit_quantity' => $item->unit_quantity,
-                        'base_quantity' => $item->base_quantity,
+                        'base_quantity' => $item->unit_id ? $item->base_quantity : PackagingCalculatorService::piecesFor($item->quantity, $item->price_unit),
                         'packaging_breakdown' => $item->packaging_breakdown,
                         'unit_price' => $item->unit_price,
                         'price_label' => $item->price_label,

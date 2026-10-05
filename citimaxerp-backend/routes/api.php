@@ -479,8 +479,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store'])->name('products.store');
     Route::post('products/bulk', [ProductController::class, 'bulkStore']);
     Route::post('/products/import', [ProductController::class, 'importProducts'])->name('products.import');
+
+    // Migration imports: blank templates are built in the browser from these schemas.
+    Route::get('/data-import/schemas', [\App\Http\Controllers\DataImportController::class, 'schemas'])->name('data-import.schemas');
+    Route::post('/data-import/{entity}', [\App\Http\Controllers\DataImportController::class, 'import'])->name('data-import.import');
+    // Reads a purchase order sheet into the New Purchase Order form; saves nothing itself.
+    Route::post('/purchase-orders/parse-sheet', [\App\Http\Controllers\DataImportController::class, 'parsePurchaseOrder'])->name('purchase-orders.parse-sheet');
+    // Reads a delivery sheet into the Create Product Receipt form; saves nothing itself.
+    Route::post('/product-receipts/parse-sheet', [\App\Http\Controllers\DataImportController::class, 'parseProductReceipt'])->name('product-receipts.parse-sheet');
+
+
     Route::post('/price-lists/import', [ProductController::class, 'importPriceList'])->name('price-lists.import');
     Route::get('/price-lists/export', [ProductController::class, 'exportPriceList'])->name('price-lists.export');
+    Route::get('/price-lists/history', [ProductController::class, 'priceListHistory'])->name('price-lists.history');
+    Route::get('/price-lists/history/{id}/download', [ProductController::class, 'downloadImportFile'])->name('price-lists.history.download');
+    Route::get('/products/{id}/price-history', [ProductController::class, 'productPriceHistory'])->name('products.price-history');
     Route::match(['patch', 'put'], '/products/{id}', [ProductController::class, 'update'])->name('products.update');
     Route::delete('/products/{id}', [ProductController::class, 'destroy'])->name('products.destroy');
 
@@ -587,12 +600,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['patch', 'put'], 'debts/order/{order_id}', [DebtController::class, 'updateByOrderId']);
 
     // Supplier routes
+    Route::get('/suppliers/export', [SupplierController::class, 'export'])->name('suppliers.export');
     Route::apiResource('suppliers', SupplierController::class);
 
     // Purchase Order routes
     Route::apiResource('purchase-orders', PurchaseOrderController::class);
-    Route::post('/purchase-orders/{id}/receipt', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
     Route::post('/purchase-orders/{id}/approve', [PurchaseOrderController::class, 'approve'])->name('purchase-orders.approve');
+    Route::post('/purchase-orders/{id}/return', [PurchaseOrderController::class, 'returnItems'])->name('purchase-orders.return');
 
     // Supplier Payment routes
     Route::apiResource('supplier-payments', SupplierPaymentController::class);
@@ -979,6 +993,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('invoices/{id}/map-payment', [InvoiceController::class, 'mapPayment']);
     Route::get('invoices/{id}/payment-history', [InvoiceController::class, 'getPaymentHistory']);
     Route::get('invoices/{id}/balance', [InvoiceController::class, 'getInvoiceBalance']);
+    Route::get('invoices/{id}/download-pdf', [InvoiceController::class, 'downloadPdf']);
     Route::post('invoices/{id}/sync-amounts', [InvoiceController::class, 'syncInvoiceAmounts']);
     Route::post('payments/allocate-to-invoices', [InvoiceController::class, 'allocatePaymentToInvoices']);
     Route::get('payments/{paymentId}/available-amount', [InvoiceController::class, 'getPaymentAvailableAmount']);

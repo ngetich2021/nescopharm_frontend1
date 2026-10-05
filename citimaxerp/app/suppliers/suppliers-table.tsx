@@ -37,7 +37,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { SupplierDetailsSheet } from "./supplier-details-sheet"
 import { CreateSupplierSheet } from "./components/create-supplier-sheet"
-import { Supplier, getSuppliers, deleteSupplier } from "@/lib/suppliers"
+import { Supplier, getSuppliers, deleteSupplier, exportSuppliers, importSuppliers } from "@/lib/suppliers"
+import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SuppliersTableSkeleton } from "./suppliers-table-skeleton"
 import { useToast } from "@/hooks/use-toast"
@@ -65,6 +66,10 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null)
   const [isSupplierDetailsOpen, setIsSupplierDetailsOpen] = useState(false)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importPreviewData, setImportPreviewData] = useState<any>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
 
   // Cache utility functions
   function getCachedSuppliers(): Supplier[] | null {
@@ -237,6 +242,75 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
     }
   }
 
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      await exportSuppliers()
+      toast({
+        title: "Success",
+        description: "Suppliers exported successfully."
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to export suppliers",
+        variant: "destructive"
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsImporting(true)
+    try {
+      // First, preview the import
+      const result = await importSuppliers(file, true)
+      setImportPreviewData(result)
+      setImportFile(file)
+      toast({
+        title: "Preview ready",
+        description: `${result.summary.rows} rows will be processed.`
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to read import file",
+        variant: "destructive"
+      })
+    } finally {
+      setIsImporting(false)
+      e.target.value = ""
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!importFile) return
+    setIsImporting(true)
+    try {
+      await importSuppliers(importFile, false)
+      await fetchSuppliers()
+      setImportPreviewData(null)
+      setImportFile(null)
+      toast({
+        title: "Success",
+        description: "Suppliers imported successfully."
+      })
+      if (onDataChanged) onDataChanged()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to import suppliers",
+        variant: "destructive"
+      })
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   const getStatusBadgeClass = (isActive: boolean) => {
     return isActive 
       ? "bg-green-100 text-green-800" 
@@ -297,14 +371,30 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                 Add Supplier
               </Button>
             </PermissionGuard>
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
+              {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Export
             </Button>
             <div className="relative">
-              <input type="file" id="import-suppliers-file" className="hidden" accept=".csv" onChange={() => {}} />
-              <Button onClick={() => document.getElementById("import-suppliers-file")?.click()} variant="outline" size="sm">
-                <Upload className="mr-2 h-4 w-4" />
+              <input
+                type="file"
+                id="import-suppliers-file"
+                className="hidden"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleImportFile}
+              />
+              <Button
+                onClick={() => document.getElementById("import-suppliers-file")?.click()}
+                variant="outline"
+                size="sm"
+                disabled={isImporting}
+              >
+                {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                 Import
               </Button>
             </div>
@@ -435,6 +525,93 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
         open={isSupplierDetailsOpen}
         onOpenChange={setIsSupplierDetailsOpen}
       />
+
+      {/* Import Preview Dialog */}
+      {importPreviewData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-lg font-semibold">Import Preview</h2>
+              <p className="text-sm text-gray-600 mt-1">Review the import summary before proceeding</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-3 rounded">
+                  <div className="text-2xl font-bold text-blue-600">{importPreviewData.summary.created}</div>
+                  <div className="text-sm text-gray-600">New suppliers</div>
+                </div>
+                <div className="bg-green-50 p-3 rounded">
+                  <div className="text-2xl font-bold text-green-600">{importPreviewData.summary.updated}</div>
+                  <div className="text-sm text-gray-600">Updated</div>
+                </div>
+                <div className="bg-yellow-50 p-3 rounded">
+                  <div className="text-2xl font-bold text-yellow-600">{importPreviewData.summary.unchanged}</div>
+                  <div className="text-sm text-gray-600">Unchanged</div>
+                </div>
+                <div className="bg-red-50 p-3 rounded">
+                  <div className="text-2xl font-bold text-red-600">{importPreviewData.summary.errors}</div>
+                  <div className="text-sm text-gray-600">Errors</div>
+                </div>
+              </div>
+              {importPreviewData.rows && importPreviewData.rows.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="font-semibold mb-2">Details ({importPreviewData.rows.length} rows):</h3>
+                  <div className="max-h-[300px] overflow-y-auto border rounded">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Row</th>
+                          <th className="px-3 py-2 text-left">Name</th>
+                          <th className="px-3 py-2 text-left">Status</th>
+                          <th className="px-3 py-2 text-left">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreviewData.rows.slice(0, 20).map((row: any, idx: number) => (
+                          <tr key={idx} className="border-t hover:bg-gray-50">
+                            <td className="px-3 py-2">{row.row}</td>
+                            <td className="px-3 py-2">{row.name}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-2 py-1 text-xs rounded ${
+                                row.status === 'created' ? 'bg-blue-100 text-blue-800' :
+                                row.status === 'updated' ? 'bg-green-100 text-green-800' :
+                                row.status === 'unchanged' ? 'bg-gray-100 text-gray-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-gray-600">{row.message || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setImportPreviewData(null)
+                  setImportFile(null)
+                }}
+                disabled={isImporting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmImport}
+                disabled={isImporting || importPreviewData.summary.errors > 0}
+              >
+                {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Confirm Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

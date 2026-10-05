@@ -7,9 +7,12 @@ use App\Models\ProductVariant;
 use App\Models\ProductPackagingUnit;
 use App\Models\ProductCategory;
 use App\Models\ProductPriceTier;
+use App\Models\ProductPriceHistory;
+use App\Models\PriceListImport;
 use App\Models\InventorySerial;
 use App\Models\ProductReceiptItem;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -229,7 +232,11 @@ class ProductController extends Controller
         $query->where('company_id', $companyId);
 
         if ($request->filled('name')) {
-            $query->where('name', 'ilike', '%' . $request->input('name') . '%');
+            // Every word must appear, so pasted text with doubled or non-breaking spaces still matches.
+            $words = preg_split('/[\s\x{00A0}]+/u', trim($request->input('name')), -1, PREG_SPLIT_NO_EMPTY);
+            foreach ($words as $word) {
+                $query->where('name', 'ilike', '%' . addcslashes($word, '%_\\') . '%');
+            }
         }
 
         if ($request->filled('search')) {
@@ -360,6 +367,7 @@ class ProductController extends Controller
 
         $results = [];
         $summary = ['rows' => 0, 'products_created' => 0, 'products_matched' => 0, 'prices_added' => 0, 'prices_updated' => 0, 'errors' => 0];
+        $priceHistoryRecords = [];
 
         DB::beginTransaction();
         try {
@@ -461,8 +469,17 @@ class ProductController extends Controller
                     if ($tier->product_id !== $product->id) {
                         $notes[] = "{$result['code']} moved here from another product.";
                     }
+                    $oldPrice = (float) $tier->price;
                     $tier->update(['product_id' => $product->id, 'variant_id' => null, 'price' => $price, 'unit_of_measure' => $uom]);
                     $summary['prices_updated']++;
+
+                    if (!$dryRun && $oldPrice !== $price) {
+                        $priceHistoryRecords[] = [
+                            'product_id' => $product->id,
+                            'old_value' => $oldPrice,
+                            'new_value' => $price,
+                        ];
+                    }
                 } else {
                     ProductPriceTier::create([
                         'id' => (string) Str::uuid(),
@@ -474,6 +491,14 @@ class ProductController extends Controller
                         'unit_of_measure' => $uom,
                     ]);
                     $summary['prices_added']++;
+
+                    if (!$dryRun) {
+                        $priceHistoryRecords[] = [
+                            'product_id' => $product->id,
+                            'old_value' => null,
+                            'new_value' => $price,
+                        ];
+                    }
                 }
 
                 $results[] = $result + [
@@ -485,7 +510,58 @@ class ProductController extends Controller
                 ];
             }
 
-            $dryRun ? DB::rollBack() : DB::commit();
+            if ($dryRun) {
+                DB::rollBack();
+            } else {
+                $nextVersion = (PriceListImport::where('company_id', $companyId)
+                    ->where('list_name', $listName)
+                    ->max('version') ?? 0) + 1;
+
+                $uploadedFile = $request->file('file');
+                $storedPath = $uploadedFile->storeAs(
+                    "price-lists/{$companyId}",
+                    "{$listName}_{$nextVersion}_" . time() . '.' . $uploadedFile->getClientOriginalExtension(),
+                    'local'
+                );
+
+                $importRecord = PriceListImport::create([
+                    'id' => (string) Str::uuid(),
+                    'company_id' => $companyId,
+                    'list_name' => $listName,
+                    'version' => $nextVersion,
+                    'file_name' => $uploadedFile->getClientOriginalName(),
+                    'file_path' => $storedPath,
+                    'rows_count' => $summary['rows'],
+                    'products_created' => $summary['products_created'],
+                    'products_matched' => $summary['products_matched'],
+                    'prices_added' => $summary['prices_added'],
+                    'prices_updated' => $summary['prices_updated'],
+                    'errors_count' => $summary['errors'],
+                    'uploaded_by' => $user->id,
+                ]);
+
+                foreach ($priceHistoryRecords as $rec) {
+                    $change = $rec['old_value'] !== null ? $rec['new_value'] - $rec['old_value'] : null;
+                    $pct = ($rec['old_value'] !== null && $rec['old_value'] != 0)
+                        ? round(($change / $rec['old_value']) * 100, 2) : null;
+
+                    ProductPriceHistory::create([
+                        'id' => (string) Str::uuid(),
+                        'company_id' => $companyId,
+                        'product_id' => $rec['product_id'],
+                        'price_type' => $listName,
+                        'old_value' => $rec['old_value'],
+                        'new_value' => $rec['new_value'],
+                        'change_amount' => $change,
+                        'change_percentage' => $pct,
+                        'changed_by' => $user->id,
+                        'source' => ProductPriceHistory::SOURCE_BULK_IMPORT,
+                        'source_reference' => $importRecord->label,
+                    ]);
+                }
+
+                DB::commit();
+            }
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Price list import failed', ['error' => $e->getMessage()]);
@@ -851,6 +927,72 @@ class ProductController extends Controller
             'list_name' => $listName,
             'rows' => $rows,
         ]);
+    }
+
+    public function priceListHistory(Request $request)
+    {
+        $user = $request->user();
+        $listName = strtoupper(trim($request->input('list_name', '')));
+
+        $query = PriceListImport::where('company_id', $user->company_id)
+            ->orderByDesc('created_at');
+
+        if ($listName) {
+            $query->where('list_name', $listName);
+        }
+
+        $imports = $query->get();
+        $userIds = $imports->pluck('uploaded_by')->filter()->unique()->values()->toArray();
+        $users = \App\Models\User::whereIn('id', $userIds)->get()->keyBy('id');
+
+        $data = $imports->map(function ($imp) use ($users) {
+            $row = $imp->toArray();
+            $u = $imp->uploaded_by ? $users->get($imp->uploaded_by) : null;
+            $row['uploader'] = $u ? ['id' => $u->id, 'name' => $u->full_name] : null;
+            return $row;
+        });
+
+        return response()->json(['data' => $data]);
+    }
+
+    public function downloadImportFile(Request $request, string $id)
+    {
+        $user = $request->user();
+        $import = PriceListImport::where('id', $id)
+            ->where('company_id', $user->company_id)
+            ->first();
+
+        if (!$import || !$import->file_path || !Storage::disk('local')->exists($import->file_path)) {
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        return Storage::disk('local')->download($import->file_path, $import->file_name);
+    }
+
+    public function productPriceHistory(Request $request, string $productId)
+    {
+        $user = $request->user();
+        $product = Product::where('id', $productId)->where('company_id', $user->company_id)->first();
+        if (!$product) {
+            return response()->json(['error' => 'Product not found'], 404);
+        }
+
+        $history = ProductPriceHistory::where('product_id', $productId)
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get();
+
+        $userIds = $history->pluck('changed_by')->filter()->unique()->values()->toArray();
+        $users = \App\Models\User::whereIn('id', $userIds)->get()->keyBy('id');
+
+        $data = $history->map(function ($h) use ($users) {
+            $row = $h->toArray();
+            $u = $h->changed_by ? $users->get($h->changed_by) : null;
+            $row['changed_by_user'] = $u ? ['id' => $u->id, 'name' => $u->full_name] : null;
+            return $row;
+        });
+
+        return response()->json(['data' => $data]);
     }
 
     /**
@@ -2280,6 +2422,10 @@ class ProductController extends Controller
 
             if ($request->has('batch_number')) {
                 $query->where('batch_number', 'ilike', '%' . $request->batch_number . '%');
+            }
+
+            if ($request->boolean('in_stock')) {
+                $query->where('quantity_available', '>', 0);
             }
 
             // Sorting

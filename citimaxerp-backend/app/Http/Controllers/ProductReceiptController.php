@@ -109,6 +109,11 @@ class ProductReceiptController extends Controller
         return $prefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
 
+    protected function receivingService(): \App\Services\PurchaseOrderReceivingService
+    {
+        return app(\App\Services\PurchaseOrderReceivingService::class);
+    }
+
     /**
      * List all product receipts (with optional pagination).
      */
@@ -122,7 +127,7 @@ class ProductReceiptController extends Controller
                 'message' => 'Unauthorized to view product receipts.',
             ], 403);
         }
-        $query = ProductReceipt::with(['store', 'supplier', 'recipient']);
+        $query = ProductReceipt::with(['store', 'supplier', 'recipient'])->withCount('productReceiptItems');
         if (!$this->hasPermission($request, 'can_manage_system')) {
             $query->where('company_id', $companyId);
         }
@@ -257,10 +262,27 @@ class ProductReceiptController extends Controller
                 'items.*.track_serials' => 'nullable|boolean',
                 'items.*.serial_prefix' => 'nullable|string|max:20',
                 'items.*.warranty_months' => 'nullable|integer|min:0',
+                'purchase_order_id' => 'nullable|uuid',
+                'items.*.purchase_order_item_id' => 'nullable|uuid',
             ]);
             if ($validator->fails()) {
                 DB::rollBack();
                 return response()->json(['status' => 'failed', 'message' => $validator->errors(), 'errors' => $validator->errors()], 422);
+            }
+
+            $previousOrderId = $receipt->purchase_order_id;
+            $linkedOrder = null;
+            if (isset($data['items'])) {
+                $orderId = array_key_exists('purchase_order_id', $data) ? ($data['purchase_order_id'] ?: null) : $receipt->purchase_order_id;
+                // Older receipts recorded before receiving was tied to purchase orders stay editable.
+                [$linkedOrder, $data['items'], $linkError] = $this->receivingService()->linkReceiptItems(
+                    $orderId, $companyId, $data['items'], $receipt->id, (bool) $previousOrderId
+                );
+                if ($linkError) {
+                    DB::rollBack();
+                    return response()->json(['status' => 'failed', 'message' => $linkError], 422);
+                }
+                $receipt->purchase_order_id = $linkedOrder?->id;
             }
 
             // Update main receipt fields
@@ -296,8 +318,12 @@ class ProductReceiptController extends Controller
                 }
                 // Delete old items
                 $receipt->productReceiptItems()->delete();
+                \App\Models\InventoryMovement::where('reference_type', 'product_receipt')
+                    ->where('reference_id', $receipt->id)
+                    ->delete();
 
                 $landedCostLines = [];
+                $movementRows = [];
 
                 // Add new items and update inventory
                 foreach ($data['items'] as $item) {
@@ -338,6 +364,7 @@ class ProductReceiptController extends Controller
                         'manufacture_date' => $item['manufacture_date'] ?? null,
                         'supplier' => $item['supplier'] ?? null,
                         'supplier_id' => $item['supplier_id'] ?? $data['supplier_id'] ?? null,
+                        'purchase_order_item_id' => $item['purchase_order_item_id'] ?? null,
                     ]);
 
                     // Create inventory batch if batch tracking is needed
@@ -445,13 +472,20 @@ class ProductReceiptController extends Controller
                         }
                     }
                     // Update inventory (increase stock)
+                    $receivedBy = $data['received_by'] ?? $receipt->received_by;
                     if (!empty($item['variant_id'])) {
                         $variant = \App\Models\ProductVariant::find($item['variant_id']);
                         if ($variant) {
+                            $before = (int) $variant->stock_quantity;
                             $variant->increment('stock_quantity', $item['quantity']);
+                            if ($product) {
+                                $movementRows[] = $this->receiptMovementRow($receipt, $item, $product->id, $before, $receivedBy);
+                            }
                         }
                     } else if ($product) {
+                        $before = (int) $product->stock_quantity;
                         $product->increment('stock_quantity', $item['quantity']);
+                        $movementRows[] = $this->receiptMovementRow($receipt, $item, $product->id, $before, $receivedBy);
                     }
 
                     if ($product) {
@@ -465,6 +499,10 @@ class ProductReceiptController extends Controller
                     }
                 }
 
+                if ($movementRows) {
+                    \App\Models\InventoryMovement::insert($movementRows);
+                }
+
                 // Distribute this receipt's shipping/logistics cost across the products
                 // received on it, updating each product's landed-cost basis.
                 $pricingWarnings = $this->landedCostService->apply(
@@ -472,6 +510,11 @@ class ProductReceiptController extends Controller
                     (float) ($data['shipping_cost'] ?? $receipt->shipping_cost ?? 0),
                     (float) ($data['logistics_cost'] ?? $receipt->logistics_cost ?? 0)
                 );
+            }
+
+            $this->receivingService()->sync($linkedOrder ?? \App\Models\PurchaseOrder::find($receipt->purchase_order_id));
+            if ($previousOrderId && $previousOrderId !== $receipt->purchase_order_id) {
+                $this->receivingService()->sync(\App\Models\PurchaseOrder::find($previousOrderId));
             }
 
             DB::commit();
@@ -487,6 +530,38 @@ class ProductReceiptController extends Controller
         }
     }
 
+    // Dated on the receipt, not the edit, so stock reports place it in the period it arrived.
+    private function receiptMovementRow(ProductReceipt $receipt, array $item, string $productId, int $before, $createdBy): array
+    {
+        $quantity = (int) $item['quantity'];
+        $unitCost = $item['unit_cost'] ?? $item['unit_price'] ?? null;
+        $date = $receipt->created_at ?? now();
+
+        return [
+            'id' => (string) Str::uuid(),
+            'company_id' => $receipt->company_id,
+            'store_id' => $receipt->store_id,
+            'product_id' => $productId,
+            'variant_id' => $item['variant_id'] ?? null,
+            'batch_id' => null,
+            'type' => 'receipt',
+            'quantity' => $quantity,
+            'quantity_before' => $before,
+            'quantity_after' => $before + $quantity,
+            'reference_type' => 'product_receipt',
+            'reference_id' => (string) $receipt->id,
+            'reference_number' => $receipt->product_receipt_number,
+            'unit_cost' => $unitCost,
+            'unit_price' => $item['unit_price'] ?? null,
+            'total_cost' => $unitCost !== null ? round($quantity * (float) $unitCost, 2) : null,
+            'movement_date' => $date,
+            'created_by' => $createdBy,
+            'notes' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+    }
+
     /**
      * Delete a product receipt.
      */
@@ -500,7 +575,9 @@ class ProductReceiptController extends Controller
                 'message' => 'Unauthorized to delete this product receipt.',
             ], 403);
         }
+        $orderId = $receipt->purchase_order_id;
         $receipt->delete();
+        $this->receivingService()->sync($orderId ? \App\Models\PurchaseOrder::find($orderId) : null);
         return response()->json(['status' => 'success', 'message' => 'Product receipt deleted.']);
     }
 
@@ -509,6 +586,9 @@ class ProductReceiptController extends Controller
      */
     public function store(Request $request)
     {
+        // Large receipts run many queries against a remote database.
+        set_time_limit(300);
+
         // TEMP: decode items if sent as JSON string (for Postman form-data)
         if ($request->has('items') && is_string($request->items)) {
             $decoded = json_decode($request->items, true);
@@ -596,17 +676,30 @@ class ProductReceiptController extends Controller
                     'items.*.track_serials' => 'nullable|boolean',
                     'items.*.serial_prefix' => 'nullable|string|max:20',
                     'items.*.warranty_months' => 'nullable|integer|min:0',
+                    'purchase_order_id' => 'nullable|uuid',
+                    'items.*.purchase_order_item_id' => 'nullable|uuid',
                 ]);
                 if ($validator->fails()) {
                     DB::rollBack();
                     return response()->json(['status' => 'failed', 'message' => $validator->errors(), 'errors' => $validator->errors()], 422);
                 }
 
+                [$linkedOrder, $receiptData['items'], $linkError] = $this->receivingService()->linkReceiptItems(
+                    $receiptData['purchase_order_id'] ?? null,
+                    $companyId,
+                    $receiptData['items']
+                );
+                if ($linkError) {
+                    DB::rollBack();
+                    return response()->json(['status' => 'failed', 'message' => $linkError], 422);
+                }
+
                 // Create product receipt
                 $receipt = ProductReceipt::create([
                     'id' => Str::uuid(),
                     'company_id' => $companyId,
-                    'supplier_id' => $receiptData['supplier_id'] ?? null,
+                    'purchase_order_id' => $linkedOrder?->id,
+                    'supplier_id' => ($receiptData['supplier_id'] ?? null) ?: $linkedOrder?->supplier_id,
                     'contractor_id' => $receiptData['contractor_id'] ?? null,
                     'document_type' => $receiptData['document_type'],
                     'product_receipt_number' => $receiptData['product_receipt_number'],
@@ -619,13 +712,22 @@ class ProductReceiptController extends Controller
                 ]);
 
                 $landedCostLines = [];
+                $productsToResync = [];
+                $movementRows = [];
+                $productsById = \App\Models\Product::whereIn('id', collect($receiptData['items'])->pluck('product_id')->filter()->unique())
+                    ->get()
+                    ->keyBy('id');
+                $variantStock = \App\Models\ProductVariant::whereIn('id', collect($receiptData['items'])->pluck('variant_id')->filter()->unique())
+                    ->pluck('stock_quantity', 'id')
+                    ->map(fn ($q) => (int) $q)
+                    ->all();
 
                 // Create product receipt items and update inventory
                 foreach ($receiptData['items'] as $item) {
                     // Find or create product if not exists
                     $product = null;
                     if (!empty($item['product_id'])) {
-                        $product = \App\Models\Product::find($item['product_id']);
+                        $product = $productsById[$item['product_id']] ?? null;
                     } else if (!empty($item['sku']) || !empty($item['barcode'])) {
                         $product = \App\Models\Product::where('sku', $item['sku'] ?? null)
                             ->orWhere('barcode', $item['barcode'] ?? null)
@@ -658,7 +760,8 @@ class ProductReceiptController extends Controller
                         'lot_number' => $item['lot_number'] ?? null,
                         'manufacture_date' => $item['manufacture_date'] ?? null,
                         'supplier' => $item['supplier'] ?? null,
-                        'supplier_id' => $item['supplier_id'] ?? $receiptData['supplier_id'] ?? null,
+                        'supplier_id' => $item['supplier_id'] ?? (($receiptData['supplier_id'] ?? null) ?: $linkedOrder?->supplier_id),
+                        'purchase_order_item_id' => $item['purchase_order_item_id'] ?? null,
                     ]);
 
                     // Create inventory batch if batch tracking is needed
@@ -768,12 +871,17 @@ class ProductReceiptController extends Controller
                     }
                     // Update inventory (increase stock)
                     if (!empty($item['variant_id'])) {
-                        $variant = \App\Models\ProductVariant::find($item['variant_id']);
-                        if ($variant) {
-                            $variant->increment('stock_quantity', $item['quantity']);
+                        $updated = \App\Models\ProductVariant::whereKey($item['variant_id'])->increment('stock_quantity', $item['quantity']);
+                        if ($updated && $product) {
+                            $productsToResync[$product->id] = $product;
+                            $before = $variantStock[$item['variant_id']] ?? 0;
+                            $variantStock[$item['variant_id']] = $before + (int) $item['quantity'];
+                            $movementRows[] = $this->receiptMovementRow($receipt, $item, $product->id, $before, $receiptData['received_by']);
                         }
                     } else if ($product) {
+                        $before = (int) $product->stock_quantity;
                         $product->increment('stock_quantity', $item['quantity']);
+                        $movementRows[] = $this->receiptMovementRow($receipt, $item, $product->id, $before, $receiptData['received_by']);
                     }
 
                     if ($product) {
@@ -787,6 +895,13 @@ class ProductReceiptController extends Controller
                     }
                 }
 
+                foreach ($productsToResync as $product) {
+                    $this->receivingService()->syncParentStock($product);
+                }
+                if ($movementRows) {
+                    \App\Models\InventoryMovement::insert($movementRows);
+                }
+
                 // Distribute this receipt's shipping/logistics cost across the products
                 // received on it, updating each product's landed-cost basis.
                 $pricingWarnings = $this->landedCostService->apply(
@@ -794,6 +909,8 @@ class ProductReceiptController extends Controller
                     (float) ($receiptData['shipping_cost'] ?? 0),
                     (float) ($receiptData['logistics_cost'] ?? 0)
                 );
+
+                $this->receivingService()->sync($linkedOrder);
 
                 $results[] = [
                     'receipt' => $receipt->load('productReceiptItems'),

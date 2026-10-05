@@ -74,11 +74,18 @@ class ProductVariant extends Model
         return trim(($base !== '' ? $base : $productName) . ' ' . $size);
     }
 
+    // Per-request memo: a product's sizes are serialised together, so without it every size
+    // re-queried its parent's name (74 queries for one products page against a remote DB).
+    private static array $productNames = [];
+
     public function getDisplayNameAttribute(): string
     {
-        $productName = $this->relationLoaded('product')
-            ? $this->product?->name
-            : Product::whereKey($this->product_id)->value('name');
+        if ($this->relationLoaded('product')) {
+            $productName = $this->product?->name;
+        } else {
+            $productName = self::$productNames[$this->product_id]
+                ??= Product::whereKey($this->product_id)->value('name');
+        }
         return self::sizedName($productName, $this->name);
     }
 

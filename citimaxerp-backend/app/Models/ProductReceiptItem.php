@@ -27,6 +27,7 @@ class ProductReceiptItem extends Model
         'manufacture_date',
         'supplier',
         'supplier_id',
+        'purchase_order_item_id',
     ];
 
     protected $casts = [
@@ -34,6 +35,11 @@ class ProductReceiptItem extends Model
         'manufacture_date' => 'date',
         'unit_price' => 'decimal:2',
     ];
+
+    public function purchaseOrderItem()
+    {
+        return $this->belongsTo(PurchaseOrderItem::class, 'purchase_order_item_id');
+    }
 
     public function productReceipt()
     {

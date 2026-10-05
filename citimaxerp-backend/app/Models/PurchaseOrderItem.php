@@ -16,7 +16,8 @@ class PurchaseOrderItem extends Model
         'product_id',
         'variant_id',
         'quantity',
-        'received_quantity', 
+        'received_quantity',
+        'returned_quantity',
         'unit_price',
         'subtotal',
         'tax_amount',
@@ -29,6 +30,7 @@ class PurchaseOrderItem extends Model
     protected $casts = [
         'quantity' => 'integer',
         'received_quantity' => 'integer',
+        'returned_quantity' => 'integer',
         'unit_price' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',

@@ -23,9 +23,18 @@ class PurchaseOrderReturn extends Model
         'notes',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function ($model) {
+            if (empty($model->id)) {
+                $model->id = (string) \Illuminate\Support\Str::uuid();
+            }
+        });
+    }
+
     public function supplier()
     {
-        return $this->belongsTo(PurchaseOrder::class, 'supplier_id', 'id');
+        return $this->belongsTo(Supplier::class, 'supplier_id', 'id');
     }
 
     public function purchaseOrder()

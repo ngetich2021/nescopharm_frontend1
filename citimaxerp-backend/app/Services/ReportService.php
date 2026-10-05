@@ -234,6 +234,12 @@ class ReportService
         $productIds = $stockRows->pluck('product_id')->unique()->values();
         $variantIds = $stockRows->pluck('variant_id')->filter()->values();
 
+        // An item sold by a packaging unit stores the number of packs in quantity and the number of
+        // stock units in base_quantity: 3 packs of 100 is quantity 3, base_quantity 300. Stock is
+        // held in base units, so every quantity sitting beside opening, received and closing has to
+        // be the base one, while revenue stays quantity x unit_price because the price is per pack.
+        $soldBaseUnits = 'SUM(COALESCE(order_items.base_quantity, order_items.quantity))';
+
         $salesByVariant = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.company_id', $this->companyId)
@@ -244,7 +250,7 @@ class ReportService
             ->groupBy('order_items.variant_id')
             ->select(
                 'order_items.variant_id',
-                DB::raw('SUM(order_items.quantity) as quantity_sold'),
+                DB::raw("{$soldBaseUnits} as quantity_sold"),
                 DB::raw('SUM(order_items.quantity * order_items.unit_price) as revenue')
             )
             ->get()
@@ -265,7 +271,7 @@ class ReportService
             ->groupBy('order_items.product_id')
             ->select(
                 'order_items.product_id',
-                DB::raw('SUM(order_items.quantity) as quantity_sold'),
+                DB::raw("{$soldBaseUnits} as quantity_sold"),
                 DB::raw('SUM(order_items.quantity * order_items.unit_price) as revenue')
             )
             ->get()

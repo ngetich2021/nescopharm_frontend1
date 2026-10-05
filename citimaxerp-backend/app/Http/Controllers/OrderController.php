@@ -429,9 +429,9 @@ class OrderController extends Controller
                     }
                 }
 
-                // Calculate base quantity and packaging breakdown
-                // Quantity is always in base units (pieces)
-                $baseQuantity = (int) $item['quantity'];
+                // Quantity is in packs of the price-list unit; stock is held in pieces.
+                $packs = (float) $item['quantity'];
+                $baseQuantity = PackagingCalculatorService::piecesFor($packs, $item['price_unit'] ?? null);
                 $packagingBreakdown = null;
 
                 if ($product->has_packaging) {
@@ -450,12 +450,12 @@ class OrderController extends Controller
                 if ($product->track_inventory && $baseQuantity > $stockQuantity) {
                     return response()->json([
                         'status' => 'failed',
-                        'message' => "Item at index {$index}: Insufficient stock for product/variant {$product->name} (available: {$stockQuantity}).",
+                        'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $packs, $item['price_unit'] ?? null, $baseQuantity, (int) $stockQuantity),
                     ], 400);
                 }
 
-                $totalAmount += $baseQuantity * $unitPrice;
-                $totalTaxAmount += $baseQuantity * $unitPrice * EtimsTaxType::rateForProduct($product) / 100;
+                $totalAmount += $packs * $unitPrice;
+                $totalTaxAmount += $packs * $unitPrice * EtimsTaxType::rateForProduct($product) / 100;
             }
 
             return DB::transaction(function () use ($request, $user, $customer, $totalAmount, $items, $belowMinimumPrice, $totalTaxAmount, $orderCredit) {
@@ -510,8 +510,8 @@ class OrderController extends Controller
                     $product = Product::find($item['product_id']);
                     $variant = !empty($item['variant_id']) ? ProductVariant::find($item['variant_id']) : null;
 
-                    // Calculate base quantity and packaging breakdown
-                    $baseQuantity = (int) $item['quantity'];
+                    $packs = (float) $item['quantity'];
+                    $baseQuantity = PackagingCalculatorService::piecesFor($packs, $item['price_unit'] ?? null);
                     $packagingBreakdown = null;
 
                     if ($product->has_packaging) {
@@ -530,7 +530,7 @@ class OrderController extends Controller
                         'product_id' => $item['product_id'],
                         'variant_id' => !empty($item['variant_id']) ? $item['variant_id'] : null,
                         'unit_id' => null,
-                        'quantity' => $baseQuantity,
+                        'quantity' => $packs,
                         'unit_quantity' => null,
                         'base_quantity' => $baseQuantity,
                         'packaging_breakdown' => $packagingBreakdown,
@@ -538,9 +538,9 @@ class OrderController extends Controller
                         'unit_price' => $unitPrice,
                         'price_label' => $item['price_label'] ?? null,
                         'price_unit' => $item['price_unit'] ?? null,
-                        'total_price' => $baseQuantity * $unitPrice,
+                        'total_price' => $packs * $unitPrice,
                         'tax_rate' => EtimsTaxType::rateForProduct($product),
-                        'tax_amount' => round($unitPrice * $baseQuantity * EtimsTaxType::rateForProduct($product) / 100, 2),
+                        'tax_amount' => round($unitPrice * $packs * EtimsTaxType::rateForProduct($product) / 100, 2),
                         'company_id' => $user->company_id,
                     ]);
                 }
@@ -710,10 +710,11 @@ class OrderController extends Controller
                         if ($item['unit_price'] < $priceToCheck) {
                             $belowMinimumPrice = true;
                         }
-                        if ($product->track_inventory && $item['quantity'] > $stockQuantity) {
+                        $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
+                        if ($product->track_inventory && $piecesNeeded > $stockQuantity) {
                             return response()->json([
                                 'status' => 'failed',
-                                'message' => "Item at index {$index}: Insufficient stock for product/variant {$product->name} (available: {$stockQuantity}).",
+                                'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, (int) $stockQuantity),
                             ], 400);
                         }
                         $totalAmount += $item['quantity'] * $item['unit_price'];
@@ -754,6 +755,7 @@ class OrderController extends Controller
                             'product_id' => $item['product_id'],
                             'variant_id' => !empty($item['variant_id']) ? $item['variant_id'] : null,
                             'quantity' => $item['quantity'],
+                            'base_quantity' => PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null),
                             'batch_allocations' => $batchAllocations,
                             'unit_price' => $item['unit_price'],
                             'price_label' => $item['price_label'] ?? null,

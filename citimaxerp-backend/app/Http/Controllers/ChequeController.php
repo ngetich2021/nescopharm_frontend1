@@ -51,7 +51,7 @@ class ChequeController extends Controller
     }
 
     /**
-     * List PD cheques for the company, most-imminent maturity first.
+     * List PD cheques for the company, most recently recorded first.
      * Covers both directions - received from customers and issued to
      * suppliers.
      */
@@ -84,7 +84,7 @@ class ChequeController extends Controller
             $query->where('supplier_id', $request->supplier_id);
         }
 
-        $cheques = $query->orderBy('maturity_date')->get();
+        $cheques = $query->orderByDesc('created_at')->get();
 
         return response()->json(['data' => $cheques]);
     }
