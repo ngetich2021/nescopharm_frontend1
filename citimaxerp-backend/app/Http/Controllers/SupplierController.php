@@ -89,7 +89,7 @@ class SupplierController extends Controller
             });
         }
 
-        $suppliers = $query->orderBy('name')->get();
+        $suppliers = $query->orderByDesc('created_at')->get();
         return response()->json([
             'status' => 'success',
             'message' => 'Suppliers retrieved successfully.',
