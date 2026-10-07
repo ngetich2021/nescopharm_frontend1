@@ -37,7 +37,7 @@ import { DocumentForm, DocumentData } from "./DocumentForm";
 import { type Customer, updateCustomer, getCustomerDisplayName } from "@/lib/customers";
 import { getDocuments, uploadDocument } from "@/lib/documents";
 import { getCustomerAccount, updateCustomerAccount, type CreateCustomerAccountPayload } from "@/lib/customer-accounts";
-import { KENYA_REGIONS, KENYA_COUNTIES, getCountiesForRegion } from "@/lib/kenya-locations";
+import { KENYA_REGIONS, KENYA_COUNTIES, getCountiesForRegion, COUNTRIES, DEFAULT_COUNTRY } from "@/lib/kenya-locations";
 
 interface EditCustomerModalProps {
   open: boolean;
@@ -99,6 +99,11 @@ export function EditCustomerModal({
   const [county, setCounty] = useState("");
   const [countyPickerOpen, setCountyPickerOpen] = useState(false);
 
+  // Kenya is the only country offered, but a customer saved before that was
+  // the case keeps whatever is on record - listing it alongside stops the
+  // dropdown rendering blank and the value being lost on the next save.
+  const countryOptions = COUNTRIES.includes(country) || !country ? COUNTRIES : [...COUNTRIES, country];
+
   // Accounts Contact - a separate contact block from Primary Contact above
   const [accountsContactName, setAccountsContactName] = useState("");
   const [accountsContactDesignation, setAccountsContactDesignation] = useState("");
@@ -112,6 +117,7 @@ export function EditCustomerModal({
   // Credit account fields
   const [creditRequired, setCreditRequired] = useState("");
   const [creditDays, setCreditDays] = useState("");
+  const [pdChequeDays, setPdChequeDays] = useState("");
   const [certificateOfIncorporationNumber, setCertificateOfIncorporationNumber] = useState("");
   const [companyType, setCompanyType] = useState("");
   const [annualTurnover, setAnnualTurnover] = useState("");
@@ -132,7 +138,7 @@ export function EditCustomerModal({
       setCompany(customer.company || "");
       setAddress(customer.address || "");
       setCity(customer.city || "");
-      setCountry(customer.country || "");
+      setCountry(customer.country || DEFAULT_COUNTRY);
       setPostalCode(customer.postal_code || "");
       setStatus(customer.status || "active");
       setCustomerType(customer.customer_type || "");
@@ -239,6 +245,7 @@ export function EditCustomerModal({
         setCustomerAccountId(account.id);
         setCreditRequired(account.credit_required?.toString() || "");
         setCreditDays(account.credit_days?.toString() || "");
+        setPdChequeDays(account.credit_period_pd_cheque_days != null ? String(account.credit_period_pd_cheque_days) : "");
         setCertificateOfIncorporationNumber(account.certificate_of_incorporation_number || "");
         setCompanyType(account.company_type || "");
         setAnnualTurnover(account.annual_turnover?.toString() || "");
@@ -623,6 +630,7 @@ export function EditCustomerModal({
         annual_turnover: annualTurnover ? parseFloat(annualTurnover) : null,
         credit_required: creditRequired ? parseFloat(creditRequired) : null,
         credit_days: creditDays ? parseInt(creditDays, 10) : null,
+        credit_period_pd_cheque_days: pdChequeDays ? parseInt(pdChequeDays, 10) : null,
         currently_defaulted: currentlyDefaulted,
         credit_terms: creditTerms || null,
         notes: null,
@@ -685,6 +693,7 @@ export function EditCustomerModal({
         annual_turnover: annualTurnover ? parseFloat(annualTurnover) : null,
         credit_required: creditRequired ? parseFloat(creditRequired) : null,
         credit_days: creditDays ? parseInt(creditDays, 10) : null,
+        credit_period_pd_cheque_days: pdChequeDays ? parseInt(pdChequeDays, 10) : null,
         currently_defaulted: currentlyDefaulted,
         credit_terms: creditTerms || null,
         notes: null,
@@ -1091,13 +1100,20 @@ export function EditCustomerModal({
 
                 <div className="space-y-2">
                   <Label htmlFor="country">Country</Label>
-                  <Input
-                    id="country"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="Kenya"
+                  <Select
+                    value={country || undefined}
+                    onValueChange={setCountry}
                     disabled={isSubmitting || isLoadingAccount}
-                  />
+                  >
+                    <SelectTrigger id="country">
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countryOptions.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -1446,6 +1462,28 @@ export function EditCustomerModal({
                       placeholder="Net 30, etc."
                       disabled={isSubmitting || isLoadingAccount}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Credit Period (days) on PD Cheques (max 60)</Label>
+                    <div className="flex items-center gap-6">
+                      {["30", "60"].map((days) => (
+                        <label key={days} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={pdChequeDays === days}
+                            onChange={(e) => setPdChequeDays(e.target.checked ? days : "")}
+                            disabled={isSubmitting || isLoadingAccount}
+                          />
+                          {days}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold">Late Payment:</span> Any payment made beyond the agreed{" "}
+                      <span className="font-semibold">credit period</span> shall attract a late payment charge
+                      equivalent to three percent (3%) of the outstanding amount.
+                    </p>
                   </div>
                   
                   <div className="space-y-2">

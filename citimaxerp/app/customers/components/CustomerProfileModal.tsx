@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Sheet,
@@ -16,25 +16,109 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building, 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  User,
+  Phone,
+  Building,
   Calendar,
   CreditCard,
   ShoppingCart,
   FileText,
   Edit,
-  Users
+  Plus,
+  Landmark,
+  Paperclip,
 } from "lucide-react";
-import { type Customer, getCustomerProfile, type CustomerProfileData } from "@/lib/customers";
+import { getDocuments, type Document as CustomerDocument } from "@/lib/documents";
+import { type Customer, getCustomerProfile, createCustomerNote, type CustomerProfileData } from "@/lib/customers";
 import { type Payment } from "@/lib/customers";
+import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { ApplicationStatusSection } from "@/app/customers/[id]/application-status-section";
+
+const BUSINESS_TYPE_LABELS: Record<string, string> = {
+  pharmacy: "Pharmacy",
+  hospital_clinic: "Hospital / Clinic",
+  distributor: "Distributor",
+  ngo: "NGO",
+  other: "Other",
+};
+
+const titleCase = (v?: string | null) =>
+  v ? v.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()) : null;
+
+const formatKes = (v: any) =>
+  v === null || v === undefined || v === "" ? null : Number(v).toLocaleString();
+
+function Field({ label, value }: { label: string; value: any }) {
+  const empty = value === null || value === undefined || value === "";
+  return (
+    <div>
+      <span className="text-gray-400">{label}:</span>{" "}
+      <span className={empty ? "text-gray-400" : "text-gray-800"}>{empty ? "—" : value}</span>
+    </div>
+  );
+}
+
+function ProfileSection({ icon: Icon, title, children }: { icon: any; title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-3 pt-4 border-t first:border-t-0 first:pt-0">
+      <h4 className="font-medium text-gray-900 flex items-center gap-2">
+        <Icon className="h-4 w-4" />
+        {title}
+      </h4>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">{children}</div>
+    </div>
+  );
+}
+
+function ProfileTable({ icon: Icon, title, headers, rows }: { icon: any; title: string; headers: string[]; rows: any[][] }) {
+  return (
+    <div className="space-y-3 pt-4 border-t">
+      <h4 className="font-medium text-gray-900 flex items-center gap-2">
+        <Icon className="h-4 w-4" />
+        {title}
+      </h4>
+      {rows.length === 0 ? (
+        <p className="text-sm text-gray-400">None captured</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-medium border-b">S/No</th>
+                {headers.map((h) => (
+                  <th key={h} className="px-2 py-1.5 text-left font-medium border-b">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i} className="border-b last:border-b-0">
+                  <td className="px-2 py-1.5">{i + 1}</td>
+                  {row.map((cell, j) => (
+                    <td key={j} className="px-2 py-1.5">{cell || <span className="text-gray-400">—</span>}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface CustomerProfileModalProps {
   open: boolean;
@@ -58,6 +142,11 @@ export function CustomerProfileModal({
   const [customerProfile, setCustomerProfile] = useState<CustomerProfileData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
+  const [documents, setDocuments] = useState<CustomerDocument[]>([]);
+  const { toast } = useToast();
 
   // Load detailed customer profile when modal opens
   useEffect(() => {
@@ -73,9 +162,13 @@ export function CustomerProfileModal({
           setError("Failed to load customer profile");
         })
         .finally(() => setLoading(false));
+      getDocuments("customer", customer.id)
+        .then(setDocuments)
+        .catch(() => setDocuments([]));
     } else if (!open) {
       setCustomerProfile(null);
       setError(null);
+      setDocuments([]);
     }
   }, [open, customer?.id]);
 
@@ -102,6 +195,27 @@ export function CustomerProfileModal({
       .map((n) => n[0])
       .join("")
       .toUpperCase();
+  };
+
+  const handleAddNote = async () => {
+    if (!noteContent.trim() || !customer?.id) return;
+    setAddingNote(true);
+    try {
+      const newNote = await createCustomerNote(customer.id, noteContent.trim());
+      if (customerProfile) {
+        setCustomerProfile({
+          ...customerProfile,
+          customer_notes: [newNote, ...customerProfile.customer_notes],
+        });
+      }
+      setNoteContent("");
+      setAddNoteOpen(false);
+      toast({ title: "Note added successfully" });
+    } catch (err: any) {
+      toast({ title: "Failed to add note", description: err.message, variant: "destructive" });
+    } finally {
+      setAddingNote(false);
+    }
   };
 
   if (!customer) return null;
@@ -165,85 +279,128 @@ export function CustomerProfileModal({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Contact Information */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                        <Mail className="h-4 w-4" />
-                        Contact Details
-                      </h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-3 w-3 text-gray-400" />
-                          <span>{currentCustomer.email || "No email"}</span>
+                  {(() => {
+                    const c = currentCustomer as any;
+                    const account = c.account;
+                    // Approved credit data lives on the linked account; a rep's
+                    // still-pending application only exists as this JSON snapshot.
+                    const credit = account || c.pending_credit_application || {};
+                    const directors: any[] = credit.directors || [];
+                    const suppliers: any[] = credit.suppliers || [];
+                    const banks: any[] = credit.bank_details || [];
+                    const creditDays = account?.credit_days ?? credit.credit_period_required;
+                    const hasCredit =
+                      c.payment_method === "credit" || !!account || !!c.pending_credit_application;
+
+                    return (
+                      <>
+                        <ProfileSection icon={Building} title="1. Company Details">
+                          <Field label="Customer No." value={c.customer_number} />
+                          <Field label="Customer Type" value={titleCase(c.customer_type)} />
+                          <Field label="Payment Method" value={titleCase(c.payment_method)} />
+                          <Field label="Status" value={titleCase(c.status)} />
+                          <Field label="Registered Business Name" value={c.business_name} />
+                          <Field label="Trading Name" value={c.trading_name} />
+                          <Field label="Type of Business" value={BUSINESS_TYPE_LABELS[c.business_type] || titleCase(c.business_type)} />
+                          <Field label="Registration/License No." value={c.registration_number} />
+                          <Field label="PPB License No." value={c.ppb_license_number} />
+                          <Field label="KRA PIN" value={c.pin_number} />
+                          <Field label="Postal Address" value={c.postal_code} />
+                          <Field label="Physical Address" value={c.address} />
+                          <Field label="Town" value={c.city} />
+                          <Field label="County" value={c.county} />
+                          <Field label="Region" value={c.region} />
+                          <Field label="Country" value={c.country} />
+                          <Field label="Telephone" value={c.telephone} />
+                          <Field label="Mobile" value={c.phone} />
+                          <Field label="Email" value={c.email} />
+                          <Field label="Website" value={c.website} />
+                        </ProfileSection>
+
+                        <ProfileSection icon={Phone} title="2. Contact Persons">
+                          <p className="md:col-span-2 text-xs font-semibold text-gray-700">
+                            Primary Contact (Procurement Officer / Pharmacist-in-Charge)
+                          </p>
+                          <Field label="Name" value={c.contact_person_name} />
+                          <Field label="Designation" value={c.contact_person_designation} />
+                          <Field label="Phone" value={c.contact_person_phone} />
+                          <Field label="Email" value={c.contact_person_email} />
+                          <p className="md:col-span-2 text-xs font-semibold text-gray-700 pt-2">Accounts Contact</p>
+                          <Field label="Name" value={c.accounts_contact_name} />
+                          <Field label="Designation" value={c.accounts_contact_designation} />
+                          <Field label="Phone" value={c.accounts_contact_phone} />
+                          <Field label="Email" value={c.accounts_contact_email} />
+                        </ProfileSection>
+
+                        {hasCredit && (
+                          <>
+                            <ProfileTable
+                              icon={User}
+                              title="3. Business Owners / Directors"
+                              headers={["Full Name", "ID / Passport No.", "Phone Number", "PIN No."]}
+                              rows={directors.map((d) => [d.name, d.id_passport_number, d.phone_number, d.pin])}
+                            />
+                            <ProfileTable
+                              icon={Building}
+                              title="4. Trade References (Supplier References)"
+                              headers={["Supplier Name", "Contact Person", "Phone Number", "Credit Limit (KES)"]}
+                              rows={suppliers.map((s) => [s.name, s.contact_person_name, s.phone_number, formatKes(s.credit_limit)])}
+                            />
+                            <ProfileTable
+                              icon={Landmark}
+                              title="5. Bank Details"
+                              headers={["Bank Name", "Branch", "Account Name", "Account Number"]}
+                              rows={banks.map((b) => [b.bank_name, b.branch, b.account_name, b.account_number])}
+                            />
+                            <ProfileSection icon={CreditCard} title="6. Credit Terms">
+                              {!account && c.pending_credit_application && (
+                                <p className="md:col-span-2 text-xs text-amber-700">Pending approval - values as submitted.</p>
+                              )}
+                              <Field label="Account No." value={account?.account_number} />
+                              <Field label="Turnover (KES)" value={formatKes(credit.annual_turnover)} />
+                              <Field label="Credit Limit (KES)" value={formatKes(credit.credit_required)} />
+                              <Field label="Credit Period (days)" value={creditDays} />
+                              <Field label="Credit Period on PD Cheques (days)" value={credit.credit_period_pd_cheque_days} />
+                              {account && <Field label="Currently Defaulted" value={account.currently_defaulted === true || account.currently_defaulted === "true" ? "Yes" : "No"} />}
+                            </ProfileSection>
+                          </>
+                        )}
+
+                        <div className="space-y-3 pt-4 border-t">
+                          <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                            <Paperclip className="h-4 w-4" />
+                            Documents
+                          </h4>
+                          {documents.length === 0 ? (
+                            <p className="text-sm text-gray-400">No documents attached</p>
+                          ) : (
+                            <ul className="space-y-1 text-sm">
+                              {documents.map((doc, i) => (
+                                <li key={doc.id} className="flex flex-wrap items-center gap-x-3">
+                                  <span className="text-gray-400 w-5">{i + 1}.</span>
+                                  {doc.document_image ? (
+                                    <a href={doc.document_image} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                      {doc.document_name}
+                                    </a>
+                                  ) : (
+                                    <span>{doc.document_name}</span>
+                                  )}
+                                  {doc.reference_number && <span className="text-gray-500">Ref: {doc.reference_number}</span>}
+                                  {doc.expiry_date && <span className="text-gray-500">Expires: {format(new Date(doc.expiry_date), "MMM dd, yyyy")}</span>}
+                                  {doc.regulatory_body && <span className="text-gray-500">{doc.regulatory_body}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-3 w-3 text-gray-400" />
-                          <span>{currentCustomer.phone || "No phone"}</span>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        Address
-                      </h4>
-                      <div className="text-sm text-gray-600">
-                        {[
-                          currentCustomer.address,
-                          currentCustomer.city,
-                          (currentCustomer as any).county,
-                          (currentCustomer as any).region,
-                          currentCustomer.country,
-                          currentCustomer.postal_code
-                        ].filter(Boolean).join(", ") || "No address provided"}
-                      </div>
-                    </div>
-                  </div>
+                        <ProfileSection icon={FileText} title="Notes">
+                          <div className="md:col-span-2 whitespace-pre-wrap">{c.notes || <span className="text-gray-400">—</span>}</div>
+                        </ProfileSection>
+                      </>
+                    );
+                  })()}
 
-                  {/* Company Details - only meaningful when at least one field was captured */}
-                  {(currentCustomer as any).trading_name ||
-                  (currentCustomer as any).business_type ||
-                  (currentCustomer as any).registration_number ||
-                  (currentCustomer as any).ppb_license_number ||
-                  (currentCustomer as any).website ||
-                  (currentCustomer as any).telephone ? (
-                    <div className="space-y-3 pt-4 border-t">
-                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        Company Details
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600">
-                        {currentCustomer.business_name && <div><span className="text-gray-400">Business Name:</span> {currentCustomer.business_name}</div>}
-                        {(currentCustomer as any).trading_name && <div><span className="text-gray-400">Trading Name:</span> {(currentCustomer as any).trading_name}</div>}
-                        {(currentCustomer as any).business_type && <div><span className="text-gray-400">Business Type:</span> {(currentCustomer as any).business_type}</div>}
-                        {(currentCustomer as any).registration_number && <div><span className="text-gray-400">Registration No.:</span> {(currentCustomer as any).registration_number}</div>}
-                        {(currentCustomer as any).ppb_license_number && <div><span className="text-gray-400">PPB License No.:</span> {(currentCustomer as any).ppb_license_number}</div>}
-                        {(currentCustomer as any).website && <div><span className="text-gray-400">Website:</span> {(currentCustomer as any).website}</div>}
-                        {(currentCustomer as any).telephone && <div><span className="text-gray-400">Telephone:</span> {(currentCustomer as any).telephone}</div>}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Accounts Contact - separate from the primary contact above */}
-                  {(currentCustomer as any).accounts_contact_name || (currentCustomer as any).accounts_contact_email || (currentCustomer as any).accounts_contact_phone ? (
-                    <div className="space-y-3 pt-4 border-t">
-                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        Accounts Contact
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600">
-                        {(currentCustomer as any).accounts_contact_name && <div><span className="text-gray-400">Name:</span> {(currentCustomer as any).accounts_contact_name}</div>}
-                        {(currentCustomer as any).accounts_contact_designation && <div><span className="text-gray-400">Designation:</span> {(currentCustomer as any).accounts_contact_designation}</div>}
-                        {(currentCustomer as any).accounts_contact_phone && <div><span className="text-gray-400">Phone:</span> {(currentCustomer as any).accounts_contact_phone}</div>}
-                        {(currentCustomer as any).accounts_contact_email && <div><span className="text-gray-400">Email:</span> {(currentCustomer as any).accounts_contact_email}</div>}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Linked credit account - full directors/suppliers/bank-details/credit-terms
-                      already live in ViewAccountModal, reused here rather than duplicated */}
                   {currentCustomer.account_id && onViewAccount && (
                     <div className="pt-4 border-t">
                       <Button variant="outline" size="sm" onClick={() => onViewAccount(currentCustomer as Customer)}>
@@ -412,18 +569,21 @@ export function CustomerProfileModal({
                           <FileText className="h-5 w-5" />
                           Customer Notes
                         </CardTitle>
-                        <Link href={`/customers/${currentCustomer.id}/statement`}>
-                          <Button variant="outline" size="sm">
-                            View Statement
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setAddNoteOpen(true)}>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add Note
                           </Button>
-                        </Link>
+                          <Link href={`/customers/${currentCustomer.id}/statement`}>
+                            <Button variant="outline" size="sm">
+                              View Statement
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
                       {(() => {
-                        // The customer's own free-text notes field, plus
-                        // actual CustomerNote records (which includes the
-                        // auto-generated monthly account statements).
                         const plainNote = customerProfile?.notes;
                         const records = customerProfile?.customer_notes ?? [];
 
@@ -446,6 +606,9 @@ export function CustomerProfileModal({
                             )}
                             {records.map((note) => {
                               const isStatement = note.note_content?.startsWith("ACCOUNT STATEMENT")
+                              const creatorName = note.creator
+                                ? `${note.creator.first_name} ${note.creator.last_name}`
+                                : "System"
                               return (
                                 <div key={note.id} className="p-3 border rounded-lg">
                                   {isStatement && (
@@ -454,8 +617,11 @@ export function CustomerProfileModal({
                                     </span>
                                   )}
                                   <div className="text-sm whitespace-pre-wrap">{note.note_content}</div>
-                                  <div className="text-xs text-gray-500 mt-2">
-                                    {note.created_at ? format(new Date(note.created_at), "MMM dd, yyyy 'at' HH:mm") : "Customer note"}
+                                  <div className="flex items-center justify-between mt-2">
+                                    <span className="text-xs font-medium text-gray-600">{creatorName}</span>
+                                    <span className="text-xs text-gray-500">
+                                      {note.created_at ? format(new Date(note.created_at), "MMM dd, yyyy 'at' HH:mm") : ""}
+                                    </span>
                                   </div>
                                 </div>
                               )
@@ -520,6 +686,33 @@ export function CustomerProfileModal({
           </div>
         </SheetFooter>
       </SheetContent>
+
+      <Dialog open={addNoteOpen} onOpenChange={setAddNoteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Note</DialogTitle>
+            <DialogDescription>
+              Add a note for {currentCustomer?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Textarea
+              placeholder="Enter your note..."
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddNoteOpen(false); setNoteContent(""); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddNote} disabled={addingNote || !noteContent.trim()}>
+              {addingNote ? "Saving..." : "Save Note"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

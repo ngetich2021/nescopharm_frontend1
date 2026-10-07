@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Employee } from "@/lib/employees";
-import { employeesApi } from "@/lib/employees";
+import { employeesApi, getLinkableUsers, type LinkableUser } from "@/lib/employees";
 import { getUsers, type UserData } from "@/lib/users";
 import { useAuth } from "@/lib/auth-context";
 
@@ -61,6 +61,8 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [leaveApproverSearchOpen, setLeaveApproverSearchOpen] = useState(false);
   const [salaryAdvanceApproverSearchOpen, setSalaryAdvanceApproverSearchOpen] = useState(false);
+  const [linkableUsers, setLinkableUsers] = useState<LinkableUser[]>([]);
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
   const { toast } = useToast();
   const { hasPermission } = useAuth();
   const canEditSalary = hasPermission("can_approve_salary_changes");
@@ -93,6 +95,7 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
     supervisor_id: "",
     leave_approver_id: "",
     salary_advance_approver_id: "",
+    user_id: "",
     tax_status: "single",
     tax_dependents: 0,
     
@@ -129,6 +132,16 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
       fetchUsersForApproverSelection();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (open && employee?.id) {
+      getLinkableUsers(employee.id)
+        .then(setLinkableUsers)
+        .catch(() => setLinkableUsers([]));
+    }
+  }, [open, employee?.id]);
+
+  const linkedUser = linkableUsers.find((u) => u.id === formData.user_id) || (employee?.user?.id === formData.user_id ? employee?.user : null);
 
   // Populate form with employee data when employee changes
   useEffect(() => {
@@ -220,6 +233,7 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
         supervisor_id: employee.supervisor_id || "",
         leave_approver_id: employee.leave_approver_id || "",
         salary_advance_approver_id: employee.salary_advance_approver_id || "",
+        user_id: employee.user_id || "",
         tax_status: "single",
         tax_dependents: 0,
         
@@ -337,6 +351,7 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
         supervisor_id: formData.supervisor_id || null,
         leave_approver_id: formData.leave_approver_id || null,
         salary_advance_approver_id: formData.salary_advance_approver_id || null,
+        user_id: formData.user_id || null,
         statutory_details: {
           kra_pin: formData.statutory_details.kra_pin?.trim() || null,
           nssf_number: formData.statutory_details.nssf_number?.trim() || null,
@@ -954,6 +969,73 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
               </CardContent>
             </Card>
             
+            {/* Connected user account (employee portal access) */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Connect User Account</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Link this employee to a system login so they can use the employee portal. A login can only be connected to one employee.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label>User account</Label>
+                  <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                        {linkedUser
+                          ? `${linkedUser.first_name} ${linkedUser.last_name}${linkedUser.email ? ` (${linkedUser.email})` : ""}`
+                          : "Not connected"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search by name or email..." />
+                        <CommandList>
+                          <CommandEmpty>No available user accounts.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="not-connected"
+                              onSelect={() => {
+                                setFormData({ ...formData, user_id: "" });
+                                setUserSearchOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", !formData.user_id ? "opacity-100" : "opacity-0")} />
+                              Not connected
+                            </CommandItem>
+                            {linkableUsers.map((user) => (
+                              <CommandItem
+                                key={user.id}
+                                value={`${user.first_name} ${user.last_name} ${user.email}`}
+                                onSelect={() => {
+                                  setFormData({ ...formData, user_id: user.id });
+                                  setUserSearchOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", formData.user_id === user.id ? "opacity-100" : "opacity-0")} />
+                                <div className="flex flex-col">
+                                  <span>
+                                    {user.first_name} {user.last_name}
+                                    {!user.is_active && <span className="ml-1 text-xs text-muted-foreground">(inactive)</span>}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {user.email}{user.role?.name ? ` · ${user.role.name}` : ""}
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">Accounts already connected to another employee are not listed.</p>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Statutory Details Card */}
             <Card>
               <CardHeader>
@@ -1097,8 +1179,12 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
                               <SelectItem value="quarterly">Quarterly</SelectItem>
                               <SelectItem value="annual">Annual</SelectItem>
                               <SelectItem value="one_time">One-time</SelectItem>
+                              <SelectItem value="disbursed">Disbursed (outside payroll)</SelectItem>
                             </SelectContent>
                           </Select>
+                          {allowance.frequency === "disbursed" && (
+                            <p className="text-[11px] text-amber-700">Paid separately – excluded from payroll, tracked under HR → Allowances.</p>
+                          )}
                         </div>
                         <div className="flex items-end gap-2">
                           <label className="flex items-center gap-2 text-sm cursor-pointer pb-2">

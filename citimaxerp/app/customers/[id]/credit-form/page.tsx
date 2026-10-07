@@ -30,7 +30,6 @@ type CustomerProfileWithCreditFields = CustomerProfileData & {
   ppb_license_number?: string | null
   website?: string | null
   telephone?: string | null
-  region?: string | null
   county?: string | null
   accounts_contact_name?: string | null
   accounts_contact_designation?: string | null
@@ -61,6 +60,20 @@ function formatMoney(amount: string | number | undefined | null): string {
 
 function field(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '—' : value
+}
+
+// Table cells on the paper form are left genuinely blank when there's nothing
+// to fill in, rather than showing a placeholder dash.
+function blank(value: string | number | null | undefined) {
+  return value === null || value === undefined || value === '' ? ' ' : value
+}
+
+// The reference form always prints a fixed number of ruled rows (three for
+// directors and for trade references), whether or not they're all filled.
+function padRows<T>(rows: T[] | undefined | null, minimum: number): (T | undefined)[] {
+  const actual = rows ?? []
+  if (actual.length >= minimum) return actual
+  return [...actual, ...Array.from({ length: minimum - actual.length }, () => undefined)]
 }
 
 // Reference document (see the credit appraisal PDF) renders every field's
@@ -94,6 +107,37 @@ function FormLine({ label, value, wide }: { label: string; value: string | numbe
         style={{ color: VALUE_COLOR, borderColor: NAVY }}
       >
         {field(value)}
+      </span>
+    </div>
+  )
+}
+
+// Section 2 of the reference form puts Phone and Email side by side on a
+// single line rather than stacked.
+function FormLinePair({
+  leftLabel,
+  leftValue,
+  rightLabel,
+  rightValue,
+}: {
+  leftLabel: string
+  leftValue: string | number | null | undefined
+  rightLabel: string
+  rightValue: string | number | null | undefined
+}) {
+  return (
+    <div className="text-sm leading-relaxed flex flex-wrap gap-x-6">
+      <span>
+        <span className="font-bold" style={{ color: NAVY }}>{leftLabel} : </span>
+        <span className="inline-block border-b px-1 font-bold min-w-[160px]" style={{ color: VALUE_COLOR, borderColor: NAVY }}>
+          {field(leftValue)}
+        </span>
+      </span>
+      <span>
+        <span className="font-bold" style={{ color: NAVY }}>{rightLabel} : </span>
+        <span className="inline-block border-b px-1 font-bold min-w-[200px]" style={{ color: VALUE_COLOR, borderColor: NAVY }}>
+          {field(rightValue)}
+        </span>
       </span>
     </div>
   )
@@ -377,8 +421,6 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
     )
   }
 
-  const displayName = customer.business_name || customer.name
-
   return (
     <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
       {/* Action Bar - Hide on print */}
@@ -486,8 +528,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
 
           {/* Title */}
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold" style={{ color: NAVY }}>CREDIT APPRAISAL FORM</h1>
-            <p className="text-sm mt-1" style={{ color: NAVY }}>{displayName}</p>
+            <h1 className="text-2xl font-bold underline" style={{ color: NAVY }}>CREDIT APPRAISAL FORM</h1>
           </div>
 
           {/* 1. Company Details */}
@@ -510,17 +551,19 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
                   )
                 })}
               </div>
+            </div>
+            <div className="space-y-1 mt-3">
               <FormLine label="Registration/License Number" value={customer.registration_number} wide />
-              <FormLine label="PPB License No." value={customer.ppb_license_number} wide />
+              <FormLine label="Pharmacy & Poisons board (PPB) License No." value={customer.ppb_license_number} />
               <FormLine label="KRA PIN" value={customer.pin_number} />
-              <FormLine label="Postal Address" value={customer.postal_code} />
+            </div>
+            <div className="space-y-1 mt-3">
+              <FormLine label="Postal Address" value={customer.postal_code} wide />
               <FormLine label="Physical Address" value={customer.address} wide />
               <FormLine label="Town/County" value={[customer.city, customer.county].filter(Boolean).join(", ") || null} wide />
-              <FormLine label="Region" value={customer.region} />
-              <FormLine label="Country" value={customer.country} />
               <FormLine label="Telephone" value={customer.telephone} />
               <FormLine label="Mobile" value={customer.phone} />
-              <FormLine label="Email" value={customer.email} wide />
+              <FormLine label="Email" value={customer.email} />
               <FormLine label="Website (if any)" value={customer.website} wide />
             </div>
             <p className="text-xs font-bold mt-4" style={{ color: NAVY }}>
@@ -533,16 +576,24 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
           <section className="mb-4">
             <h2 className="text-sm font-bold mb-3" style={{ color: NAVY }}>2. CONTACT PERSONS</h2>
             <div className="space-y-1">
-              <p className="text-sm font-bold mb-1" style={{ color: NAVY }}>Primary Contact (Procurement Officer/Pharmacist-in-Charge)</p>
-              <FormLine label="Name" value={customer.contact_person_name} wide />
+              <p className="text-sm font-bold mb-1" style={{ color: NAVY }}>Primary Contact (Procurement Officer/ Pharmacist-in-Charge)</p>
+              <FormLine label="Name" value={customer.contact_person_name} />
               <FormLine label="Designation" value={customer.contact_person_designation} />
-              <FormLine label="Phone" value={customer.contact_person_phone} />
-              <FormLine label="Email" value={customer.contact_person_email} wide />
+              <FormLinePair
+                leftLabel="Phone"
+                leftValue={customer.contact_person_phone}
+                rightLabel="Email"
+                rightValue={customer.contact_person_email}
+              />
               <p className="text-sm font-bold mb-1 mt-3" style={{ color: NAVY }}>Accounts Contact</p>
-              <FormLine label="Name" value={customer.accounts_contact_name} wide />
+              <FormLine label="Name" value={customer.accounts_contact_name} />
               <FormLine label="Designation" value={customer.accounts_contact_designation} />
-              <FormLine label="Phone" value={customer.accounts_contact_phone} />
-              <FormLine label="Email" value={customer.accounts_contact_email} wide />
+              <FormLinePair
+                leftLabel="Phone"
+                leftValue={customer.accounts_contact_phone}
+                rightLabel="Email"
+                rightValue={customer.accounts_contact_email}
+              />
             </div>
           </section>
           <hr className="mb-4" style={{ borderTopWidth: 2, borderColor: NAVY }} />
@@ -550,33 +601,27 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
           {/* 3. Business Owners/Directors */}
           <section className="mb-4">
             <h2 className="text-sm font-bold mb-1" style={{ color: NAVY }}>3. BUSINESS OWNERS/DIRECTORS</h2>
-            <p className="text-xs mb-2" style={{ color: NAVY }}>Full Name, ID/Passport No, Phone Number, Pin No</p>
+            <p className="text-sm font-bold mb-2" style={{ color: NAVY }}>Full Name ID/Passport No, Phone Number, Pin No</p>
             <table className="w-full text-sm border" style={{ borderColor: NAVY, color: NAVY }}>
               <thead>
                 <tr className="border-b" style={{ borderColor: NAVY }}>
-                  <th className="text-left py-1.5 px-2 font-bold border-r w-10" style={{ borderColor: NAVY }}>#</th>
-                  <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Full Name</th>
-                  <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>ID/Passport No.</th>
-                  <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Phone Number</th>
-                  <th className="text-left py-1.5 px-2 font-bold">Pin No.</th>
+                  <th className="py-1.5 px-2 border-r w-8" style={{ borderColor: NAVY }}></th>
+                  <th className="text-center py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Full Name</th>
+                  <th className="text-center py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>ID / Person No.</th>
+                  <th className="text-center py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Phone Number</th>
+                  <th className="text-center py-1.5 px-2 font-bold">Pin No.</th>
                 </tr>
               </thead>
               <tbody>
-                {account?.directors && account.directors.length > 0 ? (
-                  account.directors.map((director, i) => (
-                    <tr key={director.id} className="border-b" style={{ borderColor: NAVY }}>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{i + 1}.</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(director.name)}</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(director.id_passport_number)}</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(director.phone_number)}</td>
-                      <td className="py-1.5 px-2 font-bold" style={{ color: VALUE_COLOR }}>{field(director.pin)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-3 text-center opacity-70">No directors on record</td>
+                {padRows(account?.directors, 3).map((director, i) => (
+                  <tr key={director?.id ?? `blank-${i}`} className="border-b" style={{ borderColor: NAVY }}>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY }}>{i + 1}.</td>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{blank(director?.name)}</td>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{blank(director?.id_passport_number)}</td>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{blank(director?.phone_number)}</td>
+                    <td className="py-1.5 px-2 font-bold" style={{ color: VALUE_COLOR }}>{blank(director?.pin)}</td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </section>
@@ -584,33 +629,30 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
           {/* 4. Trade References (Supplier References) */}
           <section className="mb-4">
             <h2 className="text-sm font-bold mb-1" style={{ color: NAVY }}>4. TRADE REFERENCES (SUPPLIER REFERENCES)</h2>
-            <p className="text-xs mb-2" style={{ color: NAVY }}>Provide at least <span className="font-bold">three</span> suppliers you have credit history with</p>
+            <p className="text-sm mb-2" style={{ color: NAVY }}>Provide at least <span className="font-bold">three</span> suppliers you have credit history with:</p>
+            <p className="text-sm font-bold mb-2" style={{ color: NAVY }}>Supplier Name, Contact Person, Credit Limit Ksh.</p>
             <table className="w-full text-sm border" style={{ borderColor: NAVY, color: NAVY }}>
               <thead>
                 <tr className="border-b" style={{ borderColor: NAVY }}>
-                  <th className="text-left py-1.5 px-2 font-bold border-r w-10" style={{ borderColor: NAVY }}>#</th>
-                  <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Supplier Name</th>
-                  <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Contact Person &amp; Phone Number</th>
-                  <th className="text-right py-1.5 px-2 font-bold">Credit Limit (Ksh)</th>
+                  <th className="py-1.5 px-2 border-r w-8" style={{ borderColor: NAVY }}></th>
+                  <th className="text-center py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Supplier Name</th>
+                  <th className="text-center py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Contact Person &amp; Phone Number</th>
+                  <th className="text-center py-1.5 px-2 font-bold">Credit Limit (Ksh)</th>
                 </tr>
               </thead>
               <tbody>
-                {account?.suppliers && account.suppliers.length > 0 ? (
-                  account.suppliers.map((supplier, i) => (
-                    <tr key={supplier.id} className="border-b" style={{ borderColor: NAVY }}>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{i + 1}.</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(supplier.name)}</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>
-                        {[supplier.contact_person_name, supplier.phone_number].filter(Boolean).join(" — ") || "—"}
-                      </td>
-                      <td className="py-1.5 px-2 text-right font-bold" style={{ color: VALUE_COLOR }}>{formatMoney(supplier.credit_limit)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="py-3 text-center opacity-70">No trade references on record</td>
+                {padRows(account?.suppliers, 3).map((supplier, i) => (
+                  <tr key={supplier?.id ?? `blank-${i}`} className="border-b" style={{ borderColor: NAVY }}>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY }}>{i + 1}.</td>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{blank(supplier?.name)}</td>
+                    <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>
+                      {blank([supplier?.contact_person_name, supplier?.phone_number].filter(Boolean).join(" — "))}
+                    </td>
+                    <td className="py-1.5 px-2 font-bold" style={{ color: VALUE_COLOR }}>
+                      {supplier ? formatMoney(supplier.credit_limit) : ' '}
+                    </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </section>
@@ -618,30 +660,14 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
           {/* 5. Bank Details */}
           <section className="mb-4">
             <h2 className="text-sm font-bold mb-2" style={{ color: NAVY }}>5. BANK DETAILS</h2>
-            {account?.bank_details && account.bank_details.length > 0 ? (
-              <table className="w-full text-sm border" style={{ borderColor: NAVY, color: NAVY }}>
-                <thead>
-                  <tr className="border-b" style={{ borderColor: NAVY }}>
-                    <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Bank Name</th>
-                    <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Branch</th>
-                    <th className="text-left py-1.5 px-2 font-bold border-r" style={{ borderColor: NAVY }}>Account Name</th>
-                    <th className="text-left py-1.5 px-2 font-bold">Account Number</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {account.bank_details.map((bank) => (
-                    <tr key={bank.id} className="border-b" style={{ borderColor: NAVY }}>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(bank.bank_name)}</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(bank.branch)}</td>
-                      <td className="py-1.5 px-2 border-r font-bold" style={{ borderColor: NAVY, color: VALUE_COLOR }}>{field(bank.account_name)}</td>
-                      <td className="py-1.5 px-2 font-bold" style={{ color: VALUE_COLOR }}>{field(bank.account_number)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-sm" style={{ color: NAVY }}>No bank details on record</p>
-            )}
+            {padRows(account?.bank_details, 1).map((bank, i) => (
+              <div key={bank?.id ?? `blank-${i}`} className={`space-y-1 ${i > 0 ? "mt-3" : ""}`}>
+                <FormLine label="Bank Name" value={bank?.bank_name} wide />
+                <FormLine label="Branch" value={bank?.branch} wide />
+                <FormLine label="Account Name" value={bank?.account_name} wide />
+                <FormLine label="Account Number" value={bank?.account_number} wide />
+              </div>
+            ))}
           </section>
 
           {/* 6. Credit Terms */}
@@ -653,11 +679,11 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
               <div className="flex flex-wrap items-center gap-x-4 text-sm py-1">
                 <span className="font-bold" style={{ color: NAVY }}>3.) Credit Period (days):</span>
                 {["30", "45"].map((opt) => (
-                  <span key={opt} style={{ color: NAVY }}>
-                    <span className="inline-block w-3.5 h-3.5 border align-middle mr-1 text-center leading-none text-[10px]" style={{ borderColor: NAVY }}>
+                  <span key={opt} className="font-bold" style={{ color: NAVY }}>
+                    {opt}
+                    <span className="inline-block w-3.5 h-3.5 border align-middle ml-1 text-center leading-none text-[10px]" style={{ borderColor: NAVY }}>
                       {String(account?.credit_period_required || "") === opt ? "✓" : ""}
                     </span>
-                    {opt}
                   </span>
                 ))}
                 {account?.credit_period_required && !["30", "45"].includes(String(account.credit_period_required)) && (
@@ -665,20 +691,19 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-x-4 text-sm py-1">
-                <span className="font-bold" style={{ color: NAVY }}>4.) Credit Period (days) on PD Cheques:</span>
-                {[60, 90].map((opt) => (
-                  <span key={opt} style={{ color: NAVY }}>
-                    <span className="inline-block w-3.5 h-3.5 border align-middle mr-1 text-center leading-none text-[10px]" style={{ borderColor: NAVY }}>
+                <span className="font-bold" style={{ color: NAVY }}>4.) Credit Period (days) on PD Cheques (max 60):</span>
+                {[30, 60].map((opt) => (
+                  <span key={opt} className="font-bold" style={{ color: NAVY }}>
+                    {opt}
+                    <span className="inline-block w-3.5 h-3.5 border align-middle ml-1 text-center leading-none text-[10px]" style={{ borderColor: NAVY }}>
                       {account?.credit_period_pd_cheque_days != null && Number(account.credit_period_pd_cheque_days) === opt ? "✓" : ""}
                     </span>
-                    {opt}
                   </span>
                 ))}
-                {account?.credit_period_pd_cheque_days != null && ![60, 90].includes(Number(account.credit_period_pd_cheque_days)) && (
+                {account?.credit_period_pd_cheque_days != null && ![30, 60].includes(Number(account.credit_period_pd_cheque_days)) && (
                   <span className="font-bold" style={{ color: VALUE_COLOR }}>(as captured: {account.credit_period_pd_cheque_days})</span>
                 )}
               </div>
-              {account?.credit_terms && <FormLine label="Additional Terms" value={account.credit_terms} wide />}
             </div>
             <p className="text-xs mt-4" style={{ color: NAVY }}>
               <span className="font-bold">Late Payment:</span> Any payment made beyond the agreed credit period shall attract a late payment charge equivalent to three percent (3%) of the outstanding amount.

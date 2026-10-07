@@ -20,11 +20,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
+import {
+  User,
+  Phone,
   FileText,
   UserPlus,
   Loader2,
@@ -38,7 +36,16 @@ import { type Customer, createCustomer } from "@/lib/customers";
 import { type CreateCustomerAccountPayload } from "@/lib/customer-accounts";
 import { DocumentForm, DocumentData } from "./DocumentForm";
 import { uploadDocument } from "@/lib/documents";
-import { KENYA_REGIONS, KENYA_COUNTIES, getCountiesForRegion } from "@/lib/kenya-locations";
+import { KENYA_REGIONS, KENYA_COUNTIES, getCountiesForRegion, COUNTRIES, DEFAULT_COUNTRY } from "@/lib/kenya-locations";
+
+// Sections 3 and 4 of the paper form print three ruled rows, so the capture
+// form opens with the same three rather than a single row the user must
+// repeatedly expand.
+const EMPTY_DIRECTORS = () =>
+  Array.from({ length: 3 }, () => ({ name: "", idPassportNumber: "", pin: "", phoneNumber: "" }));
+const EMPTY_SUPPLIERS = () =>
+  Array.from({ length: 3 }, () => ({ name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }));
+const EMPTY_BANK_DETAILS = () => [{ accountName: "", bankName: "", branch: "", accountNumber: "" }];
 
 interface CreateCustomerModalProps {
   open: boolean;
@@ -63,20 +70,16 @@ export function CreateCustomerModal({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [company, setCompany] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
-  const [country, setCountry] = useState("Kenya");
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [postalCode, setPostalCode] = useState("");
   const [customerType, setCustomerType] = useState("individual");
   const [status, setStatus] = useState("active");
-  const [preferredCommunication, setPreferredCommunication] = useState("phone");
   const [notes, setNotes] = useState("");
-  const [tags, setTags] = useState("");
-  
+
   // Company-specific fields
   const [businessName, setBusinessName] = useState("");
-  const [natureOfBusiness, setNatureOfBusiness] = useState("");
   const [pinNumber, setPinNumber] = useState("");
   const [contactPersonName, setContactPersonName] = useState("");
   const [contactPersonPhone, setContactPersonPhone] = useState("");
@@ -100,33 +103,29 @@ export function CreateCustomerModal({
   const [accountsContactPhone, setAccountsContactPhone] = useState("");
   const [accountsContactEmail, setAccountsContactEmail] = useState("");
 
-  // Credit Appraisal application (Sales Rep only) - maps to the backend's
-  // nested `credit_application` object accepted on customer creation
-  const [caAnnualTurnover, setCaAnnualTurnover] = useState("");
-  const [caCreditRequired, setCaCreditRequired] = useState("");
-  const [caCreditPeriodRequired, setCaCreditPeriodRequired] = useState("");
-  const [caCreditPeriodPdChequeDays, setCaCreditPeriodPdChequeDays] = useState("");
-  const [caDirectors, setCaDirectors] = useState([{ name: "", idPassportNumber: "", pin: "", phoneNumber: "" }]);
-  const [caSuppliers, setCaSuppliers] = useState([{ name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }]);
-  const [caBankDetails, setCaBankDetails] = useState([{ accountName: "", bankName: "", branch: "", accountNumber: "" }]);
-
   // Payment method
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const paymentMethodRef = useRef("cash");
-  
-  // Credit account fields (only shown if payment method is credit)
+
+  // Sections 3-6 of the Credit Appraisal Form. A single set of fields feeds
+  // both submission paths: a Sales Rep's goes into the nested
+  // `credit_application` (two-stage approval), while staff selecting "Credit"
+  // creates a CustomerAccount directly. Previously these were two parallel
+  // sets of state rendering two near-identical sets of inputs.
   const [creditRequired, setCreditRequired] = useState("");
-  const [creditDays, setCreditDays] = useState("");
-  const [certificateOfIncorporationNumber, setCertificateOfIncorporationNumber] = useState("");
-  const [companyType, setCompanyType] = useState("");
+  const [creditDays, setCreditDays] = useState<"" | "30" | "45">("");
+  const [pdChequeDays, setPdChequeDays] = useState<"" | "30" | "60">("");
   const [annualTurnover, setAnnualTurnover] = useState("");
-  const [currentlyDefaulted, setCurrentlyDefaulted] = useState(false);
-  const [creditTerms, setCreditTerms] = useState("");
-  const [directors, setDirectors] = useState([{ name: "", idPassportNumber: "", pin: "", phoneNumber: "" }]);
-  const [authorisedPurchasePersons, setAuthorisedPurchasePersons] = useState([{ name: "", phoneNumber: "" }]);
-  const [suppliers, setSuppliers] = useState([{ name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }]);
-  const [bankDetails, setBankDetails] = useState([{ bankName: "", branch: "", accountNumber: "" }]);
-  
+  const [directors, setDirectors] = useState(() => EMPTY_DIRECTORS());
+  const [suppliers, setSuppliers] = useState(() => EMPTY_SUPPLIERS());
+  const [bankDetails, setBankDetails] = useState(() => EMPTY_BANK_DETAILS());
+
+  // Sections 3-6 only apply to a credit customer. Sales Reps never see the
+  // Payment Method selector (choosing "Credit" there would create a
+  // CustomerAccount immediately and bypass the two-stage approval gate), but
+  // every rep submission is a credit application by definition.
+  const isCreditApplication = isSalesRep || paymentMethod === "credit";
+
   // Documents state
   const [documents, setDocuments] = useState<DocumentData[]>([]);
 
@@ -134,20 +133,16 @@ export function CreateCustomerModal({
     setName("");
     setEmail("");
     setPhone("");
-    setCompany("");
     setAddress("");
     setCity("");
-    setCountry("Kenya");
+    setCountry(DEFAULT_COUNTRY);
     setPostalCode("");
     setCustomerType("individual");
     setStatus("active");
-    setPreferredCommunication("phone");
     setNotes("");
-    setTags("");
-    
+
     // Reset company-specific fields
     setBusinessName("");
-    setNatureOfBusiness("");
     setPinNumber("");
     setContactPersonName("");
     setContactPersonPhone("");
@@ -170,32 +165,18 @@ export function CreateCustomerModal({
     setAccountsContactPhone("");
     setAccountsContactEmail("");
 
-    // Reset Credit Appraisal application
-    setCaAnnualTurnover("");
-    setCaCreditRequired("");
-    setCaCreditPeriodRequired("");
-    setCaCreditPeriodPdChequeDays("");
-    setCaDirectors([{ name: "", idPassportNumber: "", pin: "", phoneNumber: "" }]);
-    setCaSuppliers([{ name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }]);
-    setCaBankDetails([{ accountName: "", bankName: "", branch: "", accountNumber: "" }]);
-
     // Reset payment method
     setPaymentMethod("cash");
     paymentMethodRef.current = "cash";
-    
-    // Remove documents reset
-    // Reset credit account fields
+
+    // Reset Credit Appraisal sections 3-6
     setCreditRequired("");
     setCreditDays("");
-    setCertificateOfIncorporationNumber("");
-    setCompanyType("");
+    setPdChequeDays("");
     setAnnualTurnover("");
-    setCurrentlyDefaulted(false);
-    setCreditTerms("");
-    setDirectors([{ name: "", idPassportNumber: "", pin: "", phoneNumber: "" }]);
-    setAuthorisedPurchasePersons([{ name: "", phoneNumber: "" }]);
-    setSuppliers([{ name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }]);
-    setBankDetails([{ bankName: "", branch: "", accountNumber: "" }]);
+    setDirectors(EMPTY_DIRECTORS());
+    setSuppliers(EMPTY_SUPPLIERS());
+    setBankDetails(EMPTY_BANK_DETAILS());
     setDocuments([]);
   };
 
@@ -228,137 +209,46 @@ export function CreateCustomerModal({
       return false;
     }
 
-    // If payment method is credit, validate credit account fields
-    if (paymentMethodRef.current === "credit") {
-      // Validate directors if any are provided
-      const hasDirectors = directors.some(d => d.name || d.idPassportNumber || d.pin || d.phoneNumber);
-      if (hasDirectors) {
-        for (let i = 0; i < directors.length; i++) {
-          const director = directors[i];
-          // If any field is filled, name and idPassportNumber are required
-          if (director.name || director.idPassportNumber || director.pin || director.phoneNumber) {
-            if (!director.name.trim()) {
-              toast({
-                title: "Validation Error",
-                description: `Director ${i + 1}: Name is required`,
-                variant: "destructive",
-              });
-              return false;
-            }
-            if (!director.idPassportNumber.trim()) {
-              toast({
-                title: "Validation Error",
-                description: `Director ${i + 1}: ID/Passport number is required`,
-                variant: "destructive",
-              });
-              return false;
-            }
-          }
+    // Sections 3-6 only exist for a credit customer. Each repeater row is
+    // optional, but a row that has been started needs the one field the
+    // backend marks `required_with`.
+    if (isCreditApplication) {
+      for (let i = 0; i < directors.length; i++) {
+        const director = directors[i];
+        const started = director.name || director.idPassportNumber || director.pin || director.phoneNumber;
+        if (started && !director.name.trim()) {
+          toast({
+            title: "Validation Error",
+            description: `Director ${i + 1}: Full Name is required`,
+            variant: "destructive",
+          });
+          return false;
         }
       }
 
-      // Validate authorised purchase persons if any are provided
-      const hasAuthorisedPersons = authorisedPurchasePersons.some(p => p.name || p.phoneNumber);
-      if (hasAuthorisedPersons) {
-        for (let i = 0; i < authorisedPurchasePersons.length; i++) {
-          const person = authorisedPurchasePersons[i];
-          // If any field is filled, name is required
-          if (person.name || person.phoneNumber) {
-            if (!person.name.trim()) {
-              toast({
-                title: "Validation Error",
-                description: `Authorised Person ${i + 1}: Name is required`,
-                variant: "destructive",
-              });
-              return false;
-            }
-          }
+      for (let i = 0; i < suppliers.length; i++) {
+        const supplier = suppliers[i];
+        const started = supplier.name || supplier.contactPersonName || supplier.phoneNumber || supplier.creditLimit;
+        if (started && !supplier.name.trim()) {
+          toast({
+            title: "Validation Error",
+            description: `Trade Reference ${i + 1}: Supplier Name is required`,
+            variant: "destructive",
+          });
+          return false;
         }
       }
 
-      // Validate suppliers if any are provided
-      const hasSuppliers = suppliers.some(s => s.name || s.contactPersonName || s.phoneNumber || s.creditLimit);
-      if (hasSuppliers) {
-        for (let i = 0; i < suppliers.length; i++) {
-          const supplier = suppliers[i];
-          // If any field is filled, name is required
-          if (supplier.name || supplier.contactPersonName || supplier.phoneNumber || supplier.creditLimit) {
-            if (!supplier.name.trim()) {
-              toast({
-                title: "Validation Error",
-                description: `Supplier ${i + 1}: Name is required`,
-                variant: "destructive",
-              });
-              return false;
-            }
-          }
-        }
-      }
-
-      // Validate bank details if any are provided
-      const hasBankDetails = bankDetails.some(b => b.bankName || b.branch || b.accountNumber);
-      if (hasBankDetails) {
-        for (let i = 0; i < bankDetails.length; i++) {
-          const bank = bankDetails[i];
-          // If any field is filled, bankName is required
-          if (bank.bankName || bank.branch || bank.accountNumber) {
-            if (!bank.bankName.trim()) {
-              toast({
-                title: "Validation Error",
-                description: `Bank Detail ${i + 1}: Bank name is required`,
-                variant: "destructive",
-              });
-              return false;
-            }
-          }
-        }
-      }
-    }
-
-    // Validate Credit Appraisal application fields (Sales Rep only)
-    if (isSalesRep) {
-      const hasCaDirectors = caDirectors.some(d => d.name || d.idPassportNumber || d.pin || d.phoneNumber);
-      if (hasCaDirectors) {
-        for (let i = 0; i < caDirectors.length; i++) {
-          const director = caDirectors[i];
-          if ((director.name || director.idPassportNumber || director.pin || director.phoneNumber) && !director.name.trim()) {
-            toast({
-              title: "Validation Error",
-              description: `Director ${i + 1}: Name is required`,
-              variant: "destructive",
-            });
-            return false;
-          }
-        }
-      }
-
-      const hasCaSuppliers = caSuppliers.some(s => s.name || s.contactPersonName || s.phoneNumber || s.creditLimit);
-      if (hasCaSuppliers) {
-        for (let i = 0; i < caSuppliers.length; i++) {
-          const supplier = caSuppliers[i];
-          if ((supplier.name || supplier.contactPersonName || supplier.phoneNumber || supplier.creditLimit) && !supplier.name.trim()) {
-            toast({
-              title: "Validation Error",
-              description: `Trade Reference ${i + 1}: Name is required`,
-              variant: "destructive",
-            });
-            return false;
-          }
-        }
-      }
-
-      const hasCaBankDetails = caBankDetails.some(b => b.accountName || b.bankName || b.branch || b.accountNumber);
-      if (hasCaBankDetails) {
-        for (let i = 0; i < caBankDetails.length; i++) {
-          const bank = caBankDetails[i];
-          if ((bank.accountName || bank.bankName || bank.branch || bank.accountNumber) && !bank.bankName.trim()) {
-            toast({
-              title: "Validation Error",
-              description: `Bank Detail ${i + 1}: Bank name is required`,
-              variant: "destructive",
-            });
-            return false;
-          }
+      for (let i = 0; i < bankDetails.length; i++) {
+        const bank = bankDetails[i];
+        const started = bank.accountName || bank.bankName || bank.branch || bank.accountNumber;
+        if (started && !bank.bankName.trim()) {
+          toast({
+            title: "Validation Error",
+            description: `Bank Details ${i + 1}: Bank Name is required`,
+            variant: "destructive",
+          });
+          return false;
         }
       }
     }
@@ -415,11 +305,8 @@ export function CreateCustomerModal({
       currentCity: city,
       currentCountry: country,
       currentPostalCode: postalCode,
-      currentPreferredCommunication: preferredCommunication,
       currentNotes: notes,
-      currentTags: tags,
       currentBusinessName: businessName,
-      currentNatureOfBusiness: natureOfBusiness,
       currentPinNumber: pinNumber,
       currentContactPersonName: contactPersonName,
       currentContactPersonPhone: contactPersonPhone,
@@ -442,12 +329,6 @@ export function CreateCustomerModal({
 
 
     try {
-      // Convert tags string to array
-      const tagsArray = submissionData.currentTags
-        .split(",")
-        .map(tag => tag.trim())
-        .filter(tag => tag !== "");
-
       // Prepare customer data based on customer type
       let customerData: any = {
         name: submissionData.currentName.trim(),
@@ -461,10 +342,8 @@ export function CreateCustomerModal({
         region: submissionData.currentRegion || null,
         county: submissionData.currentCounty || null,
         customer_type: submissionData.currentCustomerType || null,
-        preferred_communication_channel: submissionData.currentPreferredCommunication || null,
         last_contact_date: null,
         notes: submissionData.currentNotes.trim() || null,
-        tags: tagsArray.length > 0 ? tagsArray : null,
         // Sales Reps never see the Payment Method selector above (it's
         // hidden so selecting "Credit" there can't trigger an immediate
         // CustomerAccount, bypassing the two-stage approval) - but every rep
@@ -485,7 +364,6 @@ export function CreateCustomerModal({
         ppb_license_number: submissionData.currentPpbLicenseNumber.trim() || null,
         website: submissionData.currentWebsite.trim() || null,
         telephone: submissionData.currentTelephone.trim() || null,
-        nature_of_business: submissionData.currentNatureOfBusiness.trim() || null,
         pin_number: submissionData.currentPinNumber.trim() || null,
         contact_person_name: submissionData.currentContactPersonName.trim() || null,
         contact_person_phone: submissionData.currentContactPersonPhone.trim() || null,
@@ -502,34 +380,13 @@ export function CreateCustomerModal({
       // the customer into the two-stage approval workflow.
       if (isSalesRep) {
         customerData.credit_application = {
-          annual_turnover: caAnnualTurnover ? parseFloat(caAnnualTurnover) : null,
-          credit_required: caCreditRequired ? parseFloat(caCreditRequired) : null,
-          credit_period_required: caCreditPeriodRequired.trim() || null,
-          credit_period_pd_cheque_days: caCreditPeriodPdChequeDays ? parseInt(caCreditPeriodPdChequeDays, 10) : null,
-          directors: caDirectors
-            .filter(d => d.name.trim() !== "")
-            .map(d => ({
-              name: d.name,
-              id_passport_number: d.idPassportNumber || null,
-              pin: d.pin || null,
-              phone_number: d.phoneNumber || null,
-            })),
-          suppliers: caSuppliers
-            .filter(s => s.name.trim() !== "")
-            .map(s => ({
-              name: s.name,
-              contact_person_name: s.contactPersonName || null,
-              phone_number: s.phoneNumber || null,
-              credit_limit: s.creditLimit || null,
-            })),
-          bank_details: caBankDetails
-            .filter(b => b.bankName.trim() !== "")
-            .map(b => ({
-              account_name: b.accountName || null,
-              bank_name: b.bankName,
-              branch: b.branch || null,
-              account_number: b.accountNumber || null,
-            })),
+          annual_turnover: annualTurnover ? parseFloat(annualTurnover) : null,
+          credit_required: creditRequired ? parseFloat(creditRequired) : null,
+          credit_period_required: creditDays || null,
+          credit_period_pd_cheque_days: pdChequeDays ? parseInt(pdChequeDays, 10) : null,
+          directors: directorsPayload(),
+          suppliers: suppliersPayload(),
+          bank_details: bankDetailsPayload(),
         };
       }
 
@@ -573,50 +430,56 @@ export function CreateCustomerModal({
     }
   };
 
+  // Sections 3-5 feed two different endpoints in the same camelCase-to-
+  // snake_case shape, so the mapping lives in one place for both.
+  const directorsPayload = () =>
+    directors
+      .filter(d => d.name.trim() !== "")
+      .map(d => ({
+        name: d.name,
+        id_passport_number: d.idPassportNumber || null,
+        pin: d.pin || null,
+        phone_number: d.phoneNumber || null,
+      }));
+
+  const suppliersPayload = () =>
+    suppliers
+      .filter(s => s.name.trim() !== "")
+      .map(s => ({
+        name: s.name,
+        contact_person_name: s.contactPersonName || null,
+        phone_number: s.phoneNumber || null,
+        credit_limit: s.creditLimit || null,
+      }));
+
+  const bankDetailsPayload = () =>
+    bankDetails
+      .filter(b => b.bankName.trim() !== "")
+      .map(b => ({
+        bank_name: b.bankName,
+        account_name: b.accountName || null,
+        branch: b.branch || null,
+        account_number: b.accountNumber || null,
+      }));
+
   const createCustomerAccount = async (customerId: string) => {
     try {
       // Transform the data to match the API interface
       const accountData = {
         customer_id: customerId,
-        certificate_of_incorporation_number: certificateOfIncorporationNumber || null,
-        company_type: companyType || null,
         annual_turnover: annualTurnover ? parseFloat(annualTurnover) : null,
         credit_required: creditRequired ? parseFloat(creditRequired) : null,
+        credit_period_required: creditDays || null,
         credit_days: creditDays ? parseInt(creditDays, 10) : null,
-        currently_defaulted: currentlyDefaulted,
-        credit_terms: creditTerms || null,
+        credit_period_pd_cheque_days: pdChequeDays ? parseInt(pdChequeDays, 10) : null,
+        currently_defaulted: false,
         notes: null, // Add notes field as expected by API
-        directors: directors
-          .filter(d => d.name.trim() !== "")
-          .map(d => ({
-            name: d.name,
-            id_passport_number: d.idPassportNumber, // Transform field name
-            pin: d.pin || null,
-            phone_number: d.phoneNumber || null, // Transform field name
-          })),
-        authorised_purchase_persons: authorisedPurchasePersons
-          .filter(p => p.name.trim() !== "")
-          .map(p => ({
-            name: p.name,
-            phone_number: p.phoneNumber || null, // Transform field name
-          })),
-        suppliers: suppliers
-          .filter(s => s.name.trim() !== "")
-          .map(s => ({
-            name: s.name,
-            contact_person_name: s.contactPersonName || null, // Transform field name
-            phone_number: s.phoneNumber || null, // Transform field name
-            credit_limit: s.creditLimit || null, // Transform field name
-          })),
-        bank_details: bankDetails
-          .filter(b => b.bankName.trim() !== "")
-          .map(b => ({
-            bank_name: b.bankName, // Transform field name
-            branch: b.branch || null,
-            account_number: b.accountNumber || null, // Transform field name
-          })),
+        directors: directorsPayload(),
+        authorised_purchase_persons: [],
+        suppliers: suppliersPayload(),
+        bank_details: bankDetailsPayload(),
       };
-      
+
       // Import and call the actual createCustomerAccount function
       const { createCustomerAccount: apiCreateCustomerAccount } = await import("@/lib/customer-accounts");
       const result = await apiCreateCustomerAccount(accountData);
@@ -691,23 +554,6 @@ export function CreateCustomerModal({
     setDirectors(updatedDirectors);
   };
 
-  // Authorised purchase person management functions
-  const addAuthorisedPurchasePerson = () => {
-    setAuthorisedPurchasePersons([...authorisedPurchasePersons, { name: "", phoneNumber: "" }]);
-  };
-
-  const removeAuthorisedPurchasePerson = (index: number) => {
-    if (authorisedPurchasePersons.length > 1) {
-      setAuthorisedPurchasePersons(authorisedPurchasePersons.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateAuthorisedPurchasePerson = (index: number, field: string, value: string) => {
-    const updatedPersons = [...authorisedPurchasePersons];
-    (updatedPersons[index] as any)[field] = value;
-    setAuthorisedPurchasePersons(updatedPersons);
-  };
-
   // Supplier management functions
   const addSupplier = () => {
     setSuppliers([...suppliers, { name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }]);
@@ -727,7 +573,7 @@ export function CreateCustomerModal({
 
   // Bank details management functions
   const addBankDetail = () => {
-    setBankDetails([...bankDetails, { bankName: "", branch: "", accountNumber: "" }]);
+    setBankDetails([...bankDetails, { accountName: "", bankName: "", branch: "", accountNumber: "" }]);
   };
 
   const removeBankDetail = (index: number) => {
@@ -740,57 +586,6 @@ export function CreateCustomerModal({
     const updatedBankDetails = [...bankDetails];
     (updatedBankDetails[index] as any)[field] = value;
     setBankDetails(updatedBankDetails);
-  };
-
-  // Credit Appraisal - Director management functions
-  const addCaDirector = () => {
-    setCaDirectors([...caDirectors, { name: "", idPassportNumber: "", pin: "", phoneNumber: "" }]);
-  };
-
-  const removeCaDirector = (index: number) => {
-    if (caDirectors.length > 1) {
-      setCaDirectors(caDirectors.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateCaDirector = (index: number, field: string, value: string) => {
-    const updated = [...caDirectors];
-    (updated[index] as any)[field] = value;
-    setCaDirectors(updated);
-  };
-
-  // Credit Appraisal - Trade Reference/Supplier management functions
-  const addCaSupplier = () => {
-    setCaSuppliers([...caSuppliers, { name: "", contactPersonName: "", phoneNumber: "", creditLimit: "" }]);
-  };
-
-  const removeCaSupplier = (index: number) => {
-    if (caSuppliers.length > 1) {
-      setCaSuppliers(caSuppliers.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateCaSupplier = (index: number, field: string, value: string) => {
-    const updated = [...caSuppliers];
-    (updated[index] as any)[field] = value;
-    setCaSuppliers(updated);
-  };
-
-  // Credit Appraisal - Bank Detail management functions
-  const addCaBankDetail = () => {
-    setCaBankDetails([...caBankDetails, { accountName: "", bankName: "", branch: "", accountNumber: "" }]);
-  };
-
-  const removeCaBankDetail = (index: number) => {
-    if (caBankDetails.length > 1) {
-      setCaBankDetails(caBankDetails.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateCaBankDetail = (index: number, field: string, value: string) => {
-    const updated = [...caBankDetails];
-    (updated[index] as any)[field] = value;
-    setCaBankDetails(updated);
   };
 
   return (
@@ -807,213 +602,163 @@ export function CreateCustomerModal({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto py-6 space-y-6">
-          {/* Customer Type Selection */}
+          {/*
+            Sections 1-6 below mirror the printed Credit Appraisal Form
+            section-for-section, in its order and under its headings, so a rep
+            filling this in on screen can follow the paper copy top to bottom.
+            Fields the ERP needs but the paper form has no place for live in
+            "Additional Information" at the end.
+          */}
+
+          {/* 1. COMPANY DETAILS */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5 text-blue-600" />
-                Customer Type
+                <Building className="h-5 w-5 text-blue-600" />
+                1. COMPANY DETAILS
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="customerType">Customer Type *</Label>
-                <Select value={customerType} onValueChange={setCustomerType} disabled={isSubmitting || authLoading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="individual">Individual</SelectItem>
-                    <SelectItem value="company">Company</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select value={status} onValueChange={setStatus} disabled={isSubmitting || authLoading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Contact Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-green-600" />
-                Contact Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">
-                    {customerType === "company" ? "Contact Person Name *" : "Customer Name *"}
-                  </Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={customerType === "company" ? "Contact person name" : "John Doe"}
-                    disabled={isSubmitting || authLoading}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+254 700 123 456"
-                    disabled={isSubmitting || authLoading}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="john.doe@example.com"
-                    disabled={isSubmitting || authLoading}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="preferredCommunication">Preferred Communication</Label>
-                  <Select value={preferredCommunication} onValueChange={setPreferredCommunication} disabled={isSubmitting || authLoading}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select preferred communication method" />
+                  <Label htmlFor="customerType">Customer Type *</Label>
+                  <Select value={customerType} onValueChange={setCustomerType} disabled={isSubmitting || authLoading}>
+                    <SelectTrigger id="customerType">
+                      <SelectValue placeholder="Select customer type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="email">Email</SelectItem>
-                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                      <SelectItem value="sms">SMS</SelectItem>
+                      <SelectItem value="individual">Individual</SelectItem>
+                      <SelectItem value="company">Company</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select value={status} onValueChange={setStatus} disabled={isSubmitting || authLoading}>
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/*
+                  Sales Reps don't get this selector - choosing "Credit" here
+                  creates a CustomerAccount immediately, which would bypass the
+                  two-stage approval their submissions must go through.
+                */}
+                {!isSalesRep && (
+                  <div className="space-y-2">
+                    <Label htmlFor="paymentMethod">Payment Method</Label>
+                    <Select
+                      value={paymentMethod}
+                      onValueChange={(value) => {
+                        setPaymentMethod(value);
+                        paymentMethodRef.current = value;
+                      }}
+                      disabled={isSubmitting || authLoading}
+                    >
+                      <SelectTrigger id="paymentMethod">
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="credit">Credit</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-2 mt-2 border-t">
-                <p className="text-sm font-medium text-muted-foreground mb-3">
-                  Business Details{customerType !== "company" ? " (optional)" : ""}
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
+                <div className="space-y-2">
+                  <Label htmlFor="businessName">Registered Business Name</Label>
+                  <Input
+                    id="businessName"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    placeholder="Acme Corporation Ltd"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tradingName">Trading Name (if different)</Label>
+                  <Input
+                    id="tradingName"
+                    value={tradingName}
+                    onChange={(e) => setTradingName(e.target.value)}
+                    placeholder="Acme Pharmacy"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
               </div>
 
-              <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="businessName">Business Name</Label>
-                      <Input
-                        id="businessName"
-                        value={businessName}
-                        onChange={(e) => setBusinessName(e.target.value)}
-                        placeholder="Acme Corporation"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="tradingName">Trading Name</Label>
-                      <Input
-                        id="tradingName"
-                        value={tradingName}
-                        onChange={(e) => setTradingName(e.target.value)}
-                        placeholder="Acme Pharmacy"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="businessType">Business Type</Label>
-                      <Select value={businessType || undefined} onValueChange={setBusinessType} disabled={isSubmitting || authLoading}>
-                        <SelectTrigger id="businessType">
-                          <SelectValue placeholder="Select business type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pharmacy">Pharmacy</SelectItem>
-                          <SelectItem value="hospital_clinic">Hospital / Clinic</SelectItem>
-                          <SelectItem value="distributor">Distributor</SelectItem>
-                          <SelectItem value="ngo">NGO</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="registrationNumber">Registration Number</Label>
-                      <Input
-                        id="registrationNumber"
-                        value={registrationNumber}
-                        onChange={(e) => setRegistrationNumber(e.target.value)}
-                        placeholder="C123456"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="ppbLicenseNumber">PPB License Number</Label>
-                      <Input
-                        id="ppbLicenseNumber"
-                        value={ppbLicenseNumber}
-                        onChange={(e) => setPpbLicenseNumber(e.target.value)}
-                        placeholder="PPB/123456"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="pinNumber">KRA PIN{customerType === "company" ? " *" : ""}</Label>
-                      <Input
-                        id="pinNumber"
-                        value={pinNumber}
-                        onChange={(e) => setPinNumber(e.target.value)}
-                        placeholder="P123456"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                  </div>
-              </>
-            </CardContent>
-          </Card>
-
-          {/* Address Information - comes right after Company Details to match
-              the reference Credit Appraisal Form's Postal/Physical Address
-              placement (between KRA PIN and Telephone). */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-purple-600" />
-                Address Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="postalCode">Postal Address (P.O. Box)</Label>
+                <Label htmlFor="businessType">Type of Business</Label>
+                <Select value={businessType || undefined} onValueChange={setBusinessType} disabled={isSubmitting || authLoading}>
+                  <SelectTrigger id="businessType">
+                    <SelectValue placeholder="Select business type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                    <SelectItem value="hospital_clinic">Hospital / Clinic</SelectItem>
+                    <SelectItem value="distributor">Distributor</SelectItem>
+                    <SelectItem value="ngo">NGO</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="registrationNumber">Registration/License Number</Label>
+                  <Input
+                    id="registrationNumber"
+                    value={registrationNumber}
+                    onChange={(e) => setRegistrationNumber(e.target.value)}
+                    placeholder="C123456"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="ppbLicenseNumber">Pharmacy &amp; Poisons board (PPB) License No.</Label>
+                  <Input
+                    id="ppbLicenseNumber"
+                    value={ppbLicenseNumber}
+                    onChange={(e) => setPpbLicenseNumber(e.target.value)}
+                    placeholder="PPB/123456"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pinNumber">KRA PIN{customerType === "company" ? " *" : ""}</Label>
+                <Input
+                  id="pinNumber"
+                  value={pinNumber}
+                  onChange={(e) => setPinNumber(e.target.value)}
+                  placeholder="P123456789A"
+                  disabled={isSubmitting || authLoading}
+                  className="w-full md:w-1/2"
+                />
+              </div>
+
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="postalCode">Postal Address</Label>
                 <Input
                   id="postalCode"
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
-                  placeholder="00100"
+                  placeholder="P.O. Box 6577 - 00100"
                   disabled={isSubmitting || authLoading}
-                  className="w-full md:w-1/3"
                 />
               </div>
 
@@ -1023,7 +768,7 @@ export function CreateCustomerModal({
                   id="address"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="123 Main Street"
+                  placeholder="Kampala Road, Off Enterprise Road"
                   disabled={isSubmitting || authLoading}
                 />
               </div>
@@ -1042,17 +787,22 @@ export function CreateCustomerModal({
 
                 <div className="space-y-2">
                   <Label htmlFor="country">Country</Label>
-                  <Input
-                    id="country"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="Kenya"
+                  <Select
+                    value={country || undefined}
+                    onValueChange={setCountry}
                     disabled={isSubmitting || authLoading}
-                  />
+                  >
+                    <SelectTrigger id="country">
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="region">Region</Label>
                   <Select
@@ -1115,67 +865,90 @@ export function CreateCustomerModal({
                   </Popover>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Telephone / Website / Nature of Business */}
-          <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5 text-teal-600" />
-                  Contact Details{customerType !== "company" ? " (optional)" : ""}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="telephone">Telephone</Label>
-                    <Input
-                      id="telephone"
-                      value={telephone}
-                      onChange={(e) => setTelephone(e.target.value)}
-                      placeholder="+254 20 123 4567"
-                      disabled={isSubmitting || authLoading}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="website">Website (if any)</Label>
-                    <Input
-                      id="website"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                      placeholder="https://www.example.com"
-                      disabled={isSubmitting || authLoading}
-                    />
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="natureOfBusiness">Nature of Business</Label>
+                  <Label htmlFor="telephone">Telephone</Label>
                   <Input
-                    id="natureOfBusiness"
-                    value={natureOfBusiness}
-                    onChange={(e) => setNatureOfBusiness(e.target.value)}
-                    placeholder="Retail, Manufacturing, etc."
+                    id="telephone"
+                    value={telephone}
+                    onChange={(e) => setTelephone(e.target.value)}
+                    placeholder="+254 20 123 4567"
                     disabled={isSubmitting || authLoading}
                   />
                 </div>
-              </CardContent>
-            </Card>
 
-          {/* Primary Contact */}
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Mobile</Label>
+                  <Input
+                    id="phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+254 700 123 456"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="info@example.com"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website">Website (if any)</Label>
+                  <Input
+                    id="website"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="https://www.example.com"
+                    disabled={isSubmitting || authLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="name">Customer Name *</Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={customerType === "company" ? "Name this customer is listed under" : "John Doe"}
+                  disabled={isSubmitting || authLoading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  How this customer is listed throughout the system.
+                </p>
+              </div>
+
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-2">
+                Attach a copy of COI, KRA, PPB premises, PPB pharmacy license
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 2. CONTACT PERSONS */}
           <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5 text-teal-600" />
-                  Primary Contact (Procurement Officer/Pharmacist-in-Charge){customerType !== "company" ? " (optional)" : ""}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="h-5 w-5 text-teal-600" />
+                2. CONTACT PERSONS
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <p className="text-sm font-semibold">
+                  Primary Contact (Procurement Officer/ Pharmacist-in-Charge)
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="contactPersonName">Contact Person Name</Label>
+                    <Label htmlFor="contactPersonName">Name</Label>
                     <Input
                       id="contactPersonName"
                       value={contactPersonName}
@@ -1197,7 +970,7 @@ export function CreateCustomerModal({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="contactPersonPhone">Contact Person Phone</Label>
+                    <Label htmlFor="contactPersonPhone">Phone</Label>
                     <Input
                       id="contactPersonPhone"
                       value={contactPersonPhone}
@@ -1208,7 +981,7 @@ export function CreateCustomerModal({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="contactPersonEmail">Contact Person Email</Label>
+                    <Label htmlFor="contactPersonEmail">Email</Label>
                     <Input
                       id="contactPersonEmail"
                       type="email"
@@ -1219,18 +992,10 @@ export function CreateCustomerModal({
                     />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-          {/* Accounts Contact - a separate contact block from Primary Contact above */}
-          <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5 text-teal-600" />
-                  Accounts Contact{customerType !== "company" ? " (optional)" : ""}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <div className="space-y-4 pt-4 border-t">
+                <p className="text-sm font-semibold">Accounts Contact</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="accountsContactName">Name</Label>
@@ -1277,229 +1042,35 @@ export function CreateCustomerModal({
                     />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-
-          {/*
-            Payment Method / immediate credit-account setup - Sales Reps must
-            go through the two-stage Credit Appraisal application below
-            instead (selecting "Credit" here would create a CustomerAccount
-            immediately, bypassing that gate entirely). Staff creating a
-            customer directly keep this unchanged.
-          */}
-          {!isSalesRep && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-indigo-600" />
-                Payment Method
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="paymentMethod">Payment Method</Label>
-                <Select 
-                  value={paymentMethod} 
-                  onValueChange={(value) => {
-                    setPaymentMethod(value);
-                    paymentMethodRef.current = value;
-                  }} 
-                  disabled={isSubmitting || authLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select payment method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="credit">Credit</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
-              
-              {paymentMethod === "credit" && (
-                <div className="space-y-4 mt-4 p-4 border border-gray-200 rounded-lg">
-                  <h3 className="font-medium">Credit Account Information</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="creditRequired">Credit Required (KES)</Label>
-                      <Input
-                        id="creditRequired"
-                        type="number"
-                        value={creditRequired}
-                        onChange={(e) => setCreditRequired(e.target.value)}
-                        placeholder="50000"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="creditDays">Credit Period (Days)</Label>
-                      <Input
-                        id="creditDays"
-                        type="number"
-                        min="0"
-                        value={creditDays}
-                        onChange={(e) => setCreditDays(e.target.value)}
-                        placeholder="e.g. 60"
-                        disabled={isSubmitting || authLoading}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Used to auto-calculate invoice due dates for this customer.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="certificateOfIncorporationNumber">Certificate of Incorporation Number</Label>
-                      <Input
-                        id="certificateOfIncorporationNumber"
-                        value={certificateOfIncorporationNumber}
-                        onChange={(e) => setCertificateOfIncorporationNumber(e.target.value)}
-                        placeholder="C123456"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="companyType">Company Type</Label>
-                      <Input
-                        id="companyType"
-                        value={companyType}
-                        onChange={(e) => setCompanyType(e.target.value)}
-                        placeholder="Limited, PLC, etc."
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="annualTurnover">Annual Turnover (KES)</Label>
-                    <Input
-                      id="annualTurnover"
-                      type="number"
-                      value={annualTurnover}
-                      onChange={(e) => setAnnualTurnover(e.target.value)}
-                      placeholder="1000000"
-                      disabled={isSubmitting || authLoading}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="creditTerms">Credit Terms</Label>
-                    <Input
-                      id="creditTerms"
-                      value={creditTerms}
-                      onChange={(e) => setCreditTerms(e.target.value)}
-                      placeholder="Net 30, etc."
-                      disabled={isSubmitting || authLoading}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={currentlyDefaulted}
-                        onChange={(e) => setCurrentlyDefaulted(e.target.checked)}
-                        disabled={isSubmitting || authLoading}
-                        className="mr-2"
-                      />
-                      Currently Defaulted
-                    </Label>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
-          )}
 
-          {/* Credit Appraisal - Sales Rep submission (paper "Credit Appraisal Form") */}
-          {isSalesRep && (
+          {isCreditApplication && (
             <>
+              {/* 3. BUSINESS OWNERS/DIRECTORS */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5 text-rose-600" />
-                    Credit Appraisal - Credit Terms
+                    <User className="h-5 w-5 text-rose-600" />
+                    3. BUSINESS OWNERS/DIRECTORS
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-xs text-muted-foreground">
-                    This application will be submitted for review before the customer becomes active.
+                  <p className="text-sm text-muted-foreground">
+                    Full Name, ID/Passport No, Phone Number, Pin No
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="caAnnualTurnover">Annual Turnover (KES)</Label>
-                      <Input
-                        id="caAnnualTurnover"
-                        type="number"
-                        value={caAnnualTurnover}
-                        onChange={(e) => setCaAnnualTurnover(e.target.value)}
-                        placeholder="1000000"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="caCreditRequired">Credit Required (KES)</Label>
-                      <Input
-                        id="caCreditRequired"
-                        type="number"
-                        value={caCreditRequired}
-                        onChange={(e) => setCaCreditRequired(e.target.value)}
-                        placeholder="50000"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="caCreditPeriodRequired">Credit Period Required</Label>
-                      <Input
-                        id="caCreditPeriodRequired"
-                        value={caCreditPeriodRequired}
-                        onChange={(e) => setCaCreditPeriodRequired(e.target.value)}
-                        placeholder="30 days"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="caCreditPeriodPdChequeDays">Post-Dated Cheque Period (Days)</Label>
-                      <Input
-                        id="caCreditPeriodPdChequeDays"
-                        type="number"
-                        min="0"
-                        max="365"
-                        value={caCreditPeriodPdChequeDays}
-                        onChange={(e) => setCaCreditPeriodPdChequeDays(e.target.value)}
-                        placeholder="e.g. 30"
-                        disabled={isSubmitting || authLoading}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building className="h-5 w-5 text-rose-600" />
-                    Credit Appraisal - Business Owners / Directors
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {caDirectors.map((director, index) => (
+                  {directors.map((director, index) => (
                     <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
                       <div className="flex justify-between items-center">
-                        <h3 className="font-medium">Director {index + 1}</h3>
-                        {caDirectors.length > 1 && (
+                        <h3 className="font-medium">{index + 1}.</h3>
+                        {directors.length > 1 && (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => removeCaDirector(index)}
+                            onClick={() => removeDirector(index)}
                             disabled={isSubmitting || authLoading}
                           >
                             Remove
@@ -1509,31 +1080,21 @@ export function CreateCustomerModal({
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Name *</Label>
+                          <Label>Full Name</Label>
                           <Input
                             value={director.name}
-                            onChange={(e) => updateCaDirector(index, "name", e.target.value)}
+                            onChange={(e) => updateDirector(index, "name", e.target.value)}
                             placeholder="Director name"
                             disabled={isSubmitting || authLoading}
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <Label>ID/Passport Number</Label>
+                          <Label>ID / Person No.</Label>
                           <Input
                             value={director.idPassportNumber}
-                            onChange={(e) => updateCaDirector(index, "idPassportNumber", e.target.value)}
+                            onChange={(e) => updateDirector(index, "idPassportNumber", e.target.value)}
                             placeholder="A1234567"
-                            disabled={isSubmitting || authLoading}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>PIN</Label>
-                          <Input
-                            value={director.pin}
-                            onChange={(e) => updateCaDirector(index, "pin", e.target.value)}
-                            placeholder="D123456"
                             disabled={isSubmitting || authLoading}
                           />
                         </div>
@@ -1542,8 +1103,18 @@ export function CreateCustomerModal({
                           <Label>Phone Number</Label>
                           <Input
                             value={director.phoneNumber}
-                            onChange={(e) => updateCaDirector(index, "phoneNumber", e.target.value)}
+                            onChange={(e) => updateDirector(index, "phoneNumber", e.target.value)}
                             placeholder="0712345678"
+                            disabled={isSubmitting || authLoading}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Pin No.</Label>
+                          <Input
+                            value={director.pin}
+                            onChange={(e) => updateDirector(index, "pin", e.target.value)}
+                            placeholder="A123456789P"
                             disabled={isSubmitting || authLoading}
                           />
                         </div>
@@ -1554,7 +1125,7 @@ export function CreateCustomerModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={addCaDirector}
+                    onClick={addDirector}
                     disabled={isSubmitting || authLoading}
                     className="w-full"
                   >
@@ -1563,24 +1134,30 @@ export function CreateCustomerModal({
                 </CardContent>
               </Card>
 
+              {/* 4. TRADE REFERENCES (SUPPLIER REFERENCES) */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Building className="h-5 w-5 text-rose-600" />
-                    Credit Appraisal - Trade References / Suppliers
+                    4. TRADE REFERENCES (SUPPLIER REFERENCES)
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {caSuppliers.map((supplier, index) => (
+                  <p className="text-sm text-muted-foreground">
+                    Provide at least <span className="font-semibold">three</span> suppliers you have credit history with:
+                    Supplier Name, Contact Person, Credit Limit Ksh.
+                  </p>
+
+                  {suppliers.map((supplier, index) => (
                     <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
                       <div className="flex justify-between items-center">
-                        <h3 className="font-medium">Trade Reference {index + 1}</h3>
-                        {caSuppliers.length > 1 && (
+                        <h3 className="font-medium">{index + 1}.</h3>
+                        {suppliers.length > 1 && (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => removeCaSupplier(index)}
+                            onClick={() => removeSupplier(index)}
                             disabled={isSubmitting || authLoading}
                           >
                             Remove
@@ -1590,20 +1167,20 @@ export function CreateCustomerModal({
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Name *</Label>
+                          <Label>Supplier Name</Label>
                           <Input
                             value={supplier.name}
-                            onChange={(e) => updateCaSupplier(index, "name", e.target.value)}
+                            onChange={(e) => updateSupplier(index, "name", e.target.value)}
                             placeholder="Supplier name"
                             disabled={isSubmitting || authLoading}
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Contact Person Name</Label>
+                          <Label>Contact Person</Label>
                           <Input
                             value={supplier.contactPersonName}
-                            onChange={(e) => updateCaSupplier(index, "contactPersonName", e.target.value)}
+                            onChange={(e) => updateSupplier(index, "contactPersonName", e.target.value)}
                             placeholder="Contact person name"
                             disabled={isSubmitting || authLoading}
                           />
@@ -1613,18 +1190,18 @@ export function CreateCustomerModal({
                           <Label>Phone Number</Label>
                           <Input
                             value={supplier.phoneNumber}
-                            onChange={(e) => updateCaSupplier(index, "phoneNumber", e.target.value)}
+                            onChange={(e) => updateSupplier(index, "phoneNumber", e.target.value)}
                             placeholder="0712345678"
                             disabled={isSubmitting || authLoading}
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Credit Limit (KES)</Label>
+                          <Label>Credit Limit (Ksh)</Label>
                           <Input
                             type="number"
                             value={supplier.creditLimit}
-                            onChange={(e) => updateCaSupplier(index, "creditLimit", e.target.value)}
+                            onChange={(e) => updateSupplier(index, "creditLimit", e.target.value)}
                             placeholder="20000"
                             disabled={isSubmitting || authLoading}
                           />
@@ -1636,7 +1213,7 @@ export function CreateCustomerModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={addCaSupplier}
+                    onClick={addSupplier}
                     disabled={isSubmitting || authLoading}
                     className="w-full"
                   >
@@ -1645,47 +1222,38 @@ export function CreateCustomerModal({
                 </CardContent>
               </Card>
 
+              {/* 5. BANK DETAILS */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Landmark className="h-5 w-5 text-rose-600" />
-                    Credit Appraisal - Bank Details
+                    5. BANK DETAILS
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {caBankDetails.map((bank, index) => (
+                  {bankDetails.map((bank, index) => (
                     <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-medium">Bank Account {index + 1}</h3>
-                        {caBankDetails.length > 1 && (
+                      {bankDetails.length > 1 && (
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-medium">Bank Account {index + 1}</h3>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => removeCaBankDetail(index)}
+                            onClick={() => removeBankDetail(index)}
                             disabled={isSubmitting || authLoading}
                           >
                             Remove
                           </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Account Name</Label>
-                          <Input
-                            value={bank.accountName}
-                            onChange={(e) => updateCaBankDetail(index, "accountName", e.target.value)}
-                            placeholder="Acme Corporation Ltd"
-                            disabled={isSubmitting || authLoading}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Bank Name *</Label>
+                          <Label>Bank Name</Label>
                           <Input
                             value={bank.bankName}
-                            onChange={(e) => updateCaBankDetail(index, "bankName", e.target.value)}
+                            onChange={(e) => updateBankDetail(index, "bankName", e.target.value)}
                             placeholder="Bank of Africa"
                             disabled={isSubmitting || authLoading}
                           />
@@ -1695,8 +1263,18 @@ export function CreateCustomerModal({
                           <Label>Branch</Label>
                           <Input
                             value={bank.branch}
-                            onChange={(e) => updateCaBankDetail(index, "branch", e.target.value)}
+                            onChange={(e) => updateBankDetail(index, "branch", e.target.value)}
                             placeholder="Westlands"
+                            disabled={isSubmitting || authLoading}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Account Name</Label>
+                          <Input
+                            value={bank.accountName}
+                            onChange={(e) => updateBankDetail(index, "accountName", e.target.value)}
+                            placeholder="Acme Corporation Ltd"
                             disabled={isSubmitting || authLoading}
                           />
                         </div>
@@ -1705,7 +1283,7 @@ export function CreateCustomerModal({
                           <Label>Account Number</Label>
                           <Input
                             value={bank.accountNumber}
-                            onChange={(e) => updateCaBankDetail(index, "accountNumber", e.target.value)}
+                            onChange={(e) => updateBankDetail(index, "accountNumber", e.target.value)}
                             placeholder="1234567890"
                             disabled={isSubmitting || authLoading}
                           />
@@ -1717,7 +1295,7 @@ export function CreateCustomerModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={addCaBankDetail}
+                    onClick={addBankDetail}
                     disabled={isSubmitting || authLoading}
                     className="w-full"
                   >
@@ -1725,353 +1303,122 @@ export function CreateCustomerModal({
                   </Button>
                 </CardContent>
               </Card>
+
+              {/* 6. CREDIT TERMS */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-rose-600" />
+                    6. CREDIT TERMS
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {isSalesRep && (
+                    <p className="text-xs text-muted-foreground">
+                      This application will be submitted for review before the customer becomes active.
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="annualTurnover">1.) Turnover KES</Label>
+                      <Input
+                        id="annualTurnover"
+                        type="number"
+                        value={annualTurnover}
+                        onChange={(e) => setAnnualTurnover(e.target.value)}
+                        placeholder="1000000"
+                        disabled={isSubmitting || authLoading}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="creditRequired">2.) Credit Limit (KES)</Label>
+                      <Input
+                        id="creditRequired"
+                        type="number"
+                        value={creditRequired}
+                        onChange={(e) => setCreditRequired(e.target.value)}
+                        placeholder="50000"
+                        disabled={isSubmitting || authLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>3.) Credit Period (days)</Label>
+                    <div className="flex items-center gap-6">
+                      {(["30", "45"] as const).map((days) => (
+                        <label key={days} className="flex items-center gap-2 text-sm cursor-pointer">
+                          {days}
+                          <input
+                            type="checkbox"
+                            checked={creditDays === days}
+                            onChange={(e) => setCreditDays(e.target.checked ? days : "")}
+                            disabled={isSubmitting || authLoading}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Used to auto-calculate invoice due dates for this customer.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>4.) Credit Period (days) on PD Cheques</Label>
+                    <div className="flex items-center gap-6">
+                      {(["30", "60"] as const).map((days) => (
+                        <label key={days} className="flex items-center gap-2 text-sm cursor-pointer">
+                          {days}
+                          <input
+                            type="checkbox"
+                            checked={pdChequeDays === days}
+                            onChange={(e) => setPdChequeDays(e.target.checked ? days : "")}
+                            disabled={isSubmitting || authLoading}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Agreed PD-cheque period cannot exceed 60 days.
+                    </p>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold">Late Payment:</span> Any payment made beyond the agreed{" "}
+                    <span className="font-semibold">credit period</span> shall attract a late payment charge
+                    equivalent to three percent (3%) of the outstanding amount.
+                  </p>
+                </CardContent>
+              </Card>
             </>
           )}
 
-          {/* Directors Information (for credit accounts) */}
-          {paymentMethod === "credit" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5 text-blue-600" />
-                  Directors Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {directors.map((director, index) => (
-                  <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">Director {index + 1}</h3>
-                      {directors.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeDirector(index)}
-                          disabled={isSubmitting || authLoading}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Name *</Label>
-                        <Input
-                          value={director.name}
-                          onChange={(e) => updateDirector(index, "name", e.target.value)}
-                          placeholder="Director name"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>ID/Passport Number *</Label>
-                        <Input
-                          value={director.idPassportNumber}
-                          onChange={(e) => updateDirector(index, "idPassportNumber", e.target.value)}
-                          placeholder="A1234567"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>PIN</Label>
-                        <Input
-                          value={director.pin}
-                          onChange={(e) => updateDirector(index, "pin", e.target.value)}
-                          placeholder="D123456"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Phone Number</Label>
-                        <Input
-                          value={director.phoneNumber}
-                          onChange={(e) => updateDirector(index, "phoneNumber", e.target.value)}
-                          placeholder="0712345678"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addDirector}
-                  disabled={isSubmitting || authLoading}
-                  className="w-full"
-                >
-                  Add Director
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Authorised Purchase Persons (for credit accounts) */}
-          {paymentMethod === "credit" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5 text-green-600" />
-                  Authorised Purchase Persons
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {authorisedPurchasePersons.map((person, index) => (
-                  <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">Authorised Person {index + 1}</h3>
-                      {authorisedPurchasePersons.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeAuthorisedPurchasePerson(index)}
-                          disabled={isSubmitting || authLoading}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Name *</Label>
-                        <Input
-                          value={person.name}
-                          onChange={(e) => updateAuthorisedPurchasePerson(index, "name", e.target.value)}
-                          placeholder="Authorised person name"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Phone Number</Label>
-                        <Input
-                          value={person.phoneNumber}
-                          onChange={(e) => updateAuthorisedPurchasePerson(index, "phoneNumber", e.target.value)}
-                          placeholder="0712345678"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addAuthorisedPurchasePerson}
-                  disabled={isSubmitting || authLoading}
-                  className="w-full"
-                >
-                  Add Authorised Person
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Suppliers Information (for credit accounts) */}
-          {paymentMethod === "credit" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5 text-purple-600" />
-                  Current Suppliers
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {suppliers.map((supplier, index) => (
-                  <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">Supplier {index + 1}</h3>
-                      {suppliers.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeSupplier(index)}
-                          disabled={isSubmitting || authLoading}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Name *</Label>
-                        <Input
-                          value={supplier.name}
-                          onChange={(e) => updateSupplier(index, "name", e.target.value)}
-                          placeholder="Supplier name"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Contact Person Name</Label>
-                        <Input
-                          value={supplier.contactPersonName}
-                          onChange={(e) => updateSupplier(index, "contactPersonName", e.target.value)}
-                          placeholder="Contact person name"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Phone Number</Label>
-                        <Input
-                          value={supplier.phoneNumber}
-                          onChange={(e) => updateSupplier(index, "phoneNumber", e.target.value)}
-                          placeholder="0712345678"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Credit Limit (KES)</Label>
-                        <Input
-                          type="number"
-                          value={supplier.creditLimit}
-                          onChange={(e) => updateSupplier(index, "creditLimit", e.target.value)}
-                          placeholder="20000"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addSupplier}
-                  disabled={isSubmitting || authLoading}
-                  className="w-full"
-                >
-                  Add Supplier
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Bank Details (for credit accounts) */}
-          {paymentMethod === "credit" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5 text-indigo-600" />
-                  Bank Account Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {bankDetails.map((bank, index) => (
-                  <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">Bank Account {index + 1}</h3>
-                      {bankDetails.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeBankDetail(index)}
-                          disabled={isSubmitting || authLoading}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Bank Name *</Label>
-                        <Input
-                          value={bank.bankName}
-                          onChange={(e) => updateBankDetail(index, "bankName", e.target.value)}
-                          placeholder="Bank of Africa"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Branch</Label>
-                        <Input
-                          value={bank.branch}
-                          onChange={(e) => updateBankDetail(index, "branch", e.target.value)}
-                          placeholder="Westlands"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label>Account Number</Label>
-                        <Input
-                          value={bank.accountNumber}
-                          onChange={(e) => updateBankDetail(index, "accountNumber", e.target.value)}
-                          placeholder="1234567890"
-                          disabled={isSubmitting || authLoading}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addBankDetail}
-                  disabled={isSubmitting || authLoading}
-                  className="w-full"
-                >
-                  Add Bank Account
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Documents Section */}
-          <DocumentForm 
-            documents={documents} 
-            onChange={setDocuments} 
+          {/* Supporting documents - the attachments section 1 asks for */}
+          <DocumentForm
+            documents={documents}
+            onChange={setDocuments}
           />
 
-          {/* Additional Information */}
+          {/* Notes are the one free-text field the ERP keeps that the paper
+              form has no line for. */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-orange-600" />
-                Additional Information
+                Notes
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags (comma separated)</Label>
-                <Input
-                  id="tags"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  placeholder="VIP, Regular Customer, Wholesale"
-                  disabled={isSubmitting || authLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Additional notes about this customer..."
-                  disabled={isSubmitting || authLoading}
-                  rows={4}
-                />
-              </div>
+            <CardContent>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Additional notes about this customer..."
+                disabled={isSubmitting || authLoading}
+                rows={4}
+              />
             </CardContent>
           </Card>
         </div>

@@ -75,8 +75,14 @@ export function BulkPayrollPage() {
     employees.forEach(employee => {
       if (employee.id && !newPayrollDataMap[employee.id]) {
         // Pre-populate with employee's existing allowances and deductions if available
-        const allowances = employee.allowances ? 
-          Object.entries(employee.allowances).map(([type, amount]) => ({ type, amount: Number(amount) })) : [];
+        // Disbursed allowances are paid outside payroll, so they never pre-fill a payslip.
+        const allowances = Array.isArray(employee.allowances)
+          ? employee.allowances
+              .filter((a) => a.frequency !== "disbursed")
+              .map((a) => ({ type: a.name, amount: Number(a.amount) || 0 }))
+          : employee.allowances
+            ? Object.entries(employee.allowances).map(([type, amount]) => ({ type, amount: Number(amount) }))
+            : [];
         const deductions = employee.deductions ? 
           Object.entries(employee.deductions).map(([type, amount]) => ({ type, amount: Number(amount) })) : [];
         

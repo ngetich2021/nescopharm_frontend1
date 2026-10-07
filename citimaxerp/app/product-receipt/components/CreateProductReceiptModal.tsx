@@ -154,13 +154,57 @@ export function CreateProductReceiptModal({
   const [document, setDocument] = useState<File | null>(null);
   const [shippingCost, setShippingCost] = useState<string>("");
   const [logisticsCost, setLogisticsCost] = useState<string>("");
-  
+
+  // Import cost breakdown fields
+  const [importCosts, setImportCosts] = useState<Record<string, string>>({
+    ppb_permit: "",
+    idf: "",
+    railway_levy: "",
+    transport_cost: "",
+    clearing_agency_fee: "",
+    other_clearing_cost: "",
+    certificate_of_conformity: "",
+    sgs_listing_approval: "",
+    vat_on_clearing: "",
+    vat_on_product: "",
+    import_duty: "",
+    excise_duty: "",
+    fob_price: "",
+  });
+
+  const importCostLabels: Record<string, string> = {
+    ppb_permit: "PPB Permit",
+    idf: "IDF",
+    railway_levy: "Railway Levy",
+    transport_cost: "Transport Cost (Manufacturer to Nairobi CTD)",
+    clearing_agency_fee: "Clearing Cost - Agency Fee",
+    other_clearing_cost: "Other Clearing Cost",
+    certificate_of_conformity: "Certificate of Conformity from Manufacturer",
+    sgs_listing_approval: "SGS Listing & Approval",
+    vat_on_clearing: "VAT Charges on Clearing Cost",
+    vat_on_product: "VAT Cost on the Product",
+    import_duty: "Import Duty",
+    excise_duty: "Excise Duty",
+    fob_price: "FOB Price from Manufacturer",
+  };
+
+  const updateImportCost = (field: string, value: string) => {
+    setImportCosts((prev) => ({ ...prev, [field]: value }));
+  };
+
   // Data arrays
   const [stores, setStores] = useState<Store[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [items, setItems] = useState<ProductReceiptItem[]>([]);
+
+  const totalImportCost = Object.values(importCosts).reduce(
+    (sum, v) => sum + (parseFloat(v) || 0),
+    0
+  );
+  const totalItems = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const costPerItem = totalItems > 0 ? Math.round((totalImportCost / totalItems) * 100) / 100 : 0;
 
   // Loading states
   const [loadingStores, setLoadingStores] = useState(false);
@@ -388,6 +432,12 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     setDocument(null);
     setShippingCost("");
     setLogisticsCost("");
+    setImportCosts({
+      ppb_permit: "", idf: "", railway_levy: "", transport_cost: "",
+      clearing_agency_fee: "", other_clearing_cost: "", certificate_of_conformity: "",
+      sgs_listing_approval: "", vat_on_clearing: "", vat_on_product: "",
+      import_duty: "", excise_duty: "", fob_price: "",
+    });
     setItems([]);
     setProductSearchQuery("");
     setSelectedProductForVariant(null);
@@ -812,12 +862,15 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     try {
       const payload = {
         supplier_id: supplierId && supplierId !== "none" ? supplierId : null,
-        contractor_id: null, // Contractor functionality to be implemented later
+        contractor_id: null,
         document_type: documentType,
         reference_number: referenceNumber.trim(),
         store_id: storeId,
-        shipping_cost: shippingCost ? parseFloat(shippingCost) : 0,
-        logistics_cost: logisticsCost ? parseFloat(logisticsCost) : 0,
+        shipping_cost: 0,
+        logistics_cost: 0,
+        ...Object.fromEntries(
+          Object.entries(importCosts).map(([k, v]) => [k, parseFloat(v) || 0])
+        ),
         purchase_order_id: purchaseOrderId || null,
         // Lines left at 0 didn't arrive in this delivery and stay outstanding on the order.
         items: items.filter((item) => item.quantity > 0).map(item => ({
@@ -1032,32 +1085,6 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="shippingCost">Shipping Cost</Label>
-                    <Input
-                      id="shippingCost"
-                      type="number"
-                      step="0.01"
-                      value={shippingCost}
-                      onChange={(e) => setShippingCost(e.target.value)}
-                      placeholder="0.00"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="logisticsCost">Logistics Cost</Label>
-                    <Input
-                      id="logisticsCost"
-                      type="number"
-                      step="0.01"
-                      value={logisticsCost}
-                      onChange={(e) => setLogisticsCost(e.target.value)}
-                      placeholder="0.00"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="document">Document (Optional)</Label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -1146,6 +1173,46 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                   </div>
                 </div>
 
+                {/* Import Cost Breakdown */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Import Cost Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {Object.entries(importCostLabels).map(([field, label]) => (
+                        <div key={field} className="space-y-1">
+                          <Label className="text-sm">{label}</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={importCosts[field]}
+                            onChange={(e) => updateImportCost(field, e.target.value)}
+                            placeholder="0.00"
+                            disabled={isSubmitting}
+                            className="h-9"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center pt-2">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">Overall Import Cost</div>
+                        {totalItems > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            Cost per item: {formatCurrency(costPerItem)} ({totalItems} items)
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xl font-bold text-blue-600">
+                        {formatCurrency(totalImportCost)}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Product Items */}
                 <Card>
                   <CardHeader>
@@ -1195,6 +1262,79 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                         </Button>
                       </div>
                     )}
+
+                    {/* Bulk price setter — one row per product that has multiple sizes/lines */}
+                    {(() => {
+                      const groups = new Map<string, { name: string; count: number }>();
+                      items.forEach((item) => {
+                        if (!item.product_id) return;
+                        const existing = groups.get(item.product_id);
+                        if (existing) {
+                          existing.count++;
+                        } else {
+                          groups.set(item.product_id, {
+                            name: item.product?.name || products.find(p => p.id === item.product_id)?.name || "Unknown",
+                            count: 1,
+                          });
+                        }
+                      });
+                      const multiSizeProducts = [...groups.entries()].filter(([, g]) => g.count > 1);
+                      if (multiSizeProducts.length === 0) return null;
+
+                      return (
+                        <div className="space-y-2">
+                          {multiSizeProducts.map(([productId, group]) => (
+                            <div key={productId} className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-2.5">
+                              <Label className="text-sm font-medium text-blue-800 truncate min-w-0 flex-1">
+                                Set price for {group.name} ({group.count} sizes)
+                              </Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Unit price"
+                                className="h-9 w-32 bg-white shrink-0"
+                                defaultValue={items.find(i => i.product_id === productId)?.unit_price || ""}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const price = parseFloat((e.target as HTMLInputElement).value);
+                                    if (!isNaN(price) && price >= 0) {
+                                      const updated = items.map(item =>
+                                        item.product_id === productId ? { ...item, unit_price: price } : item
+                                      );
+                                      setItems(updated);
+                                      form.setValue("items", updated);
+                                      toast({ title: "Price updated", description: `Set ${formatCurrency(price)} on ${group.count} sizes.` });
+                                    }
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-9 border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0"
+                                onClick={(e) => {
+                                  const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                                  const price = parseFloat(input?.value);
+                                  if (!isNaN(price) && price >= 0) {
+                                    const updated = items.map(item =>
+                                      item.product_id === productId ? { ...item, unit_price: price } : item
+                                    );
+                                    setItems(updated);
+                                    form.setValue("items", updated);
+                                    toast({ title: "Price updated", description: `Set ${formatCurrency(price)} on ${group.count} sizes.` });
+                                  }
+                                }}
+                              >
+                                Apply
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {/* Items List */}
                     <div className="space-y-4">
@@ -1392,8 +1532,8 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                 </div>
                               )}
                               
-                              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                <div className="space-y-2 md:col-span-2">
+                              <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                <div className="space-y-2 md:col-span-2 lg:col-span-2">
                                   <Label className="text-sm font-medium">Product *</Label>
                                   <Popover
                                     open={productRowSearchOpen[item.id] || false}
@@ -1404,10 +1544,12 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                         variant="outline"
                                         role="combobox"
                                         aria-expanded={productRowSearchOpen[item.id] || false}
-                                        className="w-full justify-between font-normal h-10"
+                                        className="w-full justify-between font-normal h-10 overflow-hidden"
                                         disabled={isSubmitting || !!item.purchase_order_item_id}
                                       >
-                                        {item.product_id ? (item.product?.name || products.find((product) => product.id === item.product_id)?.name) : "Select product"}
+                                        <span className="truncate flex-1 text-left">
+                                          {item.product_id ? (item.product?.name || products.find((product) => product.id === item.product_id)?.name) : "Select product"}
+                                        </span>
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                       </Button>
                                     </PopoverTrigger>
@@ -1461,7 +1603,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                 
                                 {/* Variant Selection - Only show if product has variations */}
                                 {item.product && item.product.has_variations && item.product.variants && item.product.variants.length > 0 && (
-                                  <div className="space-y-2">
+                                  <div className="space-y-2 md:col-span-1 lg:col-span-1">
                                     <Label className="text-sm font-medium">Variant *</Label>
                                     <Select
                                       value={item.variant_id || "select-variant"}
@@ -1493,7 +1635,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                   </div>
                                 )}
                                 
-                                <div className="space-y-2">
+                                <div className="space-y-2 md:col-span-1 lg:col-span-1">
                                   <Label className="text-sm font-medium">Qty *</Label>
                                   <Input
                                     type="number"
@@ -1514,8 +1656,8 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                     className="h-10"
                                   />
                                 </div>
-                                
-                                <div className="space-y-2">
+
+                                <div className="space-y-2 md:col-span-1 lg:col-span-1">
                                   <Label className="text-sm font-medium">Unit Price</Label>
                                   <Input
                                     type="number"
@@ -1562,14 +1704,22 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                                 </div>
                               </div>
                               
-                              {/* Item Total */}
-                              <div className="flex justify-end pt-3 border-t border-gray-100">
-                                <div className="text-right">
-                                  <div className="text-sm text-gray-500">Item Total</div>
-                                  <div className="text-lg font-bold text-green-600">
+                              {/* Item Total + Landed Cost */}
+                              <div className="flex justify-between items-end pt-3 border-t border-gray-100">
+                                <div>
+                                  <div className="text-sm text-gray-500">Buying Total</div>
+                                  <div className="text-base font-semibold text-gray-700">
                                     {formatCurrency(item.quantity * item.unit_price)}
                                   </div>
                                 </div>
+                                {costPerItem > 0 && (
+                                  <div className="text-right">
+                                    <div className="text-sm text-gray-500">Landed Cost / Unit</div>
+                                    <div className="text-lg font-bold text-green-600">
+                                      {formatCurrency(Math.round((item.unit_price + costPerItem) * 100) / 100)}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1579,21 +1729,42 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
                     
                     {/* Total Summary */}
                     {items.length > 0 && (
-                      <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border border-green-200">
+                      <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border border-green-200 space-y-3">
                         <div className="flex justify-between items-center">
                           <div>
                             <h3 className="font-semibold text-gray-900 mb-1">Receipt Summary</h3>
                             <div className="text-sm text-gray-600">
-                              {items.length} {items.length === 1 ? 'item' : 'items'} • Total Quantity: {items.reduce((sum, item) => sum + item.quantity, 0)} units
+                              {items.length} {items.length === 1 ? 'item' : 'items'} &bull; Total Quantity: {totalItems} units
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm text-gray-600 mb-1">Total Value</div>
-                            <div className="text-2xl font-bold text-green-600">
+                            <div className="text-sm text-gray-600 mb-1">Buying Value</div>
+                            <div className="text-xl font-bold text-gray-700">
                               {formatCurrency(totalValue)}
                             </div>
                           </div>
                         </div>
+                        {totalImportCost > 0 && (
+                          <>
+                            <Separator />
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                              <div>
+                                <div className="text-gray-500">Import Cost</div>
+                                <div className="font-semibold">{formatCurrency(totalImportCost)}</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-500">Import / Unit</div>
+                                <div className="font-semibold">{formatCurrency(costPerItem)}</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-500">Total (Buying + Import)</div>
+                                <div className="text-lg font-bold text-green-600">
+                                  {formatCurrency(totalValue + totalImportCost)}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </CardContent>

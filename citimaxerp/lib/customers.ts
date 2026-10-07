@@ -4,11 +4,10 @@ export interface CustomerNote {
   id: string
   customer_id: string
   note_content: string
+  created_by: string | null
+  creator?: { id: string; first_name: string; last_name: string } | null
   created_at: string
   updated_at: string
-  // Assuming created_by is not directly in the API response for notes,
-  // but might be inferred or added client-side if needed.
-  // For now, it's not part of the API response for notes.
 }
 
 export interface Payment {
@@ -689,4 +688,20 @@ export async function uploadStampedCreditApplication(
   } catch (error: any) {
     throw new Error(error.message || "Failed to upload stamped application.")
   }
+}
+
+export async function createCustomerNote(
+  customerId: string,
+  noteContent: string,
+): Promise<CustomerNote> {
+  const response = await apiCall<{
+    status: string
+    message?: string
+    note: CustomerNote
+  }>(`/customers/${customerId}/notes`, "POST", { note_content: noteContent }, true)
+
+  if (response.status === "success" && response.note) {
+    return response.note
+  }
+  throw new Error(typeof response.message === "string" ? response.message : "Failed to add note.")
 }

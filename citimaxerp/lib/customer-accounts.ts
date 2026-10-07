@@ -7,7 +7,9 @@ export interface Director {
   company_id: string | null
   created_by: string | null
   name: string
-  id_passport_number: string
+  // Nullable to match the backend: an ID/passport number is often not on hand
+  // when the appraisal form is captured and must not block saving the rest.
+  id_passport_number?: string | null
   pin?: string | null
   phone_number?: string | null
   created_at: string

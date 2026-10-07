@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getDeliveryInvoice, DeliveryInvoice } from "@/lib/delivery-invoices"
+import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -111,7 +112,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
 
   const company = invoice.company
   const orderNumber = invoice.order_dispatch?.order?.order_number || invoice.order_dispatch?.order_id || "-"
-  const customerName = invoice.order_dispatch?.order?.customer?.name || "-"
+  const buyer = buildBuyerBlock(invoice.order_dispatch?.order?.customer)
 
   return (
     <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
@@ -169,7 +170,14 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold">Order:</td>
                 <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{orderNumber}</td>
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold">Customer:</td>
-                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{customerName}</td>
+                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">
+                  <p className="font-semibold">{buyer.name}</p>
+                  {buyer.careOf && <p>c/o {buyer.careOf}</p>}
+                  {buyer.addressLines.map((line) => (
+                    <p key={line}>{line}</p>
+                  ))}
+                  {buyer.kraPin && <p className="font-semibold">KRA PIN: {buyer.kraPin}</p>}
+                </td>
               </tr>
               <tr>
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold">Transporter:</td>

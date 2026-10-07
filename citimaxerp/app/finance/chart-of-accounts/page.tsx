@@ -29,8 +29,9 @@ import {
   getChartOfAccounts, 
   getChartOfAccount,
   deleteChartOfAccount, 
-  getAccountTypeColor, 
-  ChartOfAccount 
+  getAccountTypeColor,
+  formatCurrency,
+  ChartOfAccount
 } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 import CreateAccountDialog from "./create-account-dialog"
@@ -192,9 +193,12 @@ export default function ChartOfAccountsPage() {
           </Badge>
         </div>
 
-        {/* Normal Balance */}
-        <div className="w-24 text-xs text-slate-500 font-medium flex-shrink-0 hidden md:block capitalize">
-          {account.normal_balance}
+        {/* Balance (positive = account's normal side) */}
+        <div className="w-36 flex-shrink-0 hidden md:block text-right pr-4">
+          <div className={`text-sm font-medium tabular-nums ${Number(account.balance ?? account.current_balance ?? 0) < 0 ? "text-rose-600" : "text-slate-800"}`}>
+            {formatCurrency(account.balance ?? account.current_balance ?? 0)}
+          </div>
+          <div className="text-[10px] text-slate-400 capitalize">{account.normal_balance}</div>
         </div>
 
         {/* Status */}
@@ -392,7 +396,7 @@ export default function ChartOfAccountsPage() {
                       <div className="w-24">Code</div>
                       <div className="flex-1 min-w-0">Account Name</div>
                       <div className="w-32 hidden sm:block">Type</div>
-                      <div className="w-24 hidden md:block">Balance</div>
+                      <div className="w-36 hidden md:block text-right pr-4">Balance</div>
                       <div className="w-20">Status</div>
                       <div className="w-10"></div>
                     </div>

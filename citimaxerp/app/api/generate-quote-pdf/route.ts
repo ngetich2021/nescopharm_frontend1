@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server"
 import puppeteer from "puppeteer"
+import { buildBuyerBlock } from "@/lib/customer-address"
 
 export async function POST(request: Request) {
   try {
     const { customerInfo, quoteDetails } = await request.json()
+    const buyer = buildBuyerBlock(customerInfo)
 
     // Format the quote date and valid until date
     const quoteDate = new Date(quoteDetails.date).toLocaleDateString()
@@ -162,10 +164,12 @@ export async function POST(request: Request) {
           
           <div class="info-section">
             <h2>Customer Information</h2>
-            <p class="info-item"><strong>Name:</strong> ${customerInfo.name}</p>
+            <p class="info-item"><strong>Name:</strong> ${buyer.name}</p>
+            ${buyer.careOf ? `<p class="info-item"><strong>Contact:</strong> ${buyer.careOf}</p>` : ""}
             <p class="info-item"><strong>Email:</strong> ${customerInfo.email}</p>
             <p class="info-item"><strong>Phone:</strong> ${customerInfo.phone}</p>
-            ${customerInfo.address ? `<p class="info-item"><strong>Address:</strong> ${customerInfo.address}</p>` : ""}
+            ${buyer.addressLines.map((line) => `<p class="info-item">${line}</p>`).join("")}
+            ${buyer.kraPin ? `<p class="info-item"><strong>PIN :</strong> ${buyer.kraPin}</p>` : ""}
           </div>
           
           <table>

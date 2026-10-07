@@ -124,6 +124,13 @@ export function UsersTable() {
           can_view_chat_menu: false,
           // Reports
           can_view_reports_menu: false,
+          // Assets
+          can_view_assets_menu: false,
+          can_view_assets: false,
+          can_create_assets: false,
+          can_update_assets: false,
+          can_delete_assets: false,
+          can_manage_assets: false,
           // Settings
           can_view_settings_menu: false,
           can_manage_users_and_roles: false,

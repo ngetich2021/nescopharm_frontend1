@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { fetchOrderById, OrderDetail } from "@/lib/orders"
 import { getCompany, Company } from "@/lib/company"
-import { getCustomerProfile, getCustomerDisplayName, CustomerProfileData } from "@/lib/customers"
+import { getCustomerProfile, CustomerProfileData } from "@/lib/customers"
+import { buildBuyerBlock, mergeCustomerSources, type CustomerAddressSource } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -166,18 +167,9 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
     )
   }
 
-  const displayName = order.customer
-    ? getCustomerDisplayName({
-        name: customerDetails?.name || order.customer.name,
-        business_name: customerDetails?.business_name || order.customer.business_name,
-        customer_type: customerDetails?.customer_type || order.customer.customer_type,
-      })
-    : 'Customer'
-
-  // Show the "c/o <contact person>" line whenever a business name was
-  // actually captured, not just for customer_type === 'company' -
-  // individuals can fill this in too now.
-  const isCompanyCustomer = !!(customerDetails?.business_name || order.customer?.business_name)
+  const buyer = buildBuyerBlock(
+    mergeCustomerSources(customerDetails, order.customer as CustomerAddressSource | null),
+  )
 
   const deliveryLocation = order.delivery_location
   const deliveryAddressParts = deliveryLocation
@@ -263,18 +255,19 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
             <div>
               <p className="text-sm font-semibold text-gray-600 mb-2">CUSTOMER</p>
               <div className="text-gray-900">
-                <p className="font-semibold">{displayName}</p>
-                {isCompanyCustomer && (
-                  <p className="text-sm">c/o {customerDetails?.name || order.customer?.name}</p>
-                )}
+                <p className="font-semibold">{buyer.name}</p>
+                {buyer.careOf && <p className="text-sm">c/o {buyer.careOf}</p>}
+                {buyer.addressLines.map((line) => (
+                  <p key={line} className="text-sm">{line}</p>
+                ))}
                 {(customerDetails?.email || order.customer?.email) && (
                   <p className="text-sm">{customerDetails?.email || order.customer?.email}</p>
                 )}
                 {(customerDetails?.phone || order.customer?.phone) && (
                   <p className="text-sm">{customerDetails?.phone || order.customer?.phone}</p>
                 )}
-                {customerDetails?.address && (
-                  <p className="text-sm">{customerDetails.address}</p>
+                {buyer.kraPin && (
+                  <p className="text-sm font-semibold">KRA PIN: {buyer.kraPin}</p>
                 )}
               </div>
             </div>

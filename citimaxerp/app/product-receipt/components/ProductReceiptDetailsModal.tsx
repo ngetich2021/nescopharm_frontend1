@@ -307,24 +307,49 @@ export function ProductReceiptDetailsModal({
                       <span className="text-gray-600">Items Subtotal:</span>
                       <span>{formatCurrency(totalValue)}</span>
                     </div>
-                    {Number(receipt.shipping_cost) > 0 && (
-                      <div className="flex justify-between items-center text-sm mt-1">
-                        <span className="text-gray-600">Shipping Cost:</span>
-                        <span>{formatCurrency(Number(receipt.shipping_cost))}</span>
-                      </div>
-                    )}
-                    {Number(receipt.logistics_cost) > 0 && (
-                      <div className="flex justify-between items-center text-sm mt-1">
-                        <span className="text-gray-600">Logistics Cost:</span>
-                        <span>{formatCurrency(Number(receipt.logistics_cost))}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center text-lg font-semibold mt-2">
-                      <span>{(Number(receipt.shipping_cost) > 0 || Number(receipt.logistics_cost) > 0) ? "Landed Total:" : "Total Value:"}</span>
-                      <span className="text-green-600">
-                        {formatCurrency(totalValue + Number(receipt.shipping_cost || 0) + Number(receipt.logistics_cost || 0))}
-                      </span>
-                    </div>
+                    {(() => {
+                      const importFields = [
+                        { key: 'ppb_permit', label: 'PPB Permit' },
+                        { key: 'idf', label: 'IDF' },
+                        { key: 'railway_levy', label: 'Railway Levy' },
+                        { key: 'transport_cost', label: 'Transport Cost' },
+                        { key: 'clearing_agency_fee', label: 'Clearing Agency Fee' },
+                        { key: 'other_clearing_cost', label: 'Other Clearing Cost' },
+                        { key: 'certificate_of_conformity', label: 'Certificate of Conformity' },
+                        { key: 'sgs_listing_approval', label: 'SGS Listing & Approval' },
+                        { key: 'vat_on_clearing', label: 'VAT on Clearing' },
+                        { key: 'vat_on_product', label: 'VAT on Product' },
+                        { key: 'import_duty', label: 'Import Duty' },
+                        { key: 'excise_duty', label: 'Excise Duty' },
+                        { key: 'fob_price', label: 'FOB Price' },
+                      ];
+                      const totalImport = importFields.reduce((s, f) => s + (Number((receipt as any)[f.key]) || 0), 0);
+                      const totalQty = receipt.product_receipt_items?.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0) || 0;
+                      const perItem = totalQty > 0 ? Math.round((totalImport / totalQty) * 100) / 100 : 0;
+                      const hasImportCosts = totalImport > 0;
+                      return (
+                        <>
+                          {importFields.filter(f => Number((receipt as any)[f.key]) > 0).map(f => (
+                            <div key={f.key} className="flex justify-between items-center text-sm mt-1">
+                              <span className="text-gray-600">{f.label}:</span>
+                              <span>{formatCurrency(Number((receipt as any)[f.key]))}</span>
+                            </div>
+                          ))}
+                          {hasImportCosts && (
+                            <div className="flex justify-between items-center text-sm mt-1 font-medium">
+                              <span className="text-gray-700">Import Cost Total ({totalQty} items x {formatCurrency(perItem)}/unit):</span>
+                              <span>{formatCurrency(totalImport)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center text-lg font-semibold mt-2">
+                            <span>{hasImportCosts ? "Landed Total:" : "Total Value:"}</span>
+                            <span className="text-green-600">
+                              {formatCurrency(totalValue + totalImport)}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
 

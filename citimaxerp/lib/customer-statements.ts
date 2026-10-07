@@ -87,6 +87,11 @@ export interface CustomerStatement {
     email?: string | null
     phone?: string | null
     address?: string | null
+    postal_code?: string | null
+    city?: string | null
+    county?: string | null
+    country?: string | null
+    pin_number?: string | null
   }
   company: {
     id: string

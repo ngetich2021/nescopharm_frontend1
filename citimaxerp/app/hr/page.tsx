@@ -12,6 +12,7 @@ import {
   ClipboardList,
   CreditCard,
   Clock,
+  Wallet,
 } from 'lucide-react';
 import { PermissionGuard } from '@/components/PermissionGuard';
 
@@ -48,6 +49,14 @@ export default function HRPage() {
       icon: CreditCard,
       color: "bg-yellow-500",
       permission: "can_view_salary_advance_menu"
+    },
+    {
+      title: "Allowances",
+      description: "Track allowances disbursed outside payroll",
+      href: "/hr/allowances",
+      icon: Wallet,
+      color: "bg-emerald-500",
+      permission: "can_view_employees_menu"
     },
     {
       title: "Time Management",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import puppeteer from "puppeteer";
 import apiCall from "@/lib/api";
+import { buildBuyerBlock } from "@/lib/customer-address";
 
 // This is a placeholder for a PDF generation library.
 // In a real application, you would use a library like `puppeteer` or `html-pdf`
@@ -76,16 +77,12 @@ function generateInvoiceHTML(invoiceData: any) {
   const companyPhone = invoiceData.company?.phone || "";
   const companyAddress = invoiceData.company?.address || "";
   
-  // Get customer display name - use business_name for company customers
-  const customerDisplayName = invoiceData.customer?.customer_type === 'company' && invoiceData.customer?.business_name
-    ? invoiceData.customer.business_name
-    : (invoiceData.customer?.name || invoiceData.customer_name || "Customer Name");
-  
-  // Show contact person for company customers
-  const contactPerson = invoiceData.customer?.customer_type === 'company' && invoiceData.customer?.business_name
-    ? `<p>c/o ${invoiceData.customer.name}</p>`
-    : "";
-    
+  const buyer = buildBuyerBlock({
+    ...invoiceData.customer,
+    name: invoiceData.customer?.name || invoiceData.customer_name,
+  });
+  const buyerAddress = buyer.addressLines.map((line) => `<p>${line}</p>`).join("");
+
   return `
     <!DOCTYPE html>
     <html>
@@ -163,11 +160,12 @@ function generateInvoiceHTML(invoiceData: any) {
         <div class="invoice-details">
           <div class="customer-info">
             <h3>Bill To:</h3>
-            <p><strong>${customerDisplayName}</strong></p>
-            ${contactPerson}
+            <p><strong>${buyer.name}</strong></p>
+            ${buyer.careOf ? `<p>c/o ${buyer.careOf}</p>` : ""}
+            ${buyerAddress}
             <p>${invoiceData.customer?.email || invoiceData.customer_email || ""}</p>
             <p>${invoiceData.customer?.phone || invoiceData.customer_phone || ""}</p>
-            <p>${invoiceData.customer?.address || ""}</p>
+            ${buyer.kraPin ? `<p><strong>PIN : ${buyer.kraPin}</strong></p>` : ""}
           </div>
           <div class="invoice-info">
             <h3>Invoice Details:</h3>

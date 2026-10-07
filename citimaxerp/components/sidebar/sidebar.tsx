@@ -39,6 +39,8 @@ import {
   Banknote,
   BriefcaseBusiness,
   Layers,
+  Wallet,
+  Boxes,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -134,6 +136,7 @@ function Sidebar() {
     { name: "POS", href: "/POS", icon: Store, permission: "can_view_pos_menu" },
     // { name: "Chat", href: "/chat", icon: MessageSquare, permission: "can_view_chat_menu" },
     { name: "Users", href: "/users", icon: UserCheck, permission: "can_manage_users_and_roles" },
+    { name: "Assets", href: "/assets", icon: Boxes, permission: "can_view_assets_menu" },
   ]
 
   // Define CRM dropdown items
@@ -178,6 +181,7 @@ function Sidebar() {
     { name: "Payroll", href: "/hr/payroll", icon: Calculator, permission: "can_view_payroll_menu" },
     { name: "Leave Management", href: "/hr/leave-management", icon: ClipboardList, permission: "can_view_leave_management_menu" },
     { name: "Salary Advance", href: "/hr/salary-advance", icon: CreditCard, permission: "can_view_salary_advance_menu" },
+    { name: "Allowances", href: "/hr/allowances", icon: Wallet, permission: "can_view_employees_menu" },
     { name: "Time Management", href: "/hr/time-management", icon: Clock, permission: "can_view_time_management_menu" },
     { name: "Daily Reports", href: "/hr/daily-reports", icon: FileText, permission: "can_view_daily_reports_menu" },
   ]

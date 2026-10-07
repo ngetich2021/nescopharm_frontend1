@@ -83,6 +83,19 @@ export interface PackagingUnit {
   units_per_parent?: number | null
 }
 
+export interface InventoryBatchLite {
+  id: string
+  batch_number?: string | null
+  lot_number?: string | null
+  quantity_available: number | string
+  quantity_received: number | string
+  manufacture_date?: string | null
+  expiry_date?: string | null
+  received_date?: string | null
+  supplier?: string | null
+  status?: string | null
+}
+
 export interface ProductVariant {
   damaged: number
   on_hold: number
@@ -102,6 +115,7 @@ export interface ProductVariant {
   attributes: Record<string, string | string[]>
   store_id?: string
   price_tiers?: PriceTierInput[]
+  available_batches?: InventoryBatchLite[]
 }
 
 export interface Dimensions {
@@ -242,6 +256,9 @@ export interface Product {
   has_packaging?: boolean
   base_unit?: string | null
   packaging_units?: PackagingUnit[]
+  // Only populated for products with no variants - when variants exist, each
+  // variant has its own `available_batches` instead.
+  available_batches?: InventoryBatchLite[]
 }
 
 export interface ProductSummary {

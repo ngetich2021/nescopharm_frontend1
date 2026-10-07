@@ -31,6 +31,8 @@ export interface Employee {
   supervisor_id?: string | null;
   leave_approver_id?: string | null;
   salary_advance_approver_id?: string | null;
+  user_id?: string | null; // login connected to this employee for the employee portal
+  user?: { id: string; first_name: string; last_name: string; email?: string } | null;
   is_active: boolean; // API uses is_active instead of employment_status
   employment_status?: 'active' | 'inactive' | 'terminated';
   gross_salary?: number;
@@ -148,6 +150,7 @@ interface CreateEmployeePayload {
   supervisor_id?: string | null;
   leave_approver_id?: string | null;
   salary_advance_approver_id?: string | null;
+  user_id?: string | null;
   employment_status?: 'active' | 'inactive' | 'terminated';
   is_active?: boolean;
   address?: string;
@@ -290,6 +293,45 @@ export async function getEmployeeStatistics(): Promise<EmployeeStatisticsRespons
   } catch (error: any) {
     throw new Error(`Failed to fetch employee statistics: ${error.message || 'Unknown error'}`);
   }
+}
+
+export interface LinkableUser {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  is_active: boolean;
+  role?: { id: string; name: string } | null;
+}
+
+// Logins that can be connected to this employee (excludes ones already connected to another employee).
+export async function getLinkableUsers(employeeId: string): Promise<LinkableUser[]> {
+  const response = await apiCall<{ status: string; data: LinkableUser[] }>(`/employees/${employeeId}/linkable-users`, 'GET');
+  return response.data || [];
+}
+
+export interface DisbursedAllowance {
+  id: string;
+  employee_id: string;
+  employee_number: string | null;
+  employee_name: string;
+  department: string | null;
+  position: string | null;
+  name: string;
+  amount: number;
+  is_taxable: boolean;
+  updated_at: string | null;
+}
+
+export interface DisbursedAllowancesResponse {
+  status: string;
+  month: string;
+  data: DisbursedAllowance[];
+  summary: { total_amount: number; allowance_count: number; employee_count: number };
+}
+
+export async function getDisbursedAllowances(month: string): Promise<DisbursedAllowancesResponse> {
+  return apiCall<DisbursedAllowancesResponse>(`/employee-allowances/disbursed?month=${encodeURIComponent(month)}`, 'GET');
 }
 
 // Export all functions as a single object for easier imports

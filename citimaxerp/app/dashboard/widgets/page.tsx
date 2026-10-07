@@ -235,10 +235,10 @@ export default function WidgetShowcase() {
               <CardTitle>Compact Action Buttons</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <CompactActionButton icon={Plus} label="New Sale" />
-              <CompactActionButton icon={Users} label="Add Customer" />
-              <CompactActionButton icon={Package} label="Add Stock" />
-              <CompactActionButton icon={FileText} label="Invoice" />
+              <CompactActionButton icon={Plus} label="New Sale" href="/sales/orders" />
+              <CompactActionButton icon={Users} label="Add Customer" href="/customers" />
+              <CompactActionButton icon={Package} label="Add Stock" href="/product-receipt" />
+              <CompactActionButton icon={FileText} label="Invoice" href="/sales/invoices" />
             </CardContent>
           </Card>
         </TabsContent>

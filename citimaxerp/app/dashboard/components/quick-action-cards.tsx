@@ -95,7 +95,7 @@ export function QuickActionsGrid() {
       icon: ShoppingCart,
       color: "text-blue-600",
       bgColor: "bg-blue-500/10",
-      href: "/sales/new",
+      href: "/sales/orders",
     },
     {
       title: "Add Customer",
@@ -103,7 +103,7 @@ export function QuickActionsGrid() {
       icon: Users,
       color: "text-green-600",
       bgColor: "bg-green-500/10",
-      href: "/customers/new",
+      href: "/customers",
     },
     {
       title: "Stock Receipt",
@@ -111,7 +111,7 @@ export function QuickActionsGrid() {
       icon: Package,
       color: "text-purple-600",
       bgColor: "bg-purple-500/10",
-      href: "/product-receipt/new",
+      href: "/product-receipt",
     },
     {
       title: "Create Invoice",
@@ -119,7 +119,7 @@ export function QuickActionsGrid() {
       icon: FileText,
       color: "text-orange-600",
       bgColor: "bg-orange-500/10",
-      href: "/sales/invoices/new",
+      href: "/sales/invoices",
     },
     {
       title: "Record Expense",
@@ -127,7 +127,7 @@ export function QuickActionsGrid() {
       icon: DollarSign,
       color: "text-red-600",
       bgColor: "bg-red-500/10",
-      href: "/expenses/new",
+      href: "/expenses",
     },
     {
       title: "Dispatch Order",
@@ -135,7 +135,7 @@ export function QuickActionsGrid() {
       icon: Truck,
       color: "text-teal-600",
       bgColor: "bg-teal-500/10",
-      href: "/dispatch/new",
+      href: "/dispatch",
     },
   ]
 
@@ -191,10 +191,10 @@ export function QuickActionsToolbar() {
         <CardTitle className="text-base">Quick Actions</CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <CompactActionButton icon={Plus} label="New Sale" href="/sales/new" />
-        <CompactActionButton icon={Users} label="Add Customer" href="/customers/new" />
-        <CompactActionButton icon={Package} label="Add Stock" href="/product-receipt/new" />
-        <CompactActionButton icon={FileText} label="Create Invoice" href="/sales/invoices/new" />
+        <CompactActionButton icon={Plus} label="New Sale" href="/sales/orders" />
+        <CompactActionButton icon={Users} label="Add Customer" href="/customers" />
+        <CompactActionButton icon={Package} label="Add Stock" href="/product-receipt" />
+        <CompactActionButton icon={FileText} label="Create Invoice" href="/sales/invoices" />
       </CardContent>
     </Card>
   )

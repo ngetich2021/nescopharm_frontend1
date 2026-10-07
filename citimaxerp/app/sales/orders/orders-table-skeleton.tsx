@@ -19,9 +19,9 @@ export function OrdersTableSkeleton() {
               <div className="text-2xl font-bold">
                 <Skeleton className="h-8 w-24" />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 <Skeleton className="h-3 w-40 mt-1" />
-              </p>
+              </div>
             </CardContent>
           </Card>
         ))}

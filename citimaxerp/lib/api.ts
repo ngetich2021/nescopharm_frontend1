@@ -3,6 +3,9 @@ import { getToken as getStoredToken, isTokenExpired } from './token-manager'
 
 const BASE_URL = getApiUrl()
 
+// Fired after any successful write, so live widgets (e.g. the notification bell) can refresh.
+export const DATA_CHANGED_EVENT = "app:data-changed"
+
 function buildRequestUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) {
     return path
@@ -290,6 +293,10 @@ async function apiCall<T>(
       }
 
       throw buildApiError(errorMessage || "An unknown error occurred. Please try again.", response.status, data)
+    }
+
+    if (typeof window !== "undefined" && method.toUpperCase() !== "GET" && !path.includes("/notifications")) {
+      window.dispatchEvent(new Event(DATA_CHANGED_EVENT))
     }
 
     return data as T

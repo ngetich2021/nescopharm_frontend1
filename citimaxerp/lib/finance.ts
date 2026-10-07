@@ -20,7 +20,9 @@ export interface ChartOfAccount {
   description?: string;
   is_system?: boolean;
   opening_balance?: string;
-  current_balance?: string | null;
+  /** Balance in the account's normal direction (positive = normal side). */
+  balance?: number;
+  current_balance?: string | number | null;
   currency_code?: string;
   created_at?: string;
   updated_at?: string;
@@ -321,7 +323,42 @@ export interface UpdateAccountingSettingsInput {
   current_period_end?: string | null;
 }
 
+export interface FinanceSummary {
+  as_of: string;
+  total_assets: number;
+  total_liabilities: number;
+  total_equity: number;
+  retained_earnings_to_date: number;
+  cash_and_bank: number;
+  accounts_receivable: number;
+  accounts_payable: number;
+  vat_payable: number;
+  financial_year_start: string;
+  revenue_ytd: number;
+  expenses_ytd: number;
+  net_income_ytd: number;
+  draft_entries: number;
+  posted_entries: number;
+  books_balanced: boolean;
+  monthly: { month: string; label: string; revenue: number; expenses: number }[];
+  recent_entries: {
+    id: string;
+    entry_number: string;
+    entry_date: string;
+    reference: string | null;
+    description: string;
+    total_debit: string;
+    status: string;
+    source_type: string | null;
+  }[];
+}
+
 // API Functions
+
+export const getFinanceSummary = async (): Promise<FinanceSummary> => {
+  const response = await apiCall<{ status: string; data: FinanceSummary }>('/finance/summary', 'GET');
+  return (response as any).data;
+};
 
 // Chart of Accounts
 export const getChartOfAccounts = async (params?: {

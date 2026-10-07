@@ -1,5 +1,11 @@
 export type PermissionKey =
   | "can_view_dashboard_menu"
+  | "can_view_assets_menu"
+  | "can_view_assets"
+  | "can_create_assets"
+  | "can_update_assets"
+  | "can_delete_assets"
+  | "can_manage_assets"
   | "can_view_customers_menu"
   | "can_view_sales_menu"
   | "can_view_orders_menu"

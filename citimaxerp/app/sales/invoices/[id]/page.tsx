@@ -39,6 +39,7 @@ import { PaymentHistoryModal } from "@/components/modals/payment-history-modal"
 import { MapPaymentModal } from "@/components/modals/map-payment-modal"
 import { getCompany, Company } from "@/lib/company"
 import { getCustomerProfile, CustomerProfileData } from "@/lib/customers"
+import { buildBuyerBlock, mergeCustomerSources } from "@/lib/customer-address"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
@@ -923,21 +924,22 @@ export default function InvoiceDetailPage() {
                   <div>
                     <h3 className="font-semibold text-gray-800 mb-3">BILLED TO:</h3>
                     <div className="text-sm">
-                      {(invoice.customer || customerDetails) ? (
-                        <>
-                          <p className="font-medium">
-                            {/* Show a captured business name whenever it exists,
-                                not just for customer_type === 'company'. */}
-                            {(customerDetails?.business_name || invoice.customer?.business_name)
-                              || (customerDetails?.name || invoice.customer?.name)}
-                          </p>
-                          {(customerDetails?.business_name || invoice.customer?.business_name) && (
-                            <p className="text-gray-600">c/o {customerDetails?.name || invoice.customer?.name}</p>
-                          )}
-                          {(customerDetails?.phone || invoice.customer?.phone) && <p>{customerDetails?.phone || invoice.customer?.phone}</p>}
-                          {(customerDetails?.address || invoice.customer?.address) && <p className="break-words">{customerDetails?.address || invoice.customer?.address}</p>}
-                        </>
-                      ) : (
+                      {(invoice.customer || customerDetails) ? (() => {
+                        const buyer = buildBuyerBlock(
+                          mergeCustomerSources(customerDetails, invoice.customer),
+                        )
+                        return (
+                          <>
+                            <p className="font-medium">{buyer.name}</p>
+                            {buyer.careOf && <p className="text-gray-600">c/o {buyer.careOf}</p>}
+                            {buyer.addressLines.map((line) => (
+                              <p key={line} className="break-words">{line}</p>
+                            ))}
+                            {(customerDetails?.phone || invoice.customer?.phone) && <p>{customerDetails?.phone || invoice.customer?.phone}</p>}
+                            {buyer.kraPin && <p className="font-medium">KRA PIN: {buyer.kraPin}</p>}
+                          </>
+                        )
+                      })() : (
                         <p className="text-gray-500">Customer information not available</p>
                       )}
                     </div>
@@ -968,22 +970,32 @@ export default function InvoiceDetailPage() {
                         {invoice.line_items.map((item) => {
                           const vatRate = parseFloat((item.tax_rate ?? 0).toString())
                           const unitPriceInclVat = parseFloat(item.unit_price.toString()) * (1 + vatRate / 100)
+                          const batches = item.metadata?.batches?.length
+                            ? item.metadata.batches
+                            : (item.batch_number || item.expiry_date)
+                              ? [{ batch_number: item.batch_number ?? null, expiry_date: item.expiry_date ?? null, quantity: null }]
+                              : []
                           return (
                             <tr key={item.id} className="border-b border-gray-200">
-                              <td className="py-3 text-xs lg:text-sm pr-4 font-mono whitespace-nowrap">
+                              <td className="py-3 text-xs lg:text-sm pr-4 font-mono whitespace-nowrap align-top">
                                 {(item.product as any)?.item_number ?? "—"}
                               </td>
-                              <td className="py-3 text-xs lg:text-sm pr-4">
+                              <td className="py-3 text-xs lg:text-sm pr-4 align-top">
                                 <div>{item.description}</div>
                                 {vatRate > 0 && (
                                   <span className="inline-block mt-0.5 border border-gray-500 px-1 text-[10px] font-semibold text-gray-700">
                                     VAT {vatRate}% inclusive
                                   </span>
                                 )}
+                                {batches.map((b, i) => (
+                                  <div key={i} className="pl-4 text-[11px] italic text-gray-500 mt-0.5">
+                                    Batch: {b.batch_number || "N/A"} | Expiry: {b.expiry_date ? formatDate(b.expiry_date) : "N/A"}
+                                  </div>
+                                ))}
                               </td>
-                              <td className="text-center py-3 text-xs lg:text-sm">{item.quantity}</td>
-                              <td className="text-right py-3 text-xs lg:text-sm">{formatCurrency(unitPriceInclVat)}</td>
-                              <td className="text-right py-3 text-xs lg:text-sm font-medium">
+                              <td className="text-center py-3 text-xs lg:text-sm align-top">{item.quantity}</td>
+                              <td className="text-right py-3 text-xs lg:text-sm align-top">{formatCurrency(unitPriceInclVat)}</td>
+                              <td className="text-right py-3 text-xs lg:text-sm font-medium align-top">
                                 {formatCurrency(parseFloat(item.quantity.toString()) * unitPriceInclVat)}
                               </td>
                             </tr>

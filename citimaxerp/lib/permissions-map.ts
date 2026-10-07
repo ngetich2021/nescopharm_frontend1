@@ -1601,7 +1601,58 @@ export const PERMISSIONS_MAP: PermissionDefinition[] = [
     module: "payments"
   },
 
+  // Asset Management
+  {
+    key: "can_view_assets_menu",
+    name: "View Assets Menu",
+    description: "Access to the assets section in the main navigation menu",
+    category: "Menu Permissions",
+    module: "assets"
+  },
+  {
+    key: "can_view_assets",
+    name: "View Assets",
+    description: "View the company asset register",
+    category: "Asset Management",
+    module: "assets"
+  },
+  {
+    key: "can_create_assets",
+    name: "Create Assets",
+    description: "Add and import assets",
+    category: "Asset Management",
+    module: "assets"
+  },
+  {
+    key: "can_update_assets",
+    name: "Update Assets",
+    description: "Edit existing assets",
+    category: "Asset Management",
+    module: "assets"
+  },
+  {
+    key: "can_delete_assets",
+    name: "Delete Assets",
+    description: "Remove assets from the register",
+    category: "Asset Management",
+    module: "assets"
+  },
+  {
+    key: "can_manage_assets",
+    name: "Manage Assets",
+    description: "Full management of the asset register",
+    category: "Asset Management",
+    module: "assets"
+  },
+
   // Reporting & Analytics
+  {
+    key: "can_view_dashboard_menu",
+    name: "View Dashboard Menu",
+    description: "Access to the dashboard section in the main navigation menu",
+    category: "Menu Permissions",
+    module: "dashboard"
+  },
   {
     key: "can_view_dashboard",
     name: "View Dashboard",

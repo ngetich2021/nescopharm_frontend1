@@ -227,7 +227,7 @@ export function EditAccountModal({ open, onOpenChange, account, onSuccess }: Edi
             });
             return;
           }
-          if (!director.id_passport_number.trim()) {
+          if (!director.id_passport_number?.trim()) {
             toast({
               title: "Validation Error",
               description: `Director ${i + 1}: ID/Passport number is required`,
@@ -646,7 +646,7 @@ export function EditAccountModal({ open, onOpenChange, account, onSuccess }: Edi
                     <Label htmlFor={`director-id-${index}`}>ID/Passport Number *</Label>
                     <Input
                       id={`director-id-${index}`}
-                      value={director.id_passport_number}
+                      value={director.id_passport_number ?? ""}
                       onChange={(e) => updateDirector(index, 'id_passport_number', e.target.value)}
                       placeholder="A1234567"
                       disabled={isSubmitting || loadingAccount}

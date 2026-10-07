@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { getOrderDispatch, type OrderDispatch } from "@/lib/order-dispatches"
 import { getCompany, Company } from "@/lib/company"
 import { getCustomerProfile, CustomerProfileData } from "@/lib/customers"
-import { getCustomerDisplayName } from "@/lib/customers"
+import { buildBuyerBlock, mergeCustomerSources, type CustomerAddressSource } from "@/lib/customer-address"
 import { getEtimsConfig } from "@/lib/etims"
 import { COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
@@ -123,8 +123,9 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
     )
   }
 
-  const customerDisplayName = dispatch.order?.customer ? getCustomerDisplayName(dispatch.order.customer) : "Customer"
-  const businessName = customerDetails?.business_name || dispatch.order?.customer?.business_name
+  const buyer = buildBuyerBlock(
+    mergeCustomerSources(customerDetails, dispatch.order?.customer as CustomerAddressSource | null),
+  )
   const destination = dispatch.delivery_location?.landmark || dispatch.logistic?.delivery_location || "N/A"
   const customerPin = customerDetails?.pin_number || (dispatch.order?.customer as any)?.pin_number || 'N/A'
   const companySlug = company?.name?.toLowerCase().trim().split(/\s+/)[0]
@@ -219,13 +220,13 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
             <div className="px-2 py-1 border-r border-gray-300">
               <p className="text-[10px] font-semibold text-gray-500 mb-0.5">BUYER (BILL TO)</p>
               <div className="text-gray-900">
-                <p className="font-semibold">{businessName || customerDisplayName}</p>
-                {businessName && <p>c/o {customerDisplayName}</p>}
+                <p className="font-semibold">{buyer.name}</p>
+                {buyer.careOf && <p>c/o {buyer.careOf}</p>}
+                {buyer.addressLines.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
                 {(customerDetails?.phone || dispatch.order?.customer?.phone) && (
                   <p>{customerDetails?.phone || dispatch.order?.customer?.phone}</p>
-                )}
-                {(customerDetails?.address || dispatch.order?.customer?.address) && (
-                  <p>{customerDetails?.address || dispatch.order?.customer?.address}</p>
                 )}
                 <p>PIN : {customerPin}</p>
               </div>

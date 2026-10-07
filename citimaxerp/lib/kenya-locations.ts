@@ -63,3 +63,10 @@ export const KENYA_COUNTIES: string[] = KENYA_REGIONS.flatMap((region) => region
 export function getCountiesForRegion(regionName: string): string[] {
   return KENYA_REGIONS.find((r) => r.name === regionName)?.counties ?? []
 }
+
+export const DEFAULT_COUNTRY = "Kenya"
+
+// Kenya is the only country served, and the Region -> County cascade below
+// hangs off it. Kept as a list so the field reads as a dropdown rather than a
+// free-text box people can mistype.
+export const COUNTRIES: string[] = [DEFAULT_COUNTRY]

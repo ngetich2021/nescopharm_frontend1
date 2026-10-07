@@ -429,10 +429,20 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
               {canApprove && order && order.status === 'pending' && itemCount > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
                 <Button
                   onClick={() => setIsApproveDialogOpen(true)}
+                  disabled={isApproving}
                   className="min-w-[120px]"
                 >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve
+                  {isApproving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Approving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve
+                    </>
+                  )}
                 </Button>
               )}
             </div>

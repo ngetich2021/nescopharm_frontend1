@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { fetchInvoiceById, Invoice } from "@/lib/invoices"
 import { getCompany, Company } from "@/lib/company"
 import { getCustomerProfile, CustomerProfileData } from "@/lib/customers"
+import { buildBuyerBlock, mergeCustomerSources } from "@/lib/customer-address"
 import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/customer-accounts"
 import { INVOICE_PAYMENT_DETAILS, COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { getEtimsConfig } from "@/lib/etims"
@@ -271,37 +272,28 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
           <div className="grid grid-cols-2 border border-gray-300 text-xs leading-tight">
             <div className="px-2 py-1 border-r border-gray-300">
               <p className="text-[10px] font-semibold text-gray-500 mb-0.5">BUYER (BILL TO)</p>
-              <div className="text-gray-900">
-                <p className="font-semibold">
-                  {/* Show a captured business name whenever it exists, not
-                      just for customer_type === 'company' - individuals can
-                      fill this in too now. */}
-                  {(customerDetails?.business_name || invoice.customer?.business_name)
-                    || (customerDetails?.name || invoice.customer?.name || 'Customer Name')}
-                </p>
-                {(customerDetails?.business_name || invoice.customer?.business_name) && (
-                  <p>c/o {customerDetails?.name || invoice.customer?.name}</p>
-                )}
-                {(customerDetails?.email || invoice.customer?.email) && (
-                  <p>{customerDetails?.email || invoice.customer?.email}</p>
-                )}
-                {(customerDetails?.phone || invoice.customer?.phone) && (
-                  <p>{customerDetails?.phone || invoice.customer?.phone}</p>
-                )}
-                {(customerDetails?.address || invoice.customer?.address) && (
-                  <p>{customerDetails?.address || invoice.customer?.address}</p>
-                )}
-                {(() => {
-                  const ownPin = customerDetails?.pin_number || invoice.customer?.pin_number
-                  const isCompany = (customerDetails?.customer_type || invoice.customer?.customer_type) === "company"
-                  // Companies always print a PIN line so a missing one is visible, never silently dropped.
-                  if (isCompany) {
-                    return <p className="font-semibold">KRA PIN: {ownPin || "Not provided"}</p>
-                  }
-                  const pin = ownPin || customerAccount?.directors?.find((d) => d.pin?.trim())?.pin
-                  return pin ? <p className="font-semibold">KRA PIN: {pin}</p> : null
-                })()}
-              </div>
+              {(() => {
+                const buyer = buildBuyerBlock(
+                  mergeCustomerSources(customerDetails, invoice.customer),
+                )
+                // An individual with no PIN of their own falls back to a
+                // director's, which only the account carries.
+                const pin = buyer.kraPin || customerAccount?.directors?.find((d) => d.pin?.trim())?.pin
+                const email = customerDetails?.email || invoice.customer?.email
+                const phone = customerDetails?.phone || invoice.customer?.phone
+                return (
+                  <div className="text-gray-900">
+                    <p className="font-semibold">{buyer.name}</p>
+                    {buyer.careOf && <p>c/o {buyer.careOf}</p>}
+                    {buyer.addressLines.map((line) => (
+                      <p key={line}>{line}</p>
+                    ))}
+                    {email && <p>{email}</p>}
+                    {phone && <p>{phone}</p>}
+                    {pin && <p className="font-semibold">KRA PIN: {pin}</p>}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Reference & Dispatch Details - a tight grid of label/value

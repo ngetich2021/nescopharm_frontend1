@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { fetchCustomerStatement, CustomerStatement } from "@/lib/customer-statements"
 import { getCustomerDisplayName } from "@/lib/customers"
+import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -125,6 +126,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   }
 
   const customerName = getCustomerDisplayName(statement.customer)
+  const buyer = buildBuyerBlock(statement.customer)
   const transactions = statement.transactions ?? []
   const totalDebits = transactions.reduce((s, t) => s + toNumber(t.debit), 0)
   const totalCredits = transactions.reduce((s, t) => s + toNumber(t.credit), 0)
@@ -354,10 +356,14 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Statement To</p>
-              <p className="font-semibold text-base">{customerName}</p>
-              {statement.customer.address && <p className="text-gray-700">{statement.customer.address}</p>}
+              <p className="font-semibold text-base">{buyer.name}</p>
+              {buyer.careOf && <p className="text-gray-700">c/o {buyer.careOf}</p>}
+              {buyer.addressLines.map((line) => (
+                <p key={line} className="text-gray-700">{line}</p>
+              ))}
               {statement.customer.phone && <p className="text-gray-700">Tel: {statement.customer.phone}</p>}
               {statement.customer.email && <p className="text-gray-700">{statement.customer.email}</p>}
+              {buyer.kraPin && <p className="text-gray-700 font-semibold">KRA PIN: {buyer.kraPin}</p>}
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Account Summary</p>

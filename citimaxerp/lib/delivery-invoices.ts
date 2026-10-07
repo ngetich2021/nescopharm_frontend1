@@ -33,7 +33,18 @@ export interface DeliveryInvoice {
     order?: {
       id: string;
       order_number: string;
-      customer?: { id: string; name: string };
+      customer?: {
+        id: string;
+        name: string;
+        business_name?: string | null;
+        customer_type?: string | null;
+        address?: string | null;
+        postal_code?: string | null;
+        city?: string | null;
+        county?: string | null;
+        country?: string | null;
+        pin_number?: string | null;
+      };
     };
   };
   logistic?: {

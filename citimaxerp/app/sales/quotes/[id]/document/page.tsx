@@ -10,6 +10,7 @@ import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
 import { documentCode } from "@/lib/price-codes"
+import { buildBuyerBlock } from "@/lib/customer-address"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -99,7 +100,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
   const company = quote.company
   const rep = quote.sales_rep || quote.original_submitted_by
   const repName = rep ? `${rep.first_name} ${rep.last_name}`.trim() : "-"
-  const clientName = quote.customer?.business_name || quote.customer?.name || "-"
+  const buyer = buildBuyerBlock(quote.customer)
   const currency = quote.currency || "KES"
   const totals = quote.totals
   const subtotal = Number(totals?.subtotal ?? quote.total_amount ?? 0)
@@ -159,8 +160,13 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
               <tr>
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold w-36">Client Name:</td>
                 <td className="border border-gray-300 px-2 py-1.5 text-gray-900">
-                  <p className="font-semibold">{clientName}</p>
+                  <p className="font-semibold">{buyer.name}</p>
+                  {buyer.careOf && <p>c/o {buyer.careOf}</p>}
+                  {buyer.addressLines.map((line) => (
+                    <p key={line}>{line}</p>
+                  ))}
                   {quote.customer?.phone && <p>{quote.customer.phone}</p>}
+                  {buyer.kraPin && <p className="font-semibold">KRA PIN: {buyer.kraPin}</p>}
                 </td>
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold w-32">Quote No.:</td>
                 <td className="border border-gray-300 px-2 py-1.5 font-semibold text-gray-900">{quote.quote_number}</td>

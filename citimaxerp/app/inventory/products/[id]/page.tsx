@@ -628,9 +628,93 @@ export default function ProductDetailsPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Batches - this size holds its own stock, the parent
+                          product itself has no batches. */}
+                      <div className="mt-6 pt-4 border-t border-blue-200">
+                        <h5 className="font-semibold text-gray-900 mb-3 flex items-center">
+                          <Layers className="mr-2 h-4 w-4 text-indigo-600" />
+                          Batches
+                          {(variant as any).available_batches && (variant as any).available_batches.length > 0 && (
+                            <Badge className="ml-2 bg-indigo-100 text-indigo-700 border-indigo-200">
+                              {(variant as any).available_batches.length}
+                            </Badge>
+                          )}
+                        </h5>
+                        {(variant as any).available_batches && (variant as any).available_batches.length > 0 ? (
+                          <div className="overflow-x-auto bg-white rounded-lg border border-blue-200">
+                            <table className="w-full text-xs">
+                              <thead className="bg-blue-50 text-gray-700">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-medium">S/No</th>
+                                  <th className="px-3 py-2 text-left font-medium">Batch No.</th>
+                                  <th className="px-3 py-2 text-left font-medium">Lot No.</th>
+                                  <th className="px-3 py-2 text-right font-medium">Available</th>
+                                  <th className="px-3 py-2 text-left font-medium">Mfg Date</th>
+                                  <th className="px-3 py-2 text-left font-medium">Expiry</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(variant as any).available_batches.map((batch: any, bi: number) => (
+                                  <tr key={batch.id} className="border-t border-blue-100">
+                                    <td className="px-3 py-2">{bi + 1}</td>
+                                    <td className="px-3 py-2 font-mono">{batch.batch_number || "—"}</td>
+                                    <td className="px-3 py-2 font-mono">{batch.lot_number || "—"}</td>
+                                    <td className="px-3 py-2 text-right font-semibold">{Number(batch.quantity_available).toLocaleString()}</td>
+                                    <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}</td>
+                                    <td className="px-3 py-2">{batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No batches recorded for this size</p>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Batches for products without variants - the parent holds stock
+              directly in this case. */}
+          {!product.has_variations && (product as any).available_batches && (product as any).available_batches.length > 0 && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-2xl p-8 border border-white/20 shadow-lg">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
+                <Layers className="mr-3 h-6 w-6 text-indigo-600" />
+                Batches
+                <Badge className="ml-3 bg-indigo-100 text-indigo-700 border-indigo-200">
+                  {(product as any).available_batches.length}
+                </Badge>
+              </h2>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-700">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">S/No</th>
+                      <th className="px-3 py-2 text-left font-medium">Batch No.</th>
+                      <th className="px-3 py-2 text-left font-medium">Lot No.</th>
+                      <th className="px-3 py-2 text-right font-medium">Available</th>
+                      <th className="px-3 py-2 text-left font-medium">Mfg Date</th>
+                      <th className="px-3 py-2 text-left font-medium">Expiry</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(product as any).available_batches.map((batch: any, bi: number) => (
+                      <tr key={batch.id} className="border-t">
+                        <td className="px-3 py-2">{bi + 1}</td>
+                        <td className="px-3 py-2 font-mono">{batch.batch_number || "—"}</td>
+                        <td className="px-3 py-2 font-mono">{batch.lot_number || "—"}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{Number(batch.quantity_available).toLocaleString()}</td>
+                        <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}</td>
+                        <td className="px-3 py-2">{batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

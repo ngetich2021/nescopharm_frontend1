@@ -119,6 +119,10 @@ function groupRows(rows: Row[]): Row[][] {
 
 export default function InventoryReportPage() {
   const [reportType, setReportType] = useState<ReportType>("balance")
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab")
+    if (tab === "balance" || tab === "low_stock" || tab === "movement" || tab === "stock_management") setReportType(tab)
+  }, [])
   const [data, setData] = useState<Row[]>([])
   const [summary, setSummary] = useState<Row | null>(null)
   const [period, setPeriod] = useState<Row | null>(null)

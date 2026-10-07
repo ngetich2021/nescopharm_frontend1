@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Bell, Settings, LogOut, User, Loader2, FileText, ChevronDown, Package, ShoppingCart, Truck, ClipboardList, Users, CheckCheck } from "lucide-react" // Added icons
+import { Search, Bell, Settings, LogOut, User, Loader2, FileText, ChevronDown, Package, ShoppingCart, Truck, ClipboardList, Users, CheckCheck, ClipboardCheck, CircleCheck, CircleX, Landmark, PackageX } from "lucide-react" // Added icons
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -23,7 +23,27 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/notifications"
-import { formatDate } from "@/lib/utils"
+import { DATA_CHANGED_EVENT } from "@/lib/api"
+import { format, formatDistanceToNow } from "date-fns"
+
+function NotificationIcon({ notification }: { notification: AppNotification }) {
+  const { category, type, decision } = notification.data
+  const kind = category ?? (type === "post_dated_cheque_maturity" ? "cheque" : undefined)
+
+  const [Icon, tone] =
+    kind === "approval" ? [ClipboardCheck, "bg-amber-100 text-amber-700"]
+    : kind === "approval_result" && decision === "approved" ? [CircleCheck, "bg-emerald-100 text-emerald-700"]
+    : kind === "approval_result" ? [CircleX, "bg-red-100 text-red-700"]
+    : kind === "cheque" ? [Landmark, "bg-blue-100 text-blue-700"]
+    : kind === "stock" ? [PackageX, "bg-orange-100 text-orange-700"]
+    : [Bell, "bg-gray-100 text-gray-600"]
+
+  return (
+    <span className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center ${tone}`}>
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  )
+}
 
 export function TopNav() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -49,10 +69,28 @@ export function TopNav() {
 
   useEffect(() => {
     loadNotifications()
-    // Poll every 2 minutes so the unread badge stays reasonably fresh
+    // Poll every minute so the unread badge stays reasonably fresh
     // without needing a websocket/push setup.
-    const interval = setInterval(loadNotifications, 120_000)
-    return () => clearInterval(interval)
+    const interval = setInterval(loadNotifications, 60_000)
+
+    // Approving/rejecting elsewhere clears alerts server-side; refresh shortly after any write.
+    let debounce: ReturnType<typeof setTimeout> | undefined
+    const refreshSoon = () => {
+      clearTimeout(debounce)
+      debounce = setTimeout(loadNotifications, 400)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadNotifications()
+    }
+    window.addEventListener(DATA_CHANGED_EVENT, refreshSoon)
+    document.addEventListener("visibilitychange", onVisible)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(debounce)
+      window.removeEventListener(DATA_CHANGED_EVENT, refreshSoon)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [loadNotifications])
 
   const handleOpenNotifications = (open: boolean) => {
@@ -244,15 +282,18 @@ export function TopNav() {
                       !notification.read_at ? "bg-blue-50/50" : ""
                     }`}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <NotificationIcon notification={notification} />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm text-gray-900 ${notification.read_at ? "" : "font-semibold"}`}>{notification.data.title}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{notification.data.message}</p>
+                        <p className="text-[11px] text-gray-400 mt-1" title={format(new Date(notification.created_at), "dd MMM yyyy, HH:mm")}>
+                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })} · {format(new Date(notification.created_at), "dd MMM, HH:mm")}
+                        </p>
+                      </div>
                       {!notification.read_at && (
                         <span className="mt-1.5 h-2 w-2 rounded-full bg-[#1E2764] shrink-0" />
                       )}
-                      <div className={notification.read_at ? "pl-4" : ""}>
-                        <p className="text-sm font-medium text-gray-900">{notification.data.title}</p>
-                        <p className="text-xs text-gray-600 mt-0.5">{notification.data.message}</p>
-                        <p className="text-[11px] text-gray-400 mt-1">{formatDate(notification.created_at)}</p>
-                      </div>
                     </div>
                   </button>
                 ))

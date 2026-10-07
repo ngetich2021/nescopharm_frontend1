@@ -253,6 +253,10 @@ export function RecordPaymentModal({
                 <p className="text-xs text-muted-foreground">
                   This cheque will be recorded as pending and only applied to the invoice once approved on/after this date.
                 </p>
+                <p className="text-xs text-amber-700">
+                  Must fall within the customer&apos;s agreed PD cheque credit period (e.g. 60 or 90 days from the invoice date).
+                  Late payment beyond the credit period attracts a 3% charge on the outstanding amount.
+                </p>
               </div>
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="cheque_attachment">Cheque Image / PDF (optional)</Label>

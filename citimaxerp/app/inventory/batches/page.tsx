@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Package, Calendar, AlertTriangle, CheckCircle, DollarSign } from "lucide-react"
 import { BatchTable } from "./batch-table"
+import { ImportBatchesDialog } from "./import-batches-dialog"
 import { useState, useEffect } from "react"
 import { getBatches, getBatchSummary } from "@/lib/batches"
 import { useDataCache, invalidateCacheKey } from "@/lib/data-cache"
@@ -104,11 +105,16 @@ export default function BatchesPage() {
   return (
     <PermissionGuard permissions={["can_view_inventory_menu", "can_view_products_menu", "can_manage_system", "can_manage_company"]}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Batch Tracking</h1>
-          <p className="text-sm text-gray-600">
-            Manage and track inventory batches with expiration dates and serial numbers
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Batch Tracking</h1>
+            <p className="text-sm text-gray-600">
+              Manage and track inventory batches with expiration dates and serial numbers
+            </p>
+          </div>
+          <PermissionGuard permissions={["can_update_products", "can_manage_system", "can_manage_company"]} hideOnDenied>
+            <ImportBatchesDialog onImported={refreshBatches} />
+          </PermissionGuard>
         </div>
 
         {/* Summary Cards - Top 4 relevant metrics */}
