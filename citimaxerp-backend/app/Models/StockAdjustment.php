@@ -75,6 +75,25 @@ class StockAdjustment extends Model
                 $model->id = (string) Str::uuid();
             }
         });
+
+        static::saved(function ($model) {
+            if ($model->status !== 'pending' || !($model->wasRecentlyCreated || $model->wasChanged('status'))) {
+                return;
+            }
+            $creator = $model->created_by ? \App\Models\User::find($model->created_by) : null;
+            app(\App\Services\NotificationService::class)->notifyPermission(
+                $model->company_id,
+                ['can_approve_adjustments'],
+                new \App\Notifications\SystemAlert(
+                    'approval',
+                    "Stock adjustment {$model->adjustment_number} needs approval",
+                    ($creator ? "{$creator->first_name} {$creator->last_name}" : 'Someone') . ' submitted a ' . str_replace('_', ' ', $model->adjustment_type ?? 'stock') . ' adjustment for approval.',
+                    "/inventory/stock-adjustments/{$model->id}",
+                    ['type' => 'stock_adjustment_pending', 'stock_adjustment_id' => $model->id],
+                ),
+                $model->created_by,
+            );
+        });
     }
 
     /**
@@ -329,7 +348,12 @@ class StockAdjustment extends Model
         $this->approved_by = $userId;
         $this->approved_at = now();
         $this->save();
-        
+
+        app(\App\Services\NotificationService::class)->notifyDecision(
+            $this->created_by, "Stock adjustment {$this->adjustment_number}", 'approved',
+            "/inventory/stock-adjustments/{$this->id}", $userId,
+        );
+
         return $this;
     }
 
@@ -343,7 +367,12 @@ class StockAdjustment extends Model
         $this->rejected_at = now();
         $this->rejection_reason = $reason;
         $this->save();
-        
+
+        app(\App\Services\NotificationService::class)->notifyDecision(
+            $this->created_by, "Stock adjustment {$this->adjustment_number}", 'rejected',
+            "/inventory/stock-adjustments/{$this->id}", $userId, $reason,
+        );
+
         return $this;
     }
 

@@ -108,7 +108,7 @@ class FinancialStatementService
         $totals = JournalEntryItem::where('account_id', $account->id)
             ->whereHas('journalEntry', function ($q) use ($date) {
                 $q->where('company_id', $this->companyId)
-                  ->where('status', 'posted')
+                  ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
                   ->where('entry_date', '<=', $date);
             })
             ->selectRaw('COALESCE(SUM(debit_amount), 0) as total_debits, COALESCE(SUM(credit_amount), 0) as total_credits')
@@ -133,7 +133,7 @@ class FinancialStatementService
         $totals = JournalEntryItem::where('account_id', $account->id)
             ->whereHas('journalEntry', function ($q) use ($dateFrom, $dateTo) {
                 $q->where('company_id', $this->companyId)
-                  ->where('status', 'posted')
+                  ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
                   ->whereBetween('entry_date', [$dateFrom, $dateTo]);
             })
             ->selectRaw('COALESCE(SUM(debit_amount), 0) as total_debits, COALESCE(SUM(credit_amount), 0) as total_credits')
@@ -712,7 +712,7 @@ class FinancialStatementService
         $query = JournalEntryItem::with(['journalEntry'])
             ->where('account_id', $accountId)
             ->whereHas('journalEntry', function ($q) {
-                $q->where('company_id', $this->companyId)->where('status', 'posted');
+                $q->where('company_id', $this->companyId)->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES);
             });
 
         if ($dateFrom) {
@@ -729,10 +729,10 @@ class FinancialStatementService
         $openingBalance = (float) ($account->opening_balance ?? 0);
         if ($dateFrom) {
             $priorDebits = JournalEntryItem::where('account_id', $accountId)
-                ->whereHas('journalEntry', fn($q) => $q->where('status', 'posted')->where('entry_date', '<', $dateFrom))
+                ->whereHas('journalEntry', fn($q) => $q->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)->where('entry_date', '<', $dateFrom))
                 ->sum('debit_amount');
             $priorCredits = JournalEntryItem::where('account_id', $accountId)
-                ->whereHas('journalEntry', fn($q) => $q->where('status', 'posted')->where('entry_date', '<', $dateFrom))
+                ->whereHas('journalEntry', fn($q) => $q->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)->where('entry_date', '<', $dateFrom))
                 ->sum('credit_amount');
             
             if ($this->hasDebitNormalBalance($account)) {

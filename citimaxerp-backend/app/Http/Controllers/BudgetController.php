@@ -324,7 +324,7 @@ class BudgetController extends Controller
                 ->join('journal_entries', 'journal_entry_items.journal_entry_id', '=', 'journal_entries.id')
                 ->where('journal_entry_items.account_id', $lineItem->account_id)
                 ->whereBetween('journal_entries.transaction_date', [$budget->start_date, $budget->end_date])
-                ->where('journal_entries.status', 'posted')
+                ->whereIn('journal_entries.status', \App\Models\JournalEntry::LEDGER_STATUSES)
                 ->sum(DB::raw('
                     CASE 
                         WHEN journal_entry_items.type = "debit" THEN journal_entry_items.amount

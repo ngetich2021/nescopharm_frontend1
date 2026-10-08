@@ -227,6 +227,16 @@ class CustomerAccountApprovalController extends Controller
             // Create approval record only if not updating existing one
             if (!isset($approval)) {
                 $approval = CustomerAccountApproval::create($approvalData);
+            } elseif ($approval->created_by !== $user->id) {
+                $accountName = $account->customer?->business_name ?: ($account->customer?->name ?? $account->account_number);
+                app(\App\Services\NotificationService::class)->notifyDecision(
+                    $approval->created_by,
+                    "Credit terms change for {$accountName}",
+                    $approval->status,
+                    '/customers/accounts',
+                    $user->id,
+                    $request->input('notes'),
+                );
             }
 
             // Determine the success message based on approval type

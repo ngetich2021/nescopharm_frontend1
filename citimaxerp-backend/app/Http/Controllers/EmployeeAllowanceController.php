@@ -16,6 +16,59 @@ class EmployeeAllowanceController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // GET /employee-allowances/disbursed?month=YYYY-MM
+    // Allowances paid outside payroll, for the HR Allowances page.
+    // -------------------------------------------------------------------------
+
+    public function disbursed(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $role = $user->role;
+        $allowed = $role && ($role->hasPermission('can_manage_system') || $role->hasPermission('can_manage_company') || $role->hasPermission('can_view_employees'));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
+        $start = \Carbon\Carbon::createFromFormat('Y-m-d', "{$month}-01")->startOfMonth();
+        $end = $start->copy()->endOfMonth();
+
+        $rows = EmployeeAllowance::with('employee:id,employee_number,first_name,last_name,department,position,is_active')
+            ->where('company_id', $user->company_id)
+            ->allowances()
+            ->active()
+            ->where('frequency', 'disbursed')
+            ->whereHas('employee', fn ($q) => $q->whereRaw('is_active = true'))
+            ->where(fn ($q) => $q->whereNull('effective_from')->orWhere('effective_from', '<=', $end->toDateString()))
+            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', $start->toDateString()))
+            ->get()
+            ->map(fn (EmployeeAllowance $a) => [
+                'id' => $a->id,
+                'employee_id' => $a->employee_id,
+                'employee_number' => $a->employee?->employee_number,
+                'employee_name' => trim(($a->employee?->first_name ?? '') . ' ' . ($a->employee?->last_name ?? '')),
+                'department' => $a->employee?->department,
+                'position' => $a->employee?->position,
+                'name' => $a->name,
+                'amount' => (float) $a->amount,
+                'is_taxable' => (bool) $a->is_taxable,
+                'updated_at' => $a->updated_at?->toIso8601String(),
+            ])
+            ->values();
+
+        return response()->json([
+            'status' => 'success',
+            'month' => $month,
+            'data' => $rows,
+            'summary' => [
+                'total_amount' => round($rows->sum('amount'), 2),
+                'allowance_count' => $rows->count(),
+                'employee_count' => $rows->pluck('employee_id')->unique()->count(),
+            ],
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // GET /employees/{employeeId}/allowances
     // -------------------------------------------------------------------------
 

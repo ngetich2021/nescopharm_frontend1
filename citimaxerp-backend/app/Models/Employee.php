@@ -17,6 +17,7 @@ class Employee extends Model
     protected $fillable = [
         'id',
         'company_id',
+        'user_id',
         'employee_number',
         'first_name',
         'last_name',
@@ -122,6 +123,12 @@ class Employee extends Model
     public function supervisor()
     {
         return $this->belongsTo(Employee::class, 'supervisor_id');
+    }
+
+    // The login connected to this employee for the employee portal.
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function leaveApprover()

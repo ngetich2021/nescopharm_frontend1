@@ -12,6 +12,7 @@ class AccountBankDetail extends Model
         'company_id',
         'created_by',
         'bank_name',
+        'account_name',
         'branch',
         'account_number',
     ];

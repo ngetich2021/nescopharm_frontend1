@@ -403,6 +403,7 @@ class PayrollService
             'quarterly' => $month % 3 === 0,
             'annual'    => $month === 12,
             'one_time'  => $record->is_active,
+            // 'disbursed' = already paid outside payroll; tracked on the HR Allowances page only.
             default     => false,
         };
     }

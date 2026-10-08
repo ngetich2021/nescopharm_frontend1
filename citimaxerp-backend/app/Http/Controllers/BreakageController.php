@@ -292,6 +292,21 @@ class BreakageController extends Controller
 
                 return $breakage->load('items');
             });
+
+            app(\App\Services\NotificationService::class)->notifyPermission(
+                $companyId,
+                ['can_approve_breakages'],
+                new \App\Notifications\SystemAlert(
+                    'approval',
+                    "Breakage {$result->breakage_number} needs approval",
+                    "{$user->first_name} {$user->last_name} reported " . $result->items->count() . ' broken/damaged item(s).',
+                    '/breakages',
+                    ['type' => 'breakage_pending', 'breakage_id' => $result->id],
+                ),
+                $user->id,
+                [$request->input('approver_id')],
+            );
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Breakage created successfully.',
@@ -372,6 +387,10 @@ class BreakageController extends Controller
             $breakage->notes = $request->notes;
         }
         $breakage->save();
+        app(\App\Services\NotificationService::class)->notifyDecision(
+            $breakage->reported_by, "Breakage {$breakage->breakage_number}", (string) $breakage->approval_status,
+            '/breakages', $user->id, $request->input('notes'),
+        );
         Log::info('Breakage approval status updated', [
             'breakage_id' => $breakage->id,
             'approval_status' => $breakage->approval_status,

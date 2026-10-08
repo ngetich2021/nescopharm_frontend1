@@ -277,6 +277,15 @@ class ApprovalWorkflowService
             'rejection_reason' => $reason,
         ]);
 
+        app(\App\Services\NotificationService::class)->notifyDecision(
+            $workflowInstance->initiated_by,
+            $workflowInstance->workflow?->name ?? 'Your request',
+            $status,
+            '/settings/approvers',
+            null,
+            $reason,
+        );
+
         // Call entity hooks
         $entity = $workflowInstance->entity;
         if ($entity) {
@@ -442,14 +451,19 @@ class ApprovalWorkflowService
         }
     }
 
-    /**
-     * Send notification to approver
-     * TODO: Implement actual notification logic
-     */
     protected function notifyApprover($stepInstance, $isEscalation = false)
     {
-        // This would integrate with your notification system
-        // For now, just log the notification
+        $recipient = $isEscalation ? ($stepInstance->escalated_to ?? $stepInstance->assigned_to) : $stepInstance->assigned_to;
+        $workflowName = $stepInstance->workflowInstance?->workflow?->name ?? 'An approval';
+
+        app(\App\Services\NotificationService::class)->notifyUser($recipient, new \App\Notifications\SystemAlert(
+            'approval',
+            ($isEscalation ? 'Escalated: ' : '') . "{$workflowName} awaits your approval",
+            $isEscalation ? 'This approval was escalated to you because it was not actioned in time.' : 'A request is waiting on your approval.',
+            '/settings/approvers',
+            ['type' => 'workflow_step_pending', 'step_instance_id' => $stepInstance->id],
+        ));
+
         Log::info('Approval notification sent', [
             'step_instance_id' => $stepInstance->id,
             'assigned_to' => $stepInstance->assigned_to,

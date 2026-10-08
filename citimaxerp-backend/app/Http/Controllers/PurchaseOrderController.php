@@ -318,6 +318,22 @@ class PurchaseOrderController extends Controller
                 return $purchaseOrder;
             });
 
+            $supplierName = $purchaseOrder->supplier?->name ?? 'a supplier';
+            app(\App\Services\NotificationService::class)->notifyPermission(
+                $purchaseOrder->company_id,
+                ['can_approve_purchase_orders'],
+                new \App\Notifications\SystemAlert(
+                    'approval',
+                    "Purchase order {$purchaseOrder->order_number} needs approval",
+                    "{$user->first_name} {$user->last_name} raised a purchase order to {$supplierName}.",
+                    '/purchase-orders',
+                    ['type' => 'purchase_order_pending', 'purchase_order_id' => $purchaseOrder->id],
+                ),
+                $user->id,
+                [],
+                false,
+            );
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Purchase order created successfully.',
@@ -698,6 +714,15 @@ class PurchaseOrderController extends Controller
                 'approved_by' => $user->id,
                 'comments' => $request->input('notes') ?: $purchaseOrder->comments,
             ]);
+
+            app(\App\Services\NotificationService::class)->notifyDecision(
+                $purchaseOrder->created_by,
+                "Purchase order {$purchaseOrder->order_number}",
+                $request->input('approval_status'),
+                '/purchase-orders',
+                $user->id,
+                $request->input('notes'),
+            );
 
             return response()->json([
                 'status' => 'success',

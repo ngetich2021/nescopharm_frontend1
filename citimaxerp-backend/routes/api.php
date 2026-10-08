@@ -12,6 +12,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerNoteController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ProductController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\LogisticController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\AssetController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\SupplierPaymentController;
 use App\Http\Controllers\ChatController;
@@ -110,6 +112,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('employees', [EmployeeController::class, 'store']); // Create employee
     Route::match(['patch', 'put'], 'employees/{id}', [EmployeeController::class, 'update']); // Update employee
     Route::post('employees/{id}/terminate', [EmployeeController::class, 'terminate']);
+    Route::get('employees/{id}/linkable-users', [EmployeeController::class, 'linkableUsers']);
+    Route::get('employee-allowances/disbursed', [\App\Http\Controllers\EmployeeAllowanceController::class, 'disbursed']);
     Route::delete('employees/{id}', [EmployeeController::class, 'destroy']); // Delete employee
     Route::get('employment-types', [EmployeeController::class, 'getEmploymentTypes']); // Employment types
 
@@ -282,6 +286,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/customers/{customer_id}/statement', [CustomerController::class, 'statement'])->name('customers.statement');
     Route::get('/customers/{customerId}/credit-terms', [CustomerController::class, 'creditTerms'])->name('customers.credit-terms');
     Route::delete('/customers/{customerId}', [CustomerController::class, 'destroy'])->name('customers.destroy');
+
+    // Customer notes
+    Route::post('/customers/{customerId}/notes', [CustomerNoteController::class, 'store'])->name('customers.notes.store');
 
     // Customer document routes
     Route::get('/customers/{customerId}/documents', [CustomerController::class, 'getDocuments'])->name('customers.documents.index');
@@ -479,6 +486,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store'])->name('products.store');
     Route::post('products/bulk', [ProductController::class, 'bulkStore']);
     Route::post('/products/import', [ProductController::class, 'importProducts'])->name('products.import');
+    Route::post('/batches/import', [ProductController::class, 'importBatches'])->name('batches.import');
 
     // Migration imports: blank templates are built in the browser from these schemas.
     Route::get('/data-import/schemas', [\App\Http\Controllers\DataImportController::class, 'schemas'])->name('data-import.schemas');
@@ -601,6 +609,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Supplier routes
     Route::apiResource('suppliers', SupplierController::class);
+
+    // Asset register routes
+    Route::get('/assets/summary', [AssetController::class, 'summary'])->name('assets.summary');
+    Route::post('/assets/import', [AssetController::class, 'import'])->name('assets.import');
+    Route::get('/asset-options', [AssetController::class, 'options'])->name('assets.options');
+    Route::post('/asset-options', [AssetController::class, 'storeOption'])->name('assets.options.store');
+    Route::apiResource('assets', AssetController::class);
 
     // Purchase Order routes
     Route::apiResource('purchase-orders', PurchaseOrderController::class);
@@ -862,6 +877,9 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
         Route::post('{id}/set-default', [App\Http\Controllers\AccountingTriggerController::class, 'setDefault']);
     });
 
+    // Finance dashboard
+    Route::get('summary', [App\Http\Controllers\FinanceDashboardController::class, 'summary']);
+
     // Chart of Accounts
     Route::apiResource('chart-of-accounts', ChartOfAccountController::class);
     Route::get('chart-of-accounts-hierarchical', [ChartOfAccountController::class, 'index']); // alias with ?view=hierarchical
@@ -879,12 +897,10 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     Route::get('accounts/{id}/ledger', [GeneralLedgerController::class, 'getAccountLedger']);
     Route::get('trial-balance', [GeneralLedgerController::class, 'getTrialBalance']);
     Route::get('accounts/{id}/balance', [GeneralLedgerController::class, 'getAccountBalance']);
-    Route::get('account-types', [GeneralLedgerController::class, 'getAccountTypes']);
 
     // Bank Accounts
     Route::apiResource('bank-accounts', BankAccountController::class);
     Route::get('bank-accounts/{id}/balance', [BankAccountController::class, 'getBalance']);
-    Route::get('bank-accounts/{id}/transactions', [BankAccountController::class, 'getTransactions']);
 
     // Bank Transactions - Specific routes must come before resource routes
     Route::post('bank-transactions/import', [BankTransactionController::class, 'importFromStatement']);
@@ -922,14 +938,14 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     Route::apiResource('asset-depreciation', AssetDepreciationController::class);
 
     // Financial Periods
-    Route::apiResource('financial-periods', FinancialPeriodController::class);
-    Route::post('financial-periods/{id}/close', [FinancialPeriodController::class, 'closePeriod']);
-    Route::post('financial-periods/{id}/reopen', [FinancialPeriodController::class, 'reopenPeriod']);
-    Route::get('financial-periods/current', [FinancialPeriodController::class, 'getCurrentPeriod']);
+    Route::get('financial-periods/current', [FinancialPeriodController::class, 'getCurrent']);
+    Route::apiResource('financial-periods', FinancialPeriodController::class)->except(['destroy']);
+    Route::post('financial-periods/{id}/close', [FinancialPeriodController::class, 'close']);
+    Route::post('financial-periods/{id}/reopen', [FinancialPeriodController::class, 'reopen']);
 
     // Bank Reconciliation
-    Route::apiResource('bank-reconciliation', BankReconciliationController::class);
     Route::get('bank-reconciliation/unreconciled-transactions', [BankReconciliationController::class, 'getUnreconciledTransactions']);
+    Route::apiResource('bank-reconciliation', BankReconciliationController::class);
     Route::post('bank-reconciliation/{id}/complete', [BankReconciliationController::class, 'complete']);
     Route::get('bank-reconciliation-summary', [BankReconciliationController::class, 'getSummary']);
 

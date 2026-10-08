@@ -110,7 +110,7 @@ class OrderStockService
         });
     }
 
-    // An invoice raised before the receipt has no batches yet; give its lines the ones just drawn.
+    // Stamp real FEFO allocations onto invoice lines (replaces any preview data).
     protected function stampInvoiceLines(Order $order, string $productId, ?string $variantId, array $allocations): void
     {
         if (empty($allocations)) {
@@ -119,7 +119,6 @@ class OrderStockService
         $lines = \App\Models\InvoiceLineItem::whereIn('invoice_id', DB::table('invoices')->where('order_id', $order->id)->pluck('id'))
             ->where('product_id', $productId)
             ->when($variantId, fn ($q) => $q->where('variant_id', $variantId), fn ($q) => $q->whereNull('variant_id'))
-            ->whereNull('batch_number')
             ->get();
 
         foreach ($lines as $line) {

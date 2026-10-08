@@ -6,7 +6,6 @@ use App\Models\SupplierPayment;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\Cheque;
-use App\Services\AccountingIntegrationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,12 +14,9 @@ use Illuminate\Support\Str;
 
 class SupplierPaymentController extends Controller
 {
-    protected $accountingService;
-
-    public function __construct(AccountingIntegrationService $accountingService)
+    public function __construct()
     {
         $this->middleware('auth:sanctum');
-        $this->accountingService = $accountingService;
     }
 
     protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
@@ -189,28 +185,7 @@ class SupplierPaymentController extends Controller
                     ]);
                 }
 
-                // Accounting Integration
-                try {
-                    $supplier = Supplier::find($request->input('supplier_id'));
-                    $this->accountingService->setCompany($companyId);
-                    $this->accountingService->setUser($user->id);
-
-                    $this->accountingService->recordSupplierPayment([
-                        'company_id' => $companyId,
-                        'supplier_id' => $supplier->id,
-                        'supplier_name' => $supplier->supplier_name,
-                        'amount' => $payment->amount,
-                        'payment_method' => $payment->payment_method,
-                        'date' => $payment->payment_date->toDateString(),
-                        'reference' => $payment->payment_number,
-                        'source_id' => $payment->id,
-                        'source_type' => SupplierPayment::class,
-                    ]);
-                } catch (\Exception $e) {
-                    // Should we fail the whole transaction if accounting fails?
-                    // Yes, to ensure data consistency.
-                    throw $e;
-                }
+                // Posted to the ledger by LedgerSyncObserver once this commits.
             }
 
             DB::commit();

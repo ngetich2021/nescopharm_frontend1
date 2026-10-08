@@ -4,13 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Cheque;
 use App\Models\Customer;
+use App\Models\CustomerAccount;
 use App\Models\Invoice;
+use Carbon\Carbon;
 use App\Models\Payment;
 use App\Models\PaymentRefund;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
-use App\Services\AccountingIntegrationService;
 use App\Services\InvoicePaymentApplicationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -22,13 +23,11 @@ use Illuminate\Support\Str;
 class ChequeController extends Controller
 {
     protected InvoicePaymentApplicationService $paymentApplication;
-    protected AccountingIntegrationService $accountingService;
 
-    public function __construct(InvoicePaymentApplicationService $paymentApplication, AccountingIntegrationService $accountingService)
+    public function __construct(InvoicePaymentApplicationService $paymentApplication)
     {
         $this->middleware('auth:sanctum');
         $this->paymentApplication = $paymentApplication;
-        $this->accountingService = $accountingService;
     }
 
     protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
@@ -119,6 +118,40 @@ class ChequeController extends Controller
             : $this->storeReceived($request);
     }
 
+    /**
+     * A customer's agreed "credit period on PD cheques" (60/90 days) caps how
+     * far a post-dated cheque may be dated, counted from the invoice date.
+     * Returns an error message when the maturity date exceeds it.
+     */
+    protected function pdChequePeriodViolation(Invoice $invoice, string $maturityDate): ?string
+    {
+        if (!$invoice->customer_id) {
+            return null;
+        }
+
+        $days = CustomerAccount::where('customer_id', $invoice->customer_id)
+            ->whereNotNull('credit_period_pd_cheque_days')
+            ->latest()
+            ->value('credit_period_pd_cheque_days')
+            ?? Customer::find($invoice->customer_id)?->account?->credit_period_pd_cheque_days;
+
+        if (!$days) {
+            return null;
+        }
+
+        $from = Carbon::parse($invoice->invoice_date ?? $invoice->created_at)->startOfDay();
+        $latest = $from->copy()->addDays((int) $days);
+        $maturity = Carbon::parse($maturityDate)->startOfDay();
+
+        if ($maturity->gt($latest)) {
+            return "This customer's PD cheque credit period is {$days} days. The cheque maturity date "
+                . "({$maturity->toDateString()}) cannot be later than {$latest->toDateString()} "
+                . "({$days} days from invoice date {$from->toDateString()}).";
+        }
+
+        return null;
+    }
+
     protected function storeReceived(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -142,6 +175,11 @@ class ChequeController extends Controller
         }
 
         $invoice = Invoice::where('company_id', $user->company_id)->findOrFail($request->invoice_id);
+
+        $pdLimitError = $this->pdChequePeriodViolation($invoice, $request->maturity_date);
+        if ($pdLimitError) {
+            return response()->json(['message' => $pdLimitError, 'errors' => ['maturity_date' => [$pdLimitError]]], 422);
+        }
 
         $balance = $invoice->total_amount - $invoice->getTotalAllocatedAmount();
         if ($request->amount > $balance) {
@@ -316,22 +354,8 @@ class ChequeController extends Controller
                             }
                         }
 
-                        $supplier = $cheque->supplier_id ? Supplier::find($cheque->supplier_id) : null;
-                        if ($supplier) {
-                            $this->accountingService->setCompany($cheque->company_id);
-                            $this->accountingService->setUser($user->id);
-                            $this->accountingService->recordSupplierPayment([
-                                'company_id' => $cheque->company_id,
-                                'supplier_id' => $supplier->id,
-                                'supplier_name' => $supplier->supplier_name,
-                                'amount' => $payment->amount,
-                                'payment_method' => 'cheque',
-                                'date' => now()->toDateString(),
-                                'reference' => $payment->payment_number,
-                                'source_id' => $payment->id,
-                                'source_type' => SupplierPayment::class,
-                            ]);
-                        }
+                        // Marking the payment completed posts it to the ledger
+                        // via LedgerSyncObserver.
                     }
                 }
 

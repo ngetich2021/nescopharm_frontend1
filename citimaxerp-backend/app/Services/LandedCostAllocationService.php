@@ -17,14 +17,15 @@ class LandedCostAllocationService
      * @param array $lines Each entry: [
      *   'product' => Product|null,
      *   'quantity' => int,
-     *   'unit_value' => float|null,   // used to weight this line's share of shipping/logistics cost
-     *   'unit_cost' => float|null,    // if known, becomes the product's new unit_cost
+     *   'unit_value' => float|null,
+     *   'unit_cost' => float|null,
      * ]
-     * @param float $shippingCost Total shipping cost for this shipment.
-     * @param float $logisticsCost Total logistics cost for this shipment.
-     * @return string[] Always empty; prices are no longer checked against cost.
+     * @param float $shippingCost Legacy shipping cost (kept for backward compat).
+     * @param float $logisticsCost Legacy logistics cost (kept for backward compat).
+     * @param float $totalImportCost Sum of all import cost components for this receipt.
+     * @return string[]
      */
-    public function apply(array $lines, float $shippingCost, float $logisticsCost): array
+    public function apply(array $lines, float $shippingCost, float $logisticsCost, float $totalImportCost = 0): array
     {
         $warnings = [];
 
@@ -33,24 +34,23 @@ class LandedCostAllocationService
             return $warnings;
         }
 
-        $totalValue = 0;
-        foreach ($linesWithProduct as $line) {
-            $totalValue += (float) ($line['unit_value'] ?? 0) * (int) $line['quantity'];
-        }
+        $overallCost = $shippingCost + $logisticsCost + $totalImportCost;
 
-        $lineCount = count($linesWithProduct);
+        $totalItems = 0;
+        foreach ($linesWithProduct as $line) {
+            $totalItems += max(1, (int) $line['quantity']);
+        }
 
         foreach ($linesWithProduct as $line) {
             /** @var Product $product */
             $product = $line['product'];
             $quantity = max(1, (int) $line['quantity']);
-            $lineValue = (float) ($line['unit_value'] ?? 0) * $quantity;
-            $share = $totalValue > 0 ? ($lineValue / $totalValue) : (1 / $lineCount);
 
             $updates = [];
-            if ($shippingCost > 0 || $logisticsCost > 0) {
-                $updates['shipping_cost'] = round(($shippingCost * $share) / $quantity, 2);
-                $updates['logistics_cost'] = round(($logisticsCost * $share) / $quantity, 2);
+            if ($overallCost > 0 && $totalItems > 0) {
+                $costPerItem = round($overallCost / $totalItems, 2);
+                $updates['shipping_cost'] = $costPerItem;
+                $updates['logistics_cost'] = 0;
             }
             if (!empty($line['unit_cost'])) {
                 $updates['unit_cost'] = $line['unit_cost'];

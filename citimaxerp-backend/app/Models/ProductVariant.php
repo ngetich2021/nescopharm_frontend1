@@ -269,6 +269,25 @@ class ProductVariant extends Model
             ->orderBy('received_date', 'asc');
     }
 
+    public function previewFEFO(int $requestedQuantity): array
+    {
+        $allocations = [];
+        $remaining = $requestedQuantity;
+        foreach ($this->getFEFOBatches()->get() as $batch) {
+            if ($remaining <= 0) break;
+            $take = min($remaining, $batch->quantity_available);
+            if ($take > 0) {
+                $allocations[] = [
+                    'batch_number' => $batch->batch_number,
+                    'expiry_date' => $batch->expiry_date?->toDateString(),
+                    'quantity' => $take,
+                ];
+                $remaining -= $take;
+            }
+        }
+        return $allocations;
+    }
+
     /**
      * Allocate and immediately consume stock using FEFO (First-Expiry,
      * First-Out) - see Product::allocateStockFEFO() for the reasoning

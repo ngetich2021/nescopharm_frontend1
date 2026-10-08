@@ -151,6 +151,10 @@ class EmployeeController extends Controller
                 ], 500);
             }
 
+            if ($request->filled('allowances') || $request->filled('deductions')) {
+                $this->syncAllowanceRecords($employee, $request->input('allowances', []), $request->input('deductions', []));
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Employee created successfully.',
@@ -237,6 +241,12 @@ class EmployeeController extends Controller
             'statutory_details.insurance_relief_amount' => 'nullable|numeric|min:0|max:5000',
             'allowances' => 'nullable|array',
             'deductions' => 'nullable|array',
+            'allowances.*.frequency' => 'nullable|in:monthly,quarterly,annual,one_time,disbursed',
+            'user_id' => [
+                'nullable', 'uuid',
+                \Illuminate\Validation\Rule::exists('users', 'id')->where('company_id', $employee->company_id),
+                \Illuminate\Validation\Rule::unique('employees', 'user_id')->ignore($employee->id),
+            ],
         ];
 
         if ($this->hasEmployeeApproverColumns()) {
@@ -244,7 +254,10 @@ class EmployeeController extends Controller
             $validationRules['salary_advance_approver_id'] = 'nullable|uuid|exists:users,id';
         }
 
-        $validator = Validator::make($request->all(), $validationRules);
+        $validator = Validator::make($request->all(), $validationRules, [
+            'user_id.unique' => 'This user account is already connected to another employee.',
+            'user_id.exists' => 'Choose a user account from this company.',
+        ]);
 
         if ($validator->fails()) {
             return response()->json([
@@ -285,7 +298,7 @@ class EmployeeController extends Controller
                 'date_of_birth', 'gender', 'national_id', 'address', 'city', 'state', 'postal_code',
                 'hire_date', 'termination_date', 'employment_type', 'payment_frequency',
                 'basic_salary', 'hourly_rate', 'bank_name', 'bank_account', 'bank_branch',
-                'is_active', 'department', 'position', 'supervisor_id', 'allowances', 'deductions'
+                'is_active', 'department', 'position', 'supervisor_id', 'allowances', 'deductions', 'user_id'
             ];
 
             if ($this->hasEmployeeApproverColumns()) {
@@ -330,46 +343,8 @@ class EmployeeController extends Controller
                 }
             }
 
-            // Sync allowances/deductions to employee_allowances table for payroll
             if ($request->has('allowances') || $request->has('deductions')) {
-                \App\Models\EmployeeAllowance::where('employee_id', $employee->id)->delete();
-
-                $items = [];
-                foreach ($request->input('allowances', []) as $a) {
-                    if (empty($a['name'])) continue;
-                    $items[] = [
-                        'id' => \Illuminate\Support\Str::uuid()->toString(),
-                        'employee_id' => $employee->id,
-                        'company_id' => $employee->company_id,
-                        'name' => $a['name'],
-                        'type' => 'allowance',
-                        'amount' => $a['amount'] ?? 0,
-                        'frequency' => $a['frequency'] ?? 'monthly',
-                        'is_taxable' => ($a['is_taxable'] ?? true) ? 'true' : 'false',
-                        'is_active' => 'true',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
-                foreach ($request->input('deductions', []) as $d) {
-                    if (empty($d['name'])) continue;
-                    $items[] = [
-                        'id' => \Illuminate\Support\Str::uuid()->toString(),
-                        'employee_id' => $employee->id,
-                        'company_id' => $employee->company_id,
-                        'name' => $d['name'],
-                        'type' => 'deduction',
-                        'amount' => $d['amount'] ?? 0,
-                        'frequency' => $d['frequency'] ?? 'monthly',
-                        'is_taxable' => 'false',
-                        'is_active' => 'true',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
-                if (!empty($items)) {
-                    \App\Models\EmployeeAllowance::insert($items);
-                }
+                $this->syncAllowanceRecords($employee, $request->input('allowances', []), $request->input('deductions', []));
             }
 
             DB::commit();
@@ -444,9 +419,63 @@ class EmployeeController extends Controller
             && Schema::hasColumn('employees', 'salary_advance_approver_id');
     }
 
+    // Payroll and the HR Allowances page read employee_allowances, not the employee's JSON columns.
+    private function syncAllowanceRecords(Employee $employee, array $allowances, array $deductions): void
+    {
+        \App\Models\EmployeeAllowance::where('employee_id', $employee->id)->delete();
+
+        $row = fn (array $item, string $type, bool $taxable) => [
+            'id' => \Illuminate\Support\Str::uuid()->toString(),
+            'employee_id' => $employee->id,
+            'company_id' => $employee->company_id,
+            'name' => $item['name'],
+            'type' => $type,
+            'amount' => $item['amount'] ?? 0,
+            'frequency' => $item['frequency'] ?? 'monthly',
+            'is_taxable' => $taxable ? 'true' : 'false',
+            'is_active' => 'true',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        $items = [];
+        foreach ($allowances as $a) {
+            if (!empty($a['name'])) $items[] = $row($a, 'allowance', (bool) ($a['is_taxable'] ?? true));
+        }
+        foreach ($deductions as $d) {
+            if (!empty($d['name'])) $items[] = $row($d, 'deduction', false);
+        }
+        if ($items) {
+            \App\Models\EmployeeAllowance::insert($items);
+        }
+    }
+
+    /**
+     * Logins in the company that can be connected to this employee: those not already
+     * connected to a different employee.
+     */
+    public function linkableUsers(Request $request, $id)
+    {
+        $employee = Employee::find($id);
+        if (!$employee) {
+            return response()->json(['status' => 'failed', 'message' => 'Employee not found.'], 404);
+        }
+        if (!$this->hasPermission($request, 'can_update_employees', $employee->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+
+        $users = \App\Models\User::where('company_id', $employee->company_id)
+            ->whereNotIn('id', Employee::whereNotNull('user_id')->where('id', '!=', $employee->id)->select('user_id'))
+            ->with('role:id,name')
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'role_id', 'is_active']);
+
+        return response()->json(['status' => 'success', 'data' => $users]);
+    }
+
     private function employeeRelationships(): array
     {
-        $relationships = ['company', 'statutoryDetails', 'supervisor'];
+        $relationships = ['company', 'statutoryDetails', 'supervisor', 'user:id,first_name,last_name,email'];
 
         if ($this->hasEmployeeApproverColumns()) {
             $relationships[] = 'leaveApprover';

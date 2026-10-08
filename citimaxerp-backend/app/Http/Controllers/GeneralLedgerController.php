@@ -74,11 +74,11 @@ class GeneralLedgerController extends Controller
             // Build query for journal entry items
             $query = JournalEntryItem::with([
                 'journalEntry' => function ($q) use ($companyId) {
-                    $q->where('company_id', $companyId)->where('status', 'posted');
+                    $q->where('company_id', $companyId)->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES);
                 },
                 'account'
             ])->whereHas('journalEntry', function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)->where('status', 'posted');
+                $q->where('company_id', $companyId)->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES);
             });
 
             // Apply date filters
@@ -459,7 +459,7 @@ class GeneralLedgerController extends Controller
         $totals = JournalEntryItem::where('account_id', $account->id)
             ->whereHas('journalEntry', function ($q) use ($account, $beforeDate) {
                 $q->where('company_id', $account->company_id)
-                  ->where('status', 'posted')
+                  ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
                   ->where('entry_date', '<', $beforeDate);
             })
             ->selectRaw('COALESCE(SUM(debit_amount), 0) as total_debits, COALESCE(SUM(credit_amount), 0) as total_credits')

@@ -729,6 +729,7 @@ class PayrollRunController extends Controller
                         // Update existing entry's amount
                         \App\Models\EmployeeAllowance::where('employee_id', $employee->id)
                             ->whereRaw('LOWER(name) = ?', [strtolower(trim($a['name']))])
+                            ->where('frequency', '!=', 'disbursed')
                             ->update([
                                 'amount' => $a['amount'] ?? 0,
                                 'frequency' => $a['frequency'] ?? 'monthly',

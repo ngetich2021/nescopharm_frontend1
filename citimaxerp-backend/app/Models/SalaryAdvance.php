@@ -44,6 +44,17 @@ class SalaryAdvance extends Model
                 $model->id = (string) Str::uuid();
             }
         });
+
+        static::saved(function ($model) {
+            app(\App\Services\NotificationService::class)->hrRequestSaved(
+                $model,
+                'Salary advance',
+                'can_approve_salary_changes',
+                $model->employee?->salary_advance_approver_id,
+                '/hr/salary-advance',
+                'Requested KES ' . number_format((float) $model->amount, 2) . ($model->reason ? ": {$model->reason}" : '.'),
+            );
+        });
     }
 
     public function company()

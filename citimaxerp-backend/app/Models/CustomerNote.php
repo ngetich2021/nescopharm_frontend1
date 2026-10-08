@@ -34,4 +34,9 @@ class CustomerNote extends Model
     {
         return $this->belongsTo(Company::class);
     }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

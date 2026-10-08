@@ -268,6 +268,30 @@ class AccountingIntegrationService
     }
 
     /**
+     * Public entry point for callers (e.g. LedgerPostingService) that build
+     * their own balanced lines. Same validation as every other posting.
+     */
+    public function postEntry(array $data, array $items): JournalEntry
+    {
+        return $this->createJournalEntry($data, $items);
+    }
+
+    public function resolveAccountId(string $mappingKey, array $context = []): ?string
+    {
+        return $this->getAccountIdForKey($mappingKey, $context);
+    }
+
+    /**
+     * Payment methods are stored inconsistently ("M-Pesa", "Bank Transfer",
+     * "Cheque"), so normalise before looking up the method mapping.
+     */
+    public function resolvePaymentMethodAccountId(?string $paymentMethod): ?string
+    {
+        $method = str_replace(' ', '_', strtolower(trim((string) $paymentMethod)));
+        return $this->getCashAccountForPaymentMethod($method !== '' ? $method : 'cash');
+    }
+
+    /**
      * Create a journal entry with items
      * CRITICAL: Validates before creating to prevent bad data
      */
@@ -1378,7 +1402,7 @@ class AccountingIntegrationService
 
         $query = JournalEntryItem::where('account_id', $account->id)
             ->whereHas('journalEntry', function ($q) use ($asOfDate) {
-                $q->where('status', 'posted');
+                $q->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES);
                 if ($asOfDate) {
                     $q->where('entry_date', '<=', $asOfDate);
                 }

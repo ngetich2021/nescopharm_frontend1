@@ -187,7 +187,7 @@ class CustomerController extends Controller
                     'credit_application.annual_turnover' => 'nullable|numeric|min:0',
                     'credit_application.credit_required' => 'nullable|numeric|min:0',
                     'credit_application.credit_period_required' => 'nullable|string|max:100',
-                    'credit_application.credit_period_pd_cheque_days' => 'nullable|integer|min:0|max:365',
+                    'credit_application.credit_period_pd_cheque_days' => 'nullable|integer|min:0|max:60',
                     'credit_application.directors' => 'nullable|array',
                     'credit_application.suppliers' => 'nullable|array',
                     'credit_application.bank_details' => 'nullable|array',
@@ -261,6 +261,25 @@ class CustomerController extends Controller
                 $results[] = $customer;
             }
             DB::commit();
+
+            if (!empty($isRepCreated)) {
+                foreach ($results as $created) {
+                    $name = $created->business_name ?: $created->name;
+                    app(\App\Services\NotificationService::class)->notifyPermission(
+                        $created->company_id,
+                        ['can_approve_account'],
+                        new \App\Notifications\SystemAlert(
+                            'approval',
+                            "Customer credit approval needed: {$name}",
+                            "{$user->first_name} {$user->last_name} submitted a new customer for Stage 1 credit approval.",
+                            "/customers/{$created->id}",
+                            ['type' => 'customer_stage1', 'customer_id' => $created->id],
+                        ),
+                        $user->id,
+                    );
+                }
+            }
+
             return response()->json(['status' => 'success', 'customers' => $results], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -496,6 +515,10 @@ class CustomerController extends Controller
                     'notes' => function ($query) {
                         $query->orderByDesc('created_at');
                     },
+                    'notes.creator:id,first_name,last_name',
+                    'account.directors',
+                    'account.suppliers',
+                    'account.bankDetails',
                 ])
                 ->first();
 

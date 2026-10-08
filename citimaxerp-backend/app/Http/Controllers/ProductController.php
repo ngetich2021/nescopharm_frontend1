@@ -294,9 +294,22 @@ class ProductController extends Controller
             ], 403);
         }
 
-        // Only load variants if has_variations is true
+        // Only load variants if has_variations is true. Each size is its own
+        // stock holder - batches live on the variant, not the parent product.
         if ($product->has_variations) {
-            $product->load('variants.priceTiers');
+            $product->load([
+                'variants.priceTiers',
+                'variants.availableBatches' => fn ($q) => $q
+                    ->orderByRaw('expiry_date IS NULL, expiry_date ASC')
+                    ->orderBy('received_date', 'asc'),
+            ]);
+        } else {
+            // No sizes: batches sit on the product itself.
+            $product->load([
+                'availableBatches' => fn ($q) => $q
+                    ->orderByRaw('expiry_date IS NULL, expiry_date ASC')
+                    ->orderBy('received_date', 'asc'),
+            ]);
         }
 
         // Load packaging units if configured
@@ -859,6 +872,265 @@ class ProductController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => $dryRun ? 'Preview only - nothing was saved.' : 'Products imported.',
+            'dry_run' => $dryRun,
+            'summary' => $summary,
+            'rows' => $results,
+        ]);
+    }
+
+    /**
+     * Column aliases for the Batches import sheet. The user-facing template
+     * (Nescopharm_Import.xlsx) uses the first-named alias in each list.
+     */
+    private const BATCH_SHEET_HEADERS = [
+        'item_no' => ['itemno', 'itemnumber', 'no'],
+        'description' => ['itemdescription', 'description', 'productname', 'product', 'name'],
+        'size' => ['size', 'variant', 'variation'],
+        'batch_number' => ['batchnumber', 'batchno', 'batch'],
+        'lot_number' => ['lotnumber', 'lotno', 'lot'],
+        'quantity_received' => ['quantityreceived', 'qtyreceived', 'received', 'quantity', 'qty'],
+        'quantity_available' => ['quantityavailable', 'qtyavailable', 'available', 'remaining', 'onhand'],
+        'unit_cost' => ['unitcost', 'cost', 'costprice', 'buyingprice', 'rate'],
+        'selling_price' => ['sellingprice', 'price', 'sellprice'],
+        'manufacture_date' => ['manufacturedate', 'mfgdate', 'manufactured'],
+        'expiry_date' => ['expirydate', 'expiry', 'expiresat', 'expires'],
+        'received_date' => ['receiveddate', 'receivedon', 'dateofreceipt', 'receipt'],
+        'supplier' => ['supplier', 'suppliername', 'vendor'],
+        'status' => ['status', 'batchstatus'],
+        'notes' => ['notes', 'comments', 'remarks'],
+    ];
+
+    /**
+     * Import inventory batches from the Nescopharm_Import.xlsx "Batches" sheet
+     * (or any workbook whose first row matches the headers above). Each row
+     * creates one InventoryBatch under an existing product, matched by Item No.
+     * first, then by description (case-insensitive). Size (variant) is matched
+     * under that product by name. dry_run=1 previews.
+     */
+    public function importBatches(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            'dry_run' => 'nullable|boolean',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()], 400);
+        }
+
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_update_products', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to import batches.'], 403);
+        }
+        $companyId = $user->company_id;
+        $dryRun = $request->boolean('dry_run');
+        $storeId = DB::table('stores')->where('company_id', $companyId)->orderBy('created_at')->value('id');
+
+        try {
+            // Prefer a sheet literally called "Batches" when present (the
+            // generated Nescopharm_Import workbook has Products on sheet 0
+            // and Batches on sheet 1) so uploading the same file to either
+            // endpoint picks the right data.
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file')->getRealPath());
+            $sheet = null;
+            foreach ($spreadsheet->getAllSheets() as $candidate) {
+                if (strcasecmp($candidate->getTitle(), 'Batches') === 0) {
+                    $sheet = $candidate;
+                    break;
+                }
+            }
+            $sheet = $sheet ?? $spreadsheet->getSheet(0);
+            $rows = $sheet->toArray(null, true, false, false);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 'failed', 'message' => 'Could not read the file: ' . $e->getMessage()], 422);
+        }
+
+        $columns = [];
+        foreach ($rows[0] ?? [] as $index => $heading) {
+            $normalized = preg_replace('/[^a-z0-9]/', '', strtolower((string) $heading));
+            foreach (self::BATCH_SHEET_HEADERS as $field => $aliases) {
+                if (!isset($columns[$field]) && in_array($normalized, $aliases, true)) {
+                    $columns[$field] = $index;
+                }
+            }
+        }
+        if (!isset($columns['batch_number']) || (!isset($columns['item_no']) && !isset($columns['description']))) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'The first row must have "Batch Number" plus either "Item No." or "Item Description".',
+            ], 422);
+        }
+
+        $number = fn ($v) => is_numeric($n = str_replace([',', ' '], '', preg_replace('/^(KES|KSH|KSHS)\.?/i', '', (string) $v))) ? (float) $n : null;
+        $date = function ($v) {
+            if ($v === null || $v === '') return null;
+            if (is_numeric($v)) {
+                // Excel serial date number.
+                try {
+                    return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $v)->format('Y-m-d');
+                } catch (\Throwable $e) { return null; }
+            }
+            try {
+                return \Carbon\Carbon::parse((string) $v)->toDateString();
+            } catch (\Throwable $e) {
+                return null;
+            }
+        };
+
+        $summary = ['rows' => 0, 'batches_created' => 0, 'batches_updated' => 0, 'unchanged' => 0, 'errors' => 0];
+        $results = [];
+        if (!$dryRun) {
+            set_time_limit(600);
+        }
+
+        $products = Product::where('company_id', $companyId)->get();
+        $byItemNo = $products->keyBy(fn ($p) => (string) $p->item_number);
+        $byName = $products->keyBy(fn ($p) => mb_strtolower(trim((string) $p->name)));
+        $sizeKey = fn ($name) => is_numeric($t = trim((string) $name)) ? (string) (float) $t : mb_strtolower($t);
+        $variants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get()
+            ->groupBy('product_id')
+            ->map(fn ($group) => $group->keyBy(fn ($v) => $sizeKey($v->name)));
+
+        $existingBatchNumbers = InventoryBatch::where('company_id', $companyId)->pluck('id', 'batch_number');
+
+        DB::beginTransaction();
+        try {
+            for ($i = 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $cell = fn ($key) => isset($columns[$key]) ? trim(preg_replace('/\s+/', ' ', (string) ($row[$columns[$key]] ?? ''))) : '';
+                if (implode('', array_map(fn ($c) => trim((string) $c), $row)) === '') {
+                    continue;
+                }
+                $summary['rows']++;
+                $batchNumber = $cell('batch_number');
+                $itemNo = $cell('item_no');
+                $description = $cell('description');
+                $size = $cell('size');
+                $result = [
+                    'row' => $i + 1,
+                    'batch_number' => $batchNumber,
+                    'item' => $description ?: ($itemNo ?: '-'),
+                    'size' => $size ?: null,
+                ];
+
+                if ($batchNumber === '') {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => 'Batch Number is required.'];
+                    continue;
+                }
+
+                $product = null;
+                if ($itemNo !== '' && ctype_digit($itemNo)) {
+                    $product = $byItemNo->get((string) (int) $itemNo);
+                }
+                if (!$product && $description !== '') {
+                    $product = $byName->get(mb_strtolower($description));
+                }
+                if (!$product) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => 'Product not found - import products first.'];
+                    continue;
+                }
+
+                $variant = null;
+                if ($size !== '') {
+                    $variant = $variants->get($product->id)?->get($sizeKey($size));
+                    if (!$variant) {
+                        $summary['errors']++;
+                        $results[] = $result + ['status' => 'error', 'message' => "Size \"{$size}\" not found under this product."];
+                        continue;
+                    }
+                }
+
+                $qtyReceived = $number($cell('quantity_received'));
+                $qtyAvailable = $number($cell('quantity_available'));
+                if ($qtyReceived === null && $qtyAvailable === null) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => 'Quantity Received (or Available) is required.'];
+                    continue;
+                }
+                $qtyReceived = $qtyReceived ?? $qtyAvailable;
+                $qtyAvailable = $qtyAvailable ?? $qtyReceived;
+
+                $expiry = $date($cell('expiry_date'));
+                $mfg = $date($cell('manufacture_date'));
+                $received = $date($cell('received_date')) ?? now()->toDateString();
+                $status = strtolower($cell('status')) ?: 'active';
+                if (!in_array($status, ['active', 'expired', 'damaged', 'sold_out', 'recalled'], true)) {
+                    $status = 'active';
+                }
+
+                $fields = [
+                    'company_id' => $companyId,
+                    'store_id' => $product->store_id ?? $storeId,
+                    'product_id' => $product->id,
+                    'variant_id' => $variant?->id,
+                    'batch_number' => $batchNumber,
+                    'lot_number' => $cell('lot_number') ?: null,
+                    'quantity_received' => (int) round($qtyReceived),
+                    'quantity_available' => (int) round($qtyAvailable),
+                    'manufacture_date' => $mfg,
+                    'expiry_date' => $expiry,
+                    'received_date' => $received,
+                    'unit_cost' => $number($cell('unit_cost')),
+                    'selling_price' => $number($cell('selling_price')),
+                    'supplier' => $cell('supplier') ?: null,
+                    'status' => $status,
+                    'notes' => $cell('notes') ?: null,
+                ];
+
+                $existingBatchId = $existingBatchNumbers->get($batchNumber);
+                if ($existingBatchId) {
+                    $batch = InventoryBatch::find($existingBatchId);
+                    // Only update the fields the user actually supplied so a
+                    // blank cell doesn't null a real value.
+                    $filtered = array_filter($fields, fn ($v) => $v !== null && $v !== '');
+                    $batch->fill($filtered);
+                    if ($batch->isDirty()) {
+                        $dryRun || $batch->save();
+                        $summary['batches_updated']++;
+                        $status = 'updated';
+                    } else {
+                        $summary['unchanged']++;
+                        $status = 'unchanged';
+                    }
+                } else {
+                    $batch = new InventoryBatch($fields + [
+                        'id' => (string) Str::uuid(),
+                        'quantity_allocated' => 0,
+                        'quantity_sold' => 0,
+                        'quantity_damaged' => 0,
+                        'quantity_expired' => 0,
+                        'created_by' => $user->id ?? null,
+                    ]);
+                    if (!$dryRun) {
+                        $batch->save();
+                        $existingBatchNumbers->put($batchNumber, $batch->id);
+                        // Keep the product's rolled-up stock_quantity honest -
+                        // it's the sum of its batches' quantity_available.
+                        $target = $variant ?? $product;
+                        $target->increment('stock_quantity', (int) round($qtyAvailable));
+                    }
+                    $summary['batches_created']++;
+                    $status = 'created';
+                }
+
+                $results[] = $result + [
+                    'status' => $status,
+                    'quantity' => (int) round($qtyAvailable),
+                    'expiry' => $expiry,
+                    'product_name' => $product->name,
+                ];
+            }
+            $dryRun ? DB::rollBack() : DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Batch import failed', ['error' => $e->getMessage(), 'line' => $e->getLine()]);
+            return response()->json(['status' => 'failed', 'message' => 'Import failed: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $dryRun ? 'Preview only - nothing was saved.' : 'Batches imported.',
             'dry_run' => $dryRun,
             'summary' => $summary,
             'rows' => $results,

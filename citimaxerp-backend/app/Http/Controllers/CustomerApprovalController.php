@@ -125,7 +125,7 @@ class CustomerApprovalController extends Controller
             'annual_turnover' => 'nullable|numeric|min:0',
             'credit_required' => 'nullable|numeric|min:0',
             'credit_period_required' => 'nullable|string|max:100',
-            'credit_period_pd_cheque_days' => 'nullable|integer|min:0|max:365',
+            'credit_period_pd_cheque_days' => 'nullable|integer|min:0|max:60',
             'credit_days' => 'nullable|integer|min:0|max:365',
         ]);
         if ($validator->fails()) {
@@ -192,6 +192,26 @@ class CustomerApprovalController extends Controller
             } else { // stage2 approved
                 $customer->approval_status = 'approved';
                 $customer->save();
+            }
+
+            $stageLabel = $stage === 'stage1' ? 'Stage 1' : 'Stage 2';
+            $name = $customer->business_name ?: $customer->name;
+            app(\App\Services\NotificationService::class)->notifyDecision(
+                $customer->created_by,
+                "{$stageLabel} credit approval for {$name}",
+                $request->input('status'),
+                "/customers/{$customer->id}",
+                $user->id,
+                $request->input('notes'),
+            );
+            if ($stage === 'stage1' && $request->input('status') === 'approved') {
+                app(\App\Services\NotificationService::class)->notifyUser($customer->created_by, new \App\Notifications\SystemAlert(
+                    'approval',
+                    "Upload signed credit form for {$name}",
+                    'Stage 1 is approved. Upload the signed, stamped credit application to move to Stage 2.',
+                    "/customers/{$customer->id}",
+                    ['type' => 'customer_documents_needed', 'customer_id' => $customer->id],
+                ), $user->id);
             }
 
             return response()->json([
@@ -262,6 +282,20 @@ class CustomerApprovalController extends Controller
 
             $customer->approval_status = 'pending_stage2';
             $customer->save();
+
+            $name = $customer->business_name ?: $customer->name;
+            app(\App\Services\NotificationService::class)->notifyPermission(
+                $customer->company_id,
+                ['can_approve_account'],
+                new \App\Notifications\SystemAlert(
+                    'approval',
+                    "Stage 2 credit approval needed: {$name}",
+                    'The signed credit application has been uploaded and is ready for final approval.',
+                    "/customers/{$customer->id}",
+                    ['type' => 'customer_stage2', 'customer_id' => $customer->id],
+                ),
+                $user->id,
+            );
 
             return response()->json([
                 'status' => 'success',

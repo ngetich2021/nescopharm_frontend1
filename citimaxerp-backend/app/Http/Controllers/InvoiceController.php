@@ -14,7 +14,6 @@ use App\Models\PaymentAllocation;
 use App\Models\PaymentRefund;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Services\AccountingWorkflowService;
 use App\Services\InvoicePaymentApplicationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -30,13 +29,11 @@ class InvoiceController extends Controller
 {
     use HandlesDatabaseErrors;
 
-    protected AccountingWorkflowService $accountingWorkflow;
     protected InvoicePaymentApplicationService $paymentApplication;
 
-    public function __construct(AccountingWorkflowService $accountingWorkflow, InvoicePaymentApplicationService $paymentApplication)
+    public function __construct(InvoicePaymentApplicationService $paymentApplication)
     {
         $this->middleware('auth:sanctum');
-        $this->accountingWorkflow = $accountingWorkflow;
         $this->paymentApplication = $paymentApplication;
     }
 
@@ -104,7 +101,17 @@ class InvoiceController extends Controller
         ?string $explicitPaymentTerms = null,
     ): array {
         $isCredit = $customer->payment_method === 'credit';
-        $creditDays = $isCredit ? $customer->account?->credit_days : null;
+        // Fall back to the string `credit_period_required` captured on the
+        // Credit Appraisal Form when the integer `credit_days` was never set
+        // explicitly (rep applications only save the string value, so without
+        // this fallback every rep-created customer silently invoiced at Net 30
+        // regardless of the GM-approved 30/45 figure).
+        $account = $customer->account;
+        $creditDays = null;
+        if ($isCredit && $account) {
+            $creditDays = $account->credit_days
+                ?? (is_numeric($account->credit_period_required) ? (int) $account->credit_period_required : null);
+        }
 
         if ($isCredit) {
             $days = $creditDays ?? 30;
@@ -780,10 +787,23 @@ class InvoiceController extends Controller
                 }
                 $metadata = ['etims_tax_type_code' => $taxCode, 'price_label' => $orderItem->price_label];
                 $allocations = $orderItem->batch_allocations ?? [];
+
+                // If stock hasn't been deducted yet (credit invoice, no
+                // payment recorded), do a read-only FEFO preview so the
+                // printed invoice still carries batch/expiry info.
+                if (empty($allocations) && $orderItem->product && $orderItem->product->track_inventory) {
+                    $target = $orderItem->variant_id
+                        ? ($orderItem->variant ?? \App\Models\ProductVariant::find($orderItem->variant_id))
+                        : $orderItem->product;
+                    if ($target) {
+                        $qty = (int) ($orderItem->base_quantity ?: $orderItem->quantity);
+                        $allocations = $target->previewFEFO($qty);
+                    }
+                }
+
                 if (!empty($allocations)) {
                     $batchNumber = collect($allocations)->pluck('batch_number')->filter()->unique()->implode(', ');
                     $expiryDate = collect($allocations)->pluck('expiry_date')->filter()->sort()->first();
-                    // Per-batch split so the printed invoice can list each batch with its own qty and expiry.
                     $metadata['batches'] = collect($allocations)->map(fn ($a) => [
                         'batch_number' => $a['batch_number'] ?? null,
                         'expiry_date' => $a['expiry_date'] ?? null,
@@ -1024,35 +1044,8 @@ class InvoiceController extends Controller
                 }
             }
 
+            // markAsSent() saves the invoice; LedgerSyncObserver posts it to the ledger.
             $invoice->markAsSent();
-
-            // Create accounting journal entry based on company settings
-            // The workflow service checks company_accounting_settings to determine
-            // if this is the right trigger point for recording the invoice
-            try {
-                $result = $this->accountingWorkflow
-                    ->forCompany($invoice->company_id)
-                    ->asUser($user->id)
-                    ->onInvoiceSent($invoice);
-
-                if ($result) {
-                    Log::info('Accounting entry created for invoice (on_invoice_sent trigger)', [
-                        'invoice_id' => $invoice->id,
-                        'journal_id' => $result['journal_id'] ?? null
-                    ]);
-                } else {
-                    Log::info('Accounting entry skipped for invoice (not triggered on_invoice_sent)', [
-                        'invoice_id' => $invoice->id,
-                        'trigger_setting' => $this->accountingWorkflow->getSalesInvoiceTrigger()
-                    ]);
-                }
-            } catch (\Exception $accountingError) {
-                // Log but don't fail the invoice send - accounting can be reconciled later
-                Log::warning('Failed to create accounting entry for invoice', [
-                    'invoice_id' => $invoice->id,
-                    'error' => $accountingError->getMessage()
-                ]);
-            }
 
             return response()->json([
                 'message' => 'Invoice sent successfully',

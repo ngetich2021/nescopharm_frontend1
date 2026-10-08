@@ -100,13 +100,13 @@ class ChartOfAccount extends Model
     {
         $totalDebits = $this->journalEntryItems()
             ->whereHas('journalEntry', function ($query) {
-                $query->where('status', 'posted');
+                $query->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES);
             })
             ->sum('debit_amount');
 
         $totalCredits = $this->journalEntryItems()
             ->whereHas('journalEntry', function ($query) {
-                $query->where('status', 'posted');
+                $query->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES);
             })
             ->sum('credit_amount');
 

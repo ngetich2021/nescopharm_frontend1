@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Store;
-use App\Models\CompanyAccountingSettings;
-use App\Services\AccountingWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -15,12 +13,9 @@ use Illuminate\Support\Str;
 
 class ExpenseController extends Controller
 {
-    protected AccountingWorkflowService $accountingWorkflow;
-
-    public function __construct(AccountingWorkflowService $accountingWorkflow)
+    public function __construct()
     {
         $this->middleware('auth:sanctum');
-        $this->accountingWorkflow = $accountingWorkflow;
     }
 
     protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
@@ -245,41 +240,6 @@ class ExpenseController extends Controller
                 'created_by' => $user->id,
             ]);
 
-            // Create accounting entry based on company settings
-            // Some companies record expenses immediately, others on approval
-            try {
-                $settings = CompanyAccountingSettings::getForCompany($companyId);
-                
-                if ($settings->shouldRecordExpenseAt(CompanyAccountingSettings::EXPENSE_TRIGGER_CREATED)) {
-                    $result = $this->accountingWorkflow
-                        ->forCompany($companyId)
-                        ->asUser($user->id)
-                        ->onExpenseRecorded(
-                            $expense->amount,
-                            $expense->payment_method,
-                            $expense->description ?? 'Expense - ' . ($category->name ?? 'General'),
-                            $category->name ?? null
-                        );
-                        
-                    if ($result) {
-                        Log::info('Accounting entry created for expense on creation', [
-                            'expense_id' => $expense->id,
-                            'journal_id' => $result['journal_id'] ?? null
-                        ]);
-                    }
-                } else {
-                    Log::info('Accounting entry skipped for expense (trigger not on creation)', [
-                        'expense_id' => $expense->id,
-                        'trigger_setting' => $settings->expense_recognition_trigger
-                    ]);
-                }
-            } catch (\Exception $accountingError) {
-                // Log but don't fail - accounting can be reconciled later
-                Log::warning('Failed to create accounting entry for expense', [
-                    'expense_id' => $expense->id,
-                    'error' => $accountingError->getMessage()
-                ]);
-            }
 
             return response()->json([
                 'status' => 'success',
@@ -595,36 +555,6 @@ class ExpenseController extends Controller
                 'approved_by' => $user->id,
             ]);
 
-            // Create accounting entry based on company settings
-            // Some companies record expenses on creation, others on approval
-            try {
-                $settings = CompanyAccountingSettings::getForCompany($expense->company_id);
-                
-                if ($settings->shouldRecordExpenseAt(CompanyAccountingSettings::EXPENSE_TRIGGER_APPROVED)) {
-                    $result = $this->accountingWorkflow
-                        ->forCompany($expense->company_id)
-                        ->asUser($user->id)
-                        ->onExpenseRecorded(
-                            $expense->amount,
-                            $expense->payment_method,
-                            $expense->description ?? 'Expense - ' . ($expense->category->name ?? 'General'),
-                            $expense->category->name ?? null
-                        );
-                        
-                    if ($result) {
-                        Log::info('Accounting entry created for approved expense', [
-                            'expense_id' => $expense->id,
-                            'journal_id' => $result['journal_id'] ?? null
-                        ]);
-                    }
-                }
-            } catch (\Exception $accountingError) {
-                // Log but don't fail - accounting can be reconciled later
-                Log::warning('Failed to create accounting entry for expense', [
-                    'expense_id' => $expense->id,
-                    'error' => $accountingError->getMessage()
-                ]);
-            }
 
             return response()->json([
                 'status' => 'success',

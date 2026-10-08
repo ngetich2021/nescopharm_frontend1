@@ -45,6 +45,17 @@ class LeaveRequest extends Model
                 $model->id = (string) Str::uuid();
             }
         });
+
+        static::saved(function ($model) {
+            app(\App\Services\NotificationService::class)->hrRequestSaved(
+                $model,
+                'Leave',
+                'can_approve_leave',
+                $model->employee?->leave_approver_id,
+                '/hr/leave-management',
+                ucfirst(str_replace('_', ' ', (string) $model->leave_type)) . ' leave ' . $model->start_date?->format('d M') . ' – ' . $model->end_date?->format('d M Y') . '.',
+            );
+        });
     }
 
     public function company()

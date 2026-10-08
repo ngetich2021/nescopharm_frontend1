@@ -130,6 +130,23 @@ class CompanyAccountMapping extends Model
         'office_supplies' => ['description' => 'Office Supplies', 'type' => 'expense', 'required' => false],
         'purchase_returns' => ['description' => 'Purchase Returns', 'type' => 'expense', 'required' => false],
         'freight_in' => ['description' => 'Freight In', 'type' => 'expense', 'required' => false],
+
+        // Sales adjustments
+        'sales_returns' => ['description' => 'Sales Returns & Allowances (credit notes)', 'type' => 'income', 'required' => false],
+
+        // Payroll
+        'salaries_payable' => ['description' => 'Net Salaries Payable', 'type' => 'liability', 'required' => false],
+        'paye_payable' => ['description' => 'PAYE Payable', 'type' => 'liability', 'required' => false],
+        'nssf_payable' => ['description' => 'NSSF Payable', 'type' => 'liability', 'required' => false],
+        'shif_payable' => ['description' => 'SHIF Payable', 'type' => 'liability', 'required' => false],
+        'housing_levy_payable' => ['description' => 'Housing Levy Payable', 'type' => 'liability', 'required' => false],
+        'payroll_deductions_payable' => ['description' => 'Other Payroll Deductions Payable', 'type' => 'liability', 'required' => false],
+        'nssf_employer_expense' => ['description' => 'NSSF Employer Contribution', 'type' => 'expense', 'required' => false],
+        'housing_levy_employer_expense' => ['description' => 'Housing Levy Employer Contribution', 'type' => 'expense', 'required' => false],
+        'staff_advances' => ['description' => 'Staff Advances (salary advances)', 'type' => 'asset', 'required' => false],
+
+        // Equity
+        'retained_earnings' => ['description' => 'Retained Earnings', 'type' => 'equity', 'required' => false],
     ];
 
     /**
@@ -692,41 +709,104 @@ class CompanyAccountMapping extends Model
     /**
      * Get default account code patterns for auto-detection
      */
+    /**
+     * Candidate account codes per mapping key, first match wins. The codes from
+     * ChartOfAccountsSeeder come first; the rest cover hand-built charts.
+     */
     protected static function getDefaultCodePatterns(): array
     {
         return [
-            'cash_on_hand' => ['1010', '1000', '100', '1001'],
-            'petty_cash' => ['1020', '1001', '1015'],
-            'main_bank' => ['1110', '1100', '110', '1101'],
-            'mpesa_float' => ['1130', '1120', '1131'],
-            'accounts_receivable' => ['1200', '120', '1210', '1201'],
+            'cash_on_hand' => ['1010', '1001'],
+            'petty_cash' => ['1020', '1015'],
+            'main_bank' => ['1110', '1100', '1101'],
+            'mpesa_float' => ['1130', '1131'],
+            'accounts_receivable' => ['1200', '1210', '1201'],
             'trade_receivables' => ['1210', '1200', '1211'],
-            'inventory' => ['1300', '130', '1310', '1301'],
+            'staff_advances' => ['1230'],
+            'inventory' => ['1300', '1310', '1301'],
             'finished_goods' => ['1310', '1300', '1311'],
             'raw_materials' => ['1320', '1321'],
-            'input_vat' => ['1430', '1400', '1431'],
-            'accumulated_depreciation' => ['1610', '1600', '1611'],
+            'input_vat' => ['1430', '1431'],
+            'accumulated_depreciation' => ['1551', '1610', '1611'],
             'allowance_doubtful_accounts' => ['1220', '1221'],
-            'accounts_payable' => ['2100', '210', '2110', '2101'],
+            'accounts_payable' => ['2100', '2110', '2101'],
             'trade_payables' => ['2110', '2100', '2111'],
-            'vat_payable' => ['2310', '2300', '2311'],
-            'customer_deposits' => ['2460', '2400', '2461'],
-            'sales_revenue' => ['4100', '410', '4000', '4101'],
-            'service_revenue' => ['4200', '420', '4201'],
-            'other_income' => ['4500', '450', '4501'],
-            'discounts_allowed' => ['4600', '460', '4601'],
-            'cogs' => ['5100', '510', '5000', '5101'],
-            'purchase_returns' => ['5200', '520', '5201'],
-            'freight_in' => ['5300', '530', '5301'],
-            'salaries_expense' => ['6100', '610', '6101'],
-            'rent_expense' => ['6200', '620', '6201'],
-            'utilities_expense' => ['6300', '630', '6301'],
-            'office_supplies' => ['6400', '640', '6401'],
-            'depreciation' => ['6500', '650', '6501'],
-            'bank_charges' => ['6600', '660', '6601'],
-            'bad_debt_expense' => ['6700', '670', '6701'],
-            'miscellaneous_expense' => ['6900', '690', '6901'],
+            'payroll_deductions_payable' => ['2200'],
+            'salaries_payable' => ['2210'],
+            'vat_payable' => ['2310', '2311'],
+            'paye_payable' => ['2320'],
+            'nssf_payable' => ['2330'],
+            'shif_payable' => ['2340'],
+            'housing_levy_payable' => ['2370'],
+            'customer_deposits' => ['2460', '2461'],
+            'retained_earnings' => ['3200'],
+            'sales_revenue' => ['4100', '4110', '4101'],
+            'sales_returns' => ['4120'],
+            'discounts_allowed' => ['4130', '4600', '4601'],
+            'service_revenue' => ['4200', '4201'],
+            'other_income' => ['4500', '4501'],
+            'cogs' => ['5000', '5100', '5101'],
+            'purchase_returns' => ['5020', '5201'],
+            'freight_in' => ['5040', '5301'],
+            'salaries_expense' => ['5210', '6100', '6101'],
+            'nssf_employer_expense' => ['5221'],
+            'housing_levy_employer_expense' => ['5224'],
+            'rent_expense' => ['5230', '6200', '6201'],
+            'utilities_expense' => ['5240', '6300', '6301'],
+            'office_supplies' => ['5250', '6400', '6401'],
+            'bank_charges' => ['5300', '6600', '6601'],
+            'depreciation' => ['5310', '6500', '6501'],
+            'bad_debt_expense' => ['5340', '6700', '6701'],
+            'miscellaneous_expense' => ['5900', '6900', '6901'],
         ];
+    }
+
+    /**
+     * Map any keys that are still unmapped for a company, leaving existing
+     * (possibly user-chosen) mappings untouched. Safe to run repeatedly.
+     */
+    public static function fillMissingFromChartOfAccounts(string $companyId): array
+    {
+        $accounts = ChartOfAccount::where('company_id', $companyId)
+            ->whereRaw('is_active = true')
+            ->get()
+            ->keyBy('account_code');
+
+        $existing = self::where('company_id', $companyId)
+            ->whereNull('context_type')
+            ->pluck('mapping_key')
+            ->flip();
+
+        $mapped = [];
+        DB::transaction(function () use ($companyId, $accounts, $existing, &$mapped) {
+            foreach (self::getDefaultCodePatterns() as $mappingKey => $codes) {
+                if ($existing->has($mappingKey)) {
+                    continue;
+                }
+                foreach ($codes as $code) {
+                    if ($accounts->has($code)) {
+                        self::setMapping($companyId, $mappingKey, $code, $accounts->get($code)->id, ['is_system' => false]);
+                        $mapped[$mappingKey] = $code;
+                        break;
+                    }
+                }
+            }
+
+            $configured = DB::table('company_payment_method_mappings')
+                ->where('company_id', $companyId)
+                ->pluck('payment_method')
+                ->map(fn ($m) => strtolower($m))
+                ->flip();
+            foreach (self::DEFAULT_PAYMENT_METHOD_MAPPINGS as $method => $key) {
+                if (!$configured->has($method)) {
+                    self::setPaymentMethodMapping($companyId, $method, $key);
+                }
+            }
+        });
+
+        self::invalidateCompanyCache($companyId);
+
+        return $mapped;
     }
 }
 

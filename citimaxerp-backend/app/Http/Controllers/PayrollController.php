@@ -72,6 +72,8 @@ class PayrollController extends Controller
     ): array {
         $basicSalary     = (float) ($input['basic_salary'] ?? 0);
         $allowances      = is_array($input['allowances'] ?? null) ? $input['allowances'] : [];
+        // Disbursed allowances were already paid outside payroll.
+        $allowances      = array_values(array_filter($allowances, fn ($a) => ($a['frequency'] ?? null) !== 'disbursed'));
         $deductions      = is_array($input['deductions'] ?? null) ? $input['deductions'] : [];
         $overtimeDetails = !empty($input['overtime_hours']) ? [
             'hours' => (float) $input['overtime_hours'],

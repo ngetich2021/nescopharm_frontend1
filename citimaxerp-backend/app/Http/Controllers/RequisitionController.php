@@ -173,6 +173,22 @@ class RequisitionController extends Controller
             }
 
             DB::commit();
+
+            $actor = $request->user();
+            app(\App\Services\NotificationService::class)->notifyPermission(
+                $requisition->company_id,
+                ['can_approve_requisitions'],
+                new \App\Notifications\SystemAlert(
+                    'approval',
+                    "Requisition {$requisition->requisition_number} needs approval",
+                    "{$actor->first_name} {$actor->last_name} raised a requisition with " . count($validated['items']) . ' item(s).',
+                    '/requisitions',
+                    ['type' => 'requisition_pending', 'requisition_id' => $requisition->id],
+                ),
+                $actor->id,
+                [$requisition->approver_id],
+            );
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Requisition created successfully.',
@@ -552,6 +568,14 @@ class RequisitionController extends Controller
             'approval_status' => $validated['approval_status'],
             'notes' => $validated['notes'] ?? $requisition->notes,
         ]);
+        app(\App\Services\NotificationService::class)->notifyDecision(
+            $requisition->requester_id,
+            "Requisition {$requisition->requisition_number}",
+            $validated['approval_status'],
+            '/requisitions',
+            $user->id,
+            $validated['notes'] ?? null,
+        );
         return response()->json([
             'status' => 'success',
             'message' => 'Requisition approved successfully.',

@@ -145,6 +145,9 @@ class PayrollCalculationService
 
         // Add allowances
         foreach ($allowances as $allowance) {
+            if (($allowance['frequency'] ?? null) === 'disbursed') {
+                continue;
+            }
             $gross += $allowance['amount'];
         }
 

@@ -84,8 +84,10 @@ class ChartOfAccountController extends Controller
             ], 200);
         }
 
-        // Default: Minimal list view with only essential fields and no object duplication
-        $minimalAccounts = $accounts->map(function ($account) {
+        // Default: Minimal list view with only essential fields and no object duplication.
+        // balance is in the account's normal direction (positive = normal side).
+        $balances = app(\App\Services\LedgerBalanceService::class)->balances($user->company_id, null, $accounts);
+        $minimalAccounts = $accounts->map(function ($account) use ($balances) {
             return [
                 'id' => $account->id,
                 'account_code' => $account->account_code,
@@ -96,6 +98,8 @@ class ChartOfAccountController extends Controller
                 'is_active' => $account->is_active,
                 'normal_balance' => $account->normal_balance,
                 'level' => $account->level,
+                'balance' => $balances->get($account->id, 0),
+                'current_balance' => $balances->get($account->id, 0),
             ];
         });
 

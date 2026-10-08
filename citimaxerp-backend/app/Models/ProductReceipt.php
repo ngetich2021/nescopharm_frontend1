@@ -51,13 +51,26 @@ class ProductReceipt extends Model
         'store_id',
         'shipping_cost',
         'logistics_cost',
+        'ppb_permit',
+        'idf',
+        'railway_levy',
+        'transport_cost',
+        'clearing_agency_fee',
+        'other_clearing_cost',
+        'certificate_of_conformity',
+        'sgs_listing_approval',
+        'vat_on_clearing',
+        'vat_on_product',
+        'import_duty',
+        'excise_duty',
+        'fob_price',
         // Additional fields for enhanced receipt management
-        'receipt_date',        // Date when receipt was created/processed
-        'total_amount',        // Total value of the receipt
-        'currency',           // Currency used
-        'status',            // Receipt status (pending, confirmed, processed, etc.)
-        'notes',             // General notes about the receipt
-        'tracking_number',   // Delivery tracking number
+        'receipt_date',
+        'total_amount',
+        'currency',
+        'status',
+        'notes',
+        'tracking_number',
         'purchase_order_id',
     ];
 
@@ -67,6 +80,19 @@ class ProductReceipt extends Model
         'total_amount' => 'decimal:2',
         'shipping_cost' => 'decimal:2',
         'logistics_cost' => 'decimal:2',
+        'ppb_permit' => 'decimal:2',
+        'idf' => 'decimal:2',
+        'railway_levy' => 'decimal:2',
+        'transport_cost' => 'decimal:2',
+        'clearing_agency_fee' => 'decimal:2',
+        'other_clearing_cost' => 'decimal:2',
+        'certificate_of_conformity' => 'decimal:2',
+        'sgs_listing_approval' => 'decimal:2',
+        'vat_on_clearing' => 'decimal:2',
+        'vat_on_product' => 'decimal:2',
+        'import_duty' => 'decimal:2',
+        'excise_duty' => 'decimal:2',
+        'fob_price' => 'decimal:2',
     ];
 
       public function supplier()

@@ -89,7 +89,7 @@ class ChartOfAccountsSeeder extends Seeder
     /**
      * Returns the standard Chart of Accounts structure
      */
-    private function getStandardChartOfAccounts(): array
+    public function getStandardChartOfAccounts(): array
     {
         return [
             // =====================================================
@@ -190,6 +190,15 @@ class ChartOfAccountsSeeder extends Seeder
                 'description' => 'Estimated uncollectible receivables (contra account)',
             ],
             [
+                'code' => '1230',
+                'name' => 'Staff Advances',
+                'type' => 'asset',
+                'subtype' => 'current_asset',
+                'parent_code' => '1200',
+                'normal_balance' => 'debit',
+                'description' => 'Salary advances owed by employees, recovered through payroll',
+            ],
+            [
                 'code' => '1300',
                 'name' => 'Inventory',
                 'type' => 'asset',
@@ -253,7 +262,17 @@ class ChartOfAccountsSeeder extends Seeder
                 'normal_balance' => 'debit',
                 'description' => 'Insurance premiums paid in advance',
             ],
-            
+            [
+                'code' => '1430',
+                'name' => 'Input VAT (VAT Receivable)',
+                'type' => 'asset',
+                'subtype' => 'current_asset',
+                'parent_code' => '1000',
+                'normal_balance' => 'debit',
+                'description' => 'VAT paid on purchases, claimable against output VAT',
+                'tax_code' => 'VAT',
+            ],
+
             // Fixed Assets (1500-1799)
             [
                 'code' => '1500',
@@ -493,7 +512,7 @@ class ChartOfAccountsSeeder extends Seeder
             ],
             [
                 'code' => '2340',
-                'name' => 'NHIF Payable',
+                'name' => 'SHIF Payable',
                 'type' => 'liability',
                 'subtype' => 'current_liability',
                 'parent_code' => '2300',
@@ -518,6 +537,15 @@ class ChartOfAccountsSeeder extends Seeder
                 'parent_code' => '2300',
                 'normal_balance' => 'credit',
                 'description' => 'Corporate income tax payable',
+            ],
+            [
+                'code' => '2370',
+                'name' => 'Housing Levy Payable',
+                'type' => 'liability',
+                'subtype' => 'current_liability',
+                'parent_code' => '2300',
+                'normal_balance' => 'credit',
+                'description' => 'Affordable Housing Levy (employee + employer) due to KRA',
             ],
             [
                 'code' => '2400',
@@ -944,6 +972,15 @@ class ChartOfAccountsSeeder extends Seeder
                 'parent_code' => '5220',
                 'normal_balance' => 'debit',
                 'description' => 'Staff medical insurance',
+            ],
+            [
+                'code' => '5224',
+                'name' => 'Housing Levy Employer Contribution',
+                'type' => 'expense',
+                'subtype' => 'operating_expense',
+                'parent_code' => '5220',
+                'normal_balance' => 'debit',
+                'description' => 'Employer share of the Affordable Housing Levy',
             ],
             [
                 'code' => '5230',

@@ -131,10 +131,22 @@ class JournalEntry extends Model
         ]);
     }
 
+    /**
+     * Statuses whose lines count toward balances. A reversed entry stays in the
+     * books alongside its (posted) reversing entry; the two net to zero.
+     * Counting only "posted" would keep the reversal but drop the original.
+     */
+    public const LEDGER_STATUSES = ['posted', 'reversed'];
+
     // Scopes
     public function scopePosted($query)
     {
         return $query->where('status', 'posted');
+    }
+
+    public function scopeInLedger($query)
+    {
+        return $query->whereIn('status', self::LEDGER_STATUSES);
     }
 
     public function scopeByCompany($query, $companyId)

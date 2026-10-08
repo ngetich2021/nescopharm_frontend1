@@ -46,6 +46,43 @@ class Expense extends Model
         'updated_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (Expense $expense) {
+            if (!($expense->wasRecentlyCreated || $expense->wasChanged('status'))) {
+                return;
+            }
+            $notifier = app(\App\Services\NotificationService::class);
+            $amount = 'KES ' . number_format((float) $expense->amount, 2);
+            $url = "/expenses/{$expense->id}";
+
+            if ($expense->status === 'pending') {
+                $creator = $expense->createdBy;
+                $notifier->notifyPermission(
+                    $expense->company_id,
+                    ['can_approve_expenses'],
+                    new \App\Notifications\SystemAlert(
+                        'approval',
+                        "Expense {$expense->expense_number} needs approval",
+                        ($creator ? "{$creator->first_name} {$creator->last_name}" : 'Someone') . " recorded {$amount}" . ($expense->vendor_name ? " to {$expense->vendor_name}" : '') . '.',
+                        $url,
+                        ['type' => 'expense_pending', 'expense_id' => $expense->id],
+                    ),
+                    $expense->created_by,
+                );
+            } elseif (!$expense->wasRecentlyCreated && in_array($expense->status, ['approved', 'rejected'], true)) {
+                $notifier->notifyDecision(
+                    $expense->created_by,
+                    "Expense {$expense->expense_number} ({$amount})",
+                    $expense->status,
+                    $url,
+                    $expense->approved_by,
+                    $expense->status === 'rejected' ? request()->input('rejection_reason') : null,
+                );
+            }
+        });
+    }
+
         /**
      * Always return the short expense number when accessing expense_number
      */

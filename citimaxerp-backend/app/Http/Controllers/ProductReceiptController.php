@@ -242,6 +242,19 @@ class ProductReceiptController extends Controller
                 'document_url' => 'nullable|string',
                 'shipping_cost' => 'nullable|numeric|min:0',
                 'logistics_cost' => 'nullable|numeric|min:0',
+                'ppb_permit' => 'nullable|numeric|min:0',
+                'idf' => 'nullable|numeric|min:0',
+                'railway_levy' => 'nullable|numeric|min:0',
+                'transport_cost' => 'nullable|numeric|min:0',
+                'clearing_agency_fee' => 'nullable|numeric|min:0',
+                'other_clearing_cost' => 'nullable|numeric|min:0',
+                'certificate_of_conformity' => 'nullable|numeric|min:0',
+                'sgs_listing_approval' => 'nullable|numeric|min:0',
+                'vat_on_clearing' => 'nullable|numeric|min:0',
+                'vat_on_product' => 'nullable|numeric|min:0',
+                'import_duty' => 'nullable|numeric|min:0',
+                'excise_duty' => 'nullable|numeric|min:0',
+                'fob_price' => 'nullable|numeric|min:0',
                 'items' => 'sometimes|array|min:1',
                 'items.*.product_id' => 'nullable|uuid',
                 'items.*.sku' => 'nullable|string',
@@ -285,8 +298,14 @@ class ProductReceiptController extends Controller
                 $receipt->purchase_order_id = $linkedOrder?->id;
             }
 
-            // Update main receipt fields
-            $receipt->update([
+            $updateImportCostFields = [
+                'ppb_permit', 'idf', 'railway_levy', 'transport_cost',
+                'clearing_agency_fee', 'other_clearing_cost', 'certificate_of_conformity',
+                'sgs_listing_approval', 'vat_on_clearing', 'vat_on_product',
+                'import_duty', 'excise_duty', 'fob_price',
+            ];
+
+            $receipt->update(array_merge([
                 'supplier_id' => $data['supplier_id'] ?? $receipt->supplier_id,
                 'contractor_id' => $data['contractor_id'] ?? $receipt->contractor_id,
                 'document_type' => $data['document_type'] ?? $receipt->document_type,
@@ -296,7 +315,7 @@ class ProductReceiptController extends Controller
                 'document_url' => $uploadedDocumentUrl ?? ($data['document_url'] ?? $receipt->document_url),
                 'shipping_cost' => $data['shipping_cost'] ?? $receipt->shipping_cost,
                 'logistics_cost' => $data['logistics_cost'] ?? $receipt->logistics_cost,
-            ]);
+            ], array_combine($updateImportCostFields, array_map(fn($f) => $data[$f] ?? $receipt->$f, $updateImportCostFields))));
 
             $pricingWarnings = [];
 
@@ -503,12 +522,12 @@ class ProductReceiptController extends Controller
                     \App\Models\InventoryMovement::insert($movementRows);
                 }
 
-                // Distribute this receipt's shipping/logistics cost across the products
-                // received on it, updating each product's landed-cost basis.
+                $updateTotalImportCost = array_sum(array_map(fn($f) => (float) ($data[$f] ?? $receipt->$f ?? 0), $updateImportCostFields));
                 $pricingWarnings = $this->landedCostService->apply(
                     $landedCostLines,
                     (float) ($data['shipping_cost'] ?? $receipt->shipping_cost ?? 0),
-                    (float) ($data['logistics_cost'] ?? $receipt->logistics_cost ?? 0)
+                    (float) ($data['logistics_cost'] ?? $receipt->logistics_cost ?? 0),
+                    $updateTotalImportCost
                 );
             }
 
@@ -650,6 +669,19 @@ class ProductReceiptController extends Controller
                     'received_by' => 'required|uuid',
                     'shipping_cost' => 'nullable|numeric|min:0',
                     'logistics_cost' => 'nullable|numeric|min:0',
+                    'ppb_permit' => 'nullable|numeric|min:0',
+                    'idf' => 'nullable|numeric|min:0',
+                    'railway_levy' => 'nullable|numeric|min:0',
+                    'transport_cost' => 'nullable|numeric|min:0',
+                    'clearing_agency_fee' => 'nullable|numeric|min:0',
+                    'other_clearing_cost' => 'nullable|numeric|min:0',
+                    'certificate_of_conformity' => 'nullable|numeric|min:0',
+                    'sgs_listing_approval' => 'nullable|numeric|min:0',
+                    'vat_on_clearing' => 'nullable|numeric|min:0',
+                    'vat_on_product' => 'nullable|numeric|min:0',
+                    'import_duty' => 'nullable|numeric|min:0',
+                    'excise_duty' => 'nullable|numeric|min:0',
+                    'fob_price' => 'nullable|numeric|min:0',
                     'items' => 'required|array|min:1',
                     'reference_number' => 'nullable|string',
                     'items.*.product_id' => 'nullable|uuid',
@@ -694,8 +726,15 @@ class ProductReceiptController extends Controller
                     return response()->json(['status' => 'failed', 'message' => $linkError], 422);
                 }
 
+                $importCostFields = [
+                    'ppb_permit', 'idf', 'railway_levy', 'transport_cost',
+                    'clearing_agency_fee', 'other_clearing_cost', 'certificate_of_conformity',
+                    'sgs_listing_approval', 'vat_on_clearing', 'vat_on_product',
+                    'import_duty', 'excise_duty', 'fob_price',
+                ];
+
                 // Create product receipt
-                $receipt = ProductReceipt::create([
+                $receipt = ProductReceipt::create(array_merge([
                     'id' => Str::uuid(),
                     'company_id' => $companyId,
                     'purchase_order_id' => $linkedOrder?->id,
@@ -709,7 +748,7 @@ class ProductReceiptController extends Controller
                     'document_url' => $uploadedDocumentUrl ?? ($receiptData['document_url'] ?? null),
                     'shipping_cost' => $receiptData['shipping_cost'] ?? 0,
                     'logistics_cost' => $receiptData['logistics_cost'] ?? 0,
-                ]);
+                ], array_combine($importCostFields, array_map(fn($f) => (float) ($receiptData[$f] ?? 0), $importCostFields))));
 
                 $landedCostLines = [];
                 $productsToResync = [];
@@ -902,12 +941,12 @@ class ProductReceiptController extends Controller
                     \App\Models\InventoryMovement::insert($movementRows);
                 }
 
-                // Distribute this receipt's shipping/logistics cost across the products
-                // received on it, updating each product's landed-cost basis.
+                $totalImportCost = array_sum(array_map(fn($f) => (float) ($receiptData[$f] ?? 0), $importCostFields));
                 $pricingWarnings = $this->landedCostService->apply(
                     $landedCostLines,
                     (float) ($receiptData['shipping_cost'] ?? 0),
-                    (float) ($receiptData['logistics_cost'] ?? 0)
+                    (float) ($receiptData['logistics_cost'] ?? 0),
+                    $totalImportCost
                 );
 
                 $this->receivingService()->sync($linkedOrder);

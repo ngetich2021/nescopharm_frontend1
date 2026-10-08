@@ -7,16 +7,11 @@ use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class InvoicePaymentApplicationService
 {
-    public function __construct(protected AccountingWorkflowService $accountingWorkflow)
-    {
-    }
-
     /**
      * Calculate invoice status based on payment amount and due date.
      */
@@ -88,29 +83,12 @@ class InvoicePaymentApplicationService
 
             $newStatus = $this->calculateInvoiceStatus($newAmountPaid, $invoice->total_amount, $invoice->due_date);
 
+            // The receipt reaches the ledger via LedgerSyncObserver once this commits.
             $invoice->update([
                 'amount_paid' => $newAmountPaid,
                 'balance_amount' => $newBalance,
                 'status' => $newStatus,
             ]);
-
-            try {
-                $result = $this->accountingWorkflow
-                    ->forCompany($user->company_id)
-                    ->asUser($user->id)
-                    ->onCustomerPaymentReceived($invoice, $amount, $payment->payment_method, $payment->transaction_id);
-
-                Log::info($result ? 'Accounting entry created for payment' : 'Accounting entry skipped for payment (company settings)', [
-                    'payment_id' => $payment->id,
-                    'invoice_id' => $invoice->id,
-                ]);
-            } catch (\Exception $accountingError) {
-                Log::warning('Failed to create accounting entry for payment', [
-                    'payment_id' => $payment->id,
-                    'invoice_id' => $invoice->id,
-                    'error' => $accountingError->getMessage(),
-                ]);
-            }
 
             DB::commit();
 

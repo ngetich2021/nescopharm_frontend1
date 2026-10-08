@@ -7,8 +7,6 @@ use App\Models\OrderDispatchItem;
 use App\Models\Order;
 use App\Models\Logistic;
 use App\Models\User;
-use App\Models\CompanyAccountingSettings;
-use App\Services\AccountingWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -17,12 +15,9 @@ use Illuminate\Support\Facades\Log;
 
 class OrderDispatchController extends Controller
 {
-    protected AccountingWorkflowService $accountingWorkflow;
-
-    public function __construct(AccountingWorkflowService $accountingWorkflow)
+    public function __construct()
     {
         $this->middleware('auth:sanctum');
-        $this->accountingWorkflow = $accountingWorkflow;
     }
 
     protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
@@ -42,6 +37,22 @@ class OrderDispatchController extends Controller
             return true;
         }
         return $role->hasPermission($permission);
+    }
+
+    protected function notifyNextDispatchApprover($dispatch, string $actorId): void
+    {
+        $next = $dispatch->getCurrentApprover();
+        if (!$next) {
+            return;
+        }
+        $orderNumber = $dispatch->order?->order_number;
+        app(\App\Services\NotificationService::class)->notifyUser($next->id, new \App\Notifications\SystemAlert(
+            'approval',
+            "Dispatch {$dispatch->dispatch_number} awaits your approval",
+            'Dispatch' . ($orderNumber ? " for order {$orderNumber}" : '') . ' is waiting on your approval.',
+            "/dispatch",
+            ['type' => 'dispatch_pending', 'dispatch_id' => $dispatch->id],
+        ), $actorId);
     }
 
     /**
@@ -582,6 +593,8 @@ class OrderDispatchController extends Controller
             $dispatch->status = 'pending';
             $dispatch->save();
 
+            $this->notifyNextDispatchApprover($dispatch, $user->id);
+
             $dispatch->load(['order', 'items', 'deliveryLocation']);
             $dispatch->approver_details = $dispatch->approver_users;
             $dispatch->current_approver = $dispatch->getCurrentApprover();
@@ -647,10 +660,17 @@ class OrderDispatchController extends Controller
 
         try {
             $dispatch->approve($user, $request->comments);
+            app(\App\Services\NotificationService::class)->resolve('dispatch_pending', 'dispatch_id', $dispatch->id);
 
             if ($dispatch->isFullyApproved()) {
                 $dispatch->order->dispatch_status = 'dispatch_approved';
                 $dispatch->order->save();
+                app(\App\Services\NotificationService::class)->notifyDecision(
+                    $dispatch->created_by, "Dispatch {$dispatch->dispatch_number}", 'approved',
+                    "/dispatch", $user->id, $request->comments,
+                );
+            } else {
+                $this->notifyNextDispatchApprover($dispatch, $user->id);
             }
 
             $dispatch->load(['order', 'items', 'deliveryLocation']);
@@ -722,6 +742,11 @@ class OrderDispatchController extends Controller
 
         try {
             $dispatch->reject($user, $request->reason);
+
+            app(\App\Services\NotificationService::class)->notifyDecision(
+                $dispatch->created_by, "Dispatch {$dispatch->dispatch_number}", 'rejected',
+                "/dispatch", $user->id, $request->reason,
+            );
 
             $dispatch->load(['order', 'items', 'deliveryLocation']);
             $dispatch->approver_details = $dispatch->approver_users;
@@ -942,36 +967,6 @@ class OrderDispatchController extends Controller
                 $dispatch->logistic->save();
             }
 
-            // Create accounting entry based on company settings
-            // Some companies record sales revenue when delivery is confirmed
-            try {
-                $order = $dispatch->order;
-                if ($order) {
-                    $result = $this->accountingWorkflow
-                        ->forCompany($dispatch->company_id)
-                        ->asUser($user->id)
-                        ->onOrderDelivered($order, $dispatch);
-
-                    if ($result) {
-                        Log::info('Accounting entry created on delivery confirmation', [
-                            'dispatch_id' => $dispatch->id,
-                            'order_id' => $order->id,
-                            'journal_id' => $result['journal_id'] ?? null
-                        ]);
-                    } else {
-                        Log::info('Accounting entry skipped (not triggered on delivery)', [
-                            'dispatch_id' => $dispatch->id,
-                            'order_id' => $order->id
-                        ]);
-                    }
-                }
-            } catch (\Exception $accountingError) {
-                // Log but don't fail the delivery - accounting can be reconciled later
-                Log::warning('Failed to create accounting entry on delivery', [
-                    'dispatch_id' => $dispatch->id,
-                    'error' => $accountingError->getMessage()
-                ]);
-            }
 
             DB::commit();
 

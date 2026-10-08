@@ -527,6 +527,29 @@ class Product extends Model
     }
 
     /**
+     * Read-only FEFO preview: returns which batches WOULD be drawn, without
+     * deducting stock. Used to stamp batch/expiry on invoices before payment.
+     */
+    public function previewFEFO(int $requestedQuantity): array
+    {
+        $allocations = [];
+        $remaining = $requestedQuantity;
+        foreach ($this->getFEFOBatches()->get() as $batch) {
+            if ($remaining <= 0) break;
+            $take = min($remaining, $batch->quantity_available);
+            if ($take > 0) {
+                $allocations[] = [
+                    'batch_number' => $batch->batch_number,
+                    'expiry_date' => $batch->expiry_date?->toDateString(),
+                    'quantity' => $take,
+                ];
+                $remaining -= $take;
+            }
+        }
+        return $allocations;
+    }
+
+    /**
      * Allocate and immediately consume stock using FEFO (First-Expiry,
      * First-Out) - the batch soonest to expire is drawn down first. Unlike
      * allocateStockFIFO()/InventoryBatch::allocateQuantity(), this sells

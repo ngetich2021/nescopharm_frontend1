@@ -47,6 +47,23 @@ trait CreatesCustomerAccounts
     {
         $accountNumber = $this->generateAccountNumber($companyId);
 
+        // The rep's credit application only captures the string
+        // `credit_period_required` (e.g. "45"), so derive the integer
+        // `credit_days` the invoicing engine reads from it unless the caller
+        // supplied one explicitly. Without this, every rep-approved account
+        // silently billed at Net 30.
+        $explicitCreditDays = $data['credit_days'] ?? null;
+        $periodRequired = $data['credit_period_required'] ?? null;
+        $derivedCreditDays = $explicitCreditDays !== null
+            ? (int) $explicitCreditDays
+            : (is_numeric($periodRequired) ? (int) $periodRequired : null);
+
+        // Agreed PD-cheque period must never exceed 60 days.
+        $pdDays = $data['credit_period_pd_cheque_days'] ?? null;
+        if ($pdDays !== null) {
+            $pdDays = min(60, max(0, (int) $pdDays));
+        }
+
         $account = CustomerAccount::create([
             'id' => (string) Str::uuid(),
             'customer_id' => $customerId,
@@ -55,9 +72,9 @@ trait CreatesCustomerAccounts
             'certificate_of_incorporation_number' => $data['certificate_of_incorporation_number'] ?? null,
             'annual_turnover' => $data['annual_turnover'] ?? null,
             'credit_required' => $data['credit_required'] ?? null,
-            'credit_period_required' => $data['credit_period_required'] ?? null,
-            'credit_period_pd_cheque_days' => $data['credit_period_pd_cheque_days'] ?? null,
-            'credit_days' => $data['credit_days'] ?? null,
+            'credit_period_required' => $periodRequired,
+            'credit_period_pd_cheque_days' => $pdDays,
+            'credit_days' => $derivedCreditDays,
             'currently_defaulted' => filter_var($data['currently_defaulted'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'credit_terms' => $data['credit_terms'] ?? null,
             'notes' => $data['notes'] ?? null,

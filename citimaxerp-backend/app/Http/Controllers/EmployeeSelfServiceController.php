@@ -319,23 +319,35 @@ class EmployeeSelfServiceController extends Controller
     {
         $user = $request->user();
 
-        $employee = Employee::where('company_id', $user->company_id)
+        $linked = Employee::where('user_id', $user->id)->first();
+        if ($linked) {
+            return $linked;
+        }
+
+        // Fallback guesses only consider employees not already connected to another login,
+        // and connect the match so later visits use the link.
+        $unlinked = fn () => Employee::where('company_id', $user->company_id)->whereNull('user_id');
+
+        $employee = $unlinked()
             ->whereRaw('LOWER(email) = ?', [strtolower($user->email)])
             ->first();
 
         if ($employee) {
+            $employee->update(['user_id' => $user->id]);
             return $employee;
         }
 
-        $employee = Employee::where('company_id', $user->company_id)
+        $employee = $unlinked()
             ->whereRaw('LOWER(first_name) = ?', [strtolower($user->first_name)])
             ->whereRaw('LOWER(last_name) = ?', [strtolower($user->last_name)])
             ->first();
 
         if ($employee) {
+            $update = ['user_id' => $user->id];
             if (empty($employee->email) && !empty($user->email)) {
-                $employee->update(['email' => $user->email]);
+                $update['email'] = $user->email;
             }
+            $employee->update($update);
 
             return $employee;
         }
@@ -343,6 +355,7 @@ class EmployeeSelfServiceController extends Controller
         $payload = [
             'id' => (string) Str::uuid(),
             'company_id' => $user->company_id,
+            'user_id' => $user->id,
             'employee_number' => $this->generateEmployeeNumber($user->company_id),
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,

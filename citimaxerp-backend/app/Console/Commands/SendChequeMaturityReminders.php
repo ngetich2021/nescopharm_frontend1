@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\Cheque;
 use App\Models\User;
 use App\Notifications\PostDatedChequeMaturityReminder;
+use App\Notifications\SystemAlert;
+use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -49,6 +51,44 @@ class SendChequeMaturityReminders extends Command
             $this->info("Maturity reminder sent for cheque {$cheque->cheque_number} to " . $recipients->count() . ' recipient(s)');
         }
 
+        $this->remindReceivedCheques(app(NotificationService::class));
+
         $this->info('Cheque maturity reminders processed.');
+    }
+
+    // Received post-dated cheques need banking on/after maturity - nudge whoever records customer payments.
+    protected function remindReceivedCheques(NotificationService $notifier): void
+    {
+        $today = Carbon::today();
+        $inThreeDays = $today->copy()->addDays(3);
+
+        $cheques = Cheque::where('status', 'pending')
+            ->where('direction', 'received')
+            ->where(function ($q) use ($today, $inThreeDays) {
+                $q->whereDate('maturity_date', $today->toDateString())
+                    ->orWhereDate('maturity_date', $inThreeDays->toDateString());
+            })
+            ->with('customer')
+            ->get();
+
+        foreach ($cheques as $cheque) {
+            $dueToday = $cheque->maturity_date->isSameDay($today);
+            $from = $cheque->customer?->business_name ?: ($cheque->customer?->name ?? 'a customer');
+            $amount = 'KES ' . number_format((float) $cheque->amount, 2);
+
+            $notifier->notifyPermission(
+                $cheque->company_id,
+                ['can_update_invoices'],
+                new SystemAlert(
+                    'cheque',
+                    $dueToday ? "Cheque from {$from} matures today" : "Cheque from {$from} matures in 3 days",
+                    "Cheque #{$cheque->cheque_number} ({$cheque->bank_name}) for {$amount} " . ($dueToday ? 'is ready to bank.' : 'matures on ' . $cheque->maturity_date->format('d M Y') . '.'),
+                    '/sales/cheques',
+                    ['type' => 'received_cheque_maturity', 'cheque_id' => $cheque->id],
+                ),
+            );
+        }
+
+        $this->info("Received-cheque reminders sent for {$cheques->count()} cheque(s)");
     }
 }
