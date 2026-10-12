@@ -15,7 +15,6 @@ import { amountInWords } from "@/lib/number-to-words"
 import { ArrowLeft, Download, Mail, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
 import { documentCode } from "@/lib/price-codes"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,8 +30,6 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
   const [isDownloading, setIsDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [companyPin, setCompanyPin] = useState<string | null>(null)
-  const [view, setView] = useDocumentView()
-  const isPricing = view === "pricing"
 
   useEffect(() => {
     getEtimsConfig().then((res) => setCompanyPin(res?.config?.kra_pin || null)).catch(() => setCompanyPin(null))
@@ -147,7 +144,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       const imgY = 10
       
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
-      pdf.save(`Invoice-${invoice.invoice_number}${isPricing ? "-Pricing" : ""}.pdf`)
+      pdf.save(`Invoice-${invoice.invoice_number}.pdf`)
       
       toast({
         title: "Success",
@@ -211,7 +208,6 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
               Back
             </Button>
             <div className="flex gap-2">
-              <DocumentViewToggle value={view} onChange={setView} />
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
@@ -258,7 +254,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
 
           {/* Header */}
           <div className="flex justify-between items-end mb-3">
-            <h1 className="text-xl font-bold text-gray-900 tracking-wide">INVOICE{isPricing && " (PRICING)"}</h1>
+            <h1 className="text-xl font-bold text-gray-900 tracking-wide">INVOICE</h1>
             {invoice.due_date && invoice.due_date !== invoice.invoice_date && (
               <p className="text-xs text-gray-600">
                 Due Date: <span className="font-semibold text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
@@ -407,7 +403,6 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                       <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">{packSize}</td>
                       <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
                         {formatAmount(unitPriceInclVat)}
-                        {isPricing && item.metadata?.price_label && <span className="font-semibold"> @ {item.metadata.price_label}</span>}
                       </td>
                       {/* Per-batch qtys only when the line was split across batches; one batch would just repeat the total. */}
                       <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
