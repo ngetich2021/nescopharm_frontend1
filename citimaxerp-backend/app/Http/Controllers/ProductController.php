@@ -415,6 +415,29 @@ class ProductController extends Controller
                 // Match order: this list's code already on a product, then a product whose SKU is the
                 // code (older data stored codes there), then the item description.
                 $code = trim($listName . ' ' . ($itemCode ?? ''));
+
+                // A code covering several sizes sits on each size's product; reprice them all together.
+                $sharedTiers = $itemCode !== null
+                    ? ProductPriceTier::where('company_id', $companyId)->where('tier_name', $listName)->where('item_code', $itemCode)->get()
+                    : collect();
+                if ($sharedTiers->count() > 1) {
+                    foreach ($sharedTiers as $tier) {
+                        if (!$dryRun && (float) $tier->price !== $price) {
+                            $priceHistoryRecords[] = ['product_id' => $tier->product_id, 'old_value' => (float) $tier->price, 'new_value' => $price];
+                        }
+                        $tier->update(['price' => $price, 'unit_of_measure' => $uom]);
+                    }
+                    $summary['products_matched']++;
+                    $summary['prices_updated'] += $sharedTiers->count();
+                    $results[] = $result + [
+                        'status' => 'matched',
+                        'price' => $price,
+                        'unit_of_measure' => $uom,
+                        'message' => "{$code} covers {$sharedTiers->count()} sizes - all repriced.",
+                    ];
+                    continue;
+                }
+
                 $matches = collect();
                 if ($itemCode !== null) {
                     $tierOwner = ProductPriceTier::where('company_id', $companyId)->where('tier_name', $listName)->where('item_code', $itemCode)->value('product_id');
