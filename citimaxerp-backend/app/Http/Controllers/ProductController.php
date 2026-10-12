@@ -990,7 +990,11 @@ class ProductController extends Controller
             ->groupBy('product_id')
             ->map(fn ($group) => $group->keyBy(fn ($v) => $sizeKey($v->name)));
 
-        $existingBatchNumbers = InventoryBatch::where('company_id', $companyId)->pluck('id', 'batch_number');
+        // Suppliers reuse batch numbers across different products, so a batch is only the same batch within one product/size.
+        $batchKey = fn ($productId, $variantId, $batchNumber) => $productId . '|' . ($variantId ?? '') . '|' . $batchNumber;
+        $existingBatchNumbers = InventoryBatch::where('company_id', $companyId)
+            ->get(['id', 'product_id', 'variant_id', 'batch_number'])
+            ->mapWithKeys(fn ($b) => [$batchKey($b->product_id, $b->variant_id, $b->batch_number) => $b->id]);
 
         DB::beginTransaction();
         try {
@@ -1078,7 +1082,7 @@ class ProductController extends Controller
                     'notes' => $cell('notes') ?: null,
                 ];
 
-                $existingBatchId = $existingBatchNumbers->get($batchNumber);
+                $existingBatchId = $existingBatchNumbers->get($batchKey($product->id, $variant?->id, $batchNumber));
                 if ($existingBatchId) {
                     $batch = InventoryBatch::find($existingBatchId);
                     // Only update the fields the user actually supplied so a
@@ -1104,7 +1108,7 @@ class ProductController extends Controller
                     ]);
                     if (!$dryRun) {
                         $batch->save();
-                        $existingBatchNumbers->put($batchNumber, $batch->id);
+                        $existingBatchNumbers->put($batchKey($product->id, $variant?->id, $batchNumber), $batch->id);
                         // Keep the product's rolled-up stock_quantity honest -
                         // it's the sum of its batches' quantity_available.
                         $target = $variant ?? $product;
