@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Trash2, Loader2 } from "lucide-react"
 import { getProducts } from "@/lib/products"
-import { DEFAULT_UNIT, findByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { DEFAULT_UNIT, findAllByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { activeSizesOf, sizedName } from "@/lib/product-sizes"
+import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 
 interface Props {
   form: UseFormReturn<any>
@@ -72,12 +73,12 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
                 <td className="py-2 pr-2 pt-4 text-gray-600">{index + 1}</td>
                 <td className="py-2 pr-2">
                   <CodeCell form={form} index={index} products={products} listId={listId} onResolved={remember} />
-                  {errors?.product_id && !form.watch(`items.${index}.product_id`) && (
+                  {errors?.product_id && !form.watch(`items.${index}.product_id`) && !form.watch(`items.${index}.price_label`) && (
                     <p className="text-xs text-red-600 mt-1">Enter a valid code</p>
                   )}
                 </td>
                 <td className="py-2 pr-2">
-                  <ItemNameCell form={form} index={index} product={productById(form.watch(`items.${index}.product_id`))} />
+                  <ItemNameCell form={form} index={index} product={productById(form.watch(`items.${index}.product_id`))} onResolved={remember} />
                 </td>
                 <td className="py-2 pr-2 pt-4 text-gray-700">
                   {form.watch(`items.${index}.product_id`)
@@ -131,13 +132,29 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
 // Items like "Endobronchial Tubes Left Fr26,28,31" are one code at one price but many sizes.
 // Picking a size names the line for it ("Endobronchial Tubes Left Fr26") and decides which
 // stock and batch is dispatched.
-function ItemNameCell({ form, index, product }: { form: UseFormReturn<any>; index: number; product: any }) {
+function ItemNameCell({ form, index, product, onResolved }: { form: UseFormReturn<any>; index: number; product: any; onResolved: (product: any) => void }) {
   const sizes = activeSizesOf(product)
   const value = (form.watch(`items.${index}.variant_id`) as string | null) ?? ""
   const description = form.watch(`items.${index}.description`) as string
 
   if (sizes.length === 0) {
-    return <span className="block pt-2 text-gray-900">{description || <span className="text-gray-400">-</span>}</span>
+    // A code shared by sizes stocked as separate products: the size picks the product, the code keeps the price.
+    return (
+      <div>
+        <span className="block pt-2 text-gray-900">{description || <span className="text-gray-400">-</span>}</span>
+        <SameCodeSizeSelect
+          code={form.watch(`items.${index}.price_label`)}
+          productId={form.watch(`items.${index}.product_id`)}
+          label={`Size for row ${index + 1}`}
+          onPick={(picked) => {
+            onResolved(picked)
+            form.setValue(`items.${index}.product_id`, picked.id, { shouldValidate: true })
+            form.setValue(`items.${index}.variant_id`, null)
+            form.setValue(`items.${index}.description`, picked.name)
+          }}
+        />
+      </div>
+    )
   }
 
   const picked = sizes.find((s) => s.id === value)
@@ -184,11 +201,13 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
   const [looking, setLooking] = useState(false)
   const [notFound, setNotFound] = useState(false)
 
-  const apply = (product: any, option: PriceOption) => {
-    onResolved(product)
-    form.setValue(`items.${index}.product_id`, product.id, { shouldValidate: true })
+  // A code shared by several sizes sets the price but leaves the product empty until a size is picked.
+  const apply = (matches: any[], option: PriceOption) => {
+    matches.forEach(onResolved)
+    const single = matches.length === 1 ? matches[0] : null
+    form.setValue(`items.${index}.product_id`, single?.id ?? "", { shouldValidate: !!single })
     form.setValue(`items.${index}.variant_id`, null)
-    form.setValue(`items.${index}.description`, product.name)
+    form.setValue(`items.${index}.description`, single?.name ?? "")
     form.setValue(`items.${index}.unit_price`, option.price)
     form.setValue(`items.${index}.price_label`, option.code)
     form.setValue(`items.${index}.price_unit`, option.unit)
@@ -208,28 +227,32 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
   // Exact codes among the loaded products apply as soon as they are typed or picked from the list.
   useEffect(() => {
     if (!text.trim()) return
-    const hit = findByPriceCode(products, text)
-    if (hit && hit.option.code !== form.getValues(`items.${index}.price_label`)) apply(hit.product, hit.option)
+    const hit = findAllByPriceCode(products, text)
+    if (hit && hit.option.code !== form.getValues(`items.${index}.price_label`)) apply(hit.products, hit.option)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, products])
 
-  // Codes outside the loaded page are looked up on the server when the field is left.
+  // Codes outside the loaded page are looked up on the server when the field is left; the loaded
+  // page may hold only some of a shared code's sizes, so shared codes are always looked up too.
   const resolveRemotely = async () => {
     const value = text.trim()
     if (!value) {
       clear()
       return
     }
-    if (findByPriceCode(products, value) || !looksLikeCode(value)) {
-      if (!findByPriceCode(products, value)) setNotFound(true)
+    const local = findAllByPriceCode(products, value)
+    if ((local && local.products.length === 1) || !looksLikeCode(value)) {
+      if (!local) setNotFound(true)
       return
     }
     setLooking(true)
     try {
-      const { data } = await getProducts(1, 10, { search: value })
-      const hit = findByPriceCode(data || [], value)
-      if (hit) apply(hit.product, hit.option)
-      else setNotFound(true)
+      const { data } = await getProducts(1, 100, { search: value.replace(/\s+/g, "") })
+      const hit = findAllByPriceCode(data || [], value)
+      if (hit) {
+        if (hit.option.code !== form.getValues(`items.${index}.price_label`)) apply(hit.products, hit.option)
+        else hit.products.forEach(onResolved)
+      } else setNotFound(true)
     } catch {
       setNotFound(true)
     } finally {

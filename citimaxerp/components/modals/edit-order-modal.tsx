@@ -1,6 +1,7 @@
 "use client"
 
 import { sizedName } from "@/lib/product-sizes"
+import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -344,6 +345,18 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       const item = orderItems[orderItemIndex]
       return { ...prev, [getOrderItemKey({ ...item, variant_id: variantId })]: variantId }
     })
+  }
+
+  // A code shared by several sizes keeps its code and price; only the size (product) changes.
+  const handleSwapSize = (index: number, product: ProductWithVariants) => {
+    setProducts((prev) => (prev.some((p) => p.id === product.id) ? prev : [...prev, { ...product, variants: Array.isArray(product.variants) ? product.variants : [] }]))
+    setOrderItems((items) =>
+      items.map((item, idx) =>
+        idx === index
+          ? { ...item, product_id: product.id, product_name: product.name, variant_id: undefined, variant_name: undefined, tax_rate: vatRateForProduct(product) }
+          : item
+      )
+    )
   }
 
   const handleUpdateQuantity = (index: number, quantity: number) => {
@@ -805,7 +818,10 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                                   </SelectContent>
                                 </Select>
                               ) : (
-                                <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
+                                <>
+                                  <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
+                                  <SameCodeSizeSelect code={item.price_label} productId={item.product_id} onPick={(p) => handleSwapSize(index, p)} />
+                                </>
                               )}
                               <div className="text-xs text-gray-500">{[item.price_label, item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
                             </td>

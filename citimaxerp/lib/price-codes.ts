@@ -98,7 +98,8 @@ export const defaultPriceOption = (product: any, variant?: any): PriceOption | u
 }
 
 // Price codes among the given products that contain the typed text, e.g. "nspd 00" -> NSPD 001, NSPD 002...
-export function priceCodeHits(products: any[], query: string, limit = 8): { product: any; option: PriceOption }[] {
+// The limit leaves room for a code whose sizes are stocked as separate products (NSPO 005 has 13).
+export function priceCodeHits(products: any[], query: string, limit = 40): { product: any; option: PriceOption }[] {
   const wanted = normalizeCode(query)
   if (wanted.length < 2) return []
   const hits: { product: any; option: PriceOption }[] = []
@@ -143,13 +144,28 @@ export function dispatchItemCode(item: any): string {
   return documentCode(null, item?.product?.item_number)
 }
 
-// Finds the product and price for a typed code such as "NSPD 001" or "nspd001".
-export function findByPriceCode(products: any[], query: string): { product: any; option: PriceOption } | undefined {
+// Every product carrying a code. One code can cover several sizes at the same price, each size
+// stocked as its own product (e.g. NSPO 014 Tracheostomy Tubes Cuffed ID 2.5 ... 8.0).
+export function findAllByPriceCode(products: any[], query: string): { products: any[]; option: PriceOption } | undefined {
   const wanted = normalizeCode(query)
   if (!wanted) return undefined
+  let option: PriceOption | undefined
+  const hits: any[] = []
   for (const product of products) {
-    const option = priceOptionsFor(product).find((o) => normalizeCode(o.code) === wanted)
-    if (option) return { product, option }
+    const found = priceOptionsFor(product).find((o) => normalizeCode(o.code) === wanted)
+    if (found) {
+      option ??= found
+      hits.push(product)
+    }
   }
-  return undefined
+  if (!option) return undefined
+  hits.sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }))
+  return { products: hits, option }
+}
+
+// The product and price for a typed code such as "NSPD 001" or "nspd001" - only when the code
+// names a single product; a code shared by several sizes needs the size picked.
+export function findByPriceCode(products: any[], query: string): { product: any; option: PriceOption } | undefined {
+  const all = findAllByPriceCode(products, query)
+  return all && all.products.length === 1 ? { product: all.products[0], option: all.option } : undefined
 }
