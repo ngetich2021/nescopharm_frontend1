@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +16,7 @@ import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { createQuote, fetchQuoteSalesReps, type SalesRep } from "@/lib/quotes"
-import { getCustomers, createCustomer, getCustomerDisplayName } from "@/lib/customers"
+import { getCustomers, getCustomerDisplayName } from "@/lib/customers"
 import { getProducts } from "@/lib/products"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils"
@@ -56,6 +57,7 @@ interface CreateQuoteSheetProps {
 }
 
 export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetProps) {
+  const router = useRouter()
   const [customers, setCustomers] = useState<any[]>([])
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -63,10 +65,6 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
   const [isSaving, setIsSaving] = useState(false)
   const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [showCustomerSearch, setShowCustomerSearch] = useState(false)
-  const [showCreateCustomer, setShowCreateCustomer] = useState(false)
-  const [newCustomerName, setNewCustomerName] = useState("")
-  const [newCustomerEmail, setNewCustomerEmail] = useState("")
-  const [newCustomerPhone, setNewCustomerPhone] = useState("")
   const { toast } = useToast()
   const { user } = useAuth()
 
@@ -156,59 +154,6 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
     })
   }
 
-  const handleCreateCustomer = async () => {
-    if (!newCustomerName.trim()) {
-      toast({
-        title: "Error",
-        description: "Customer name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setIsSaving(true)
-      const customerData = {
-        name: newCustomerName.trim(),
-        email: newCustomerEmail.trim() || null,
-        phone: newCustomerPhone.trim() || null,
-        address: null,
-        city: null,
-        state: null,
-        country: null,
-        postal_code: null,
-        customer_type: 'individual',
-        company: null,
-        preferred_communication_channel: null,
-        last_contact_date: null,
-        first_name: newCustomerName.split(" ")[0] || "",
-        last_name: newCustomerName.split(" ").slice(1).join(" ") || "",
-        tags: [],
-      };
-
-      const newCustomer = await createCustomer(customerData as any)
-
-      setCustomers(prev => [...prev, newCustomer])
-      form.setValue('customer_id', newCustomer.id)
-      setShowCreateCustomer(false)
-      setNewCustomerName("")
-      setNewCustomerEmail("")
-      setNewCustomerPhone("")
-      
-      toast({
-        title: "Success",
-        description: "Customer created successfully",
-      })
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create customer",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
 
   // Calculate totals
   const quoteTotals = {
@@ -369,7 +314,7 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
                                 className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded text-blue-600 font-medium"
                                 onClick={() => {
                                   setShowCustomerSearch(false)
-                                  setShowCreateCustomer(true)
+                                  router.push('/customers')
                                 }}
                               >
                                 <Plus className="h-4 w-4" />
@@ -403,71 +348,6 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
                         </PopoverContent>
                       </Popover>
 
-                      {/* Create Customer Modal */}
-                      {showCreateCustomer && (
-                        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-                          <div className="p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium">Create New Customer</h4>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setShowCreateCustomer(false)
-                                  setNewCustomerName("")
-                                  setNewCustomerEmail("")
-                                  setNewCustomerPhone("")
-                                }}
-                                className="px-2"
-                              >
-                                ✕
-                              </Button>
-                            </div>
-                            <Input
-                              placeholder="Customer name *"
-                              value={newCustomerName}
-                              onChange={(e) => setNewCustomerName(e.target.value)}
-                            />
-                            <Input
-                              placeholder="Email (optional)"
-                              type="email"
-                              value={newCustomerEmail}
-                              onChange={(e) => setNewCustomerEmail(e.target.value)}
-                            />
-                            <Input
-                              placeholder="Phone (optional)"
-                              value={newCustomerPhone}
-                              onChange={(e) => setNewCustomerPhone(e.target.value)}
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setShowCreateCustomer(false)
-                                  setNewCustomerName("")
-                                  setNewCustomerEmail("")
-                                  setNewCustomerPhone("")
-                                }}
-                                className="flex-1"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={handleCreateCustomer}
-                                disabled={!newCustomerName.trim() || isSaving}
-                                className="flex-1"
-                              >
-                                {isSaving ? "Creating..." : "Create"}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                     {form.formState.errors.customer_id && (
                       <p className="text-sm text-red-600">{form.formState.errors.customer_id.message}</p>

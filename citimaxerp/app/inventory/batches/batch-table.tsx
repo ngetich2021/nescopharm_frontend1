@@ -5,7 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MoreHorizontal, Search, Download, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Eye, RefreshCw, AlertTriangle, Calendar, Package, CheckCircle } from "lucide-react"
+import { MoreHorizontal, Search, Download, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Eye, RefreshCw, AlertTriangle, Calendar, Package, CheckCircle, List, Layers } from "lucide-react"
+import { getBatches } from "@/lib/batches"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,92 +73,85 @@ function batchMatchesSearch(batch: Batch, searchTerm: string): boolean {
   )
 }
 
-// Helper function to download CSV template
-function downloadCSVTemplate(batches: Batch[], searchTerm: string) {
-  // Filter batches based on search term
-  const filteredBatches = searchTerm 
-    ? batches.filter(batch => batchMatchesSearch(batch, searchTerm))
-    : batches
-
-  // Helper function to safely get supplier name
-  const getSupplierName = (supplier: Batch['supplier']): string => {
-    if (!supplier) return ''
-    if (typeof supplier === 'string') return supplier
-    if (typeof supplier === 'object' && supplier !== null && 'name' in supplier) {
-      return supplier.name || ''
-    }
-    return ''
+// Helper: safely get supplier display name from the polymorphic field
+function getSupplierName(supplier: Batch['supplier']): string {
+  if (!supplier) return ''
+  if (typeof supplier === 'string') return supplier
+  if (typeof supplier === 'object' && supplier !== null && 'name' in supplier) {
+    return supplier.name || ''
   }
-
-  // Create CSV content
-  const headers = ["Batch Number", "Lot Number", "Quantity Received", "Quantity Available", "Quantity Sold", "Manufacture Date", "Expiry Date", "Supplier"]
-  const csvContent = [
-    headers.join(","),
-    ...filteredBatches.map(batch => 
-      [
-        `"${batch.batch_number || ""}"`,
-        `"${batch.lot_number || ""}"`,
-        `"${batch.quantity_received || 0}"`,
-        `"${batch.quantity_available || 0}"`,
-        `"${batch.quantity_sold || 0}"`,
-        `"${batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : ""}"`,
-        `"${batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : ""}"`,
-        `"${getSupplierName(batch.supplier)}"`
-      ].join(",")
-    )
-  ].join("\n")
-
-  // Create download link
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.setAttribute("href", url)
-  link.setAttribute("download", `batches_${new Date().toISOString().split("T")[0]}.csv`)
-  link.style.visibility = "hidden"
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  return ''
 }
 
-// Helper function to download Excel template
-function downloadExcelTemplate(batches: Batch[], searchTerm: string) {
-  // Filter batches based on search term
-  const filteredBatches = searchTerm 
-    ? batches.filter(batch => batchMatchesSearch(batch, searchTerm))
-    : batches
+// Date formatting helper for export - produces ISO-style dates that
+// round-trip cleanly through the importer.
+function exportDate(date?: string): string {
+  if (!date) return ''
+  try { return new Date(date).toISOString().split('T')[0] } catch { return '' }
+}
 
-  // Helper function to safely get supplier name
-  const getSupplierName = (supplier: Batch['supplier']): string => {
-    if (!supplier) return ''
-    if (typeof supplier === 'string') return supplier
-    if (typeof supplier === 'object' && supplier !== null && 'name' in supplier) {
-      return supplier.name || ''
-    }
-    return ''
-  }
-
-  // Create worksheet data
-  const worksheetData = [
-    ["Batch Number", "Lot Number", "Quantity Received", "Quantity Available", "Quantity Sold", "Manufacture Date", "Expiry Date", "Supplier"],
-    ...filteredBatches.map(batch => [
-      batch.batch_number || "",
-      batch.lot_number || "",
-      batch.quantity_received || 0,
-      batch.quantity_available || 0,
-      batch.quantity_sold || 0,
-      batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "",
-      batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "",
-      getSupplierName(batch.supplier)
-    ])
+// Build an export-ready row array for a single batch.
+// The column order matches the import BATCH_SHEET_HEADERS so the
+// exported file can be re-imported after editing in Excel.
+const EXPORT_HEADERS = [
+  "Item No.", "Item Description", "Size",
+  "Batch Number", "Lot Number",
+  "Quantity Received", "Quantity Available",
+  "Unit Cost", "Selling Price",
+  "Manufacture Date", "Expiry Date", "Received Date",
+  "Supplier", "Status", "Notes",
+]
+function batchToRow(batch: Batch): (string | number)[] {
+  return [
+    batch.product?.product_number ?? '',
+    batch.product?.name ?? '',
+    batch.variant?.name ?? '',
+    batch.batch_number || '',
+    batch.lot_number || '',
+    batch.quantity_received || 0,
+    batch.quantity_available || 0,
+    batch.unit_cost ?? '',
+    batch.selling_price ?? '',
+    exportDate(batch.manufacture_date),
+    exportDate(batch.expiry_date),
+    exportDate(batch.received_date),
+    getSupplierName(batch.supplier),
+    batch.status || '',
+    batch.notes || '',
   ]
+}
 
-  // Create workbook and worksheet
-  const ws = XLSX.utils.aoa_to_sheet(worksheetData)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, "Batches")
+// Fetch ALL batches (not just the current page) then export.
+async function fetchAllAndExport(format: "csv" | "excel") {
+  // Fetch with a large per_page to get everything in one call
+  const all = await getBatches({ per_page: 100000 })
+  const allBatches = all.data || []
 
-  // Download Excel file
-  XLSX.writeFile(wb, `batches_${new Date().toISOString().split("T")[0]}.xlsx`)
+  if (format === "csv") {
+    const csvContent = [
+      EXPORT_HEADERS.join(","),
+      ...allBatches.map(b =>
+        batchToRow(b).map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")
+      ),
+    ].join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `batches_${new Date().toISOString().split("T")[0]}.csv`
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } else {
+    const worksheetData = [EXPORT_HEADERS, ...allBatches.map(batchToRow)]
+    const ws = XLSX.utils.aoa_to_sheet(worksheetData)
+    // Auto-size columns for readability
+    ws["!cols"] = EXPORT_HEADERS.map((h) => ({ wch: Math.max(h.length, 14) }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Batches")
+    XLSX.writeFile(wb, `batches_${new Date().toISOString().split("T")[0]}.xlsx`)
+  }
 }
 
 interface BatchTableProps {
@@ -318,12 +312,19 @@ export function BatchTable({
     })
   }
 
-  // Handle export
-  const handleExport = (format: "csv" | "excel") => {
-    if (format === "csv") {
-      downloadCSVTemplate(batches, searchTerm)
-    } else {
-      downloadExcelTemplate(batches, searchTerm)
+  const [isExporting, setIsExporting] = useState(false)
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("flat")
+
+  // Handle export - fetches ALL batches from API before exporting
+  const handleExport = async (format: "csv" | "excel") => {
+    setIsExporting(true)
+    try {
+      await fetchAllAndExport(format)
+      toast({ title: "Export complete", description: "All batches exported successfully." })
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message || "Could not export batches.", variant: "destructive" })
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -466,23 +467,45 @@ export function BatchTable({
           </div>
           
           <div className="flex gap-2 w-full sm:w-auto">
+            {/* View toggle: grouped vs flat */}
+            <div className="flex border rounded-md overflow-hidden">
+              <Button
+                variant={viewMode === "flat" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                onClick={() => setViewMode("flat")}
+                title="Show all batches"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "grouped" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                onClick={() => setViewMode("grouped")}
+                title="Group by product"
+              >
+                <Layers className="h-4 w-4" />
+              </Button>
+            </div>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export
+                <Button variant="outline" size="sm" disabled={isExporting}>
+                  {isExporting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                  {isExporting ? "Exporting..." : "Export"}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem onClick={() => handleExport("csv")}>
-                  Export as CSV
+                  Export All as CSV
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleExport("excel")}>
-                  Export as Excel
+                  Export All as Excel
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            
+
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -492,159 +515,239 @@ export function BatchTable({
           </div>
         </div>
 
-        {/* Batches Table - grouped by product; parent row shows no batch
-            info (the product itself holds no stock when it has sizes), click
-            to expand and see each size with its batches. */}
         <div className="rounded-md border bg-white">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10"></TableHead>
-                <TableHead className="w-14 text-center font-semibold">S/No.</TableHead>
-                <TableHead className="font-semibold">Product</TableHead>
-                <TableHead className="font-semibold text-center">Sizes</TableHead>
-                <TableHead className="font-semibold text-center">Batches</TableHead>
-                <TableHead className="font-semibold">Total Remaining / Received</TableHead>
-                <TableHead className="font-semibold">Earliest Expiry</TableHead>
-                <TableHead className="text-right font-semibold">Actions</TableHead>
+                {viewMode === "flat" ? (
+                  <>
+                    <TableHead className="w-14 text-center font-semibold">S/No.</TableHead>
+                    <TableHead className="font-semibold">Product</TableHead>
+                    <TableHead className="font-semibold">Size</TableHead>
+                    <TableHead className="font-semibold">Batch Number</TableHead>
+                    <TableHead className="font-semibold">Lot Number</TableHead>
+                    <TableHead className="font-semibold">Remaining / Received</TableHead>
+                    <TableHead className="font-semibold text-right">Qty Sold</TableHead>
+                    <TableHead className="font-semibold">Manufacture</TableHead>
+                    <TableHead className="font-semibold">Expiry</TableHead>
+                    <TableHead className="font-semibold">Supplier</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="text-right font-semibold">Actions</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead className="w-14 text-center font-semibold">S/No.</TableHead>
+                    <TableHead className="font-semibold">Product</TableHead>
+                    <TableHead className="font-semibold text-center">Sizes</TableHead>
+                    <TableHead className="font-semibold text-center">Batches</TableHead>
+                    <TableHead className="font-semibold">Total Remaining / Received</TableHead>
+                    <TableHead className="font-semibold">Earliest Expiry</TableHead>
+                    <TableHead className="text-right font-semibold">Actions</TableHead>
+                  </>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {productGroups.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
-                    <div className="text-gray-500">
-                      <p className="font-semibold">No batches found</p>
-                      <p className="text-sm">Try adjusting your search or filter criteria</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
+              {viewMode === "flat" ? (
+                filteredAndSortedBatches.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="h-24 text-center">
+                      <div className="text-gray-500">
+                        <p className="font-semibold">No batches found</p>
+                        <p className="text-sm">Try adjusting your search or filter criteria</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredAndSortedBatches.map((batch, index) => (
+                    <TableRow key={batch.id} className="hover:bg-gray-50">
+                      <TableCell className="text-center text-gray-700">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
+                      <TableCell className="font-medium">{batch.product?.name || "-"}</TableCell>
+                      <TableCell>{batch.variant?.name || "-"}</TableCell>
+                      <TableCell className="font-medium">{batch.batch_number}</TableCell>
+                      <TableCell>{batch.lot_number || "-"}</TableCell>
+                      <TableCell>
+                        <RemainingCell available={batch.quantity_available} received={batch.quantity_received} />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{Number(batch.quantity_sold || 0).toLocaleString()}</TableCell>
+                      <TableCell>{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "-"}</TableCell>
+                      <TableCell>
+                        <ExpiryCell date={batch.expiry_date} />
+                      </TableCell>
+                      <TableCell>{getSupplierName(batch.supplier)}</TableCell>
+                      <TableCell>
+                        <Badge className={
+                          batch.status === "active" ? "bg-green-100 text-green-800" :
+                          batch.status === "expired" ? "bg-red-100 text-red-800" :
+                          batch.status === "sold_out" ? "bg-gray-100 text-gray-800" :
+                          batch.status === "recalled" ? "bg-orange-100 text-orange-800" :
+                          batch.status === "damaged" ? "bg-yellow-100 text-yellow-800" :
+                          "bg-green-100 text-green-800"
+                        }>
+                          {(batch.status || "active").replace("_", " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setSelectedBatch({ productId: batch.product_id, batchId: batch.id })}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/inventory/products/${batch.product_id}`)}>
+                              <Package className="mr-2 h-4 w-4" />
+                              View Product
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )
               ) : (
-                productGroups.map((group, groupIndex) => {
-                  const isExpanded = expandedProducts.has(group.productId)
-                  const sizeCount = group.variants.filter(v => v.variantId !== null).length
-                  return (
-                    <Fragment key={group.productId}>
-                      <TableRow
-                        className="cursor-pointer hover:bg-gray-50"
-                        onClick={() => toggleProduct(group.productId)}
-                      >
-                        <TableCell className="text-center">
-                          {isExpanded
-                            ? <ChevronDown className="h-4 w-4 text-gray-500 inline" />
-                            : <ChevronRightIcon className="h-4 w-4 text-gray-500 inline" />}
-                        </TableCell>
-                        <TableCell className="text-center text-gray-700">{(currentPage - 1) * itemsPerPage + groupIndex + 1}</TableCell>
-                        <TableCell className="font-medium">{group.productName}</TableCell>
-                        <TableCell className="text-center">
-                          {group.hasVariants ? (
-                            <Badge className="bg-blue-100 text-blue-800">{sizeCount}</Badge>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge className="bg-indigo-100 text-indigo-800">{group.batchCount}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <RemainingCell available={group.totalAvailable} received={group.totalReceived} />
-                        </TableCell>
-                        <TableCell>
-                          <ExpiryCell date={group.earliestExpiry ?? undefined} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => { e.stopPropagation(); router.push(`/inventory/products/${group.productId}`) }}
-                          >
-                            <Eye className="h-4 w-4 mr-1" /> Product
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-
-                      {isExpanded && (
-                        <TableRow className="bg-gray-50/50 hover:bg-gray-50/50 border-0">
-                          <TableCell colSpan={8} className="p-0">
-                            <div className="p-4 space-y-4">
-                              {group.variants.map((v) => (
-                                <div key={v.variantId ?? "no-variant"} className="bg-white border rounded-md overflow-hidden">
-                                  {v.variantId !== null && (
-                                    <div className="px-4 py-2 bg-blue-50 border-b flex items-center gap-2">
-                                      <Package className="h-4 w-4 text-blue-700" />
-                                      <span className="font-semibold text-sm text-blue-900">Size: {v.variantName}</span>
-                                      <Badge className="bg-blue-100 text-blue-800 ml-auto">{v.batches.length} {v.batches.length === 1 ? "batch" : "batches"}</Badge>
-                                    </div>
-                                  )}
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                      <thead className="bg-gray-50 text-gray-600 text-xs">
-                                        <tr>
-                                          <th className="px-3 py-2 text-left font-medium">S/No</th>
-                                          <th className="px-3 py-2 text-left font-medium">Batch Number</th>
-                                          <th className="px-3 py-2 text-left font-medium">Lot Number</th>
-                                          <th className="px-3 py-2 text-left font-medium">Remaining / Received</th>
-                                          <th className="px-3 py-2 text-right font-medium">Qty Sold</th>
-                                          <th className="px-3 py-2 text-left font-medium">Manufacture</th>
-                                          <th className="px-3 py-2 text-left font-medium">Expiry</th>
-                                          <th className="px-3 py-2 text-left font-medium">Supplier</th>
-                                          <th className="px-3 py-2 text-right font-medium">Actions</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {v.batches.map((batch, bi) => (
-                                          <tr key={batch.id} className="border-t hover:bg-gray-50">
-                                            <td className="px-3 py-2">{bi + 1}</td>
-                                            <td className="px-3 py-2 font-medium">{batch.batch_number}</td>
-                                            <td className="px-3 py-2">{batch.lot_number || "N/A"}</td>
-                                            <td className="px-3 py-2">
-                                              <RemainingCell available={batch.quantity_available} received={batch.quantity_received} />
-                                            </td>
-                                            <td className="px-3 py-2 text-right tabular-nums">{Number(batch.quantity_sold || 0).toLocaleString()}</td>
-                                            <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "N/A"}</td>
-                                            <td className="px-3 py-2">
-                                              <ExpiryCell date={batch.expiry_date} />
-                                            </td>
-                                            <td className="px-3 py-2">
-                                              {typeof batch.supplier === 'string'
-                                                ? batch.supplier
-                                                : (batch.supplier && typeof batch.supplier === 'object' && 'name' in batch.supplier
-                                                  ? batch.supplier.name
-                                                  : "N/A")}
-                                            </td>
-                                            <td className="px-3 py-2 text-right">
-                                              <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                  <Button variant="ghost" className="h-8 w-8 p-0">
-                                                    <span className="sr-only">Open menu</span>
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                  </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                  <DropdownMenuItem onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setSelectedBatch({ productId: batch.product_id, batchId: batch.id })
-                                                  }}>
-                                                    <Eye className="mr-2 h-4 w-4" />
-                                                    View Details
-                                                  </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                              </DropdownMenu>
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                productGroups.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center">
+                      <div className="text-gray-500">
+                        <p className="font-semibold">No batches found</p>
+                        <p className="text-sm">Try adjusting your search or filter criteria</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  productGroups.map((group, groupIndex) => {
+                    const isExpanded = expandedProducts.has(group.productId)
+                    const sizeCount = group.variants.filter(v => v.variantId !== null).length
+                    return (
+                      <Fragment key={group.productId}>
+                        <TableRow
+                          className="cursor-pointer hover:bg-gray-50"
+                          onClick={() => toggleProduct(group.productId)}
+                        >
+                          <TableCell className="text-center">
+                            {isExpanded
+                              ? <ChevronDown className="h-4 w-4 text-gray-500 inline" />
+                              : <ChevronRightIcon className="h-4 w-4 text-gray-500 inline" />}
+                          </TableCell>
+                          <TableCell className="text-center text-gray-700">{(currentPage - 1) * itemsPerPage + groupIndex + 1}</TableCell>
+                          <TableCell className="font-medium">{group.productName}</TableCell>
+                          <TableCell className="text-center">
+                            {group.hasVariants ? (
+                              <Badge className="bg-blue-100 text-blue-800">{sizeCount}</Badge>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-indigo-100 text-indigo-800">{group.batchCount}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <RemainingCell available={group.totalAvailable} received={group.totalReceived} />
+                          </TableCell>
+                          <TableCell>
+                            <ExpiryCell date={group.earliestExpiry ?? undefined} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); router.push(`/inventory/products/${group.productId}`) }}
+                            >
+                              <Eye className="h-4 w-4 mr-1" /> Product
+                            </Button>
                           </TableCell>
                         </TableRow>
-                      )}
-                    </Fragment>
-                  )
-                })
+
+                        {isExpanded && (
+                          <TableRow className="bg-gray-50/50 hover:bg-gray-50/50 border-0">
+                            <TableCell colSpan={8} className="p-0">
+                              <div className="p-4 space-y-4">
+                                {group.variants.map((v) => (
+                                  <div key={v.variantId ?? "no-variant"} className="bg-white border rounded-md overflow-hidden">
+                                    {v.variantId !== null && (
+                                      <div className="px-4 py-2 bg-blue-50 border-b flex items-center gap-2">
+                                        <Package className="h-4 w-4 text-blue-700" />
+                                        <span className="font-semibold text-sm text-blue-900">Size: {v.variantName}</span>
+                                        <Badge className="bg-blue-100 text-blue-800 ml-auto">{v.batches.length} {v.batches.length === 1 ? "batch" : "batches"}</Badge>
+                                      </div>
+                                    )}
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 text-gray-600 text-xs">
+                                          <tr>
+                                            <th className="px-3 py-2 text-left font-medium">S/No</th>
+                                            <th className="px-3 py-2 text-left font-medium">Batch Number</th>
+                                            <th className="px-3 py-2 text-left font-medium">Lot Number</th>
+                                            <th className="px-3 py-2 text-left font-medium">Remaining / Received</th>
+                                            <th className="px-3 py-2 text-right font-medium">Qty Sold</th>
+                                            <th className="px-3 py-2 text-left font-medium">Manufacture</th>
+                                            <th className="px-3 py-2 text-left font-medium">Expiry</th>
+                                            <th className="px-3 py-2 text-left font-medium">Supplier</th>
+                                            <th className="px-3 py-2 text-right font-medium">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {v.batches.map((batch, bi) => (
+                                            <tr key={batch.id} className="border-t hover:bg-gray-50">
+                                              <td className="px-3 py-2">{bi + 1}</td>
+                                              <td className="px-3 py-2 font-medium">{batch.batch_number}</td>
+                                              <td className="px-3 py-2">{batch.lot_number || "N/A"}</td>
+                                              <td className="px-3 py-2">
+                                                <RemainingCell available={batch.quantity_available} received={batch.quantity_received} />
+                                              </td>
+                                              <td className="px-3 py-2 text-right tabular-nums">{Number(batch.quantity_sold || 0).toLocaleString()}</td>
+                                              <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "N/A"}</td>
+                                              <td className="px-3 py-2">
+                                                <ExpiryCell date={batch.expiry_date} />
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                {typeof batch.supplier === 'string'
+                                                  ? batch.supplier
+                                                  : (batch.supplier && typeof batch.supplier === 'object' && 'name' in batch.supplier
+                                                    ? batch.supplier.name
+                                                    : "N/A")}
+                                              </td>
+                                              <td className="px-3 py-2 text-right">
+                                                <DropdownMenu>
+                                                  <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                      <span className="sr-only">Open menu</span>
+                                                      <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                  </DropdownMenuTrigger>
+                                                  <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      setSelectedBatch({ productId: batch.product_id, batchId: batch.id })
+                                                    }}>
+                                                      <Eye className="mr-2 h-4 w-4" />
+                                                      View Details
+                                                    </DropdownMenuItem>
+                                                  </DropdownMenuContent>
+                                                </DropdownMenu>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    )
+                  })
+                )
               )}
             </TableBody>
           </Table>

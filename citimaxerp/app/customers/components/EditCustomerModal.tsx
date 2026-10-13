@@ -1465,9 +1465,9 @@ export function EditCustomerModal({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Credit Period (days) on PD Cheques (max 60)</Label>
+                    <Label>Credit Period (days) on PD Cheques</Label>
                     <div className="flex items-center gap-6">
-                      {["30", "60"].map((days) => (
+                      {["60", "90"].map((days) => (
                         <label key={days} className="flex items-center gap-2 text-sm cursor-pointer">
                           <input
                             type="checkbox"
@@ -1478,6 +1478,18 @@ export function EditCustomerModal({
                           {days}
                         </label>
                       ))}
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-muted-foreground">Other:</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          className="w-20 h-7 text-sm"
+                          value={!["60", "90", ""].includes(pdChequeDays) ? pdChequeDays : ""}
+                          onChange={(e) => setPdChequeDays(e.target.value)}
+                          placeholder="e.g. 45"
+                          disabled={isSubmitting || isLoadingAccount}
+                        />
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       <span className="font-semibold">Late Payment:</span> Any payment made beyond the agreed{" "}

@@ -1348,7 +1348,7 @@ export function CreateCustomerModal({
                   <div className="space-y-2">
                     <Label>3.) Credit Period (days)</Label>
                     <div className="flex items-center gap-6">
-                      {(["30", "45"] as const).map((days) => (
+                      {(["30", "45", "90"] as const).map((days) => (
                         <label key={days} className="flex items-center gap-2 text-sm cursor-pointer">
                           {days}
                           <input
@@ -1359,6 +1359,18 @@ export function CreateCustomerModal({
                           />
                         </label>
                       ))}
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-muted-foreground">Other:</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          className="w-20 h-7 text-sm"
+                          value={!["30", "45", "90", ""].includes(creditDays) ? creditDays : ""}
+                          onChange={(e) => setCreditDays(e.target.value)}
+                          placeholder="e.g. 60"
+                          disabled={isSubmitting || authLoading}
+                        />
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Used to auto-calculate invoice due dates for this customer.
@@ -1368,7 +1380,7 @@ export function CreateCustomerModal({
                   <div className="space-y-2">
                     <Label>4.) Credit Period (days) on PD Cheques</Label>
                     <div className="flex items-center gap-6">
-                      {(["30", "60"] as const).map((days) => (
+                      {(["60", "90"] as const).map((days) => (
                         <label key={days} className="flex items-center gap-2 text-sm cursor-pointer">
                           {days}
                           <input
@@ -1379,9 +1391,21 @@ export function CreateCustomerModal({
                           />
                         </label>
                       ))}
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-muted-foreground">Other:</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          className="w-20 h-7 text-sm"
+                          value={!["60", "90", ""].includes(pdChequeDays) ? pdChequeDays : ""}
+                          onChange={(e) => setPdChequeDays(e.target.value)}
+                          placeholder="e.g. 45"
+                          disabled={isSubmitting || authLoading}
+                        />
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Agreed PD-cheque period cannot exceed 60 days.
+                      Agreed PD-cheque period cannot exceed 90 days.
                     </p>
                   </div>
 

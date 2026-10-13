@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, ShoppingCart, Trash2, X, Edit, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
@@ -79,7 +78,6 @@ interface EditOrderModalProps {
 export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: EditOrderModalProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState("existing")
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
@@ -90,11 +88,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const [productSearchQuery, setProductSearchQuery] = useState("")
   const [openProductDropdown, setOpenProductDropdown] = useState(false)
 
-  // New customer form state
-  const [newCustomerName, setNewCustomerName] = useState("")
-  const [newCustomerEmail, setNewCustomerEmail] = useState("")
-  const [newCustomerPhone, setNewCustomerPhone] = useState("")
-  const [newCustomerAddress, setNewCustomerAddress] = useState("")
 
   // Order specific fields
   const [trackingNumber, setTrackingNumber] = useState("")
@@ -496,27 +489,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
     }
   }
 
-  const handleCreateNewCustomer = async () => {
-    if (!newCustomerName) {
-      toast.error("Please enter customer name")
-      return
-    }
-    try {
-      const newCustomer = await apiCall<Customer>("/customers", "POST", {
-        name: newCustomerName,
-        email: newCustomerEmail,
-        phone: newCustomerPhone,
-        address: newCustomerAddress,
-        company_id: null, // Set to null if not needed
-      })
-      setCustomers((prev) => [newCustomer, ...prev])
-      setSelectedCustomer(newCustomer)
-      setActiveTab("existing")
-      toast.success("Customer created successfully!")
-    } catch (error) {
-      toast.error("Failed to create customer")
-    }
-  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -535,13 +507,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
           {/* Customer Selection */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Customer Information</h3>
-            <Tabs defaultValue="existing" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="existing">Existing Customer</TabsTrigger>
-                <TabsTrigger value="new">New Customer</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="existing" className="space-y-4 pt-4">
+            <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label htmlFor="customer-search">Search Customers</Label>
                   <div className="space-y-1">
@@ -600,65 +566,13 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setActiveTab("new")
-                      setSearchQuery("")
-                    }}
+                    onClick={() => router.push('/customers')}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Create New Customer
                   </Button>
                 </div>
-              </TabsContent>
-
-              <TabsContent value="new" className="space-y-4 pt-4">
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                      id="name"
-                      placeholder="Customer name"
-                      value={newCustomerName}
-                      onChange={(e) => setNewCustomerName(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="customer@example.com"
-                      value={newCustomerEmail}
-                      onChange={(e) => setNewCustomerEmail(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      placeholder="+254 712 345 678"
-                      value={newCustomerPhone}
-                      onChange={(e) => setNewCustomerPhone(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                      id="address"
-                      placeholder="Customer address"
-                      value={newCustomerAddress}
-                      onChange={(e) => setNewCustomerAddress(e.target.value)}
-                    />
-                  </div>
-                  <Button className="mt-2 w-full" onClick={handleCreateNewCustomer}>
-                    Create Customer
-                  </Button>
-                </div>
-              </TabsContent>
-            </Tabs>
+            </div>
           </div>
 
           {/* Order Items */}

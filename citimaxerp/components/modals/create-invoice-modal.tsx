@@ -2,6 +2,7 @@
 
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +19,7 @@ import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { createInvoice, CreateInvoiceRequest, fetchSalesReps, SalesRep } from "@/lib/invoices"
-import { getCustomers, createCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
+import { getCustomers, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 import { getProducts } from "@/lib/products"
 import { useToast } from "@/hooks/use-toast"
@@ -100,6 +101,7 @@ interface CreateInvoiceModalProps {
 }
 
 export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceModalProps) {
+  const router = useRouter()
   const [customers, setCustomers] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -109,10 +111,6 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
   const [showProductSearch, setShowProductSearch] = useState<number | null>(null)
   const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [showCustomerSearch, setShowCustomerSearch] = useState(false)
-  const [showCreateCustomer, setShowCreateCustomer] = useState(false)
-  const [newCustomerName, setNewCustomerName] = useState("")
-  const [newCustomerEmail, setNewCustomerEmail] = useState("")
-  const [newCustomerPhone, setNewCustomerPhone] = useState("")
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
   const [salesRepId, setSalesRepId] = useState<string>("")
   const [paymentOption, setPaymentOption] = useState<'instant' | 'credit'>('instant')
@@ -496,70 +494,6 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
   }
 
   // Create new customer
-  const handleCreateCustomer = async () => {
-    if (!newCustomerName.trim() || !companyId) {
-      toast({
-        title: "Error",
-        description: "Customer name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      // Prepare customer data without company_id - it will be handled by the backend
-      const customerData = {
-        name: newCustomerName.trim(),
-        email: newCustomerEmail.trim() || null,
-        phone: newCustomerPhone.trim() || null,
-        address: null,
-        city: null,
-        state: null,
-        country: null,
-        postal_code: null,
-        customer_type: 'individual',
-        company: null,
-        preferred_communication_channel: null,
-        last_contact_date: null,
-        // These fields are no longer collected via form, assuming backend handles defaults or they are not required
-        first_name: newCustomerName.split(" ")[0] || "", // Derive first_name from name
-        last_name: newCustomerName.split(" ").slice(1).join(" ") || "", // Derive last_name from name
-        tags: [],
-        notes: null,
-        // company_id is intentionally omitted - will be handled by the backend
-      };
-
-      const newCustomer = await createCustomer(customerData as any)
-
-      // Refresh customers list
-      await loadCustomers()
-      
-      // Select the new customer
-      form.setValue('customer_id', newCustomer.id)
-      
-      // Reset create customer form
-      setNewCustomerName("")
-      setNewCustomerEmail("")
-      setNewCustomerPhone("")
-      setShowCreateCustomer(false)
-      setShowCustomerSearch(false)
-      setCustomerSearchTerm("")
-
-      toast({
-        title: "Success",
-        description: "Customer created successfully",
-      })
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create customer",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   return (
     <Sheet open={open} onOpenChange={(open) => !open && onClose()}>
@@ -614,7 +548,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
                               className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded text-blue-600 font-medium"
                               onClick={() => {
                                 setShowCustomerSearch(false)
-                                setShowCreateCustomer(true)
+                                router.push('/customers')
                               }}
                             >
                               <Plus className="h-4 w-4" />
@@ -648,70 +582,6 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
                       </PopoverContent>
                     </Popover>
 
-                    {/* Create Customer Modal */}
-                    {showCreateCustomer && (
-                      <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-                        <div className="p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium">Create New Customer</h4>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setShowCreateCustomer(false)
-                                setNewCustomerName("")
-                                setNewCustomerEmail("")
-                                setNewCustomerPhone("")
-                              }}
-                            >
-                              ✕
-                            </Button>
-                          </div>
-                          <Input
-                            placeholder="Customer name *"
-                            value={newCustomerName}
-                            onChange={(e) => setNewCustomerName(e.target.value)}
-                          />
-                          <Input
-                            placeholder="Email (optional)"
-                            type="email"
-                            value={newCustomerEmail}
-                            onChange={(e) => setNewCustomerEmail(e.target.value)}
-                          />
-                          <Input
-                            placeholder="Phone (optional)"
-                            value={newCustomerPhone}
-                            onChange={(e) => setNewCustomerPhone(e.target.value)}
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setShowCreateCustomer(false)
-                                setNewCustomerName("")
-                                setNewCustomerEmail("")
-                                setNewCustomerPhone("")
-                              }}
-                              className="flex-1"
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={handleCreateCustomer}
-                              disabled={!newCustomerName.trim() || isLoading}
-                              className="flex-1"
-                            >
-                              {isLoading ? "Creating..." : "Create"}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   {form.formState.errors.customer_id && (
                     <p className="text-sm text-red-600">{form.formState.errors.customer_id.message}</p>

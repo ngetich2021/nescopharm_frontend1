@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -24,7 +23,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts } from "@/lib/products"
-import { getCustomers, Customer as LibCustomer, createCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
+import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { formatPackagingForDisplay } from "@/lib/packaging-utils"
 import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
@@ -62,7 +61,6 @@ export function CreateOrderModal({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState("existing")
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<ProductWithVariants[]>([])
   const [searchResults, setSearchResults] = useState<ProductWithVariants[]>([])
@@ -78,11 +76,6 @@ export function CreateOrderModal({
   const [productSearchQuery, setProductSearchQuery] = useState("")
   const [openProductDropdown, setOpenProductDropdown] = useState(false)
 
-  // New customer form state
-  const [newCustomerName, setNewCustomerName] = useState("")
-  const [newCustomerEmail, setNewCustomerEmail] = useState("")
-  const [newCustomerPhone, setNewCustomerPhone] = useState("")
-  const [newCustomerAddress, setNewCustomerAddress] = useState("")
 
   // Order specific fields
   const [trackingNumber, setTrackingNumber] = useState("")
@@ -336,13 +329,8 @@ export function CreateOrderModal({
 
   const handleCreateOrder = async () => {
     // Validation
-    if (!selectedCustomer && activeTab === "existing") {
+    if (!selectedCustomer) {
       toast.error("Please select a customer")
-      return
-    }
-
-    if (activeTab === "new" && !newCustomerName) {
-      toast.error("Please enter customer name")
       return
     }
 
@@ -369,20 +357,7 @@ export function CreateOrderModal({
     setLoading(true)
 
     try {
-      let customerId = selectedCustomer?.id
-
-      // Create new customer if needed
-      if (activeTab === "new") {
-        // Create customer via API
-        const newCustomer = await apiCall<Customer>("/customers", "POST", {
-          name: newCustomerName,
-          email: newCustomerEmail,
-          phone: newCustomerPhone,
-          address: newCustomerAddress,
-          company_id: null, // Set to null if not needed
-        })
-        customerId = newCustomer.id
-      }
+      const customerId = selectedCustomer?.id
 
       // Use the first company as store_id (adjust if you have a separate store selector)
       const storeId = companies.length > 0 ? companies[0].id : null
@@ -470,39 +445,6 @@ export function CreateOrderModal({
     }
   }
 
-  const handleCreateNewCustomer = async () => {
-    if (!newCustomerName) {
-      toast.error("Please enter customer name")
-      return
-    }
-    try {
-      // Use the updated createCustomer function instead of direct API call
-      const customerData = {
-        name: newCustomerName,
-        email: newCustomerEmail || null,
-        phone: newCustomerPhone || null,
-        address: newCustomerAddress || null,
-        city: null,
-        state: null,
-        country: null,
-        postal_code: null,
-        company: null,
-        notes: null,
-        tags: [],
-        customer_type: null,
-        preferred_communication_channel: null,
-        last_contact_date: null,
-      };
-
-      const newCustomer = await createCustomer(customerData as any);
-      setCustomers((prev) => [newCustomer, ...prev])
-      setSelectedCustomer(newCustomer)
-      setActiveTab("existing")
-      toast.success("Customer created successfully!")
-    } catch (error) {
-      toast.error("Failed to create customer")
-    }
-  }
 
   const resetForm = () => {
     setSelectedCustomer(null)
@@ -513,11 +455,6 @@ export function CreateOrderModal({
     // setTaxRate(16)
     setSearchQuery("")
     setProductSearchQuery("")
-    setActiveTab("existing")
-    setNewCustomerName("")
-    setNewCustomerEmail("")
-    setNewCustomerPhone("")
-    setNewCustomerAddress("")
     setTrackingNumber("")
     setStatus("Pending")
     setPaymentStatus("Unpaid")
@@ -551,13 +488,7 @@ export function CreateOrderModal({
           {/* Customer Selection */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Customer Information</h3>
-            <Tabs defaultValue="existing" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="existing">Existing Customer</TabsTrigger>
-                <TabsTrigger value="new">New Customer</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="existing" className="space-y-4 pt-4">
+            <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label htmlFor="customer-search">Search Customers</Label>
                   <div className="space-y-1">
@@ -623,65 +554,13 @@ export function CreateOrderModal({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setActiveTab("new")
-                      setSearchQuery("")
-                    }}
+                    onClick={() => router.push('/customers')}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Create New Customer
                   </Button>
                 </div>
-              </TabsContent>
-
-              <TabsContent value="new" className="space-y-4 pt-4">
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                      id="name"
-                      placeholder="Customer name"
-                      value={newCustomerName}
-                      onChange={(e) => setNewCustomerName(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="customer@example.com"
-                      value={newCustomerEmail}
-                      onChange={(e) => setNewCustomerEmail(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      placeholder="+254 712 345 678"
-                      value={newCustomerPhone}
-                      onChange={(e) => setNewCustomerPhone(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                      id="address"
-                      placeholder="Customer address"
-                      value={newCustomerAddress}
-                      onChange={(e) => setNewCustomerAddress(e.target.value)}
-                    />
-                  </div>
-                  <Button className="mt-2 w-full" onClick={handleCreateNewCustomer}>
-                    Create Customer
-                  </Button>
-                </div>
-              </TabsContent>
-            </Tabs>
+            </div>
           </div>
 
           {/* Order Items */}

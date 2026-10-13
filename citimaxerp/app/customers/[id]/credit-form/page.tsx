@@ -678,7 +678,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
               <FormLine label="2.) Credit Limit (KES)" value={formatMoney(account?.credit_required)} wide />
               <div className="flex flex-wrap items-center gap-x-4 text-sm py-1">
                 <span className="font-bold" style={{ color: NAVY }}>3.) Credit Period (days):</span>
-                {["30", "45"].map((opt) => (
+                {["30", "45", "90"].map((opt) => (
                   <span key={opt} className="font-bold" style={{ color: NAVY }}>
                     {opt}
                     <span className="inline-block w-3.5 h-3.5 border align-middle ml-1 text-center leading-none text-[10px]" style={{ borderColor: NAVY }}>
@@ -686,13 +686,13 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
                     </span>
                   </span>
                 ))}
-                {account?.credit_period_required && !["30", "45"].includes(String(account.credit_period_required)) && (
-                  <span className="font-bold" style={{ color: VALUE_COLOR }}>(as captured: {account.credit_period_required})</span>
+                {account?.credit_period_required && !["30", "45", "90"].includes(String(account.credit_period_required)) && (
+                  <span className="font-bold" style={{ color: VALUE_COLOR }}>Other: {account.credit_period_required}</span>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-x-4 text-sm py-1">
-                <span className="font-bold" style={{ color: NAVY }}>4.) Credit Period (days) on PD Cheques (max 60):</span>
-                {[30, 60].map((opt) => (
+                <span className="font-bold" style={{ color: NAVY }}>4.) Credit Period (days) on PD Cheques:</span>
+                {[60, 90].map((opt) => (
                   <span key={opt} className="font-bold" style={{ color: NAVY }}>
                     {opt}
                     <span className="inline-block w-3.5 h-3.5 border align-middle ml-1 text-center leading-none text-[10px]" style={{ borderColor: NAVY }}>
@@ -700,8 +700,8 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
                     </span>
                   </span>
                 ))}
-                {account?.credit_period_pd_cheque_days != null && ![30, 60].includes(Number(account.credit_period_pd_cheque_days)) && (
-                  <span className="font-bold" style={{ color: VALUE_COLOR }}>(as captured: {account.credit_period_pd_cheque_days})</span>
+                {account?.credit_period_pd_cheque_days != null && ![60, 90].includes(Number(account.credit_period_pd_cheque_days)) && (
+                  <span className="font-bold" style={{ color: VALUE_COLOR }}>Other: {account.credit_period_pd_cheque_days}</span>
                 )}
               </div>
             </div>
