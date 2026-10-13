@@ -83,9 +83,11 @@ const productCodes = (product: Product) => priceOptionsFor(product).map(o => o.c
 const costOf = (product: Product) => parseFloat(String(product.unit_cost ?? "0")) || 0
 
 // Same layout the products import reads back: one row per item, then one row per size (164.1, 164.2 ...).
+// "Ref" is the system's own id, kept in a hidden column so a row still finds its product after the
+// description is edited in Excel (rename), and two rows given the same description merge into one product.
 const EXPORT_HEADERS = [
   "S/No.", "Item No.", "Row Type", "Size", "Item Description", "Unit of Measure", "Cost Price",
-  "Tax Status", "Reorder Level",
+  "Tax Status", "Reorder Level", "Ref",
 ]
 
 const taxStatus = (product: Product) => {
@@ -108,12 +110,12 @@ function exportRows(product: Product): (string | number)[][] {
   const rows: (string | number)[][] = [[
     itemNo, "Item", sizes.length ? `${sizes.length} sizes` : "", p.name,
     p.unit_of_measurement ?? "", costOf(product), taxStatus(product),
-    p.low_stock_threshold ?? "",
+    p.low_stock_threshold ?? "", p.id,
   ]]
   sizes.forEach((v: any, i: number) => {
     rows.push([
       `${itemNo}.${i + 1}`, "Size", v.name ?? "", sizedName(p.name, v.name), "", Number(v.cost || 0),
-      "", "",
+      "", "", v.id ?? "",
     ])
   })
   return rows
@@ -146,7 +148,8 @@ function downloadCSVTemplate(products: Product[]) {
 
 function downloadExcelTemplate(products: Product[]) {
   const ws = XLSX.utils.aoa_to_sheet(exportSheet(products))
-  ws["!cols"] = EXPORT_HEADERS.map((h) => ({ wch: h === "Item Description" ? 55 : h === "S/No." ? 7 : Math.max(h.length + 2, 10) }))
+  ws["!cols"] = EXPORT_HEADERS.map((h) =>
+    h === "Ref" ? { wch: 38, hidden: true } : { wch: h === "Item Description" ? 55 : h === "S/No." ? 7 : Math.max(h.length + 2, 10) })
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, "Products")
   XLSX.writeFile(wb, exportFileName("xlsx"))

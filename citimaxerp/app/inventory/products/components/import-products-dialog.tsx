@@ -11,7 +11,7 @@ import { Loader2, Upload } from "lucide-react"
 import apiCall from "@/lib/api"
 
 interface ImportRow {
-  row: number
+  row: number | null
   item_no: string
   description: string
   status: string
@@ -22,8 +22,8 @@ interface ImportRow {
   after?: Snapshot | null
 }
 
-type Snapshot = { uom?: string | null; cost?: number | null; tax?: string | null; reorder?: number | null }
-type Field = keyof Snapshot
+type Snapshot = { name?: string | null; uom?: string | null; cost?: number | null; tax?: string | null; reorder?: number | null }
+type Field = Exclude<keyof Snapshot, "name">
 
 const money = (v: unknown) =>
   v === null || v === undefined ? "-" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -48,9 +48,12 @@ interface ImportResult {
   status: string
   message: string
   dry_run: boolean
-  summary: { rows: number; items_created: number; items_updated: number; sizes_created: number; sizes_updated: number; unchanged: number; errors: number }
+  summary: { rows: number; items_created: number; items_updated: number; sizes_created: number; sizes_updated: number; unchanged: number; errors: number; merged: number; deactivated: number }
   rows: ImportRow[]
 }
+
+const changeCount = (s: ImportResult["summary"]) =>
+  s.items_created + s.items_updated + s.sizes_created + s.sizes_updated + (s.merged ?? 0) + (s.deactivated ?? 0)
 
 const STATUS_STYLE: Record<string, string> = {
   created: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -59,6 +62,8 @@ const STATUS_STYLE: Record<string, string> = {
   "size updated": "bg-blue-50 text-blue-700 border-blue-200",
   unchanged: "bg-gray-50 text-gray-500 border-gray-200",
   error: "bg-red-50 text-red-700 border-red-200",
+  deactivated: "bg-orange-50 text-orange-700 border-orange-200",
+  merged: "bg-purple-50 text-purple-700 border-purple-200",
 }
 
 export function ImportProductsDialog({ onImported }: { onImported: () => void }) {
@@ -66,6 +71,7 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportResult | null>(null)
   const [busy, setBusy] = useState(false)
+  const [deactivateMissing, setDeactivateMissing] = useState(false)
   const { toast } = useToast()
 
   const run = async (dryRun: boolean) => {
@@ -75,6 +81,7 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
       const form = new FormData()
       form.append("file", file)
       form.append("dry_run", dryRun ? "1" : "0")
+      form.append("deactivate_missing", deactivateMissing ? "1" : "0")
       const result = await apiCall<ImportResult>("/products/import", "POST", form)
       if (dryRun) {
         setPreview(result)
@@ -82,7 +89,7 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
         const s = result.summary
         toast({
           title: "Products imported",
-          description: `${s.items_created} items created, ${s.items_updated} updated, ${s.sizes_created} sizes created, ${s.sizes_updated} sizes updated${s.errors ? `, ${s.errors} rows skipped` : ""}.`,
+          description: `${s.items_created} items created, ${s.items_updated} updated, ${s.sizes_created} sizes created, ${s.sizes_updated} sizes updated${s.deactivated ? `, ${s.deactivated} deactivated` : ""}${s.errors ? `, ${s.errors} rows skipped` : ""}.`,
         })
         setOpen(false)
         onImported()
@@ -116,7 +123,9 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
         <DialogHeader>
           <DialogTitle>Import Products</DialogTitle>
           <DialogDescription>
-            Upload a sheet in the same layout as <b>Export as Excel</b>. Items are matched by Item No. (leave it blank for a new item);
+            Export, edit in Excel, upload. Item No. is ignored. Each row keeps track of its product through a hidden column, so editing
+            a description renames that product. Give two rows the same description to merge them into one product - batches, stock,
+            sizes and price codes move to it and the duplicate is deactivated. Rows you add get a new item number automatically;
             sizes go on their own rows under the item (e.g. 164.1, Row Type "Size"). Blank cells leave a field unchanged. Stock
             is not imported - it changes only through receipts, stock adjustments and recounts.
           </DialogDescription>
@@ -136,6 +145,21 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
             Preview
           </Button>
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4"
+            checked={deactivateMissing}
+            onChange={(e) => {
+              setDeactivateMissing(e.target.checked)
+              setPreview(null)
+            }}
+          />
+          <span>
+            <b>Deactivate products not in this file</b> - use this when you deleted rows (e.g. duplicates) from the exported sheet.
+            They are switched to Inactive, not deleted, so their sales and batch history stay. Only use it with a full export of all products.
+          </span>
+        </label>
 
         {s && (
           <div className="space-y-3">
@@ -146,9 +170,11 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
               <Badge variant="outline" className={STATUS_STYLE.created}>{s.sizes_created} new sizes</Badge>
               <Badge variant="outline" className={STATUS_STYLE.updated}>{s.sizes_updated} sizes updated</Badge>
               <Badge variant="outline" className={STATUS_STYLE.unchanged}>{s.unchanged} unchanged</Badge>
+              {s.merged > 0 && <Badge variant="outline" className={STATUS_STYLE.merged}>{s.merged} duplicates merged</Badge>}
+              {s.deactivated > 0 && <Badge variant="outline" className={STATUS_STYLE.deactivated}>{s.deactivated} to deactivate</Badge>}
               {s.errors > 0 && <Badge variant="outline" className={STATUS_STYLE.error}>{s.errors} errors</Badge>}
             </div>
-            {s.items_created + s.items_updated + s.sizes_created + s.sizes_updated === 0 && (
+            {changeCount(s) === 0 && (
               <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Nothing to import - every row already matches what is in the system{s.errors ? " or has an error" : ""}. Edit the values in Excel, save, and preview again.
               </p>
@@ -172,13 +198,20 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {preview!.rows.map((r) => (
-                    <TableRow key={r.row} className={r.row_type === "size" ? "bg-gray-50/50" : undefined}>
-                      <TableCell className="text-gray-500">{r.row}</TableCell>
+                  {preview!.rows.map((r, i) => (
+                    <TableRow key={i} className={r.status === "deactivated" ? "bg-orange-50/40" : r.status === "merged" ? "bg-purple-50/40" : r.row_type === "size" ? "bg-gray-50/50" : undefined}>
+                      <TableCell className="text-gray-500">{r.row ?? "-"}</TableCell>
                       <TableCell className={r.row_type === "size" ? "pl-5 font-mono text-gray-600" : "font-mono font-medium"}>{r.item_no || "new"}</TableCell>
                       <TableCell className={r.row_type === "size" ? "pl-6 text-gray-700" : "font-medium"}>
-                        {r.description || "-"}
-                        {r.message && <p className={r.status === "error" ? "text-xs text-red-600" : "text-xs text-amber-600"}>{r.message}</p>}
+                        {r.before?.name && r.after?.name && r.before.name !== r.after.name && (
+                          <div className="text-xs font-normal text-gray-400 line-through">{r.before.name}</div>
+                        )}
+                        <span className={r.before?.name && r.after?.name && r.before.name !== r.after.name ? "rounded bg-amber-50 px-1 text-amber-800" : undefined}>
+                          {r.description || "-"}
+                        </span>
+                        {r.message && (
+                          <p className={r.status === "error" ? "text-xs text-red-600" : r.status === "merged" ? "text-xs text-purple-700" : "text-xs text-amber-600"}>{r.message}</p>
+                        )}
                       </TableCell>
                       <TableCell><CompareCell row={r} field="uom" /></TableCell>
                       <TableCell className="text-right tabular-nums"><CompareCell row={r} field="cost" /></TableCell>
@@ -197,7 +230,7 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
 
         <DialogFooter>
           <Button variant="outline" onClick={() => reset(false)}>Cancel</Button>
-          <Button onClick={() => run(false)} disabled={!preview || busy || preview.summary.rows === preview.summary.errors + preview.summary.unchanged}>
+          <Button onClick={() => run(false)} disabled={!preview || busy || changeCount(preview.summary) === 0}>
             {busy && preview ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {busy && preview ? "Importing..." : `Import${s?.errors ? " (skip errors)" : ""}`}
           </Button>

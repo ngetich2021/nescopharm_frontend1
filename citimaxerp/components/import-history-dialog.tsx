@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Download, History, Loader2 } from "lucide-re
 import apiCall from "@/lib/api"
 
 type Change = { field: string; from: unknown; to: unknown }
-type ChangedRow = { ref: string; item: string; size: string | null; action: "created" | "updated"; changes: Change[] }
+type ChangedRow = { ref: string; item: string; size: string | null; action: "created" | "updated" | "deactivated" | "merged"; changes: Change[] }
 type ImportLog = {
   id: string
   created_at: string
@@ -53,6 +53,8 @@ const SUMMARY_LABELS: Record<string, string> = {
   batches_created: "batches created",
   batches_updated: "batches updated",
   unchanged: "unchanged",
+  deactivated: "deactivated",
+  merged: "duplicates merged",
   errors: "skipped",
 }
 
@@ -181,7 +183,12 @@ export function ImportHistoryDialog({ kind }: { kind: "products" | "batches" }) 
                                       <td className="px-3 py-2 font-mono">{row.ref}</td>
                                       <td className="px-3 py-2">{row.item}{row.size ? <span className="text-gray-500"> ({row.size})</span> : null}</td>
                                       <td className="px-3 py-2">
-                                        <Badge variant="outline" className={row.action === "created" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}>
+                                        <Badge variant="outline" className={
+                                          row.action === "created" ? "bg-emerald-50 text-emerald-700"
+                                            : row.action === "deactivated" ? "bg-orange-50 text-orange-700"
+                                            : row.action === "merged" ? "bg-purple-50 text-purple-700"
+                                            : "bg-blue-50 text-blue-700"
+                                        }>
                                           {row.action}
                                         </Badge>
                                       </td>
@@ -189,7 +196,7 @@ export function ImportHistoryDialog({ kind }: { kind: "products" | "batches" }) 
                                         {row.changes.map((c, ci) => (
                                           <div key={ci}>
                                             <span className="text-gray-600">{label(c.field)}:</span>{" "}
-                                            {row.action === "updated" && <><span className="text-gray-400 line-through">{show(c.from)}</span>{" → "}</>}
+                                            {row.action !== "created" && c.from !== null && <><span className="text-gray-400 line-through">{show(c.from)}</span>{" → "}</>}
                                             <span className="font-medium">{show(c.to)}</span>
                                           </div>
                                         ))}
