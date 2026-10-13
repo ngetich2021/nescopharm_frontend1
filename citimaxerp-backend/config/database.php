@@ -55,7 +55,7 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => 'prefer',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
             'options' => [
                 // CRITICAL: Emulate prepared statements to work with Supabase PgBouncer
                 // PgBouncer in transaction mode deallocates prepared statements when returning

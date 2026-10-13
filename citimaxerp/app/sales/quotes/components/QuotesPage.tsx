@@ -248,6 +248,10 @@ export function QuotesPage() {
             setSelectedQuote(null)
           }}
           onRefresh={handleRefresh}
+          onSignedCopyUploaded={(quoteId: string) => {
+            handleViewQuote(quoteId)
+            fetchQuotesData()
+          }}
           onEdit={(quoteId: string) => {
             setViewModalOpen(false)
             handleEditQuote(quoteId)

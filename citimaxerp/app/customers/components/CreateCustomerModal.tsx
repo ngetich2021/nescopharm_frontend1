@@ -190,13 +190,20 @@ export function CreateCustomerModal({
       return false;
     }
 
-    if (customerType === "company" && !pinNumber.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "KRA PIN is required for company customers",
-        variant: "destructive",
-      });
-      return false;
+    const requiredIds: [string, string][] = [
+      [registrationNumber, "Registration/License Number"],
+      [ppbLicenseNumber, "PPB License No."],
+      [pinNumber, "KRA PIN"],
+    ];
+    for (const [value, label] of requiredIds) {
+      if (!value.trim()) {
+        toast({
+          title: "Validation Error",
+          description: `${label} is required`,
+          variant: "destructive",
+        });
+        return false;
+      }
     }
 
     // Optional: validate email format if provided
@@ -717,7 +724,7 @@ export function CreateCustomerModal({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="registrationNumber">Registration/License Number</Label>
+                  <Label htmlFor="registrationNumber">Registration/License Number *</Label>
                   <Input
                     id="registrationNumber"
                     value={registrationNumber}
@@ -728,7 +735,7 @@ export function CreateCustomerModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="ppbLicenseNumber">Pharmacy &amp; Poisons board (PPB) License No.</Label>
+                  <Label htmlFor="ppbLicenseNumber">Pharmacy &amp; Poisons board (PPB) License No. *</Label>
                   <Input
                     id="ppbLicenseNumber"
                     value={ppbLicenseNumber}
@@ -740,7 +747,7 @@ export function CreateCustomerModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pinNumber">KRA PIN{customerType === "company" ? " *" : ""}</Label>
+                <Label htmlFor="pinNumber">KRA PIN *</Label>
                 <Input
                   id="pinNumber"
                   value={pinNumber}

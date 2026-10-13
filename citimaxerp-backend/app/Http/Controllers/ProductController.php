@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Http\Traits\HandlesDatabaseErrors;
+use App\Models\ActivityLog;
 use App\Models\InventoryBatch;
 use App\Models\InventoryMovement;
 use App\Services\ProductPackagingService;
@@ -615,7 +616,6 @@ class ProductController extends Controller
     }
 
     private const PRODUCT_SHEET_HEADERS = [
-        'item_no' => ['itemno', 'itemnumber', 'no'],
         'row_type' => ['rowtype', 'type', 'linetype'],
         'size' => ['size', 'variant', 'variation', 'sizename'],
         'description' => ['itemdescription', 'description', 'name', 'itemname', 'productname'],
@@ -628,20 +628,23 @@ class ProductController extends Controller
         'track' => ['trackinventory', 'track'],
         'active' => ['active', 'isactive', 'status'],
         'brand' => ['brand'],
+        'ref' => ['ref'],
     ];
 
     /**
      * Import the products sheet that the products page exports. One row per item; an item with
-     * sizes is followed by one row per size (Item No. 164.1, 164.2 ... or Row Type "Size").
-     * Items are matched by Item No. (blank or unknown = new item), sizes by name under their item.
-     * A blank cell leaves that field unchanged. Stock is never imported - it moves only through
-     * receipts, stock adjustments, recounts and sales. dry_run=1 previews.
+     * sizes is followed by one row per size (Row Type "Size"). Item No. is never read. A row finds
+     * its product by the hidden Ref column the export writes (so an edited description renames it),
+     * else by Item Description; neither = new item. Rows that end with the same description merge
+     * those products into one: batches, sizes, stock and price-list codes move, the duplicate is
+     * deactivated. A blank cell leaves that field unchanged. Stock is never imported. dry_run=1 previews.
      */
     public function importProducts(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
             'dry_run' => 'nullable|boolean',
+            'deactivate_missing' => 'nullable|boolean',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors()], 400);
@@ -654,6 +657,7 @@ class ProductController extends Controller
         }
         $companyId = $user->company_id;
         $dryRun = $request->boolean('dry_run');
+        $deactivateMissing = $request->boolean('deactivate_missing');
         $storeId = DB::table('stores')->where('company_id', $companyId)->orderBy('created_at')->value('id');
 
         try {
@@ -668,7 +672,13 @@ class ProductController extends Controller
         $priceColumns = [];
         foreach ($rows[0] ?? [] as $index => $heading) {
             $normalized = preg_replace('/[^a-z0-9]/', '', strtolower((string) $heading));
-            if (preg_match('/^([a-z]{2,10})(code|price)$/', $normalized, $m) && !in_array($normalized, ['costprice', 'hscode'], true)) {
+            if (in_array($normalized, ['batchnumber', 'batchno'], true)) {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => 'This is a batches sheet. Import it from Inventory > Batch Tracking > Import - this screen takes the products sheet (Export on the Products page).',
+                ], 422);
+            }
+            if (preg_match('/^([a-z]{2,10})(code|price)$/', $normalized, $m) && !in_array($normalized, ['costprice', 'hscode', 'sellingprice', 'unitprice'], true)) {
                 $priceColumns[strtoupper($m[1])][$m[2]] = $index;
                 continue;
             }
@@ -678,18 +688,20 @@ class ProductController extends Controller
                 }
             }
         }
-        if (!isset($columns['description']) && !isset($columns['item_no'])) {
+        if (!isset($columns['description'])) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'The first row must have the column headings from the exported products sheet (at least "Item No." or "Item Description").',
+                'message' => 'The first row must have the column headings from the exported products sheet (at least "Item Description").',
             ], 422);
         }
 
         $number = fn ($v) => is_numeric($n = str_replace([',', ' '], '', preg_replace('/^(KES|KSH|KSHS)\.?/i', '', $v))) ? (float) $n : null;
         $yesNo = fn ($v) => $v === '' ? null : in_array(strtolower($v), ['yes', 'y', 'true', '1', 'active'], true);
 
-        $summary = ['rows' => 0, 'items_created' => 0, 'items_updated' => 0, 'sizes_created' => 0, 'sizes_updated' => 0, 'unchanged' => 0, 'errors' => 0];
+        $summary = ['rows' => 0, 'items_created' => 0, 'items_updated' => 0, 'sizes_created' => 0, 'sizes_updated' => 0, 'unchanged' => 0, 'errors' => 0, 'merged' => 0, 'deactivated' => 0];
         $results = [];
+        $changeLog = [];
+        $priceHistoryRecords = [];
         $current = null;
         // The database is remote (~250ms a round trip): look everything up once instead of per row,
         // let the preview simulate without writing, and give a real import more than PHP's 30s.
@@ -702,6 +714,7 @@ class ProductController extends Controller
         $sizeKey = fn ($name) => is_numeric($t = trim((string) $name)) ? (string) (float) $t : mb_strtolower($t);
         // What the preview shows side by side: the system's values before, and after applying the row.
         $itemSnapshot = fn (?Product $p) => $p ? [
+            'name' => $p->name,
             'uom' => $p->unit_of_measurement,
             'cost' => round((float) $p->unit_cost, 2),
             'tax' => $this->describeTaxStatus($p),
@@ -712,37 +725,186 @@ class ProductController extends Controller
             ->groupBy('product_id')
             ->map(fn ($group) => $group->keyBy(fn ($v) => $sizeKey($v->name)));
         $nextItemNumber = (int) Product::withTrashed()->where('company_id', $companyId)->max('item_number') + 1;
+        $nameKey = fn ($name) => mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $name)));
+        // Products sharing a name are taken in this order, one per row: the one holding stock first.
+        $existingByName = $products->groupBy(fn ($p) => $nameKey($p->name))
+            ->map(fn ($group) => $group->sortBy([fn ($a, $b) => (float) $b->stock_quantity <=> (float) $a->stock_quantity, fn ($a, $b) => $a->item_number <=> $b->item_number])->values());
+        $linkedIds = [];
+        $seenItemNos = [];
+        $seenVariantIds = [];
+        $parentsWithSizeRows = [];
+        $productsById = $products->keyBy('id');
+        $variantsById = $variants->flatten(1)->keyBy('id');
+        $isActive = fn ($m) => filter_var($m->getRawOriginal('is_active') ?? $m->is_active, FILTER_VALIDATE_BOOLEAN);
+
+        $cellOf = fn (array $row, string $key) => isset($columns[$key]) ? trim(preg_replace('/\s+/', ' ', (string) ($row[$columns[$key]] ?? ''))) : '';
+        $isBlankRow = fn (array $row) => implode('', array_map(fn ($c) => trim((string) $c), $row)) === '';
+        // Item No. is only the system's running number and is never read: sizes belong to the item row above them.
+        $isSizeRow = fn (array $row) => strtolower($cellOf($row, 'row_type')) === 'size'
+            || ($cellOf($row, 'size') !== '' && strtolower($cellOf($row, 'row_type')) !== 'item');
+
+        // Pass 1: which product each item row is (hidden Ref, else description), and the description it ends with.
+        $rowProduct = [];
+        $inFile = [];
+        $finalGroups = [];
+        for ($i = 1; $i < count($rows); $i++) {
+            $row = $rows[$i];
+            if ($isBlankRow($row) || $isSizeRow($row) || ($desc = $cellOf($row, 'description')) === '') {
+                continue;
+            }
+            $ref = $cellOf($row, 'ref');
+            $p = $ref !== '' ? $productsById->get($ref) : null;
+            if (!$p) {
+                $named = $existingByName->get($nameKey($desc), collect());
+                $p = $named->first(fn ($x) => !isset($inFile[$x->id])) ?? $named->first();
+            }
+            if ($p) {
+                $rowProduct[$i] = $p;
+                $inFile[$p->id] = true;
+                $finalGroups[$nameKey($desc)][$p->id] = $p;
+            }
+        }
+        // Several products ending with one description become one. Active products already carrying that
+        // description but missing from the file join in. Kept: the one already named so, holding most stock.
+        $mergeInto = [];
+        foreach ($finalGroups as $name => $group) {
+            $candidates = collect($group);
+            foreach ($existingByName->get($name, collect()) as $e) {
+                if (!isset($inFile[$e->id]) && $isActive($e)) {
+                    $candidates->put($e->id, $e);
+                }
+            }
+            if ($candidates->count() < 2) {
+                continue;
+            }
+            $target = $candidates->sortBy([
+                fn ($a, $b) => ($nameKey($b->name) === $name) <=> ($nameKey($a->name) === $name),
+                fn ($a, $b) => (float) $b->stock_quantity <=> (float) $a->stock_quantity,
+                fn ($a, $b) => $a->item_number <=> $b->item_number,
+            ])->first();
+            foreach ($candidates as $p) {
+                if ($p->id !== $target->id) {
+                    $mergeInto[$p->id] = $target;
+                }
+            }
+        }
+
+        $batchCounts = InventoryBatch::where('company_id', $companyId)->whereIn('product_id', array_keys($mergeInto))
+            ->selectRaw('product_id, count(*) as n')->groupBy('product_id')->pluck('n', 'product_id');
+        $tiersByProduct = ProductPriceTier::where('company_id', $companyId)->get()->groupBy('product_id');
+        $mergedIds = [];
+        // Moves batches, sizes, stock and price-list codes from a duplicate to the product kept, then deactivates it.
+        // A list the kept product already has (e.g. both have an NSPH code) stays on the duplicate.
+        $merge = function (Product $from, Product $to) use (&$variants, &$variantsById, $tiersByProduct, $batchCounts, $write, &$mergedIds, &$seenItemNos, &$changeLog, &$summary) {
+            $toSizes = $variants->get($to->id, collect());
+            $variantMap = [];
+            $sizesMoved = 0;
+            foreach ($variants->get($from->id, collect()) as $key => $v) {
+                if ($same = $toSizes->get($key)) {
+                    $variantMap[$v->id] = $same->id;
+                    if ($write) {
+                        ProductVariant::whereKey($same->id)->update(['stock_quantity' => DB::raw('coalesce(stock_quantity, 0) + ' . (float) $v->stock_quantity)]);
+                        ProductVariant::whereKey($v->id)->update(['stock_quantity' => 0, 'is_active' => DB::raw('false')]);
+                    }
+                } else {
+                    $write && ProductVariant::whereKey($v->id)->update(['product_id' => $to->id]);
+                    $v->product_id = $to->id;
+                    $toSizes->put($key, $v);
+                    $sizesMoved++;
+                }
+            }
+            $variants->put($to->id, $toSizes);
+            $variants->forget($from->id);
+
+            $toLists = $tiersByProduct->get($to->id, collect())->whereNull('variant_id')->pluck('tier_name')->all();
+            [$moved, $kept] = $tiersByProduct->get($from->id, collect())
+                ->partition(fn ($t) => $t->variant_id !== null || !in_array($t->tier_name, $toLists, true));
+            $codes = fn ($tiers) => $tiers->map(fn ($t) => trim($t->tier_name . ' ' . $t->item_code))->implode(', ');
+            $batches = (int) ($batchCounts[$from->id] ?? 0);
+            $stock = (float) $from->stock_quantity;
+
+            if ($write) {
+                foreach ($variantMap as $old => $new) {
+                    InventoryBatch::where('product_id', $from->id)->where('variant_id', $old)->update(['variant_id' => $new]);
+                    ProductPriceTier::where('variant_id', $old)->update(['variant_id' => $new]);
+                }
+                InventoryBatch::where('product_id', $from->id)->update(['product_id' => $to->id]);
+                if ($moved->isNotEmpty()) {
+                    ProductPriceTier::whereIn('id', $moved->pluck('id'))->update(['product_id' => $to->id]);
+                }
+                Product::whereKey($to->id)->update(array_filter([
+                    'stock_quantity' => DB::raw('coalesce(stock_quantity, 0) + ' . $stock),
+                    'has_variations' => $sizesMoved ? DB::raw('true') : null,
+                ]));
+                Product::whereKey($from->id)->update(['stock_quantity' => 0, 'is_active' => DB::raw('false')]);
+            }
+            $to->stock_quantity = (float) $to->stock_quantity + $stock;
+            $from->stock_quantity = 0;
+            $from->setRawAttributes(array_merge($from->getAttributes(), ['is_active' => false]), true);
+            $mergedIds[$from->id] = true;
+            $seenItemNos[(string) $from->item_number] = true;
+            $seenItemNos[(string) $to->item_number] = true;
+            $summary['merged']++;
+
+            $changes = array_values(array_filter([
+                ['field' => 'merged into', 'from' => "{$from->item_number} {$from->name}", 'to' => "{$to->item_number} {$to->name}"],
+                $batches ? ['field' => 'batches moved', 'from' => null, 'to' => $batches] : null,
+                $stock ? ['field' => 'stock moved', 'from' => null, 'to' => $stock] : null,
+                $sizesMoved ? ['field' => 'sizes moved', 'from' => null, 'to' => $sizesMoved] : null,
+                $moved->isNotEmpty() ? ['field' => 'price codes moved', 'from' => null, 'to' => $codes($moved)] : null,
+                $kept->isNotEmpty() ? ['field' => 'price codes left on the old item', 'from' => null, 'to' => $codes($kept)] : null,
+            ]));
+            $changeLog[] = ['ref' => (string) $from->item_number, 'item' => $from->name, 'size' => null, 'action' => 'merged', 'changes' => $changes];
+
+            return "Merged into Item No. {$to->item_number} \"{$to->name}\": "
+                . implode(', ', array_filter([
+                    $batches ? "{$batches} batches" : null,
+                    $stock ? number_format($stock) . ' in stock' : null,
+                    $sizesMoved ? "{$sizesMoved} sizes" : null,
+                    $moved->isNotEmpty() ? 'prices ' . $codes($moved) : null,
+                ])) . ' moved there'
+                . ($kept->isNotEmpty() ? '; ' . $codes($kept) . ' stays on this item (that list is already on the kept one)' : '')
+                . '. This item is deactivated.';
+        };
 
         DB::beginTransaction();
         try {
             for ($i = 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
-                $cell = fn ($key) => isset($columns[$key]) ? trim(preg_replace('/\s+/', ' ', (string) ($row[$columns[$key]] ?? ''))) : '';
-                if (implode('', array_map(fn ($c) => trim((string) $c), $row)) === '') {
+                $cell = fn ($key) => $cellOf($row, $key);
+                if ($isBlankRow($row)) {
                     continue;
                 }
                 $summary['rows']++;
-                $itemNo = $cell('item_no');
-                $result = ['row' => $i + 1, 'item_no' => $itemNo, 'description' => $cell('description')];
-                $isSize = strtolower($cell('row_type')) === 'size' || str_contains($itemNo, '.') || ($cell('size') !== '' && strtolower($cell('row_type')) !== 'item');
+                $result = ['row' => $i + 1, 'item_no' => '', 'description' => $cell('description')];
+                $isSize = $isSizeRow($row);
 
                 if ($isSize) {
-                    $parentNo = str_contains($itemNo, '.') ? strstr($itemNo, '.', true) : null;
-                    $parent = $parentNo !== null ? $products->get((string) (int) $parentNo) : $current;
+                    $parent = $current;
                     $sizeName = $cell('size');
                     if (!$parent || $sizeName === '') {
                         $summary['errors']++;
-                        $results[] = $result + ['status' => 'error', 'message' => !$parent ? "No item {$parentNo} found for this size - put the size rows under their item." : 'Size name is missing.'];
+                        $results[] = $result + ['status' => 'error', 'message' => !$parent ? 'No item row above this size (or that row has an error) - put size rows directly under their item.' : 'Size name is missing.'];
                         continue;
                     }
+                    $parentsWithSizeRows[$parent->id] = true;
 
-                    $variant = $variants->get($parent->id)?->get($sizeKey($sizeName));
+                    $byRef = $variantsById->get($cell('ref'));
+                    $variant = $byRef && $byRef->product_id === $parent->id
+                        ? $byRef
+                        : $variants->get($parent->id)?->get($sizeKey($sizeName));
                     $cost = $number($cell('cost'));
                     $active = $yesNo($cell('active'));
                     $before = $sizeSnapshot($variant);
                     if ($variant) {
-                        $variant->fill(array_filter(['cost' => $cost, 'is_active' => $active], fn ($v) => $v !== null));
+                        $variant->fill(array_filter([
+                            'cost' => $cost,
+                            'is_active' => $active,
+                            'name' => $sizeKey($variant->name) !== $sizeKey($sizeName) ? $sizeName : null,
+                        ], fn ($v) => $v !== null));
                         if ($variant->isDirty()) {
+                            $changeLog[] = ['ref' => $parent->item_number . ' / ' . $sizeName, 'item' => $parent->name, 'size' => $sizeName,
+                                'action' => 'updated', 'changes' => $this->dirtyChanges($variant)];
                             $write && $variant->save();
                             $summary['sizes_updated']++;
                             $status = 'size updated';
@@ -769,31 +931,51 @@ class ProductController extends Controller
                             }
                         }
                         $variants->put($parent->id, ($variants->get($parent->id) ?? collect())->put($sizeKey($sizeName), $variant));
+                        $changeLog[] = ['ref' => $parent->item_number . ' / ' . $sizeName, 'item' => $parent->name, 'size' => $sizeName,
+                            'action' => 'created', 'changes' => [['field' => 'cost', 'from' => null, 'to' => $variant->cost]]];
                         $summary['sizes_created']++;
                         $status = 'size created';
                     }
-                    $results[] = array_merge($result, ['status' => $status, 'item_no' => $itemNo ?: ($parent->item_number . ' / ' . $sizeName),
+                    $seenVariantIds[$variant->id] = true;
+                    $results[] = array_merge($result, ['status' => $status, 'item_no' => $parent->item_number . ' / ' . $sizeName,
                         'description' => ProductVariant::sizedName($parent->name, $sizeName),
                         'row_type' => 'size', 'size' => $sizeName, 'before' => $before, 'after' => $sizeSnapshot($variant)]);
                     continue;
+                }
+
+                $current = null;
+                if ($cell('description') === '') {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => 'Item Description is required - products are linked by their description.'];
+                    continue;
+                }
+
+                $product = $rowProduct[$i] ?? null;
+                $linkNote = null;
+                $repeatedInFile = $product && isset($linkedIds[$product->id]);
+                if ($product) {
+                    $linkedIds[$product->id] = true;
+                    $seenItemNos[(string) $product->item_number] = true;
+                }
+                if ($product && isset($mergeInto[$product->id])) {
+                    $target = $mergeInto[$product->id];
+                    if (!isset($mergedIds[$product->id])) {
+                        $results[] = array_merge($result, ['status' => 'merged', 'item_no' => (string) $product->item_number, 'description' => $product->name,
+                            'row_type' => 'item', 'message' => $merge($product, $target)]);
+                    }
+                    $current = $target;
+                    if (isset($inFile[$target->id])) {
+                        continue;
+                    }
+                    // The kept product has no row of its own: this row's values go onto it.
+                    $product = $target;
+                    $linkedIds[$target->id] = true;
                 }
 
                 $tax = $this->parseTaxStatus($cell('tax'));
                 if ($tax === false) {
                     $summary['errors']++;
                     $results[] = $result + ['status' => 'error', 'message' => "Tax status \"{$cell('tax')}\" not recognised (use VAT 16%, Zero rated or Exempt)."];
-                    continue;
-                }
-
-                if ($itemNo !== '' && !ctype_digit($itemNo)) {
-                    $summary['errors']++;
-                    $results[] = $result + ['status' => 'error', 'message' => "Item No. \"{$itemNo}\" is not a number."];
-                    continue;
-                }
-                $product = $itemNo !== '' ? $products->get((string) (int) $itemNo) : null;
-                if (!$product && $cell('description') === '') {
-                    $summary['errors']++;
-                    $results[] = $result + ['status' => 'error', 'message' => "Item {$itemNo} not found, and there is no description to create it."];
                     continue;
                 }
 
@@ -808,7 +990,11 @@ class ProductController extends Controller
                     'is_active' => $yesNo($cell('active')),
                     'brand' => $cell('brand') ?: null,
                 ], fn ($v) => $v !== null);
-                if ($tax !== null) {
+                // The is_taxable setter stores 'true'/'false' text, which always looks changed - only set tax when it really differs.
+                $sameTax = $product && $tax !== null
+                    && filter_var($product->getRawOriginal('is_taxable'), FILTER_VALIDATE_BOOLEAN) === (bool) $tax['is_taxable']
+                    && (float) $product->tax_rate === (float) $tax['tax_rate'];
+                if ($tax !== null && !$sameTax) {
                     $fields['is_taxable'] = $tax['is_taxable'];
                     $fields['tax_rate'] = $tax['tax_rate'];
                 }
@@ -817,9 +1003,11 @@ class ProductController extends Controller
                 }
 
                 $before = $itemSnapshot($product);
+                $rowChanges = [];
                 if ($product) {
                     $product->fill($fields);
                     if ($product->isDirty()) {
+                        $rowChanges = $this->dirtyChanges($product);
                         $write && $product->save();
                         $summary['items_updated']++;
                         $status = 'updated';
@@ -848,11 +1036,19 @@ class ProductController extends Controller
                         $product->item_number = $nextItemNumber++;
                     }
                     $products->put((string) $product->item_number, $product);
+                    $existingByName->put($nameKey($product->name), collect([$product]));
+                    $linkedIds[$product->id] = true;
+                    $seenItemNos[(string) $product->item_number] = true;
                     $summary['items_created']++;
                     $status = 'created';
+                    $rowChanges = collect($fields)->except(['category_id'])
+                        ->map(fn ($v, $k) => ['field' => $k, 'from' => null, 'to' => $v])->values()->all();
                 }
 
-                $notes = [];
+                $notes = $linkNote ? [$linkNote] : [];
+                if ($repeatedInFile) {
+                    $notes[] = 'This description is already on a row above - both rows update the same product. Delete the extra row.';
+                }
                 foreach ($priceColumns as $list => $cols) {
                     $price = isset($cols['price']) ? $number(trim((string) ($row[$cols['price']] ?? ''))) : null;
                     $code = isset($cols['code']) ? $this->priceListItemCode(trim((string) ($row[$cols['code']] ?? '')), $list) : null;
@@ -871,6 +1067,11 @@ class ProductController extends Controller
                         continue;
                     }
                     $tier = ProductPriceTier::where('company_id', $companyId)->where('product_id', $product->id)->whereNull('variant_id')->where('tier_name', $list)->first();
+                    $oldPrice = $tier ? round((float) $tier->price, 2) : null;
+                    if ($oldPrice !== round($price, 2)) {
+                        $rowChanges[] = ['field' => "{$list} price", 'from' => $oldPrice, 'to' => round($price, 2)];
+                        $priceHistoryRecords[] = ['product_id' => $product->id, 'price_type' => $list, 'old_value' => $oldPrice, 'new_value' => round($price, 2)];
+                    }
                     $values = ['price' => round($price, 2), 'unit_of_measure' => $product->unit_of_measurement ?: 'pcs'] + ($code !== null ? ['item_code' => $code] : []);
                     $tier
                         ? $tier->update($values)
@@ -881,11 +1082,73 @@ class ProductController extends Controller
                 }
 
                 $current = $product;
+                if ($rowChanges) {
+                    $changeLog[] = ['ref' => (string) $product->item_number, 'item' => $product->name, 'size' => null,
+                        'action' => $status === 'created' ? 'created' : 'updated', 'changes' => $rowChanges];
+                }
                 $results[] = array_merge($result, ['status' => $status, 'item_no' => (string) $product->item_number, 'description' => $product->name,
                     'row_type' => 'item', 'size' => null, 'before' => $before, 'after' => $itemSnapshot($product), 'message' => implode(' ', $notes) ?: null]);
             }
 
-            $dryRun ? DB::rollBack() : DB::commit();
+            // Duplicates not in the file that carry a merged description.
+            foreach ($mergeInto as $pid => $target) {
+                if (!isset($mergedIds[$pid])) {
+                    $p = $productsById->get($pid);
+                    $results[] = ['row' => null, 'item_no' => (string) $p->item_number, 'description' => $p->name, 'status' => 'merged',
+                        'row_type' => 'item', 'message' => $merge($p, $target)];
+                }
+            }
+
+            // Rows deleted from the sheet: switch those products/sizes off (never delete - sales and batches still point at them).
+            if ($deactivateMissing) {
+                $stockNote = fn ($qty) => (float) $qty > 0 ? 'Still has ' . number_format((float) $qty) . ' in stock - move or adjust it out.' : null;
+                $missingProducts = $products->filter(fn ($p) => $p->exists && $isActive($p) && !isset($mergedIds[$p->id]) && !isset($seenItemNos[(string) $p->item_number]));
+                $missingSizes = collect($parentsWithSizeRows)->keys()
+                    ->flatMap(fn ($pid) => $variants->get($pid, collect())->values())
+                    ->filter(fn ($v) => $v->exists && $isActive($v) && !isset($seenVariantIds[$v->id]));
+
+                foreach ($missingProducts as $p) {
+                    $changeLog[] = ['ref' => (string) $p->item_number, 'item' => $p->name, 'size' => null, 'action' => 'deactivated',
+                        'changes' => [['field' => 'is_active', 'from' => true, 'to' => false]]];
+                    $results[] = ['row' => null, 'item_no' => (string) $p->item_number, 'description' => $p->name, 'status' => 'deactivated',
+                        'row_type' => 'item', 'message' => $stockNote($p->stock_quantity)];
+                }
+                foreach ($missingSizes as $v) {
+                    $parent = $products->first(fn ($p) => $p->id === $v->product_id);
+                    $changeLog[] = ['ref' => $parent->item_number . ' / ' . $v->name, 'item' => $parent->name, 'size' => $v->name, 'action' => 'deactivated',
+                        'changes' => [['field' => 'is_active', 'from' => true, 'to' => false]]];
+                    $results[] = ['row' => null, 'item_no' => $parent->item_number . ' / ' . $v->name, 'description' => ProductVariant::sizedName($parent->name, $v->name),
+                        'status' => 'deactivated', 'row_type' => 'size', 'message' => $stockNote($v->stock_quantity)];
+                }
+                $summary['deactivated'] = $missingProducts->count() + $missingSizes->count();
+                if ($write && $summary['deactivated']) {
+                    Product::whereIn('id', $missingProducts->pluck('id'))->update(['is_active' => DB::raw('false')]);
+                    ProductVariant::whereIn('id', $missingSizes->pluck('id'))->update(['is_active' => DB::raw('false')]);
+                }
+            }
+
+            if ($dryRun) {
+                DB::rollBack();
+            } else {
+                $log = $this->recordImport('products', $request, $user, $summary, $changeLog);
+                foreach ($priceHistoryRecords as $rec) {
+                    $change = $rec['old_value'] !== null ? $rec['new_value'] - $rec['old_value'] : null;
+                    ProductPriceHistory::create([
+                        'id' => (string) Str::uuid(),
+                        'company_id' => $companyId,
+                        'product_id' => $rec['product_id'],
+                        'price_type' => $rec['price_type'],
+                        'old_value' => $rec['old_value'],
+                        'new_value' => $rec['new_value'],
+                        'change_amount' => $change,
+                        'change_percentage' => $rec['old_value'] ? round($change / $rec['old_value'] * 100, 2) : null,
+                        'changed_by' => $user->id,
+                        'source' => ProductPriceHistory::SOURCE_BULK_IMPORT,
+                        'source_reference' => 'Products import ' . $log->created_at->format('Y-m-d H:i'),
+                    ]);
+                }
+                DB::commit();
+            }
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Product import failed', ['error' => $e->getMessage(), 'line' => $e->getLine()]);
@@ -906,7 +1169,6 @@ class ProductController extends Controller
      * (Nescopharm_Import.xlsx) uses the first-named alias in each list.
      */
     private const BATCH_SHEET_HEADERS = [
-        'item_no' => ['itemno', 'itemnumber', 'no'],
         'description' => ['itemdescription', 'description', 'productname', 'product', 'name'],
         'size' => ['size', 'variant', 'variation'],
         'batch_number' => ['batchnumber', 'batchno', 'batch'],
@@ -976,10 +1238,10 @@ class ProductController extends Controller
                 }
             }
         }
-        if (!isset($columns['batch_number']) || (!isset($columns['item_no']) && !isset($columns['description']))) {
+        if (!isset($columns['batch_number'], $columns['description'])) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'The first row must have "Batch Number" plus either "Item No." or "Item Description".',
+                'message' => 'The first row must have "Item Description" and "Batch Number" (plus "Size" for sized products).',
             ], 422);
         }
 
@@ -1006,8 +1268,10 @@ class ProductController extends Controller
         }
 
         $products = Product::where('company_id', $companyId)->get();
-        $byItemNo = $products->keyBy(fn ($p) => (string) $p->item_number);
-        $byName = $products->keyBy(fn ($p) => mb_strtolower(trim((string) $p->name)));
+        $byName = $products->groupBy(fn ($p) => mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $p->name))));
+        $suppliers = \App\Models\Supplier::where('company_id', $companyId)->get(['id', 'name'])
+            ->keyBy(fn ($s) => mb_strtolower(trim((string) $s->name)));
+        $changeLog = [];
         $sizeKey = fn ($name) => is_numeric($t = trim((string) $name)) ? (string) (float) $t : mb_strtolower($t);
         $variants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get()
             ->groupBy('product_id')
@@ -1029,13 +1293,12 @@ class ProductController extends Controller
                 }
                 $summary['rows']++;
                 $batchNumber = $cell('batch_number');
-                $itemNo = $cell('item_no');
                 $description = $cell('description');
                 $size = $cell('size');
                 $result = [
                     'row' => $i + 1,
                     'batch_number' => $batchNumber,
-                    'item' => $description ?: ($itemNo ?: '-'),
+                    'item' => $description ?: '-',
                     'size' => $size ?: null,
                 ];
 
@@ -1046,17 +1309,21 @@ class ProductController extends Controller
                 }
 
                 $product = null;
-                if ($itemNo !== '' && ctype_digit($itemNo)) {
-                    $product = $byItemNo->get((string) (int) $itemNo);
-                }
-                if (!$product && $description !== '') {
-                    $product = $byName->get(mb_strtolower($description));
-                }
-                if (!$product) {
+                // Batches link to products by Item Description (and Size) only - never by Item No.
+                if ($description === '') {
                     $summary['errors']++;
-                    $results[] = $result + ['status' => 'error', 'message' => 'Product not found - import products first.'];
+                    $results[] = $result + ['status' => 'error', 'message' => 'Item Description is required.'];
                     continue;
                 }
+                $named = $byName->get(mb_strtolower($description), collect());
+                if ($named->count() !== 1) {
+                    $summary['errors']++;
+                    $results[] = $result + ['status' => 'error', 'message' => $named->isEmpty()
+                        ? "No product named \"{$description}\" - check the spelling or import products first."
+                        : "{$named->count()} products are named \"{$description}\" (Item No. " . $named->pluck('item_number')->implode(', ') . ') - rename or merge them on the Products page first.'];
+                    continue;
+                }
+                $product = $named->first();
 
                 $variant = null;
                 if ($size !== '') {
@@ -1100,7 +1367,9 @@ class ProductController extends Controller
                     'received_date' => $received,
                     'unit_cost' => $number($cell('unit_cost')),
                     'selling_price' => $number($cell('selling_price')),
-                    'supplier' => $cell('supplier') ?: null,
+                    // The export shows the linked supplier's name; link it back rather than copying it into the free-text column.
+                    'supplier_id' => $suppliers->get(mb_strtolower($cell('supplier')))?->id,
+                    'supplier' => $suppliers->has(mb_strtolower($cell('supplier'))) ? null : ($cell('supplier') ?: null),
                     'status' => $status,
                     'notes' => $cell('notes') ?: null,
                 ];
@@ -1110,10 +1379,26 @@ class ProductController extends Controller
                     $batch = InventoryBatch::find($existingBatchId);
                     // Only update the fields the user actually supplied so a
                     // blank cell doesn't null a real value.
-                    $filtered = array_filter($fields, fn ($v) => $v !== null && $v !== '');
+                    $filtered = array_filter(
+                        array_diff_key($fields, array_flip(['company_id', 'store_id', 'product_id', 'variant_id'])),
+                        fn ($v) => $v !== null && $v !== ''
+                    );
                     $batch->fill($filtered);
                     if ($batch->isDirty()) {
-                        $dryRun || $batch->save();
+                        $changeLog[] = ['ref' => $batchNumber, 'item' => $product->name, 'size' => $variant?->name,
+                            'action' => 'updated', 'changes' => array_map(
+                                fn ($c) => $c['field'] === 'supplier_id'
+                                    ? ['field' => 'supplier', 'from' => \App\Models\Supplier::whereKey($c['from'])->value('name'), 'to' => $suppliers->firstWhere('id', $c['to'])?->name]
+                                    : $c,
+                                $this->dirtyChanges($batch)
+                            )];
+                        $stockDelta = (int) $batch->quantity_available - (int) $batch->getRawOriginal('quantity_available');
+                        if (!$dryRun) {
+                            $batch->save();
+                            if ($stockDelta !== 0) {
+                                ($variant ?? $product)->increment('stock_quantity', $stockDelta);
+                            }
+                        }
                         $summary['batches_updated']++;
                         $status = 'updated';
                     } else {
@@ -1137,6 +1422,10 @@ class ProductController extends Controller
                         $target = $variant ?? $product;
                         $target->increment('stock_quantity', (int) round($qtyAvailable));
                     }
+                    $changeLog[] = ['ref' => $batchNumber, 'item' => $product->name, 'size' => $variant?->name, 'action' => 'created', 'changes' => [
+                        ['field' => 'quantity_available', 'from' => null, 'to' => (int) round($qtyAvailable)],
+                        ['field' => 'expiry_date', 'from' => null, 'to' => $expiry],
+                    ]];
                     $summary['batches_created']++;
                     $status = 'created';
                 }
@@ -1146,9 +1435,15 @@ class ProductController extends Controller
                     'quantity' => (int) round($qtyAvailable),
                     'expiry' => $expiry,
                     'product_name' => $product->name,
+                    'changes' => $status === 'updated' ? end($changeLog)['changes'] : [],
                 ];
             }
-            $dryRun ? DB::rollBack() : DB::commit();
+            if ($dryRun) {
+                DB::rollBack();
+            } else {
+                $this->recordImport('batches', $request, $user, $summary, $changeLog);
+                DB::commit();
+            }
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Batch import failed', ['error' => $e->getMessage(), 'line' => $e->getLine()]);
@@ -1226,6 +1521,72 @@ class ProductController extends Controller
             'list_name' => $listName,
             'rows' => $rows,
         ]);
+    }
+
+    private function dirtyChanges(\Illuminate\Database\Eloquent\Model $model, array $skip = []): array
+    {
+        $changes = [];
+        foreach ($model->getDirty() as $field => $to) {
+            if (!in_array($field, $skip, true)) {
+                $clean = fn ($v) => is_string($v) ? preg_replace('/ 00:00:00$/', '', $v) : $v;
+                $changes[] = ['field' => $field, 'from' => $clean($model->getRawOriginal($field)), 'to' => $clean($to)];
+            }
+        }
+        return $changes;
+    }
+
+    /** One history entry per committed import: who, when, totals, every field changed, and the uploaded file. */
+    private function recordImport(string $kind, Request $request, $user, array $summary, array $changes): ActivityLog
+    {
+        $file = $request->file('file');
+        $path = $file->storeAs("imports/{$user->company_id}", "{$kind}_" . now()->format('Ymd_His') . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension(), 'local');
+
+        return ActivityLog::logActivity("{$kind}_import", ucfirst($kind) . ' imported from ' . $file->getClientOriginalName(), $user, [
+            'kind' => $kind,
+            'file_name' => $file->getClientOriginalName(),
+            'file_path' => $path,
+            'summary' => $summary,
+            'changes' => $changes,
+        ]);
+    }
+
+    public function importHistory(Request $request)
+    {
+        $kind = $request->input('kind');
+        if (!in_array($kind, ['products', 'batches'], true)) {
+            return response()->json(['status' => 'failed', 'message' => 'kind must be products or batches.'], 400);
+        }
+
+        $logs = ActivityLog::with('user:id,first_name,last_name,email')
+            ->where('company_id', $request->user()->company_id)
+            ->where('action', "{$kind}_import")
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+
+        return response()->json(['data' => $logs->map(fn ($log) => [
+            'id' => $log->id,
+            'created_at' => $log->created_at,
+            'user' => $log->user ? trim($log->user->first_name . ' ' . $log->user->last_name) ?: $log->user->email : null,
+            'file_name' => $log->properties['file_name'] ?? null,
+            'has_file' => !empty($log->properties['file_path']),
+            'summary' => $log->properties['summary'] ?? [],
+            'changes' => $log->properties['changes'] ?? [],
+        ])]);
+    }
+
+    public function downloadImportHistoryFile(Request $request, string $id)
+    {
+        $log = ActivityLog::where('id', $id)
+            ->where('company_id', $request->user()->company_id)
+            ->whereIn('action', ['products_import', 'batches_import'])
+            ->first();
+        $path = $log?->properties['file_path'] ?? null;
+
+        if (!$path || !Storage::disk('local')->exists($path)) {
+            return response()->json(['error' => 'File not found'], 404);
+        }
+        return Storage::disk('local')->download($path, $log->properties['file_name'] ?? basename($path));
     }
 
     public function priceListHistory(Request $request)

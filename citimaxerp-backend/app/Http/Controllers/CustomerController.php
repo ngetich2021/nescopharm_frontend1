@@ -165,14 +165,14 @@ class CustomerController extends Controller
                     'business_name' => 'nullable|string|max:255',
                     'trading_name' => 'nullable|string|max:255',
                     'business_type' => 'nullable|string|in:pharmacy,hospital_clinic,distributor,ngo,other',
-                    'registration_number' => 'nullable|string|max:100',
-                    'ppb_license_number' => 'nullable|string|max:100',
+                    'registration_number' => 'required|string|max:100',
+                    'ppb_license_number' => 'required|string|max:100',
                     'website' => 'nullable|string|max:255',
                     'telephone' => 'nullable|string|max:50',
                     'region' => 'nullable|string|max:100',
                     'county' => 'nullable|string|max:100',
                     'nature_of_business' => 'nullable|string|max:255',
-                    'pin_number' => 'nullable|required_if:customer_type,company|string|max:100',
+                    'pin_number' => 'required|string|max:100',
                     'contact_person_name' => 'nullable|string|max:255',
                     'contact_person_phone' => 'nullable|string|max:50',
                     'contact_person_email' => 'nullable|email|max:255',
@@ -360,13 +360,23 @@ class CustomerController extends Controller
             ], 403);
         }
 
-        // Company KRA PIN is printed on every invoice, so it can't be blank.
-        $effectiveType = $request->input('customer_type', $customer->customer_type);
-        $effectivePin = trim((string) $request->input('pin_number', $customer->pin_number));
-        if ($effectiveType === 'company' && $effectivePin === '') {
+        // Registration, PPB licence and KRA PIN are mandatory for every customer.
+        // Checked against the merged value so a partial update can't blank them.
+        $requiredIds = [
+            'registration_number' => 'Registration/License Number',
+            'ppb_license_number' => 'PPB License No.',
+            'pin_number' => 'KRA PIN',
+        ];
+        $missing = [];
+        foreach ($requiredIds as $field => $label) {
+            if (trim((string) $request->input($field, $customer->{$field})) === '') {
+                $missing[$field] = ["{$label} is required."];
+            }
+        }
+        if ($missing) {
             return response()->json([
                 'status' => 'failed',
-                'message' => ['pin_number' => ['KRA PIN is required for company customers.']],
+                'message' => $missing,
             ], 400);
         }
 

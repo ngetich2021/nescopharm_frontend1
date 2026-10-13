@@ -1,7 +1,7 @@
 "use client"
 
 import { sizedName } from "@/lib/product-sizes"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -15,10 +15,10 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
-import { Edit, ShoppingCart, FileText, Calendar, User, MapPin, Phone, Mail, ArrowLeft, Send, ChevronDown, MessageCircle, Eye } from "lucide-react"
+import { Edit, ShoppingCart, FileText, Calendar, User, MapPin, Phone, Mail, ArrowLeft, Send, ChevronDown, MessageCircle, Eye, Upload, Download, CheckCircle2, AlertCircle } from "lucide-react"
 import { getCustomerDisplayName } from "@/lib/customers"
 import { formatCurrency } from "@/lib/utils"
-import { Quote, SalesRep, fetchQuoteSalesReps, assignQuoteSalesRep } from "@/lib/quotes"
+import { Quote, SalesRep, fetchQuoteSalesReps, assignQuoteSalesRep, uploadSignedQuote } from "@/lib/quotes"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { SendQuoteModal } from "@/components/modals/send-quote-modal"
 import apiCall from "@/lib/api"
@@ -34,6 +34,7 @@ interface ViewQuoteSheetProps {
   onEdit: (quoteId: string) => void
   onConvertToOrder: (quote: Quote) => void
   isConverting: string | null
+  onSignedCopyUploaded?: (quoteId: string) => void
 }
 
 export function ViewQuoteSheet({
@@ -44,9 +45,12 @@ export function ViewQuoteSheet({
   onRefresh,
   onEdit,
   onConvertToOrder,
-  isConverting
+  isConverting,
+  onSignedCopyUploaded
 }: ViewQuoteSheetProps) {
   const [isSendQuoteModalOpen, setIsSendQuoteModalOpen] = useState(false)
+  const [isUploadingSigned, setIsUploadingSigned] = useState(false)
+  const signedFileInputRef = useRef<HTMLInputElement>(null)
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
   const [salesRepId, setSalesRepId] = useState<string>("")
   const [isSavingRep, setIsSavingRep] = useState(false)
@@ -87,6 +91,28 @@ export function ViewQuoteSheet({
     repFullName(salesReps.find((r) => r.id === salesRepId)) ||
     repFullName(quote.sales_rep) ||
     repFullName(quote.original_submitted_by)
+
+  const handleSignedFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large", description: "The signed quote must be 10 MB or smaller.", variant: "destructive" })
+      return
+    }
+    setIsUploadingSigned(true)
+    try {
+      await uploadSignedQuote(quote.id, file)
+      toast({ title: "Uploaded", description: "Signed quote saved." })
+      onSignedCopyUploaded?.(quote.id)
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message || "Failed to upload signed quote", variant: "destructive" })
+    } finally {
+      setIsUploadingSigned(false)
+    }
+  }
+
+  const hasSignedCopy = !!quote.signed_quote_path
 
   const handleSendEmail = () => {
     setIsSendQuoteModalOpen(true)
@@ -397,6 +423,71 @@ export function ViewQuoteSheet({
             </CardContent>
           </Card>
 
+          {/* Customer's signed & stamped copy */}
+          <Card className={hasSignedCopy ? "border-green-200" : "border-red-200"}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {hasSignedCopy ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-red-600" />
+                )}
+                Signed &amp; Stamped Quote
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {hasSignedCopy ? (
+                <div className="text-sm">
+                  <p className="font-medium">{quote.signed_quote_name || "Signed quote"}</p>
+                  <p className="text-muted-foreground">
+                    Uploaded
+                    {quote.signed_quote_uploaded_at && ` ${new Date(quote.signed_quote_uploaded_at).toLocaleString()}`}
+                    {quote.signed_quote_uploaded_by && ` by ${repFullName(quote.signed_quote_uploaded_by)}`}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No signed copy yet. Once the customer signs and stamps the quote, upload it here
+                  (PDF, JPG or PNG, up to 10 MB).
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {quote.signed_quote_urls && (
+                  <>
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={quote.signed_quote_urls.view} target="_blank" rel="noopener noreferrer">
+                        <Eye className="h-4 w-4 mr-2" /> View
+                      </a>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={quote.signed_quote_urls.download} download={quote.signed_quote_name || true}>
+                        <Download className="h-4 w-4 mr-2" /> Download
+                      </a>
+                    </Button>
+                  </>
+                )}
+                <PermissionGuard permissions={["can_update_quotes", "can_create_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                  <input
+                    ref={signedFileInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                    className="hidden"
+                    onChange={handleSignedFileChange}
+                  />
+                  <Button
+                    size="sm"
+                    variant={hasSignedCopy ? "outline" : "default"}
+                    onClick={() => signedFileInputRef.current?.click()}
+                    disabled={isUploadingSigned}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {isUploadingSigned ? "Uploading..." : hasSignedCopy ? "Replace Signed Copy" : "Upload Signed Copy"}
+                  </Button>
+                </PermissionGuard>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Notes */}
           {quote.notes && (
             <Card>
@@ -471,11 +562,11 @@ export function ViewQuoteSheet({
                 }
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                {quote.converted_to_order_id 
-                  ? "Already Converted" 
-                  : quote.requires_approval 
-                  ? "Needs Approval" 
-                  : isConverting === quote.id 
+                {quote.converted_to_order_id
+                  ? "Already Converted"
+                  : quote.requires_approval
+                  ? "Needs Approval"
+                  : isConverting === quote.id
                   ? "Converting..." 
                   : "Convert to Order"}
               </Button>

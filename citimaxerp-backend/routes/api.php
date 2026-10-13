@@ -446,6 +446,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/quotes', [QuoteController::class, 'store'])->name('quotes.store');
     Route::match(['patch', 'put'], '/quotes/{quoteId}', [QuoteController::class, 'update'])->name('quotes.update');
     Route::delete('/quotes/{id}', [QuoteController::class, 'destroy'])->name('quotes.destroy');
+    Route::post('/quotes/{quoteId}/signed-copy', [QuoteController::class, 'uploadSignedCopy'])->name('quotes.uploadSignedCopy');
     Route::post('/quotes/{quoteId}/convert-to-order', [QuoteController::class, 'convertToOrder'])->name('quotes.convertToOrder');
     Route::post('/quotes/{quoteId}/confirm', [QuoteController::class, 'confirm'])->name('quotes.confirm');
     Route::post('/quotes/{quoteId}/request-changes', [QuoteController::class, 'requestChanges'])->name('quotes.requestChanges');
@@ -487,6 +488,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('products/bulk', [ProductController::class, 'bulkStore']);
     Route::post('/products/import', [ProductController::class, 'importProducts'])->name('products.import');
     Route::post('/batches/import', [ProductController::class, 'importBatches'])->name('batches.import');
+    Route::get('/imports/history', [ProductController::class, 'importHistory'])->name('imports.history');
+    Route::get('/imports/history/{id}/download', [ProductController::class, 'downloadImportHistoryFile'])->name('imports.history.download');
 
     // Migration imports: blank templates are built in the browser from these schemas.
     Route::get('/data-import/schemas', [\App\Http\Controllers\DataImportController::class, 'schemas'])->name('data-import.schemas');

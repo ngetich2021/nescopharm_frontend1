@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class Quote extends Model
 {
@@ -94,6 +95,10 @@ class Quote extends Model
         'below_minimum_price',
         'requires_approval',
         'valid_until',
+        'signed_quote_path',
+        'signed_quote_name',
+        'signed_quote_uploaded_at',
+        'signed_quote_uploaded_by',
         'created_at',
         'updated_at',
     ];
@@ -106,6 +111,7 @@ class Quote extends Model
         'requires_approval' => 'boolean',
         'valid_until' => 'date',
         'submitted_at' => 'datetime',
+        'signed_quote_uploaded_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -134,6 +140,41 @@ class Quote extends Model
     public function salesRep()
     {
         return $this->belongsTo(User::class, 'sales_rep_id');
+    }
+
+    public function signedQuoteUploadedBy()
+    {
+        return $this->belongsTo(User::class, 'signed_quote_uploaded_by');
+    }
+
+    /**
+     * Links to the customer's signed & stamped copy: one that opens in the
+     * browser and one that downloads. A private disk (s3/R2) needs signed,
+     * time-limited URLs; a public disk just has its plain URL.
+     *
+     * @return array{view: string, download: string}|null
+     */
+    public function signedQuoteUrls(): ?array
+    {
+        if (!$this->signed_quote_path) {
+            return null;
+        }
+
+        $disk = Storage::disk(config('filesystems.default'));
+        $name = str_replace('"', '', $this->signed_quote_name ?: basename($this->signed_quote_path));
+
+        try {
+            $expires = now()->addHours(24);
+            return [
+                'view' => $disk->temporaryUrl($this->signed_quote_path, $expires),
+                'download' => $disk->temporaryUrl($this->signed_quote_path, $expires, [
+                    'ResponseContentDisposition' => "attachment; filename=\"{$name}\"",
+                ]),
+            ];
+        } catch (\Exception $e) {
+            $url = $disk->url($this->signed_quote_path);
+            return ['view' => $url, 'download' => $url];
+        }
     }
 
     /**

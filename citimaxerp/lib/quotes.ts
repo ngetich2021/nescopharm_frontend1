@@ -41,6 +41,12 @@ export interface Quote {
   updated_at: string
   deleted_at: string | null
   converted_to_order_id: string | null
+  // Customer's signed & stamped copy of the quote
+  signed_quote_path?: string | null
+  signed_quote_name?: string | null
+  signed_quote_uploaded_at?: string | null
+  signed_quote_urls?: { view: string; download: string } | null
+  signed_quote_uploaded_by?: { id: string; first_name: string; last_name: string } | null
   customer: {
     id: string
     name: string
@@ -635,6 +641,28 @@ export async function convertQuoteToOrder(quoteId: string): Promise<any> {
       throw error;
     }
   });
+}
+
+/**
+ * Uploads (or replaces) the customer's signed & stamped copy of a quote.
+ */
+export async function uploadSignedQuote(quoteId: string, file: File): Promise<void> {
+  const formData = new FormData()
+  formData.append("signed_quote", file)
+
+  const response = await apiCall<{ status: string; message?: any }>(
+    `/quotes/${quoteId}/signed-copy`,
+    "POST",
+    formData,
+    true
+  )
+
+  if (response.status !== "success") {
+    const message = typeof response.message === "string"
+      ? response.message
+      : (Object.values(response.message || {}).flat()[0] as string) || "Failed to upload signed quote"
+    throw new Error(message)
+  }
 }
 
 /**

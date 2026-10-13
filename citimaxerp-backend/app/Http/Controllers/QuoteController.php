@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Traits\HandlesDatabaseErrors;
 use App\Http\Traits\ChecksStockAvailability;
 use App\Services\PackagingCalculatorService;
@@ -1065,7 +1066,7 @@ class QuoteController extends Controller
                 }
 
                 $perPage = (int) $request->input('per_page', 20);
-                $quotes = $query->select('id', 'customer_id', 'company_id', 'quote_number', 'total_amount', 'final_amount', 'status', 'valid_until', 'submitted_by_id', 'submitted_at', 'original_submitted_by_id', 'created_at', 'updated_at')
+                $quotes = $query->select('id', 'customer_id', 'company_id', 'quote_number', 'total_amount', 'final_amount', 'status', 'valid_until', 'submitted_by_id', 'submitted_at', 'original_submitted_by_id', 'signed_quote_path', 'created_at', 'updated_at')
                     ->orderBy('created_at', 'desc')
                     ->paginate($perPage);
 
@@ -1108,6 +1109,9 @@ class QuoteController extends Controller
                         $query->select('id', 'name', 'logo_url', 'letterhead_url');
                     },
                     'originalSubmittedBy' => function ($query) {
+                        $query->select('id', 'first_name', 'last_name');
+                    },
+                    'signedQuoteUploadedBy' => function ($query) {
                         $query->select('id', 'first_name', 'last_name');
                     },
                     'deliveryLocation' => function ($query) {
@@ -1164,6 +1168,7 @@ class QuoteController extends Controller
 
             $quote->setAttribute('payment_terms', $quote->paymentTermsLabel());
             $quote->setAttribute('totals', $quote->vatBreakdown());
+            $quote->setAttribute('signed_quote_urls', $quote->signedQuoteUrls());
             foreach ($quote->quoteItems as $item) {
                 $tax = $item->taxInfo();
                 $item->setAttribute('item_code', $item->itemCode());
@@ -1228,6 +1233,66 @@ class QuoteController extends Controller
             'status' => 'success',
             'message' => $quote->sales_rep_id ? 'Sales rep assigned' : 'Sales rep cleared',
             'data' => $quote->fresh(['salesRep:id,first_name,last_name,email']),
+        ]);
+    }
+
+    /**
+     * Attach (or replace) the customer's signed & stamped copy of the quote -
+     * a record of their agreement. Staff decide whether to wait for it before
+     * converting; convertToOrder() doesn't require it.
+     */
+    public function uploadSignedCopy(Request $request, $quoteId)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_update_quotes', $user->company_id)
+            && !$this->hasPermission($request, 'can_create_orders', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to update quotes.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'signed_quote' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()], 422);
+        }
+
+        $quote = Quote::where('company_id', $user->company_id)->find($quoteId);
+        if (!$quote) {
+            return response()->json(['status' => 'failed', 'message' => 'Quote not found.'], 404);
+        }
+
+        $file = $request->file('signed_quote');
+        $disk = config('filesystems.default');
+        $path = $file->store("signed-quotes/{$quote->company_id}", $disk);
+        if (!$path) {
+            return response()->json(['status' => 'failed', 'message' => 'Failed to store the signed quote.'], 500);
+        }
+
+        $previous = $quote->signed_quote_path;
+        $quote->update([
+            'signed_quote_path' => $path,
+            'signed_quote_name' => $file->getClientOriginalName(),
+            'signed_quote_uploaded_at' => now(),
+            'signed_quote_uploaded_by' => $user->id,
+        ]);
+
+        if ($previous && $previous !== $path) {
+            try {
+                Storage::disk($disk)->delete($previous);
+            } catch (\Exception $e) {
+                Log::warning('Failed to delete replaced signed quote', ['path' => $previous, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Signed quote uploaded.',
+            'data' => [
+                'signed_quote_path' => $quote->signed_quote_path,
+                'signed_quote_name' => $quote->signed_quote_name,
+                'signed_quote_uploaded_at' => $quote->signed_quote_uploaded_at,
+                'signed_quote_urls' => $quote->signedQuoteUrls(),
+            ],
         ]);
     }
 

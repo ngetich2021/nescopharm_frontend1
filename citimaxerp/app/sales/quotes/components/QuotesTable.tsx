@@ -19,6 +19,8 @@ import {
   Edit,
   Trash2,
   ShoppingCart,
+  CheckCircle2,
+  Minus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
@@ -85,7 +87,7 @@ export function QuotesTable({
   }
 
   const exportToCSV = () => {
-    const headers = ["Quote Number", "Customer", "Date", "Status", "Valid Until", "Total Amount"]
+    const headers = ["Quote Number", "Customer", "Date", "Status", "Signed Copy", "Valid Until", "Total Amount"]
     const csvContent = [
       headers.join(","),
       ...quotes.map((quote) =>
@@ -94,6 +96,7 @@ export function QuotesTable({
           (quote.customer as any)?.business_name || quote.customer?.name || "Unknown",
           new Date(quote.created_at).toLocaleDateString(),
           formatStatus(quote.status),
+          quote.signed_quote_path ? "Yes" : "No",
           new Date(quote.valid_until).toLocaleDateString(),
           Number.parseFloat(quote.final_amount || quote.total_amount || "0").toFixed(2),
         ].join(","),
@@ -256,6 +259,7 @@ export function QuotesTable({
               <TableHead className="font-semibold">Customer</TableHead>
               <TableHead className="font-semibold">Total Amount</TableHead>
               <TableHead className="font-semibold">Status</TableHead>
+              <TableHead className="font-semibold text-center">File</TableHead>
               <TableHead className="font-semibold">Valid Until</TableHead>
               <TableHead className="font-semibold">Created On</TableHead>
               <TableHead className="text-right font-semibold">Actions</TableHead>
@@ -264,7 +268,7 @@ export function QuotesTable({
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="flex items-center justify-center space-x-2">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                     <span>Loading quotes...</span>
@@ -273,7 +277,7 @@ export function QuotesTable({
               </TableRow>
             ) : quotes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="text-gray-500">
                     <p className="font-semibold">No quotes found</p>
                     <p className="text-sm">Create your first quote to get started</p>
@@ -345,6 +349,13 @@ export function QuotesTable({
                         </Badge>
                       )
                     })()}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {quote.signed_quote_path ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-600 inline-block" aria-label="Signed copy uploaded" />
+                    ) : (
+                      <Minus className="h-5 w-5 text-red-600 inline-block" aria-label="No signed copy" />
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">

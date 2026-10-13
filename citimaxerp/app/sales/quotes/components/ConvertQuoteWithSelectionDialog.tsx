@@ -35,8 +35,8 @@ export function ConvertQuoteWithSelectionDialog({
   }
 
   // Filter quotes that can be converted
-  const eligibleQuotes = quotes.filter(quote => 
-    !quote.converted_to_order_id && 
+  const eligibleQuotes = quotes.filter(quote =>
+    !quote.converted_to_order_id &&
     !quote.requires_approval && 
     quote.status !== "rejected" && 
     quote.status !== "expired"
