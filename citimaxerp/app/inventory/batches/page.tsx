@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Package, Calendar, AlertTriangle, CheckCircle, DollarSign } from "lucide-react"
 import { BatchTable } from "./batch-table"
 import { ImportBatchesDialog } from "./import-batches-dialog"
+import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { useState, useEffect } from "react"
 import { getBatches, getBatchSummary } from "@/lib/batches"
 import { useDataCache, invalidateCacheKey } from "@/lib/data-cache"
@@ -113,7 +114,10 @@ export default function BatchesPage() {
             </p>
           </div>
           <PermissionGuard permissions={["can_update_products", "can_manage_system", "can_manage_company"]} hideOnDenied>
-            <ImportBatchesDialog onImported={refreshBatches} />
+            <div className="flex gap-2">
+              <ImportHistoryDialog kind="batches" />
+              <ImportBatchesDialog onImported={refreshBatches} />
+            </div>
           </PermissionGuard>
         </div>
 

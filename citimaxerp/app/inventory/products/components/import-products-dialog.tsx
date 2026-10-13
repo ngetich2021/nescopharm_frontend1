@@ -148,6 +148,11 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
               <Badge variant="outline" className={STATUS_STYLE.unchanged}>{s.unchanged} unchanged</Badge>
               {s.errors > 0 && <Badge variant="outline" className={STATUS_STYLE.error}>{s.errors} errors</Badge>}
             </div>
+            {s.items_created + s.items_updated + s.sizes_created + s.sizes_updated === 0 && (
+              <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Nothing to import - every row already matches what is in the system{s.errors ? " or has an error" : ""}. Edit the values in Excel, save, and preview again.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Each value is what the item will have after import. Where it changes, the current value is shown{" "}
               <span className="line-through">struck through</span> above the new one, <span className="rounded bg-amber-50 px-1 text-amber-800">highlighted</span>.

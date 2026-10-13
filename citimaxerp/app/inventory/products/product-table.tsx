@@ -22,6 +22,7 @@ import { getProductById, type Product, type ProductSummary } from "@/lib/product
 import { priceOptionsFor, priceListsFor, PRICE_LIST_CODES } from "@/lib/price-codes"
 import { sizedName } from "@/lib/product-sizes"
 import { ImportProductsDialog } from "./components/import-products-dialog"
+import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import * as XLSX from "xlsx"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -402,6 +403,7 @@ export function ProductTable({
             <PermissionGuard permissions={["can_create_products"]}>
               <ImportProductsDialog onImported={onProductUpdated} />
             </PermissionGuard>
+            <ImportHistoryDialog kind="products" />
             
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>

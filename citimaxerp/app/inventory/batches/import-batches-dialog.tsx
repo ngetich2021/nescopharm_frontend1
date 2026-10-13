@@ -20,6 +20,7 @@ interface ImportRow {
   quantity?: number
   expiry?: string | null
   product_name?: string
+  changes?: { field: string; from: unknown; to: unknown }[]
 }
 
 interface ImportResult {
@@ -98,10 +99,10 @@ export function ImportBatchesDialog({ onImported }: { onImported: () => void }) 
         <DialogHeader>
           <DialogTitle>Import Batches</DialogTitle>
           <DialogDescription>
-            Upload the "Batches" sheet of the Nescopharm import workbook (or any sheet whose first row
-            has <b>Batch Number</b> plus <b>Item Description</b> or <b>Item No.</b>). Products must exist already
-            - import the Products sheet first. The same workbook can be uploaded here too; the "Batches"
-            sheet is picked automatically.
+            Upload the sheet from <b>Export All as Excel</b> after editing it, or any sheet whose first row has
+            <b> Item Description</b> and <b>Batch Number</b>. Batches are linked to products by Item Description
+            (plus Size for sized products), and a batch already in the system is updated in place. Products must
+            exist already.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,6 +130,11 @@ export function ImportBatchesDialog({ onImported }: { onImported: () => void }) 
               <Badge variant="outline" className={STATUS_STYLE.unchanged}>{s.unchanged} unchanged</Badge>
               {s.errors > 0 && <Badge variant="outline" className={STATUS_STYLE.error}>{s.errors} errors</Badge>}
             </div>
+            {s.batches_created + s.batches_updated === 0 && (
+              <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Nothing to import - every row already matches what is in the system{s.errors ? " or has an error" : ""}. Edit the values in Excel, save, and preview again.
+              </p>
+            )}
             <div className="max-h-[55vh] overflow-auto rounded border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-white">
@@ -152,6 +158,11 @@ export function ImportBatchesDialog({ onImported }: { onImported: () => void }) 
                         {r.message && (
                           <p className={r.status === "error" ? "text-xs text-red-600" : "text-xs text-amber-600"}>{r.message}</p>
                         )}
+                        {r.changes?.map((c, ci) => (
+                          <p key={ci} className="text-xs text-blue-700">
+                            {c.field.replace(/_/g, " ")}: <span className="text-gray-400 line-through">{String(c.from ?? "-")}</span> → <b>{String(c.to ?? "-")}</b>
+                          </p>
+                        ))}
                       </TableCell>
                       <TableCell className="text-sm">{r.size || "-"}</TableCell>
                       <TableCell className="text-right tabular-nums">

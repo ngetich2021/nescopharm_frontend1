@@ -94,7 +94,7 @@ function exportDate(date?: string): string {
 // The column order matches the import BATCH_SHEET_HEADERS so the
 // exported file can be re-imported after editing in Excel.
 const EXPORT_HEADERS = [
-  "Item No.", "Item Description", "Size",
+  "Item Description", "Size",
   "Batch Number", "Lot Number",
   "Quantity Received", "Quantity Available",
   "Unit Cost", "Selling Price",
@@ -103,7 +103,6 @@ const EXPORT_HEADERS = [
 ]
 function batchToRow(batch: Batch): (string | number)[] {
   return [
-    batch.product?.product_number ?? '',
     batch.product?.name ?? '',
     batch.variant?.name ?? '',
     batch.batch_number || '',
