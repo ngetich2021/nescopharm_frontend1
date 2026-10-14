@@ -15,7 +15,14 @@ export interface SizeRow {
 // space (Id) is part of the item name, not the size.
 const SIZE_LIST = /([A-Za-z]+)?(\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)+)\s*$/
 
-const SIZE_LIST_TAIL = /\s*[A-Za-z]*\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)+\s*$/
+// Trailing size list as the price lists write them: "Fr26,28,31", "2.0,2.5,3", "#1,2,3", "18G/16G",
+// "24%/28%", "S/M/L", "(M,L)", "Adult,Child,Infant". Mirrors ProductVariant::SIZE_LIST in the backend.
+const SIZE_NUM = String.raw`[A-Za-z#]*\d+(?:\.\d+)?[A-Za-z%]*`
+const SIZE_WORD = String.raw`(?<![A-Za-z])(?:XXS|XS|XXL|XL|S|M|L|Adult|Child|Infant|Neonate|Neonatal|Paediatric)`
+const SIZE_LIST_TAIL = new RegExp(
+  String.raw`[\s-]*\(?\s*(?:${SIZE_NUM}(?:\s*[,/]\s*${SIZE_NUM})+|${SIZE_WORD}(?:\s*[,/]\s*${SIZE_WORD})+)\s*,?\s*\)?\s*$`,
+  "i",
+)
 
 // The item name for one size: "Endobronchial Tubes Left Fr26,28,31" + "Fr26" -> "Endobronchial Tubes Left Fr26".
 export function sizedName(productName: string | null | undefined, size: string | null | undefined): string {

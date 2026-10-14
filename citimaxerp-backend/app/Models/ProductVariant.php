@@ -56,8 +56,12 @@ class ProductVariant extends Model
         'display_name',
     ];
 
-    // Trailing size list in an item name, e.g. "Fr26,28,31" or "2.0,2.5,3".
-    private const SIZE_LIST = '/\s*[A-Za-z]*\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)+\s*$/';
+    // Trailing size list in an item name, as the price lists write them: "Fr26,28,31", "2.0,2.5,3",
+    // "#1,2,3", "18G/16G", "24%/28%", "S/M/L", "(M,L)", "Adult,Child,Infant". Mirrors lib/product-sizes.ts.
+    private const SIZE_NUM = '[A-Za-z#]*\d+(?:\.\d+)?[A-Za-z%]*';
+    private const SIZE_WORD = '(?<![A-Za-z])(?:XXS|XS|XXL|XL|S|M|L|Adult|Child|Infant|Neonate|Neonatal|Paediatric)';
+    private const SIZE_LIST = '/[\s\-]*\(?\s*(?:' . self::SIZE_NUM . '(?:\s*[,\/]\s*' . self::SIZE_NUM . ')+|'
+        . self::SIZE_WORD . '(?:\s*[,\/]\s*' . self::SIZE_WORD . ')+)\s*,?\s*\)?\s*$/i';
 
     /**
      * The item name for one size: the size list in the item's name is replaced by the size,
