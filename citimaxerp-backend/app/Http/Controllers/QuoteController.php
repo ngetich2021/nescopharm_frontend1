@@ -218,7 +218,6 @@ class QuoteController extends Controller
                 }
 
                 $cost = $product->unit_cost;
-                $stockQuantity = $product->stock_quantity;
                 $priceToCheck = $product->price;
 
                 // Handle variant if provided
@@ -243,7 +242,6 @@ class QuoteController extends Controller
                     }
 
                     $cost = $variant->cost;
-                    $stockQuantity = $variant->stock_quantity;
                     $priceToCheck = $variant->price; // Use variant price for validation
 
                     // Validate variant store if set
@@ -279,14 +277,8 @@ class QuoteController extends Controller
                     ]);
                 }
 
-                // Validate stock if track_inventory is true. Quantity is in packs; stock is in pieces.
-                $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
-                if ($product->track_inventory && $piecesNeeded > $stockQuantity) {
-                    return response()->json([
-                        'status' => 'failed',
-                        'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, (int) $stockQuantity),
-                    ], 400);
-                }
+                // No stock check here - a quote may be raised for items that aren't
+                // in stock yet. Stock is enforced when it's converted to an order.
 
                 // Handle packaging units
                 $unitId = $item['unit_id'] ?? null;
@@ -585,17 +577,7 @@ class QuoteController extends Controller
                             ], 400);
                         }
 
-                        // Validate stock. Quantity is in packs; stock is in pieces.
-                        $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
-                        $stockQuantity = !empty($item['variant_id'])
-                            ? (int) (\App\Models\ProductVariant::whereKey($item['variant_id'])->value('stock_quantity') ?? 0)
-                            : (int) $product->stock_quantity;
-                        if ($product->track_inventory && $piecesNeeded > $stockQuantity) {
-                            return response()->json([
-                                'status' => 'failed',
-                                'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, $stockQuantity),
-                            ], 400);
-                        }
+                        // No stock check - quotes may exceed stock; conversion to an order enforces it.
 
                         $totalAmount += $item['quantity'] * $item['unit_price'];
 

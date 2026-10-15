@@ -91,17 +91,17 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
                     type="number"
                     step="1"
                     min="1"
-                    className={`h-10 text-right ${overStock ? "border-red-500" : ""}`}
+                    className={`h-10 text-right ${overStock ? "border-amber-500" : ""}`}
                     aria-label={`Order quantity in packs for row ${index + 1}`}
                     {...form.register(`items.${index}.quantity`, { valueAsNumber: true })}
                   />
                   {errors?.quantity && <p className="text-xs text-red-600 mt-1">{errors.quantity.message}</p>}
                   {product && qty > 0 && (
-                    <p className={`text-xs mt-1 text-right ${overStock ? "text-red-600 font-medium" : "text-gray-500"}`}>
+                    <p className={`text-xs mt-1 text-right ${overStock ? "text-amber-600 font-medium" : "text-gray-500"}`}>
                       = {pieces.toLocaleString()} pcs
                       {stock !== null && tracksStock && (
                         overStock
-                          ? <> - only {stock.toLocaleString()} pcs in stock (max {Math.floor(stock / perPack).toLocaleString()} packs)</>
+                          ? <> - only {stock.toLocaleString()} pcs in stock; needs restocking before it can become an order</>
                           : <> of {stock.toLocaleString()}</>
                       )}
                     </p>

@@ -18,13 +18,14 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Http\Traits\HandlesDatabaseErrors;
+use App\Http\Traits\ChecksStockAvailability;
 use App\Services\PackagingCalculatorService;
 use App\Services\CustomerCreditTermsResolver;
 use App\Services\TaxCompliance\EtimsTaxType;
 
 class OrderController extends Controller
 {
-    use HandlesDatabaseErrors;
+    use HandlesDatabaseErrors, ChecksStockAvailability;
 
     protected $calculator;
     protected CustomerCreditTermsResolver $creditTermsResolver;
@@ -928,6 +929,21 @@ class OrderController extends Controller
                 'status' => 'failed',
                 'message' => 'Order does not have a delivery location set.',
             ], 400);
+        }
+
+        // Stock is only taken when the order is receipted, so an order (e.g. one
+        // converted from a quote) may have lost its stock since it was raised.
+        // Re-check before anything leaves the store.
+        if (!$order->stock_deducted_at) {
+            $order->loadMissing('orderItems.product', 'orderItems.variant');
+            foreach ($order->orderItems as $index => $item) {
+                if ($error = $this->insufficientStockMessage($item->product, $item->variant, (int) ($item->base_quantity ?: $item->quantity))) {
+                    return response()->json([
+                        'status' => 'failed',
+                        'message' => "Item at index {$index}: {$error}",
+                    ], 400);
+                }
+            }
         }
 
         $validator = Validator::make($request->all(), [
