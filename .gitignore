@@ -33,3 +33,6 @@ Thumbs.db
 
 # Claude Code worktrees (stale agent copies, not real project files)
 **/.claude/worktrees/
+
+.vercel
+.env.local

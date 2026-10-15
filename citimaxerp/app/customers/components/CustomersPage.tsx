@@ -13,6 +13,7 @@ import { getCustomers, type Customer } from "@/lib/customers";
 import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/customer-accounts";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionGuard } from "@/components/PermissionGuard";
 
@@ -82,6 +83,73 @@ export function CustomersPage() {
   const totalPages = Math.ceil(filteredCustomers.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + rowsPerPage);
+
+  // Every column of the customer record, in the order it reads on the form.
+  const EXPORT_COLUMNS: [string, (c: Customer) => unknown][] = [
+    ["Customer #", (c) => c.customer_number],
+    ["Name", (c) => c.name],
+    ["Business Name", (c) => c.business_name],
+    ["Trading Name", (c) => c.trading_name],
+    ["Customer Type", (c) => c.customer_type],
+    ["Business Type", (c) => c.business_type],
+    ["Nature of Business", (c) => c.nature_of_business],
+    ["Status", (c) => c.status],
+    ["Approval Status", (c) => c.approval_status],
+    ["Payment Method", (c) => c.payment_method],
+    ["Email", (c) => c.email],
+    ["Phone", (c) => c.phone],
+    ["Telephone", (c) => c.telephone],
+    ["Website", (c) => c.website],
+    ["PIN Number", (c) => c.pin_number],
+    ["Registration Number", (c) => c.registration_number],
+    ["PPB License Number", (c) => c.ppb_license_number],
+    ["Address", (c) => c.address],
+    ["City", (c) => c.city],
+    ["State", (c) => c.state],
+    ["County", (c) => c.county],
+    ["Region", (c) => c.region],
+    ["Country", (c) => c.country],
+    ["Postal Code", (c) => c.postal_code],
+    ["Contact Person", (c) => c.contact_person_name],
+    ["Contact Designation", (c) => c.contact_person_designation],
+    ["Contact Phone", (c) => c.contact_person_phone],
+    ["Contact Email", (c) => c.contact_person_email],
+    ["Accounts Contact", (c) => c.accounts_contact_name],
+    ["Accounts Designation", (c) => c.accounts_contact_designation],
+    ["Accounts Phone", (c) => c.accounts_contact_phone],
+    ["Accounts Email", (c) => c.accounts_contact_email],
+    ["Preferred Communication", (c) => c.preferred_communication_channel],
+    ["Last Contact Date", (c) => c.last_contact_date],
+    ["Tags", (c) => (Array.isArray(c.tags) ? c.tags.join(", ") : c.tags)],
+    ["Notes", (c) => c.notes],
+    ["Total Spend (KES)", (c) => Number(c.total_spend) || 0],
+    ["Total Orders", (c) => c.total_orders ?? 0],
+    ["Loyalty Points", (c) => c.loyalty_points ?? 0],
+    ["Created At", (c) => (c.created_at ? new Date(c.created_at).toLocaleString() : "")],
+    ["Updated At", (c) => (c.updated_at ? new Date(c.updated_at).toLocaleString() : "")],
+  ];
+
+  // Exports the whole (search-filtered) list, not just the page on screen.
+  const handleExport = () => {
+    if (filteredCustomers.length === 0) {
+      toast({ title: "No Data", description: "No customers to export." });
+      return;
+    }
+    // Excel rejects cells over 32,767 characters.
+    const cell = (v: unknown) => {
+      if (v === null || v === undefined) return "";
+      const value = typeof v === "object" ? JSON.stringify(v) : v;
+      return typeof value === "string" ? value.slice(0, 32767) : value;
+    };
+    const rows = [
+      ["S/No", ...EXPORT_COLUMNS.map(([header]) => header)],
+      ...filteredCustomers.map((c, i) => [i + 1, ...EXPORT_COLUMNS.map(([, get]) => cell(get(c)))]),
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Customers");
+    XLSX.writeFile(workbook, `customers_export_${new Date().toISOString().split("T")[0]}.xlsx`);
+    toast({ title: "Export Successful", description: `Exported ${filteredCustomers.length} customers to Excel.` });
+  };
 
   // Event handlers
   const handleViewCustomer = (customer: Customer) => {
@@ -206,6 +274,7 @@ export function CustomersPage() {
           totalItems={filteredCustomers.length}
           onRefresh={handleRefresh}
           onCreateNew={() => setCreateModalOpen(true)}
+          onExport={handleExport}
         />
 
         {/* View Customer Modal */}

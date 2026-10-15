@@ -58,6 +58,7 @@ interface CustomersTableProps {
   totalItems: number;
   onRefresh: () => void;
   onCreateNew: () => void;
+  onExport: () => void;
 }
 
 export function CustomersTable({
@@ -77,6 +78,7 @@ export function CustomersTable({
   totalItems,
   onRefresh,
   onCreateNew,
+  onExport,
 }: CustomersTableProps) {
   console.log("CustomersTable received props - customers:", customers, "loading:", loading, "typeof customers:", typeof customers);
   
@@ -146,7 +148,7 @@ export function CustomersTable({
               Add Customer
             </Button>
           </PermissionGuard>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onExport} disabled={loading}>
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
