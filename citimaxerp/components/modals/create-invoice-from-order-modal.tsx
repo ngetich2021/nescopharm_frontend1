@@ -100,8 +100,10 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
                              order.status.toLowerCase() === 'confirmed'
         const hasCustomer = order.customer_id && order.customer
         const hasValidAmount = order.final_amount || order.total_amount
-        
-        return isValidStatus && hasCustomer && hasValidAmount
+        // Only orders the GM or a Director has approved can be invoiced.
+        const isApproved = !!order.invoice_approved_at
+
+        return isValidStatus && hasCustomer && hasValidAmount && isApproved
       })
       
       setOrders(availableOrders)
@@ -109,7 +111,7 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
       if (availableOrders.length === 0) {
         toast({
           title: "No Available Orders",
-          description: "No completed or confirmed orders are available for invoicing.",
+          description: "No completed or confirmed orders approved by the GM or a Director are available for invoicing.",
           variant: "destructive",
         })
       }

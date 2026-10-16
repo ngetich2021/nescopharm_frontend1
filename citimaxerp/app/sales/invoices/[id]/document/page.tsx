@@ -12,10 +12,14 @@ import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/custo
 import { INVOICE_PAYMENT_DETAILS, COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { getEtimsConfig } from "@/lib/etims"
 import { amountInWords } from "@/lib/number-to-words"
-import { ArrowLeft, Download, Mail, Printer } from "lucide-react"
+import { ArrowLeft, Download, FileText, Mail, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentCode } from "@/lib/price-codes"
+
+const RETURN_POLICY_LINE = "All goods are subject to the enclosed Non-returnable policy"
+const RETURN_POLICY_IMAGE = "/company/return-policy.jpg"
+const RETURN_POLICY_PDF = "/company/return-policy.pdf"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -144,6 +148,16 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       const imgY = 10
       
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
+
+      // The return policy always goes out with the invoice, as its last page.
+      const policy = await fetch(RETURN_POLICY_IMAGE).then((r) => r.blob()).then((blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      }))
+      pdf.addPage()
+      pdf.addImage(policy, 'JPEG', 0, 0, pdfWidth, pdfHeight)
       pdf.save(`Invoice-${invoice.invoice_number}.pdf`)
       
       toast({
@@ -224,6 +238,12 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                   <Download className="h-4 w-4 mr-2" />
                 )}
                 {isDownloading ? 'Generating...' : 'Download PDF'}
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a href={RETURN_POLICY_PDF} target="_blank" rel="noopener noreferrer">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Return Policy
+                </a>
               </Button>
               <Button variant="outline" size="sm">
                 <Mail className="h-4 w-4 mr-2" />
@@ -349,7 +369,9 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
           <div className="mb-4 border border-t-0 border-gray-300 px-1.5 py-0.5 text-xs leading-tight">
             <p className="text-[10px] text-gray-500">Terms of Delivery</p>
             <p className="font-bold text-gray-900 break-words">
-              {invoice.terms_of_delivery || "Returns shall only be accepted within 7 days from delivery."}
+              {invoice.terms_of_delivery && !/returns?\b/i.test(invoice.terms_of_delivery)
+                ? invoice.terms_of_delivery
+                : RETURN_POLICY_LINE}
             </p>
           </div>
 
@@ -536,6 +558,11 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
             <p>Thank you for your business!</p>
             <p>This is a Computer Generated Invoice</p>
           </div>
+        </Card>
+
+        {/* Enclosed stock return policy - printed as the invoice's last page */}
+        <Card className="max-w-4xl mx-auto mt-6 bg-white shadow-lg overflow-hidden print:shadow-none print:max-w-none print:m-0 print:border-0 print:break-before-page">
+          <img src={RETURN_POLICY_IMAGE} alt="Nescopharm Stock Return Policy" className="w-full h-auto block" />
         </Card>
       </div>
     </div>

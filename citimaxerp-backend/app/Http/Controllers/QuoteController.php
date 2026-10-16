@@ -569,13 +569,7 @@ class QuoteController extends Controller
                             }
                         }
 
-                        // Validate unit price
-                        if ($item['unit_price'] < $product->unit_cost) {
-                            return response()->json([
-                                'status' => 'failed',
-                                'message' => "Item at index {$index}: Unit price cannot be below unit cost ({$product->unit_cost}).",
-                            ], 400);
-                        }
+                        // The price is negotiated per quote - any price may be used.
 
                         // No stock check - quotes may exceed stock; conversion to an order enforces it.
 

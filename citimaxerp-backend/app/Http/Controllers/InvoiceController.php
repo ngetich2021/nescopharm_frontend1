@@ -411,7 +411,7 @@ class InvoiceController extends Controller
                 if (!$this->hasPermission($request, 'can_view_invoices', $companyId)) {
                     return response()->json(['message' => 'Unauthorized'], 403);
                 }
-                $invoice = Invoice::with(['customer', 'order', 'lineItems.product', 'lineItems.variant', 'createdBy', 'company'])
+                $invoice = Invoice::with(['customer', 'order.invoiceApprover:id,first_name,last_name', 'lineItems.product', 'lineItems.variant', 'createdBy', 'company'])
                     ->where('company_id', $companyId)
                     ->findOrFail($id);
                 $this->syncSystemReferences($invoice);
@@ -687,6 +687,10 @@ class InvoiceController extends Controller
             $existingInvoice = Invoice::where('order_id', $orderId)->first();
             if ($existingInvoice) {
                 return response()->json(['message' => 'Invoice already exists for this order', 'invoice' => $existingInvoice], 400);
+            }
+
+            if (!$order->isInvoiceApproved()) {
+                return response()->json(['message' => 'This order must be approved by the GM or a Director before it can be invoiced.'], 403);
             }
 
             DB::beginTransaction();

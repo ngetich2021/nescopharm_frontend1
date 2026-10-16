@@ -184,11 +184,30 @@ body { font-family: 'Figtree'; background: #fff; }
             </div>
         @endif
 
+        @php $approvedOrder = $invoice->order; @endphp
+        @if($approvedOrder && $approvedOrder->invoice_approved_at)
+            <div style="margin-top: 12px; font-size: 0.8rem; border-top: 1px solid #e5e7eb; padding-top: 8px;">
+                <strong>Customer contact person:</strong> {{ $approvedOrder->invoice_contact_person }}@if($approvedOrder->invoice_contact_phone) - {{ $approvedOrder->invoice_contact_phone }}@endif<br>
+                <strong>Approved by:</strong> {{ $approvedOrder->invoiceApprover?->full_name }}
+                ({{ $approvedOrder->invoice_approved_at->format('d M Y') }})<br>
+                <strong>Comment:</strong> {{ $approvedOrder->invoice_approval_comment }}
+            </div>
+        @endif
+
         <div class="footer">
             <div>Payment Terms: {{ $invoice->payment_terms ?? 'Due on Receipt' }}</div>
+            <div style="margin-top: 8px; font-weight: bold; color: #111827;">All goods are subject to the enclosed Non-returnable policy</div>
             <div style="margin-top: 8px;">Thank you for your business.</div>
         </div>
         
     </div>
+
+    {{-- Every invoice goes out with the company's stock return policy as its last page. --}}
+    @php $returnPolicy = resource_path('documents/return-policy.jpg'); @endphp
+    @if(is_file($returnPolicy))
+        <div style="page-break-before: always;">
+            <img src="data:image/jpeg;base64,{{ base64_encode(file_get_contents($returnPolicy)) }}" alt="Stock Return Policy" style="width: 100%;">
+        </div>
+    @endif
 </body>
 </html>

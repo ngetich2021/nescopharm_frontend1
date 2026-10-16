@@ -104,6 +104,11 @@ class Order extends Model
         'created_at',
         'updated_at',
         'order_date',
+        'invoice_approved_by',
+        'invoice_approved_at',
+        'invoice_approval_comment',
+        'invoice_contact_person',
+        'invoice_contact_phone',
     ];
 
     protected $casts = [
@@ -119,6 +124,7 @@ class Order extends Model
         'updated_at' => 'datetime',
         'order_date' => 'datetime',
         'stock_deducted_at' => 'datetime',
+        'invoice_approved_at' => 'datetime',
     ];
 
     // Forms send order_date: null when the field is left blank, and sales reports
@@ -135,6 +141,24 @@ class Order extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    // Only the GM or a Director may sign an order off for invoicing.
+    public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director'];
+
+    public static function canApproveInvoices(?User $user): bool
+    {
+        return in_array(strtolower(trim((string) $user?->role?->name)), self::INVOICE_APPROVER_ROLES, true);
+    }
+
+    public function isInvoiceApproved(): bool
+    {
+        return (bool) $this->invoice_approved_at;
+    }
+
+    public function invoiceApprover()
+    {
+        return $this->belongsTo(User::class, 'invoice_approved_by');
     }
 
     public function salesRep()

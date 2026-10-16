@@ -437,6 +437,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['patch', 'put'], '/orders/{id}', [OrderController::class, 'update'])->name('orders.update');
     Route::delete('/orders/{id}', [OrderController::class, 'destroy'])->name('orders.destroy');
     Route::post('/orders/{id}/dispatch', [OrderController::class, 'dispatch'])->name('orders.dispatch');
+    Route::post('/orders/{id}/approve-invoice', [OrderController::class, 'approveInvoice'])->name('orders.approveInvoice');
 
     // Quote routes
     Route::get('/quotes', [QuoteController::class, 'index']);

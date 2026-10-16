@@ -25,7 +25,16 @@ export interface Order {
     total_orders: number
     customer_type?: string
     business_name?: string
+    contact_person_name?: string | null
+    contact_person_phone?: string | null
   } | null
+  // GM / Director sign-off required before the order can be invoiced.
+  invoice_approved_by?: string | null
+  invoice_approved_at?: string | null
+  invoice_approval_comment?: string | null
+  invoice_contact_person?: string | null
+  invoice_contact_phone?: string | null
+  invoice_approver?: { id: string; first_name: string; last_name: string } | null
 }
 
 // Define the detailed order type with all related data
@@ -244,4 +253,21 @@ export async function deleteOrder(orderId: string): Promise<void> {
   } catch (error: any) {
     throw new Error(`An unexpected error occurred while deleting the order: ${error.message || "Unknown error"}.`)
   }
+}
+
+// GM / Director approval that lets an order be invoiced.
+export async function approveOrderForInvoice(
+  orderId: string,
+  data: { comment: string; contact_person: string; contact_phone?: string },
+): Promise<OrderDetail> {
+  const response = await apiCall<{ status: string; message?: string; order: OrderDetail }>(
+    `/orders/${orderId}/approve-invoice`,
+    "POST",
+    data,
+    true,
+  )
+  if (response.status !== "success") {
+    throw new Error(typeof response.message === "string" ? response.message : "Failed to approve order for invoicing")
+  }
+  return response.order
 }

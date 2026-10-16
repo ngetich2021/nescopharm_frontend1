@@ -572,6 +572,15 @@ class PaymentController extends Controller
                 throw new \Exception('Order not found');
             }
 
+            // Payments are still recorded, but the invoice waits for GM/Director approval.
+            if (!$order->isInvoiceApproved()) {
+                Log::info('Invoice not generated - order awaiting GM/Director approval', [
+                    'payment_id' => $payment->id,
+                    'order_id' => $order->id,
+                ]);
+                return null;
+            }
+
             if (!$order->company_id) {
                 Log::error('Missing company_id', [
                     'payment_id' => $payment->id,

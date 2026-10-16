@@ -85,7 +85,20 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
                     ? form.watch(`items.${index}.price_unit`) || DEFAULT_UNIT
                     : <span className="text-gray-400">-</span>}
                 </td>
-                <td className="py-2 pr-2 pt-4 text-right">{form.watch(`items.${index}.product_id`) ? money(price) : <span className="text-gray-400">-</span>}</td>
+                <td className="py-2 pr-2">
+                  {/* Defaults to the price-list price; can be negotiated per quote. */}
+                  {form.watch(`items.${index}.product_id`) ? (
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="h-10 w-28 ml-auto text-right"
+                      aria-label={`Price per pack for row ${index + 1}`}
+                      {...form.register(`items.${index}.unit_price`, { valueAsNumber: true })}
+                    />
+                  ) : <p className="pt-2 text-right text-gray-400">-</p>}
+                  {errors?.unit_price && <p className="text-xs text-red-600 mt-1 text-right">{errors.unit_price.message}</p>}
+                </td>
                 <td className="py-2 pr-2">
                   <Input
                     type="number"

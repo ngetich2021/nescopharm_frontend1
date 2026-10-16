@@ -158,7 +158,7 @@ class OrderController extends Controller
                 }
 
                 $perPage = (int) $request->input('per_page', 1000);
-                $orders = $query->select('id', 'customer_id', 'company_id', 'order_number', 'total_amount', 'discount', 'tax', 'final_amount', 'status', 'payment_status', 'created_at', 'updated_at')
+                $orders = $query->select('id', 'customer_id', 'company_id', 'order_number', 'total_amount', 'discount', 'tax', 'final_amount', 'status', 'payment_status', 'invoice_approved_at', 'created_at', 'updated_at')
                     ->orderBy('created_at', 'desc')
                     ->paginate($perPage);
 
@@ -220,7 +220,8 @@ class OrderController extends Controller
                     },
                     'deliveryDetails' => function ($query) {
                         $query->select('id', 'order_id', 'delivery_status', 'estimated_delivery_date', 'created_at', 'updated_at');
-                    }
+                    },
+                    'invoiceApprover:id,first_name,last_name,email',
                 ]);
 
             if (!$this->hasPermission($request, 'can_manage_all_quotes')) {
@@ -675,6 +676,15 @@ class OrderController extends Controller
                     $orderStock = app(\App\Services\OrderStockService::class);
                     $wasDeducted = (bool) $order->stock_deducted_at;
                     $orderStock->restore($order, "Order {$order->order_number} edited");
+                    // Changed lines need a fresh sign-off before they can be invoiced.
+                    if (!\App\Models\Invoice::where('order_id', $order->id)->exists()) {
+                        $order->fill([
+                            'invoice_approved_by' => null,
+                            'invoice_approved_at' => null,
+                            'invoice_approval_comment' => null,
+                        ]);
+                    }
+
                     // Delete old items
                     $order->orderItems()->delete();
 
@@ -888,6 +898,63 @@ class OrderController extends Controller
                 'message' => 'Failed to delete order: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * GM / Director sign-off that this order may be invoiced. Records who approved,
+     * their comment, and the customer contact person the invoice is going to.
+     */
+    public function approveInvoice(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!Order::canApproveInvoices($user)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Only the GM or a Director can approve an order for invoicing.',
+            ], 403);
+        }
+
+        $order = Order::where('id', $id)->where('company_id', $user->company_id)->first();
+        if (!$order) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Order not found.',
+            ], 404);
+        }
+
+        if (\App\Models\Invoice::where('order_id', $order->id)->exists()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'This order has already been invoiced.',
+            ], 400);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'comment' => 'required|string|max:2000',
+            'contact_person' => 'required|string|max:255',
+            'contact_phone' => 'nullable|string|max:50',
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $order->update([
+            'invoice_approved_by' => $user->id,
+            'invoice_approved_at' => now(),
+            'invoice_approval_comment' => $request->input('comment'),
+            'invoice_contact_person' => $request->input('contact_person'),
+            'invoice_contact_phone' => $request->input('contact_phone'),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Order approved for invoicing.',
+            'order' => $order->fresh()->load('invoiceApprover:id,first_name,last_name,email'),
+        ]);
     }
 
     public function dispatch(Request $request, $id)

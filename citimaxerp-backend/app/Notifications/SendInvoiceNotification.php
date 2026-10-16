@@ -45,6 +45,10 @@ class SendInvoiceNotification extends Notification implements ShouldQueue
             ->line('Thank you for your business!')
             ->attachData($pdfContent, 'invoice-' . $invoice->invoice_number . '.pdf', [
                 'mime' => 'application/pdf',
+            ])
+            ->attach(resource_path('documents/return-policy.pdf'), [
+                'as' => 'Nescopharm Stock Return Policy.pdf',
+                'mime' => 'application/pdf',
             ]);
     }
 }

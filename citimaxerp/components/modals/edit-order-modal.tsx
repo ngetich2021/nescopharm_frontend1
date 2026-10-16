@@ -361,6 +361,16 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
     setOrderItems(updatedItems)
   }
 
+  const handleUpdatePrice = (index: number, value: string) => {
+    const price = Number.parseFloat(value)
+    if (isNaN(price) || price < 0) return
+
+    const updatedItems = [...orderItems]
+    updatedItems[index].unit_price = price
+    updatedItems[index].total_price = updatedItems[index].quantity * price
+    setOrderItems(updatedItems)
+  }
+
   const handleRemoveItem = (index: number) => {
     setOrderItems(orderItems.filter((_, i) => i !== index))
   }
@@ -740,9 +750,16 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                               <div className="text-xs text-gray-500">{[item.price_label, item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
-                                {item.unit_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
+                              {/* Defaults to the price-list price; can be negotiated per order. */}
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.unit_price}
+                                onChange={(e) => handleUpdatePrice(index, e.target.value)}
+                                className="h-8 w-28 text-right"
+                                aria-label={`Price for row ${index + 1}`}
+                              />
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center">
