@@ -8,17 +8,24 @@ use Illuminate\Support\Collection;
 
 class PackagingCalculatorService
 {
-    // Pieces in one pack from a price-list unit like "Per pack of 100's" or "Box of 50"; 1 for single pieces.
+    // Numbers joined by "of", "x" or "*" multiply: "3's of 10" = 30, "2 x 100" / "2 packs of 100" = 200.
+    // A number followed by a measure ("of 5mg") is a strength, not a count.
+    private const PACK_JOIN = "/^\s*(?:'?s\b)?\s*(?:[a-z]+\s+)?(?:of|x|×|\*)\s*(\d[\d,]*)(?![\d,])(?!\s*(?:mg|mcg|ml|g|kg|l|cm|mm|m|iu)\b)/iu";
+
+    // Pieces in one pack from a price-list unit like "Per pack of 100's", "Box of 50" or "3's of 10"; 1 for single pieces.
     // Mirrors piecesPerPack() in the frontend's lib/price-codes.ts.
     public static function piecesPerPack(?string $unit): int
     {
-        if ($unit && preg_match('/(\d[\d,]*)/', $unit, $m)) {
-            $n = (int) str_replace(',', '', $m[1]);
-            if ($n > 1) {
-                return $n;
-            }
+        if (!$unit || !preg_match('/\d[\d,]*/', $unit, $m, PREG_OFFSET_CAPTURE)) {
+            return 1;
         }
-        return 1;
+        $n = (int) str_replace(',', '', $m[0][0]);
+        $rest = substr($unit, $m[0][1] + strlen($m[0][0]));
+        while (preg_match(self::PACK_JOIN, $rest, $next)) {
+            $n *= (int) str_replace(',', '', $next[1]);
+            $rest = substr($rest, strlen($next[0]));
+        }
+        return $n > 1 ? $n : 1;
     }
 
     // Stock pieces for a line: packs ordered x pieces per pack of its price-list unit.

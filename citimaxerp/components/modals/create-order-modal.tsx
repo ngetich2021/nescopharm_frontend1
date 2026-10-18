@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Search, ShoppingCart, Trash2, X, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
+import { Plus, Search, ShoppingCart, Trash2, X, Pencil, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
 import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
@@ -27,6 +27,7 @@ import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, Custom
 import { formatPackagingForDisplay } from "@/lib/packaging-utils"
 import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
+import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
 
 type Customer = LibCustomer
@@ -324,6 +325,30 @@ export function CreateOrderModal({
     item.total_price = item.quantity * price
     item.tax_amount = price * item.quantity * (item.tax_rate / 100)
     setOrderItems(updatedItems)
+  }
+
+  // The pen edits the item itself, so every line using it takes the new name, and lines priced
+  // with the same code take the new price and unit.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const handleItemEdited = ({ product: fresh, unitPrice, priceUnit }: LineEditResult) => {
+    if (editingIndex === null) return
+    const code = orderItems[editingIndex]?.price_label
+    setProducts((prev) => prev.map((p) => (p.id === fresh.id ? { ...p, ...fresh } : p)))
+    setOrderItems((prev) =>
+      prev.map((item) => {
+        if (item.product_id !== fresh.id) return item
+        const size = item.variant_id ? (fresh.variants ?? []).find((v: any) => v.id === item.variant_id) : undefined
+        const renamed = { ...item, product_name: size ? sizedName(fresh.name, size.name) : fresh.name }
+        if (!code || item.price_label !== code) return renamed
+        return {
+          ...renamed,
+          unit_price: unitPrice,
+          price_unit: priceUnit,
+          total_price: item.quantity * unitPrice,
+        tax_amount: unitPrice * item.quantity * (item.tax_rate / 100),
+        }
+      }),
+    )
   }
 
   const handleRemoveItem = (index: number) => {
@@ -800,6 +825,17 @@ export function CreateOrderModal({
                               <div className="text-sm text-gray-900">Ksh. {(item.total_price + item.tax_amount).toFixed(2)}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-right">
+                              {product && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingIndex(index)}
+                                  aria-label={`Edit item on row ${index + 1}`}
+                                  title="Edit name, description, unit, price and expiry"
+                                >
+                                  <Pencil className="h-4 w-4 text-gray-500" />
+                                </Button>
+                              )}
                               <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(index)}>
                                 <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
@@ -809,6 +845,14 @@ export function CreateOrderModal({
                       })}
                     </tbody>
                   </table>
+                  <LineItemEditDialog
+                    open={editingIndex !== null && !!products.find((p) => p.id === orderItems[editingIndex]?.product_id)}
+                    onOpenChange={(open) => !open && setEditingIndex(null)}
+                    product={editingIndex !== null ? products.find((p) => p.id === orderItems[editingIndex]?.product_id) : undefined}
+                    variantId={editingIndex !== null ? orderItems[editingIndex]?.variant_id ?? null : null}
+                    priceCode={editingIndex !== null ? orderItems[editingIndex]?.price_label ?? null : null}
+                    onSaved={handleItemEdited}
+                  />
                 </div>
 
                 <div className="border rounded-md p-4 space-y-4">

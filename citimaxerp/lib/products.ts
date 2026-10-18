@@ -864,3 +864,19 @@ export function calculateProductSummary(products: Product[]): ProductSummary {
     lowStockProducts,
   };
 }
+export interface QuickEditPayload {
+  name?: string
+  description?: string | null
+  variant_id?: string | null
+  // The price-list code the line was priced with, e.g. "NSPD 001"; price and unit go onto that entry.
+  price_code?: string | null
+  price?: number
+  unit_of_measure?: string
+  batches?: { id: string; expiry_date: string | null }[]
+}
+
+// Edits the product itself from a quote/order line, so its price lists and batches change with it.
+export async function quickEditProduct(productId: string, payload: QuickEditPayload): Promise<{ data: any; changes: any[]; message: string }> {
+  const response = await apiCall<any>(`/products/${productId}/quick-edit`, "PATCH", payload, true)
+  return { data: response.data, changes: response.changes ?? [], message: response.message }
+}

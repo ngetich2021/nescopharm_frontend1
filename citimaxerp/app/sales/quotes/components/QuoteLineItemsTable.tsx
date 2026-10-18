@@ -4,11 +4,12 @@ import { useEffect, useId, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Trash2, Loader2 } from "lucide-react"
+import { Trash2, Loader2, Pencil } from "lucide-react"
 import { getProducts } from "@/lib/products"
 import { DEFAULT_UNIT, findAllByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { activeSizesOf, sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
+import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
 
 interface Props {
   form: UseFormReturn<any>
@@ -27,9 +28,29 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
   // Codes typed for products outside the loaded page are fetched by CodeCell; keep those
   // products around so their sizes stay available to the row.
   const [resolved, setResolved] = useState<Record<string, any>>({})
-  const productById = (id: string) => (id ? products.find((p) => p.id === id) ?? resolved[id] : undefined)
+  // An item edited with the pen is kept here too, and wins over the copy loaded with the page.
+  const productById = (id: string) => (id ? resolved[id] ?? products.find((p) => p.id === id) : undefined)
   const remember = (product: any) =>
     setResolved((prev) => (prev[product.id] ? prev : { ...prev, [product.id]: product }))
+  const [editing, setEditing] = useState<number | null>(null)
+  const editingProduct = editing !== null ? productById(form.getValues(`items.${editing}.product_id`)) : undefined
+
+  // The item changed everywhere, so every line on this quote using it takes the new name, and
+  // those priced with the same code take the new price and unit.
+  const applyEdit = ({ product: fresh, unitPrice, priceUnit }: LineEditResult) => {
+    if (editing === null) return
+    const code = form.getValues(`items.${editing}.price_label`)
+    setResolved((prev) => ({ ...prev, [fresh.id]: fresh }))
+    ;(form.getValues("items") as any[]).forEach((line, i) => {
+      if (line.product_id !== fresh.id) return
+      const size = line.variant_id ? (fresh.variants ?? []).find((v: any) => v.id === line.variant_id) : undefined
+      form.setValue(`items.${i}.description`, size ? sizedName(fresh.name, size.name) : fresh.name)
+      if (code && line.price_label === code) {
+        form.setValue(`items.${i}.unit_price`, unitPrice)
+        form.setValue(`items.${i}.price_unit`, priceUnit)
+      }
+    })
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -50,7 +71,7 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
             <th className="text-right py-2 pr-2 w-28">Price per Pack (Ksh)</th>
             <th className="text-right py-2 pr-2 w-32">Order Qty (packs)</th>
             <th className="text-right py-2 pr-2 w-32">Total Value (Ksh)</th>
-            <th className="w-10" />
+            <th className="w-20" />
           </tr>
         </thead>
         <tbody>
@@ -121,7 +142,20 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
                   )}
                 </td>
                 <td className="py-2 pr-2 pt-4 text-right font-semibold">{money(qty * price)}</td>
-                <td className="py-2">
+                <td className="py-2 whitespace-nowrap">
+                  {product && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setEditing(index)}
+                      className="text-gray-500 hover:text-gray-900"
+                      aria-label={`Edit item on row ${index + 1}`}
+                      title="Edit name, description, unit, price and expiry"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
@@ -138,6 +172,14 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
           })}
         </tbody>
       </table>
+      <LineItemEditDialog
+        open={editing !== null && !!editingProduct}
+        onOpenChange={(open) => !open && setEditing(null)}
+        product={editingProduct}
+        variantId={editing !== null ? form.getValues(`items.${editing}.variant_id`) : null}
+        priceCode={editing !== null ? form.getValues(`items.${editing}.price_label`) : null}
+        onSaved={applyEdit}
+      />
     </div>
   )
 }

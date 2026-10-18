@@ -120,10 +120,23 @@ export function documentCode(priceLabel: string | null | undefined, itemNumber: 
   return itemNumber != null && itemNumber !== "" ? String(itemNumber) : "-"
 }
 
-// Pieces in one pack from a unit like "Per pack of 100's" or "Box of 50"; null for a single piece.
+// Numbers joined by "of", "x" or "*" multiply: "3's of 10" = 30, "2 x 100" / "2 packs of 100" = 200.
+// A number followed by a measure ("of 5mg") is a strength, not a count.
+const PACK_JOIN = /^\s*(?:'?s\b)?\s*(?:[a-z]+\s+)?(?:of|x|×|\*)\s*(\d[\d,]*)(?![\d,])(?!\s*(?:mg|mcg|ml|g|kg|l|cm|mm|m|iu)\b)/i
+const toInt = (s: string) => parseInt(s.replace(/,/g, ""), 10)
+
+// Pieces in one pack from a unit like "Per pack of 100's", "Box of 50" or "3's of 10"; null for a single piece.
+// Mirrors PackagingCalculatorService::piecesPerPack() on the backend, which takes stock with it.
 export function piecesPerPack(unit: string | null | undefined): number | null {
-  const m = unit?.match(/(\d[\d,]*)/)
-  const n = m ? parseInt(m[1].replace(/,/g, ""), 10) : NaN
+  const first = unit?.match(/\d[\d,]*/)
+  if (!unit || !first || first.index === undefined) return null
+  let n = toInt(first[0])
+  let rest = unit.slice(first.index + first[0].length)
+  let next: RegExpMatchArray | null
+  while ((next = rest.match(PACK_JOIN))) {
+    n *= toInt(next[1])
+    rest = rest.slice(next[0].length)
+  }
   return n > 1 ? n : null
 }
 

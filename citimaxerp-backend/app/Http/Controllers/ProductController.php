@@ -3268,6 +3268,146 @@ class ProductController extends Controller
     /**
      * Update inventory batch
      */
+    /**
+     * The pen on a quote/order line: edits the product itself, so the change shows on its batches,
+     * price lists and every other document - nothing is kept as a one-off copy on the line.
+     * Name/description go on the product, unit/price on the price-list entry the line was priced
+     * with (e.g. "NSPD 001"), and expiry dates on the product's batches. All or nothing.
+     */
+    public function quickEdit(Request $request, $id)
+    {
+        $user = $request->user();
+        $companyId = $user->company_id;
+        if (!$this->hasPermission($request, 'can_update_products', $companyId)) {
+            return response()->json(['status' => 'failed', 'message' => 'You need permission to update products to edit an item here.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string|max:5000',
+            'variant_id' => 'nullable|uuid',
+            'price_code' => 'nullable|string|max:100',
+            'price' => 'nullable|numeric|min:0|max:999999.99',
+            'unit_of_measure' => 'nullable|string|max:50',
+            'batches' => 'nullable|array',
+            'batches.*.id' => 'required|uuid',
+            'batches.*.expiry_date' => 'nullable|date',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $product = Product::forCompany($companyId)->findOrFail($id);
+        $variant = $request->filled('variant_id')
+            ? ProductVariant::where('product_id', $product->id)->findOrFail($request->input('variant_id'))
+            : null;
+
+        if ($request->has('name')) {
+            $name = trim(preg_replace('/\s+/', ' ', $request->input('name')));
+            // Imports and batches link by name, so two active products must never share one.
+            $clash = Product::forCompany($companyId)->where('id', '!=', $product->id)
+                ->whereRaw('lower(name) = ?', [mb_strtolower($name)])
+                ->whereRaw('is_active = true')->value('item_number');
+            if ($clash !== null) {
+                return response()->json(['status' => 'failed', 'message' => "Item No. {$clash} already has the name \"{$name}\" - pick a different name or merge the two on the Products page."], 422);
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            $changes = [];
+            if (isset($name)) {
+                $product->name = $name;
+            }
+            if ($request->has('description')) {
+                $product->description = trim((string) $request->input('description')) ?: null;
+            }
+            if ($product->isDirty()) {
+                $changes = array_merge($changes, $this->dirtyChanges($product));
+                $product->save();
+            }
+
+            if ($request->filled('price_code') && ($request->filled('price') || $request->filled('unit_of_measure'))) {
+                $wanted = strtoupper(preg_replace('/\s+/', '', $request->input('price_code')));
+                $tier = ProductPriceTier::where('product_id', $product->id)
+                    ->where(fn ($q) => $variant ? $q->where('variant_id', $variant->id) : $q->whereNull('variant_id'))
+                    ->get()
+                    ->first(fn ($t) => strtoupper(preg_replace('/\s+/', '', $t->tier_name . ($t->item_code ?? ''))) === $wanted);
+                if (!$tier && $wanted !== 'NSPV') {
+                    throw new \RuntimeException("Price code {$request->input('price_code')} is not on this item any more.");
+                }
+
+                $owner = $variant ?? $product;
+                $oldPrice = $tier ? (float) $tier->price : (float) $owner->price;
+                $newPrice = $request->filled('price') ? (float) $request->input('price') : $oldPrice;
+                $unit = $request->filled('unit_of_measure') ? trim($request->input('unit_of_measure')) : ($tier->unit_of_measure ?? $product->unit_of_measurement ?? 'pcs');
+
+                if ($tier) {
+                    $tier->fill(['price' => $newPrice, 'unit_of_measure' => $unit]);
+                    if ($tier->isDirty()) {
+                        $changes = array_merge($changes, array_map(fn ($c) => ['field' => "{$tier->code} {$c['field']}"] + $c, $this->dirtyChanges($tier)));
+                        $tier->save();
+                    }
+                }
+                // NSPV is the default price and is mirrored onto the item, as the price-list import does.
+                if ($wanted === 'NSPV' || ($tier && $tier->tier_name === 'NSPV')) {
+                    $owner->price = $newPrice;
+                    if (!$variant) {
+                        $owner->unit_of_measurement = $unit;
+                    }
+                    if ($owner->isDirty()) {
+                        $owner->save();
+                    }
+                }
+                if (abs($newPrice - $oldPrice) > 0.004) {
+                    ProductPriceHistory::create([
+                        'id' => (string) Str::uuid(),
+                        'company_id' => $companyId,
+                        'product_id' => $product->id,
+                        'variant_id' => $variant?->id,
+                        'price_type' => $tier->tier_name ?? 'NSPV',
+                        'old_value' => $oldPrice,
+                        'new_value' => $newPrice,
+                        'change_amount' => $newPrice - $oldPrice,
+                        'change_percentage' => $oldPrice != 0 ? round(($newPrice - $oldPrice) / $oldPrice * 100, 2) : null,
+                        'changed_by' => $user->id,
+                        'source' => ProductPriceHistory::SOURCE_MANUAL_UPDATE,
+                        'source_reference' => 'Edited from a quote/order line',
+                    ]);
+                }
+            }
+
+            foreach ((array) $request->input('batches', []) as $row) {
+                $batch = InventoryBatch::forCompany($companyId)->where('product_id', $product->id)->findOrFail($row['id']);
+                $batch->expiry_date = $row['expiry_date'] ?? null;
+                if ($batch->isDirty('expiry_date')) {
+                    $changes[] = ['field' => "batch {$batch->batch_number} expiry", 'from' => $batch->getOriginal('expiry_date')?->toDateString(), 'to' => $row['expiry_date'] ?? null];
+                    $batch->updateStatus(); // saves; marks it expired/active to match the new date
+                }
+            }
+
+            if ($changes) {
+                ActivityLog::logActivity('product_quick_edit', "Edited {$product->name} from a quote/order line", $user, [
+                    'product_id' => $product->id,
+                    'variant_id' => $variant?->id,
+                    'changes' => $changes,
+                ]);
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Quick edit failed', ['product_id' => $product->id, 'error' => $e->getMessage()]);
+            return response()->json(['status' => 'failed', 'message' => $e->getMessage()], $e instanceof \RuntimeException ? 422 : 500);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $changes ? 'Item updated everywhere it is used.' : 'Nothing changed.',
+            'changes' => $changes,
+            'data' => Product::with(['variants.priceTiers', 'priceTiers'])->find($product->id),
+        ]);
+    }
+
     public function updateInventoryBatch(Request $request, $productId, $batchId)
     {
         $user = $request->user();

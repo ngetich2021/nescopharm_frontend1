@@ -507,6 +507,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/price-lists/history/{id}/download', [ProductController::class, 'downloadImportFile'])->name('price-lists.history.download');
     Route::get('/products/{id}/price-history', [ProductController::class, 'productPriceHistory'])->name('products.price-history');
     Route::match(['patch', 'put'], '/products/{id}', [ProductController::class, 'update'])->name('products.update');
+    Route::patch('/products/{id}/quick-edit', [ProductController::class, 'quickEdit'])->name('products.quick-edit');
     Route::delete('/products/{id}', [ProductController::class, 'destroy'])->name('products.destroy');
 
     // Product Packaging routes
