@@ -221,6 +221,10 @@ class StockAdjustmentController extends Controller
                 'items.*.unit_cost' => 'nullable|numeric|min:0',
                 'items.*.unit_price' => 'nullable|numeric|min:0',
                 'items.*.metadata' => 'nullable|array',
+                // Batch details for stock coming in (e.g. returns); a batch is created when applied.
+                'items.*.batch_number' => 'nullable|string|max:100',
+                'items.*.manufacture_date' => 'nullable|date',
+                'items.*.expiry_date' => 'nullable|date|after_or_equal:items.*.manufacture_date',
             ]);
 
             if ($validator->fails()) {
@@ -338,7 +342,11 @@ class StockAdjustmentController extends Controller
                         'unit_cost' => $unitCost,
                         'unit_price' => $unitPrice,
                         'notes' => $itemData['notes'] ?? null,
-                        'metadata' => $itemData['metadata'] ?? null,
+                        'metadata' => array_merge($itemData['metadata'] ?? [], array_filter([
+                            'batch_number' => $itemData['batch_number'] ?? null,
+                            'manufacture_date' => $itemData['manufacture_date'] ?? null,
+                            'expiry_date' => $itemData['expiry_date'] ?? null,
+                        ])) ?: null,
                         'item_status' => 'pending',
                     ]);
 
@@ -1202,6 +1210,12 @@ class StockAdjustmentController extends Controller
             return;
         }
 
+        // Stock coming in (e.g. a return) goes into a batch, so FEFO picking, expiry tracking and
+        // batch-based stock views see it - not only the product total.
+        if ($item->quantity_adjusted > 0) {
+            $this->receiveIntoBatch($item);
+        }
+
         // Otherwise, adjust product or variant stock_quantity
         if ($item->variant_id) {
             $variant = ProductVariant::findOrFail($item->variant_id);
@@ -1210,6 +1224,54 @@ class StockAdjustmentController extends Controller
             $product = Product::findOrFail($item->product_id);
             $product->increment('stock_quantity', $item->quantity_adjusted);
         }
+    }
+
+    /**
+     * Put an increase into the batch named on the line (a returned batch goes back into it),
+     * or a new batch with the line's manufacture/expiry dates. Links the line to that batch.
+     */
+    private function receiveIntoBatch($item): void
+    {
+        $meta = $item->metadata ?? [];
+        $companyId = $item->stockAdjustment->company_id;
+        $batchNumber = trim((string) ($meta['batch_number'] ?? ''));
+
+        $batch = $batchNumber !== ''
+            ? InventoryBatch::where('company_id', $companyId)->where('batch_number', $batchNumber)->first()
+            : null;
+
+        if ($batch && ($batch->product_id !== $item->product_id || $batch->variant_id !== $item->variant_id)) {
+            throw new \Exception("Batch {$batchNumber} belongs to a different product");
+        }
+
+        if ($batch) {
+            $batch->increment('quantity_available', $item->quantity_adjusted);
+            $batch->update(array_filter([
+                'manufacture_date' => $batch->manufacture_date ? null : ($meta['manufacture_date'] ?? null),
+                'expiry_date' => $batch->expiry_date ? null : ($meta['expiry_date'] ?? null),
+            ]));
+        } else {
+            $product = Product::findOrFail($item->product_id);
+            $batch = InventoryBatch::create([
+                'company_id' => $companyId,
+                'store_id' => $item->store_id ?? $product->store_id,
+                'product_id' => $item->product_id,
+                'variant_id' => $item->variant_id,
+                'batch_number' => $batchNumber !== '' ? $batchNumber : InventoryBatch::generateBatchNumber($companyId, $item->product_id),
+                'quantity_received' => $item->quantity_adjusted,
+                'quantity_available' => $item->quantity_adjusted,
+                'manufacture_date' => $meta['manufacture_date'] ?? null,
+                'expiry_date' => $meta['expiry_date'] ?? null,
+                'received_date' => now(),
+                'unit_cost' => $item->unit_cost ?? $product->unit_cost,
+                'selling_price' => $item->unit_price ?? $product->price,
+                'notes' => "From stock adjustment {$item->stockAdjustment->adjustment_number}",
+                'status' => 'active',
+            ]);
+        }
+
+        $item->batch_id = $batch->id;
+        $item->save();
     }
 
     /**

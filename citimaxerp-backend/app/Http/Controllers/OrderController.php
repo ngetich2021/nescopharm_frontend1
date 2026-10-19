@@ -677,18 +677,26 @@ class OrderController extends Controller
                 }
 
                 // Handle updating items if provided
+                $approvalReset = false;
                 if ($request->has('items')) {
                     $orderStock = app(\App\Services\OrderStockService::class);
                     $wasDeducted = (bool) $order->stock_deducted_at;
-                    $orderStock->restore($order, "Order {$order->order_number} edited");
-                    // Changed lines need a fresh sign-off before they can be invoiced.
-                    if (!\App\Models\Invoice::where('order_id', $order->id)->exists()) {
+
+                    // Changed lines need a fresh sign-off before they can be invoiced. The edit form
+                    // always resends every line, so compare them - a notes-only save keeps the approval.
+                    $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '']);
+                    $before = $order->orderItems()->get()->map(fn ($i) => $lineKey($i->toArray()))->sort()->values()->all();
+                    $after = collect($request->input('items'))->map($lineKey)->sort()->values()->all();
+                    if ($before !== $after && $order->isInvoiceApproved() && !\App\Models\Invoice::where('order_id', $order->id)->exists()) {
                         $order->fill([
                             'invoice_approved_by' => null,
                             'invoice_approved_at' => null,
                             'invoice_approval_comment' => null,
                         ]);
+                        $approvalReset = true;
                     }
+
+                    $orderStock->restore($order, "Order {$order->order_number} edited");
 
                     // Delete old items
                     $order->orderItems()->delete();
@@ -820,6 +828,11 @@ class OrderController extends Controller
                     'order_date',
                 ]));
 
+                if ($approvalReset) {
+                    // The earlier alert was cleared at approval; ask the approvers again.
+                    app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $request->user()->id);
+                }
+
                 Log::info('Order updated', [
                     'user_id' => $request->user()->id,
                     'order_id' => $order->id,
@@ -827,7 +840,7 @@ class OrderController extends Controller
                 ]);
                 return response()->json([
                     'status' => 'success',
-                    'message' => 'Order updated successfully.',
+                    'message' => $approvalReset ? 'Order updated. It needs to be approved again.' : 'Order updated successfully.',
                     'order' => $order->load(['customer', 'deliveryLocation', 'orderItems.product.store', 'orderItems.variant']),
                 ], 200);
             });

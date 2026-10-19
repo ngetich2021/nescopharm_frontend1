@@ -28,8 +28,14 @@ import {
   DollarSign,
   ShoppingCart
 } from "lucide-react"
-import { getBatchDetails, getInventoryMovements } from "@/lib/batches"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { PermissionGuard } from "@/components/PermissionGuard"
+import { useToast } from "@/hooks/use-toast"
+import { getBatchDetails, getInventoryMovements, updateBatch } from "@/lib/batches"
 import type { Batch, BatchMovement } from "@/types/batches"
+
+const dateInput = (value?: string | null) => (value ? String(value).slice(0, 10) : "")
 
 interface BatchDetailsSheetProps {
   productId: string
@@ -43,6 +49,46 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
   const [movements, setMovements] = useState<BatchMovement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ batch_number: "", lot_number: "", manufacture_date: "", expiry_date: "", notes: "" })
+
+  const startEdit = () => {
+    if (!batch) return
+    setForm({
+      batch_number: batch.batch_number ?? "",
+      lot_number: batch.lot_number ?? "",
+      manufacture_date: dateInput(batch.manufacture_date),
+      expiry_date: dateInput(batch.expiry_date),
+      notes: batch.notes ?? "",
+    })
+    setEditing(true)
+  }
+
+  const saveEdit = async () => {
+    if (!form.batch_number.trim()) {
+      toast({ title: "Batch number required", variant: "destructive" })
+      return
+    }
+    setSaving(true)
+    try {
+      await updateBatch(productId, batchId, {
+        batch_number: form.batch_number.trim(),
+        lot_number: form.lot_number.trim() || null,
+        manufacture_date: form.manufacture_date || null,
+        expiry_date: form.expiry_date || null,
+        notes: form.notes.trim() || null,
+      })
+      toast({ title: "Batch updated" })
+      setEditing(false)
+      fetchBatchDetails()
+    } catch (err: any) {
+      toast({ title: "Could not update batch", description: err.message, variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (open && productId && batchId) {
@@ -128,14 +174,51 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
             {/* Batch Information */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="h-5 w-5" />
-                  Batch Information
-                </CardTitle>
-                <CardDescription>
-                  Details for batch {batch.batch_number}
-                </CardDescription>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Package className="h-5 w-5" />
+                      Batch Information
+                    </CardTitle>
+                    <CardDescription>
+                      Details for batch {batch.batch_number}
+                    </CardDescription>
+                  </div>
+                  {!editing && (
+                    <PermissionGuard permissions={["can_update_products", "can_manage_company"]} hideOnDenied>
+                      <Button size="sm" variant="outline" onClick={startEdit}>Edit</Button>
+                    </PermissionGuard>
+                  )}
+                </div>
               </CardHeader>
+              {editing ? (
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="batch-number">Batch Number *</Label>
+                    <Input id="batch-number" value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="lot-number">Lot Number</Label>
+                    <Input id="lot-number" value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="mfg-date">Manufacture Date</Label>
+                    <Input id="mfg-date" type="date" value={form.manufacture_date} onChange={(e) => setForm({ ...form, manufacture_date: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="exp-date">Expiry Date</Label>
+                    <Input id="exp-date" type="date" min={form.manufacture_date || undefined} value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} />
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <Label htmlFor="batch-notes">Notes</Label>
+                    <Input id="batch-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                  </div>
+                  <div className="md:col-span-2 flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setEditing(false)} disabled={saving}>Cancel</Button>
+                    <Button onClick={saveEdit} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+                  </div>
+                </CardContent>
+              ) : (
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Batch Number</div>
@@ -199,6 +282,7 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
                   <div className="font-medium">{batch.notes || "N/A"}</div>
                 </div>
               </CardContent>
+              )}
             </Card>
             
             {/* Financial Information */}

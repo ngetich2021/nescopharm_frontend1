@@ -17,6 +17,8 @@ import { createBulkStockAdjustmentAction } from "../actions"
 import type { BulkStockAdjustmentItem } from "../actions"
 import { getProducts } from "@/lib/products"
 import { getStores } from "@/lib/stores"
+import { getBatches } from "@/lib/batches"
+import type { Batch } from "@/types/batches"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/lib/products"
 import type { Store } from "@/lib/stores"
@@ -32,6 +34,10 @@ interface AdjustmentLine {
   product_id: string
   variant_id: string
   quantity_adjusted: string
+  // Only for increases (e.g. returns): the batch the stock goes into.
+  batch_number?: string
+  manufacture_date?: string
+  expiry_date?: string
 }
 
 export function CreateStockAdjustmentSheet({
@@ -59,6 +65,20 @@ export function CreateStockAdjustmentSheet({
   const [lines, setLines] = useState<AdjustmentLine[]>([
     { id: crypto.randomUUID(), product_id: "", variant_id: "", quantity_adjusted: "" }
   ])
+
+  // Each product's batches (including emptied ones), so a return can go back into its own batch.
+  const [productBatches, setProductBatches] = useState<Record<string, Batch[]>>({})
+  useEffect(() => {
+    if (adjustmentType !== "increase") return
+    const missing = Array.from(new Set(lines.map(l => l.product_id).filter(id => id && !(id in productBatches))))
+    missing.forEach(productId => {
+      setProductBatches(prev => ({ ...prev, [productId]: [] }))
+      getBatches({ product_id: productId, per_page: 100 })
+        .then(({ data }) => setProductBatches(prev => ({ ...prev, [productId]: data })))
+        .catch(() => {})
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, adjustmentType])
 
   useEffect(() => {
     if (open) {
@@ -180,6 +200,11 @@ export function CreateStockAdjustmentSheet({
           adjustment_type: adjustmentType,
           quantity_adjusted: quantity, // The API handles the sign based on adjustment_type
           notes: selectedVariant ? `Variant: ${selectedVariant.name}` : undefined,
+          ...(adjustmentType === "increase" ? {
+            batch_number: line.batch_number?.trim() || undefined,
+            manufacture_date: line.manufacture_date || undefined,
+            expiry_date: line.expiry_date || undefined,
+          } : {}),
         }
       })
 
@@ -482,6 +507,75 @@ export function CreateStockAdjustmentSheet({
                             <div className="h-9 flex items-center text-sm text-muted-foreground">—</div>
                           )}
                         </div>
+
+                        {/* Batch details - stock coming in (e.g. returns) goes back into its batch, or a new one */}
+                        {adjustmentType === "increase" && (() => {
+                          const batches = (productBatches[line.product_id] ?? []).filter(b => !line.variant_id || String(b.variant_id ?? "") === line.variant_id)
+                          const existing = batches.find(b => b.batch_number === line.batch_number)
+                          return (
+                          <>
+                            <div className="md:col-span-4 space-y-1">
+                              <Label className="text-xs text-muted-foreground">Batch</Label>
+                              <Select
+                                value={existing ? existing.batch_number : "__new"}
+                                onValueChange={v => updateLine(line.id, "batch_number", v === "__new" ? "" : v)}
+                                disabled={!line.product_id}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="New batch" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__new">New batch</SelectItem>
+                                  {batches.map(b => (
+                                    <SelectItem key={b.id} value={b.batch_number}>
+                                      {b.batch_number}
+                                      {b.expiry_date ? ` · exp ${String(b.expiry_date).slice(0, 10)}` : ""}
+                                      {` · ${b.quantity_available} left`}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {!existing && (
+                                <Input
+                                  value={line.batch_number ?? ""}
+                                  onChange={e => updateLine(line.id, "batch_number", e.target.value)}
+                                  placeholder="New batch no. (blank = auto)"
+                                  className="h-9 mt-1"
+                                />
+                              )}
+                            </div>
+                            {existing ? (
+                              <div className="md:col-span-8 flex items-center text-xs text-muted-foreground h-9 md:mt-5">
+                                Goes back into batch {existing.batch_number}
+                                {existing.manufacture_date ? `, made ${String(existing.manufacture_date).slice(0, 10)}` : ""}
+                                {existing.expiry_date ? `, expires ${String(existing.expiry_date).slice(0, 10)}` : ""}.
+                              </div>
+                            ) : (
+                            <>
+                            <div className="md:col-span-4 space-y-1">
+                              <Label className="text-xs text-muted-foreground">Manufacture date</Label>
+                              <Input
+                                type="date"
+                                value={line.manufacture_date ?? ""}
+                                onChange={e => updateLine(line.id, "manufacture_date", e.target.value)}
+                                className="h-9"
+                              />
+                            </div>
+                            <div className="md:col-span-4 space-y-1">
+                              <Label className="text-xs text-muted-foreground">Expiry date</Label>
+                              <Input
+                                type="date"
+                                value={line.expiry_date ?? ""}
+                                min={line.manufacture_date || undefined}
+                                onChange={e => updateLine(line.id, "expiry_date", e.target.value)}
+                                className="h-9"
+                              />
+                            </div>
+                            </>
+                            )}
+                          </>
+                          )
+                        })()}
                       </div>
 
                       {/* Remove Button */}

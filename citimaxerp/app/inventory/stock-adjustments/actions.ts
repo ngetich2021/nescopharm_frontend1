@@ -15,6 +15,10 @@ export interface BulkStockAdjustmentItem {
   adjustment_type: AdjustmentType
   quantity_adjusted: number
   notes?: string
+  // Stock coming in is put into this batch (an existing number refills that batch).
+  batch_number?: string
+  manufacture_date?: string
+  expiry_date?: string
 }
 
 export interface BulkStockAdjustmentData {

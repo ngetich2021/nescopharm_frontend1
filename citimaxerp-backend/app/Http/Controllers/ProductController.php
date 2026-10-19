@@ -3421,6 +3421,7 @@ class ProductController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
+            'batch_number' => ['sometimes', 'string', 'max:100', \Illuminate\Validation\Rule::unique('inventory_batches', 'batch_number')->ignore($batchId)],
             'lot_number' => 'nullable|string|max:100',
             'serial_number' => 'nullable|string|max:100',
             'manufacture_date' => 'nullable|date',
@@ -3448,6 +3449,7 @@ class ProductController extends Controller
                 ->findOrFail($batchId);
 
             $batch->update($request->only([
+                'batch_number',
                 'lot_number',
                 'serial_number',
                 'manufacture_date',

@@ -66,6 +66,24 @@ export async function createBatch(productId: string, batchData: Partial<Batch>):
   }
 }
 
+// Correct a batch's identity and dates (batch/lot number, manufacture and expiry dates, notes).
+export async function updateBatch(
+  productId: string,
+  batchId: string,
+  data: { batch_number?: string; lot_number?: string | null; manufacture_date?: string | null; expiry_date?: string | null; notes?: string | null },
+): Promise<Batch> {
+  const response = await apiCall<{ status: string; data: Batch; message?: any }>(
+    `/products/${productId}/inventory/batches/${batchId}`,
+    "PATCH",
+    data,
+    true
+  )
+  if (response.status !== "success") {
+    throw new Error(typeof response.message === "string" ? response.message : "Failed to update batch")
+  }
+  return response.data
+}
+
 // Get batch details
 export async function getBatchDetails(productId: string, batchId: string): Promise<Batch> {
   try {

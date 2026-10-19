@@ -23,7 +23,7 @@ import { InstantPaymentPrompt } from "@/components/instant-payment-prompt"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import apiCall from "@/lib/api"
-import { Product, ProductVariant, getProducts } from "@/lib/products"
+import { Product, ProductVariant, getProducts, getProductById } from "@/lib/products"
 import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { OrderDetail } from "@/lib/orders"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
@@ -125,26 +125,62 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       .finally(() => setIsLoadingCreditTerms(false))
   }, [selectedCustomer?.id])
 
-  // Fetch products only once per modal open
+  const withVariants = (p: Product): ProductWithVariants => ({
+    ...p,
+    variants: Array.isArray(p.variants) ? p.variants as ProductVariant[] : [],
+  })
+  const mergeProducts = (list: ProductWithVariants[]) =>
+    setProducts(prev => {
+      const map = new Map(prev.map(p => [p.id, p]))
+      for (const prod of list) map.set(prod.id, prod)
+      return Array.from(map.values())
+    })
+
+  // The order's own lines need full product details (sizes, edit dialog); load exactly those.
+  // Only the first page of the catalog used to load, so most lines and searches came up empty.
   useEffect(() => {
-    async function fetchProducts() {
-      try {
-        const response = await getProducts()
-        setProducts(Array.isArray(response.data) ? response.data.map(p => ({
-          ...p,
-          variants: Array.isArray(p.variants) ? p.variants as ProductVariant[] : []
-        })) : [])
-      } catch (error) {
-        setProducts([])
-        toast.error("Failed to load products")
-      }
-    }
-    if (open) {
-      fetchProducts()
-    } else {
+    if (!open || !order) {
       setProducts([])
+      return
     }
-  }, [open])
+    let cancelled = false
+    const ids = Array.from(new Set(order.order_items.map(i => i.product_id).filter(Boolean)))
+    Promise.all(ids.map(id => getProductById(id).catch(() => null)))
+      .then(list => { if (!cancelled) mergeProducts(list.filter(Boolean).map(withVariants)) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, order?.id])
+
+  // Adding products searches the whole catalog on the server, the same as creating an order.
+  const [searchResults, setSearchResults] = useState<ProductWithVariants[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const q = productSearchQuery.trim()
+    const timer = setTimeout(async () => {
+      if (!open) return
+      if (q.length < 2) {
+        setSearchResults([])
+        setSearchLoading(false)
+        return
+      }
+      setSearchLoading(true)
+      try {
+        const { data } = await getProducts(1, 100, { search: q })
+        if (cancelled) return
+        const results = Array.isArray(data) ? data.map(withVariants) : []
+        setSearchResults(results)
+        mergeProducts(results)
+      } catch (err) {
+        console.warn("Product search failed", err)
+        setSearchResults([])
+      } finally {
+        if (!cancelled) setSearchLoading(false)
+      }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productSearchQuery, open])
 
   // Initialize form with order data when order changes
   useEffect(() => {
@@ -258,15 +294,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       })
     : []
 
-  const filteredProducts = Array.isArray(products)
-    ? products.filter((product) => {
-        const query = productSearchQuery.toLowerCase().trim()
-        const compact = query.replace(/\s+/g, "")
-        return product.name?.toLowerCase().includes(query)
-          || String(product.item_number ?? "") === query
-          || priceOptionsFor(product).some((o) => o.code.toLowerCase().replace(/\s+/g, "").includes(compact))
-      })
-    : []
+  const filteredProducts: ProductWithVariants[] = productSearchQuery.trim().length >= 2 ? searchResults : []
 
   const handleSelectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer)
@@ -281,11 +309,11 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
 
   // Typing a full code such as "NSPD 001" picks that item straight away - no list to choose from.
   useEffect(() => {
-    if (!openProductDropdown) return
+    if (!openProductDropdown || searchLoading) return
     const hit = findByPriceCode(filteredProducts, productSearchQuery)
     if (hit) handleAddProduct(hit.product, undefined, hit.option)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productSearchQuery, openProductDropdown])
+  }, [productSearchQuery, searchResults, searchLoading, openProductDropdown])
 
   const handleAddProduct = (product: ProductWithVariants, variantId?: string, option?: PriceOption) => {
     const hasVariants = product.variants && product.variants.length > 0;
@@ -585,7 +613,13 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                         onValueChange={setProductSearchQuery}
                       />
                       <CommandList>
-                        <CommandEmpty>No products found</CommandEmpty>
+                        <CommandEmpty>
+                          {productSearchQuery.trim().length < 2
+                            ? "Type at least 2 characters to search products"
+                            : searchLoading
+                            ? "Searching..."
+                            : "No products found"}
+                        </CommandEmpty>
                         {priceCodeHits(filteredProducts, productSearchQuery).length > 0 && (
                           <CommandGroup heading="Price codes">
                             {priceCodeHits(filteredProducts, productSearchQuery).map(({ product, option }) => (
