@@ -176,6 +176,9 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
   const { toast } = useToast()
   const { hasPermission } = usePermissions()
   const canApprove = hasPermission("can_approve_account")
+  // Accountants keep the customer file and often re-key terms from the GM's
+  // signed hard copy, so the granted terms are editable with either right.
+  const canEditOfficialUse = canApprove || hasPermission("can_update_accounts")
 
   const [approvals, setApprovals] = useState<CustomerApproval[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
@@ -214,6 +217,9 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
   const [isLoadingAccount, setIsLoadingAccount] = useState(false)
   const [approvedCreditLimit, setApprovedCreditLimit] = useState("")
   const [approvedCreditDays, setApprovedCreditDays] = useState("")
+  const [approvedPdChequeDays, setApprovedPdChequeDays] = useState("")
+  const [approvedCreditPeriod, setApprovedCreditPeriod] = useState("")
+  const [approvedTurnover, setApprovedTurnover] = useState("")
   const [officialRemarks, setOfficialRemarks] = useState("")
   const [isSavingOfficialUse, setIsSavingOfficialUse] = useState(false)
 
@@ -327,8 +333,11 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
   useEffect(() => {
     setApprovedCreditLimit(account?.credit_required != null ? String(account.credit_required) : "")
     setApprovedCreditDays(account?.credit_days != null ? String(account.credit_days) : "")
+    setApprovedPdChequeDays(account?.credit_period_pd_cheque_days != null ? String(account.credit_period_pd_cheque_days) : "")
+    setApprovedCreditPeriod(account?.credit_period_required || "")
+    setApprovedTurnover(account?.annual_turnover != null ? String(account.annual_turnover) : "")
     setOfficialRemarks(account?.notes || "")
-  }, [account?.credit_required, account?.credit_days, account?.notes])
+  }, [account?.credit_required, account?.credit_days, account?.credit_period_pd_cheque_days, account?.credit_period_required, account?.annual_turnover, account?.notes])
 
   async function handleSaveOfficialUse() {
     if (!account) return
@@ -337,6 +346,9 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
       const updated = await updateCustomerAccount(account.id, {
         credit_required: approvedCreditLimit.trim() ? (approvedCreditLimit as any) : null,
         credit_days: approvedCreditDays.trim() ? (Number(approvedCreditDays) as any) : null,
+        credit_period_pd_cheque_days: approvedPdChequeDays.trim() ? Number(approvedPdChequeDays) : null,
+        credit_period_required: approvedCreditPeriod.trim() || null,
+        annual_turnover: approvedTurnover.trim() ? (approvedTurnover as any) : null,
         notes: officialRemarks.trim() || null,
       })
       setAccount((prev) => (prev ? { ...prev, ...updated } : prev))
@@ -752,7 +764,7 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
               <p className="text-sm text-muted-foreground">Loading account…</p>
             ) : !account ? (
               <p className="text-sm text-muted-foreground">Could not load the customer's credit account.</p>
-            ) : canApprove ? (
+            ) : canEditOfficialUse ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="space-y-1">
@@ -774,6 +786,39 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
                       min="0"
                       value={approvedCreditDays}
                       onChange={(e) => setApprovedCreditDays(e.target.value)}
+                      disabled={isSavingOfficialUse}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="approved-pd-cheque-days" className="text-xs text-muted-foreground font-normal">Credit Period on PD Cheques (Days)</Label>
+                    <Input
+                      id="approved-pd-cheque-days"
+                      type="number"
+                      min="0"
+                      max="365"
+                      value={approvedPdChequeDays}
+                      onChange={(e) => setApprovedPdChequeDays(e.target.value)}
+                      disabled={isSavingOfficialUse}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="approved-credit-period" className="text-xs text-muted-foreground font-normal">Credit Period</Label>
+                    <Input
+                      id="approved-credit-period"
+                      value={approvedCreditPeriod}
+                      onChange={(e) => setApprovedCreditPeriod(e.target.value)}
+                      placeholder="e.g. 30"
+                      disabled={isSavingOfficialUse}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="approved-turnover" className="text-xs text-muted-foreground font-normal">Annual Turnover (KES)</Label>
+                    <Input
+                      id="approved-turnover"
+                      type="number"
+                      min="0"
+                      value={approvedTurnover}
+                      onChange={(e) => setApprovedTurnover(e.target.value)}
                       disabled={isSavingOfficialUse}
                     />
                   </div>
@@ -802,6 +847,14 @@ export function ApplicationStatusSection({ customerId, approvalStatus: rawApprov
                 <div>
                   <p className="text-xs text-muted-foreground">Approved Credit Terms (Days)</p>
                   <p className="font-medium">{account.credit_days ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Credit Period on PD Cheques (Days)</p>
+                  <p className="font-medium">{account.credit_period_pd_cheque_days ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Credit Period</p>
+                  <p className="font-medium">{account.credit_period_required || "—"}</p>
                 </div>
               </div>
             )}

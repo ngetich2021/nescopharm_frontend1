@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { usePermissions } from "@/hooks/use-permissions"
 import { compressImageIfLarge } from "@/lib/image-compression"
+import { documentFileName, todayFileDate, printWithFileName } from "@/lib/document-names"
 
 // The customer profile response includes several Credit Appraisal Form fields
 // that aren't yet part of the shared `CustomerProfileData` type (confirmed live
@@ -164,6 +165,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
   // the CustomerAccount that Stage 1 approval already created.
   const [approvedCreditLimit, setApprovedCreditLimit] = useState("")
   const [approvedCreditDays, setApprovedCreditDays] = useState("")
+  const [approvedPdChequeDays, setApprovedPdChequeDays] = useState("")
   const [officialRemarks, setOfficialRemarks] = useState("")
   const [reviewedByName, setReviewedByName] = useState("")
   const [reviewedByPosition, setReviewedByPosition] = useState("")
@@ -184,6 +186,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
   useEffect(() => {
     setApprovedCreditLimit(account?.credit_required != null ? String(account.credit_required) : "")
     setApprovedCreditDays(account?.credit_days != null ? String(account.credit_days) : "")
+    setApprovedPdChequeDays(account?.credit_period_pd_cheque_days != null ? String(account.credit_period_pd_cheque_days) : "")
     setOfficialRemarks(account?.notes || "")
     // Once a review has actually been saved, always show that recorded
     // name/position, regardless of who's viewing. Before that, ONLY
@@ -205,7 +208,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
     } else {
       setReviewedByPosition("")
     }
-  }, [account?.credit_required, account?.credit_days, account?.notes, account?.reviewed_by_name, account?.reviewed_by_position, user, canEditOfficialUse])
+  }, [account?.credit_required, account?.credit_days, account?.credit_period_pd_cheque_days, account?.notes, account?.reviewed_by_name, account?.reviewed_by_position, user, canEditOfficialUse])
 
   useEffect(() => {
     if (account?.directors && account.directors.length > 0 && !selectedDirectorId) {
@@ -278,8 +281,11 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
     }
   }
 
+  const fileBase = () =>
+    documentFileName([customer?.business_name || customer?.name || "Customer", "Credit Appraisal Form", todayFileDate()])
+
   const handlePrint = () => {
-    window.print()
+    printWithFileName(fileBase())
   }
 
   const handleDownloadPDF = async () => {
@@ -331,8 +337,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
         heightLeft -= pdfHeight
       }
 
-      const nameForFile = customer.business_name || customer.name || 'Customer'
-      pdf.save(`Credit-Appraisal-Form-${nameForFile}.pdf`)
+      pdf.save(`${fileBase()}.pdf`)
 
       toast({
         title: "Success",
@@ -357,6 +362,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
       const updated = await updateCustomerAccount(account.id, {
         credit_required: approvedCreditLimit.trim() ? (approvedCreditLimit as any) : null,
         credit_days: approvedCreditDays.trim() ? (Number(approvedCreditDays) as any) : null,
+        credit_period_pd_cheque_days: approvedPdChequeDays.trim() ? Number(approvedPdChequeDays) : null,
         notes: officialRemarks.trim() || null,
         reviewed_by_name: reviewedByName.trim() || null,
         reviewed_by_position: reviewedByPosition.trim() || null,
@@ -824,6 +830,20 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
                         min="0"
                         value={approvedCreditDays}
                         onChange={(e) => setApprovedCreditDays(e.target.value)}
+                        disabled={isSavingOfficialUse}
+                        className={DOC_INPUT_CLASS}
+                        style={{ color: VALUE_COLOR, borderColor: NAVY }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="approved-pd-cheque-days" className="text-xs font-bold" style={{ color: NAVY }}>Credit Period on PD Cheques (Days)</Label>
+                      <Input
+                        id="approved-pd-cheque-days"
+                        type="number"
+                        min="0"
+                        max="365"
+                        value={approvedPdChequeDays}
+                        onChange={(e) => setApprovedPdChequeDays(e.target.value)}
                         disabled={isSavingOfficialUse}
                         className={DOC_INPUT_CLASS}
                         style={{ color: VALUE_COLOR, borderColor: NAVY }}

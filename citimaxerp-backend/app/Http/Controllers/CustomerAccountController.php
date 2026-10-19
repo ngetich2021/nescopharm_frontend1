@@ -249,7 +249,10 @@ class CustomerAccountController extends Controller
     public function update(Request $request, $id)
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_update_accounts', $user->company_id)) {
+        // Approvers (GM) set the granted terms; accountants maintain the same
+        // customer file from the signed hard copy, so either right may edit.
+        if (!$this->hasPermission($request, 'can_update_accounts', $user->company_id)
+            && !$this->hasPermission($request, 'can_approve_account', $user->company_id)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to update accounts.',
@@ -272,6 +275,7 @@ class CustomerAccountController extends Controller
             'annual_turnover' => 'nullable|numeric|min:0',
             'credit_required' => 'nullable|numeric|min:0',
             'credit_period_required' => 'nullable|string|max:100',
+            'credit_period_pd_cheque_days' => 'nullable|integer|min:0|max:365',
             'credit_days' => 'nullable|integer|min:0|max:3650',
             'currently_defaulted' => 'nullable|boolean',
             'credit_terms' => 'nullable|string|max:255',
