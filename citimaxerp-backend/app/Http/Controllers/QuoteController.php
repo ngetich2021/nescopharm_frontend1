@@ -863,6 +863,8 @@ class QuoteController extends Controller
                 $quote->status = 'accepted';
                 $quote->save();
 
+                app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $user->id);
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Quote converted to order successfully.',

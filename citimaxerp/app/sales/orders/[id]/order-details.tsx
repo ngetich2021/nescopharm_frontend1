@@ -107,34 +107,30 @@ const INVOICE_APPROVER_ROLES = ["gm", "general manager", "director", "directors"
 export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   const router = useRouter()
   const { userProfile } = useAuth()
-  const canApproveInvoice = INVOICE_APPROVER_ROLES.includes((userProfile?.role?.name ?? "").trim().toLowerCase())
+  // The server says whether this user may approve; the role list is only a fallback for older responses.
+  const canApproveInvoice =
+    order.can_approve_invoice ?? INVOICE_APPROVER_ROLES.includes((userProfile?.role?.name ?? "").trim().toLowerCase())
   const isInvoiceApproved = !!order.invoice_approved_at
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [approvalComment, setApprovalComment] = useState("")
-  const [approvalContactPerson, setApprovalContactPerson] = useState("")
-  const [approvalContactPhone, setApprovalContactPhone] = useState("")
 
   const openApproveDialog = () => {
-    setApprovalComment(order.invoice_approval_comment ?? "")
-    setApprovalContactPerson(order.invoice_contact_person ?? order.customer?.contact_person_name ?? "")
-    setApprovalContactPhone(order.invoice_contact_phone ?? order.customer?.contact_person_phone ?? "")
+    setApprovalComment("")
     setShowApproveDialog(true)
   }
 
+  // The approver checks the items, adds a comment and approves - nothing else to fill in.
   const handleApproveInvoice = async () => {
-    if (!approvalComment.trim() || !approvalContactPerson.trim()) {
-      toast({ title: "Missing details", description: "Enter a comment and the customer contact person.", variant: "destructive" })
-      return
-    }
+    if (!approvalComment.trim()) return
     setIsApproving(true)
     try {
       await approveOrderForInvoice(order.id, {
         comment: approvalComment.trim(),
-        contact_person: approvalContactPerson.trim(),
-        contact_phone: approvalContactPhone.trim() || undefined,
+        contact_person: order.customer?.contact_person_name || undefined,
+        contact_phone: order.customer?.contact_person_phone || undefined,
       })
-      toast({ title: "Approved", description: "This order can now be invoiced." })
+      toast({ title: "Order approved", description: "The accountant can now continue with this order." })
       setShowApproveDialog(false)
       refreshOrder?.()
     } catch (error: any) {
@@ -729,6 +725,16 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
         </div>
       </div>
 
+      {/* Approvers see the pending sign-off up front, not only under the Invoices tab. */}
+      {canApproveInvoice && !isInvoiceApproved && !isLoadingInvoice && !orderInvoice && (
+        <div className="border rounded-lg p-3 sm:p-4 text-xs sm:text-sm bg-amber-50 border-amber-200 flex items-center justify-between gap-2">
+          <span className="text-amber-800 font-medium">This order is awaiting your approval. Check the items below, then approve.</span>
+          <Button size="sm" className="h-8 text-xs" onClick={openApproveDialog}>
+            Approve
+          </Button>
+        </div>
+      )}
+
       {/* Main Content - Responsive Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Left Column - Takes full width on mobile, 2/3 on desktop */}
@@ -1040,7 +1046,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                       size="sm"
                       onClick={handleCreateInvoice}
                       disabled={isCreatingInvoice || !isInvoiceApproved}
-                      title={isInvoiceApproved ? undefined : "Needs GM / Director approval first"}
+                      title={isInvoiceApproved ? undefined : "The order needs to be approved first"}
                       className="text-xs h-8"
                     >
                       <Plus className="h-3 w-3 mr-1" />
@@ -1052,27 +1058,26 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                 {/* GM / Director sign-off - required before any invoice */}
                 {isInvoiceApproved ? (
                   <div className="border rounded-lg p-3 space-y-1 text-xs bg-green-50 border-green-200">
-                    <div className="font-medium text-green-800">Approved for invoicing</div>
+                    <div className="font-medium text-green-800">Order approved</div>
                     <div>
                       <span className="text-muted-foreground">Approved by: </span>
                       {[order.invoice_approver?.first_name, order.invoice_approver?.last_name].filter(Boolean).join(" ") || "-"}
                       {order.invoice_approved_at && ` on ${new Date(order.invoice_approved_at).toLocaleString()}`}
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Customer contact: </span>
-                      {order.invoice_contact_person}
-                      {order.invoice_contact_phone && ` - ${order.invoice_contact_phone}`}
-                    </div>
-                    <div><span className="text-muted-foreground">Comment: </span>{order.invoice_approval_comment}</div>
-                    {canApproveInvoice && !orderInvoice && (
-                      <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={openApproveDialog}>
-                        Edit approval
-                      </Button>
+                    {order.invoice_contact_person && (
+                      <div>
+                        <span className="text-muted-foreground">Customer contact: </span>
+                        {order.invoice_contact_person}
+                        {order.invoice_contact_phone && ` - ${order.invoice_contact_phone}`}
+                      </div>
+                    )}
+                    {order.invoice_approval_comment && (
+                      <div><span className="text-muted-foreground">Comment: </span>{order.invoice_approval_comment}</div>
                     )}
                   </div>
                 ) : !orderInvoice && (
                   <div className="border rounded-lg p-3 text-xs bg-amber-50 border-amber-200 flex items-center justify-between gap-2">
-                    <span className="text-amber-800">Awaiting GM / Director approval before this order can be invoiced.</span>
+                    <span className="text-amber-800">Awaiting order approval (GM / Director / Warehouse Manager).</span>
                     {canApproveInvoice && (
                       <Button size="sm" className="h-8 text-xs" onClick={openApproveDialog}>
                         Approve
@@ -1363,32 +1368,19 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
         </>
       )}
 
-      {/* GM / Director invoice approval */}
+      {/* Order approval - just a comment */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Approve order {order.order_number} for invoicing</DialogTitle>
+            <DialogTitle>Approve order {order.order_number}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="approval-contact-person">Customer contact person *</Label>
-              <Input id="approval-contact-person" value={approvalContactPerson} onChange={(e) => setApprovalContactPerson(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="approval-contact-phone">Contact phone</Label>
-              <Input id="approval-contact-phone" value={approvalContactPhone} onChange={(e) => setApprovalContactPhone(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="approval-comment">Comment *</Label>
-              <Textarea id="approval-comment" rows={3} value={approvalComment} onChange={(e) => setApprovalComment(e.target.value)} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Approved by: {[userProfile?.first_name, userProfile?.last_name].filter(Boolean).join(" ") || userProfile?.email}
-            </p>
+          <div className="space-y-1">
+            <Label htmlFor="approval-comment">Comment *</Label>
+            <Textarea id="approval-comment" rows={3} value={approvalComment} onChange={(e) => setApprovalComment(e.target.value)} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowApproveDialog(false)} disabled={isApproving}>Cancel</Button>
-            <Button onClick={handleApproveInvoice} disabled={isApproving || !approvalComment.trim() || !approvalContactPerson.trim()}>
+            <Button onClick={handleApproveInvoice} disabled={isApproving || !approvalComment.trim()}>
               {isApproving ? "Approving..." : "Approve"}
             </Button>
           </DialogFooter>

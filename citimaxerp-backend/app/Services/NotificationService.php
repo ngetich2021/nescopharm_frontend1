@@ -79,6 +79,48 @@ class NotificationService
         }
     }
 
+    /**
+     * A new order must be signed off before it can be invoiced. Approval is role-based
+     * (Order::INVOICE_APPROVER_ROLES), so the approvers are named by role, not permission.
+     * Cleared automatically once invoice_approved_at is set (see AppServiceProvider).
+     */
+    public function orderAwaitingInvoiceApproval(\App\Models\Order $order, ?string $exceptUserId = null): void
+    {
+        // Callers create the order inside a transaction; a failed query there would abort the order itself.
+        \Illuminate\Support\Facades\DB::afterCommit(fn () => $this->sendOrderAwaitingInvoiceApproval($order, $exceptUserId));
+    }
+
+    private function sendOrderAwaitingInvoiceApproval(\App\Models\Order $order, ?string $exceptUserId): void
+    {
+        try {
+            $placeholders = implode(',', array_fill(0, count(\App\Models\Order::INVOICE_APPROVER_ROLES), '?'));
+            $approverIds = User::where('company_id', $order->company_id)
+                ->whereRaw('users.is_active = true')
+                ->whereHas('role', fn ($r) => $r->whereRaw("LOWER(TRIM(name)) IN ({$placeholders})", \App\Models\Order::INVOICE_APPROVER_ROLES))
+                ->pluck('id')
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to find order approvers', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+            return;
+        }
+
+        $customer = $order->customer?->name ?: 'a customer';
+        $this->notifyPermission(
+            $order->company_id,
+            [],
+            new SystemAlert(
+                'approval',
+                "Order {$order->order_number} needs approval",
+                "Order for {$customer} is awaiting your approval. Open it to check the items and approve.",
+                "/sales/orders/{$order->id}",
+                ['type' => 'order_invoice_pending', 'order_id' => $order->id],
+            ),
+            $exceptUserId,
+            $approverIds,
+            false,
+        );
+    }
+
     public function notifyUser(?string $userId, SystemAlert $alert, ?string $exceptUserId = null): void
     {
         if (!$userId || $userId === $exceptUserId) {

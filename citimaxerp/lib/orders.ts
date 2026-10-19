@@ -35,6 +35,8 @@ export interface Order {
   invoice_contact_person?: string | null
   invoice_contact_phone?: string | null
   invoice_approver?: { id: string; first_name: string; last_name: string } | null
+  // Whether the logged-in user may approve this order (set by the order details endpoint).
+  can_approve_invoice?: boolean
 }
 
 // Define the detailed order type with all related data
@@ -258,7 +260,7 @@ export async function deleteOrder(orderId: string): Promise<void> {
 // GM / Director approval that lets an order be invoiced.
 export async function approveOrderForInvoice(
   orderId: string,
-  data: { comment: string; contact_person: string; contact_phone?: string },
+  data: { comment?: string; contact_person?: string; contact_phone?: string },
 ): Promise<OrderDetail> {
   const response = await apiCall<{ status: string; message?: string; order: OrderDetail }>(
     `/orders/${orderId}/approve-invoice`,

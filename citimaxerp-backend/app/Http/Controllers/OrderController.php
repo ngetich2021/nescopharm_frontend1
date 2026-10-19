@@ -237,6 +237,9 @@ class OrderController extends Controller
                 ], 404);
             }
 
+            // The page shows Approve from this, so it never disagrees with approveInvoice().
+            $order->setAttribute('can_approve_invoice', Order::canApproveInvoices($user));
+
             return response()->json([
                 'status' => 'success',
                 'order' => $order,
@@ -552,6 +555,8 @@ class OrderController extends Controller
                 if ($orderStock->hasReceipt($order)) {
                     $orderStock->deduct($order);
                 }
+
+                app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $user->id);
 
                 $message = 'Order created successfully.';
                 if ($belowMinimumPrice) {
@@ -910,7 +915,7 @@ class OrderController extends Controller
         if (!Order::canApproveInvoices($user)) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Only the GM, a Director or the Warehouse Manager can approve an order for invoicing.',
+                'message' => 'Only the GM, a Director or the Warehouse Manager can approve orders.',
             ], 403);
         }
 
@@ -931,7 +936,7 @@ class OrderController extends Controller
 
         $validator = Validator::make($request->all(), [
             'comment' => 'required|string|max:2000',
-            'contact_person' => 'required|string|max:255',
+            'contact_person' => 'nullable|string|max:255',
             'contact_phone' => 'nullable|string|max:50',
         ]);
         if ($validator->fails()) {
@@ -952,7 +957,7 @@ class OrderController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Order approved for invoicing.',
+            'message' => 'Order approved.',
             'order' => $order->fresh()->load('invoiceApprover:id,first_name,last_name,email'),
         ]);
     }

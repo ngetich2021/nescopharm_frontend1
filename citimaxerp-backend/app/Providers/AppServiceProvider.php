@@ -97,6 +97,8 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\StockAdjustment::class => ['stock_adjustment_pending', 'stock_adjustment_id', 'status', ['pending']],
             \App\Models\OrderDispatch::class => ['dispatch_pending', 'dispatch_id', 'approval_status', ['pending', 'in_progress']],
             \App\Models\ApprovalWorkflowStepInstance::class => ['workflow_step_pending', 'step_instance_id', 'status', ['pending']],
+            // Any approval timestamp means decided.
+            \App\Models\Order::class => ['order_invoice_pending', 'order_id', 'invoice_approved_at', []],
         ];
 
         foreach ($map as $model => [$type, $key, $column, $pending]) {
