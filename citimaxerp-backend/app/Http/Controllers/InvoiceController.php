@@ -690,7 +690,7 @@ class InvoiceController extends Controller
             }
 
             if (!$order->isInvoiceApproved()) {
-                return response()->json(['message' => 'This order must be approved by the GM or a Director before it can be invoiced.'], 403);
+                return response()->json(['message' => 'This order must be approved by the GM, a Director or the Warehouse Manager before it can be invoiced.'], 403);
             }
 
             DB::beginTransaction();

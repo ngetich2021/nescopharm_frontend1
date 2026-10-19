@@ -44,7 +44,6 @@ class Company extends Model
     protected $casts = [
         'id' => 'string',
         'is_active' => 'boolean',
-        'is_first_time' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -138,12 +137,9 @@ class Company extends Model
      */
     public function setIsFirstTimeAttribute($value)
     {
-        // Convert any truthy/falsy value to actual PostgreSQL boolean
-        if ($value === null) {
-            $this->attributes['is_first_time'] = 'true'; // Store as string for PostgreSQL
-        } else {
-            $this->attributes['is_first_time'] = $value ? 'true' : 'false';
-        }
+        // Stored as 'true'/'false' text for PostgreSQL (a PHP bool binds as 1/0). Not in $casts: a
+        // boolean cast reads 'false' as true, so switching it off was never detected as a change.
+        $this->attributes['is_first_time'] = ($value === null || filter_var($value, FILTER_VALIDATE_BOOLEAN)) ? 'true' : 'false';
     }
 
     /**
