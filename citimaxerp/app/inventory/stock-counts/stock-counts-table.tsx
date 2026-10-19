@@ -29,6 +29,7 @@ import { format } from "date-fns"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { CreateStockCountSheet } from "./components/create-stock-count-sheet"
 import { deleteStockCount, updateStockCountStatus } from "@/lib/stock-counts"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 interface StockCountSummary {
   totalCounts: number
@@ -170,7 +171,7 @@ export function StockCountsTable({
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `stock-counts-${new Date().toISOString().split("T")[0]}.csv`
+    a.download = documentFileName([sessionCompanyName(), "Stock Counts", todayFileDate()], "csv")
     a.click()
 
     toast({

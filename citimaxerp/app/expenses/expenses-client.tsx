@@ -18,6 +18,7 @@ import { formatCurrency } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ExpensesTableSkeleton } from "./components/expenses-table-skeleton"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 export function ExpensesClient() {
   const { user, userProfile, companyId } = useAuth()
@@ -117,7 +118,7 @@ export function ExpensesClient() {
     const ws = XLSX.utils.json_to_sheet(data)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Expenses")
-    XLSX.writeFile(wb, `expenses-${new Date().toISOString().split("T")[0]}.xlsx`)
+    XLSX.writeFile(wb, documentFileName([sessionCompanyName(), "Expenses", todayFileDate()], "xlsx"))
   }
 
   // Client-side filtering by vendor name and description

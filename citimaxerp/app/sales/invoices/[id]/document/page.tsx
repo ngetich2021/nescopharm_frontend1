@@ -16,6 +16,7 @@ import { ArrowLeft, Download, FileText, Mail, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentCode } from "@/lib/price-codes"
+import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 
 const RETURN_POLICY_LINE = "All goods are subject to the enclosed Non-returnable policy"
 const RETURN_POLICY_IMAGE = "/company/return-policy.jpg"
@@ -92,15 +93,24 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
     getInvoice()
   }, [id])
 
+  const fileBase = () =>
+    invoice
+      ? documentFileName([
+          buildBuyerBlock(mergeCustomerSources(customerDetails, invoice.customer)).name,
+          `Invoice ${invoice.invoice_number}`,
+          fileDate(invoice.invoice_date),
+        ])
+      : "Invoice"
+
   const handlePrint = () => {
-    window.print()
+    printWithFileName(fileBase())
   }
 
   // Allow linking straight to a print or download dialog
   useEffect(() => {
     if (!isLoading && invoice && typeof window !== 'undefined') {
       if (window.location.search.includes('autoprint=1')) {
-        const timer = setTimeout(() => window.print(), 300)
+        const timer = setTimeout(() => printWithFileName(fileBase()), 300)
         return () => clearTimeout(timer)
       } else if (window.location.search.includes('download=1')) {
         const timer = setTimeout(() => handleDownloadPDF(), 300)
@@ -158,7 +168,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       }))
       pdf.addPage()
       pdf.addImage(policy, 'JPEG', 0, 0, pdfWidth, pdfHeight)
-      pdf.save(`Invoice-${invoice.invoice_number}.pdf`)
+      pdf.save(`${fileBase()}.pdf`)
       
       toast({
         title: "Success",

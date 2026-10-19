@@ -11,6 +11,7 @@ import { getCustomerDisplayName } from "@/lib/customers"
 import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { documentFileName, filePeriod, printWithFileName } from "@/lib/document-names"
 
 function toNumber(amount: string | number | null | undefined): number {
   if (amount === null || amount === undefined) return 0
@@ -140,7 +141,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const hasPaymentDetails = !!paymentDetails && Object.values(paymentDetails).some((v) => !!v)
   const closing = toNumber(statement.closing_balance)
   const statementDate = formatDate(statement.period.to)
-  const fileBase = `Statement-${customerName}-${statement.period.from}-to-${statement.period.to}`
+  const fileBase = documentFileName([customerName, `Account Statement ${filePeriod(statement.period.from, statement.period.to)}`])
 
   const handleDownloadCSV = () => {
     const rows: (string | number | null | undefined)[][] = []
@@ -308,7 +309,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 CSV
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Button variant="outline" size="sm" onClick={() => printWithFileName(fileBase)}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>

@@ -1,5 +1,6 @@
 import apiCall from "./api"
 import * as XLSX from "xlsx"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 export interface Asset {
   id: string
@@ -158,7 +159,7 @@ export async function exportAssets(): Promise<void> {
   sheet["!cols"] = Object.keys(EXPORT_HEADERS).map((k) => ({ wch: Math.max(k.length + 2, 18) }))
   const book = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(book, sheet, "Assets")
-  XLSX.writeFile(book, `assets_register_${new Date().toISOString().split("T")[0]}.xlsx`)
+  XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Assets Register", todayFileDate()], "xlsx"))
 }
 
 export function downloadAssetTemplate(): void {

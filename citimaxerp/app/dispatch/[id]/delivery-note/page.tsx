@@ -15,6 +15,7 @@ import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
 import { format } from "date-fns"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 
 export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -66,11 +67,20 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
     load()
   }, [id])
 
-  const handlePrint = () => window.print()
+  const fileBase = () =>
+    dispatch
+      ? documentFileName([
+          buildBuyerBlock(mergeCustomerSources(customerDetails, dispatch.order?.customer as CustomerAddressSource | null)).name,
+          `Delivery Note ${dispatch.dispatch_number}`,
+          fileDate(dispatch.dispatch_date || dispatch.created_at),
+        ])
+      : "Delivery Note"
+
+  const handlePrint = () => printWithFileName(fileBase())
 
   useEffect(() => {
     if (!isLoading && dispatch && typeof window !== 'undefined' && window.location.search.includes('autoprint=1')) {
-      const timer = setTimeout(() => window.print(), 300)
+      const timer = setTimeout(() => printWithFileName(fileBase()), 300)
       return () => clearTimeout(timer)
     }
   }, [isLoading, dispatch])
@@ -90,7 +100,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height)
       const imgX = (pdfWidth - canvas.width * ratio) / 2
       pdf.addImage(imgData, 'PNG', imgX, 10, canvas.width * ratio, canvas.height * ratio)
-      pdf.save(`Delivery-Note-${dispatch.dispatch_number}.pdf`)
+      pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Delivery note PDF downloaded successfully" })
     } catch (err) {
       console.error('Failed to generate PDF:', err)

@@ -33,6 +33,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react"
+import { documentFileName, filePeriod, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 type ReportType = "balance" | "low_stock" | "movement" | "stock_management"
 type Row = Record<string, any>
@@ -384,7 +385,7 @@ export default function InventoryReportPage() {
     sheet["!cols"] = header.map((h) => ({ wch: h === "Item Description" ? 55 : h === "S/No." ? 8 : Math.max(h.length + 2, 12) }))
     const book = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(book, sheet, "Report")
-    XLSX.writeFile(book, `inventory_${reportType}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(book, documentFileName([sessionCompanyName(), `${({ balance: "Stock Balance", low_stock: "Low and Out of Stock", movement: "Stock Movement", stock_management: "Stock Management" } as Record<ReportType, string>)[reportType]} Report`, usesDates && (dateFrom || dateTo) ? filePeriod(dateFrom, dateTo) : `as at ${todayFileDate()}`], "xlsx"))
   }
 
   const renderSummary = () => {

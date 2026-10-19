@@ -9,6 +9,7 @@ import { getDeliveryInvoice, DeliveryInvoice } from "@/lib/delivery-invoices"
 import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 
 const STATUS_STYLES: Record<string, string> = {
   paid: "bg-green-100 text-green-800",
@@ -40,6 +41,15 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
     load()
   }, [id])
 
+  const fileBase = () =>
+    invoice
+      ? documentFileName([
+          buildBuyerBlock(invoice.order_dispatch?.order?.customer).name,
+          `Delivery Invoice ${invoice.invoice_number}`,
+          fileDate(invoice.created_at),
+        ])
+      : "Delivery Invoice"
+
   const handleDownloadPDF = async () => {
     if (!docRef.current || !invoice) return
     setIsDownloading(true)
@@ -62,7 +72,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
       const imgX = (pdfWidth - canvas.width * ratio) / 2
 
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", imgX, 10, canvas.width * ratio, canvas.height * ratio)
-      pdf.save(`Delivery-Invoice-${invoice.invoice_number}.pdf`)
+      pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Delivery invoice PDF downloaded" })
     } catch (err) {
       console.error("Failed to generate PDF:", err)
@@ -75,7 +85,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
   useEffect(() => {
     if (!isLoading && invoice && typeof window !== "undefined") {
       if (window.location.search.includes("autoprint=1")) {
-        const timer = setTimeout(() => window.print(), 300)
+        const timer = setTimeout(() => printWithFileName(fileBase()), 300)
         return () => clearTimeout(timer)
       } else if (window.location.search.includes("download=1")) {
         const timer = setTimeout(() => handleDownloadPDF(), 300)
@@ -124,7 +134,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
               Back
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Button variant="outline" size="sm" onClick={() => printWithFileName(fileBase())}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>

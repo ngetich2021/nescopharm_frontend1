@@ -28,6 +28,7 @@ import {
 } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
+import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
 
 interface BalanceSheetData {
   report_date: string
@@ -105,7 +106,7 @@ export default function BalanceSheetPage() {
   }
 
   const exportToPDF = () => {
-    window.print()
+    printWithFileName(documentFileName([sessionCompanyName(), `Balance Sheet ${filePeriod(null, asOfDate)}`]))
   }
 
   const exportToCSV = () => {
@@ -147,7 +148,7 @@ export default function BalanceSheetPage() {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `balance-sheet-${asOfDate}.csv`
+    a.download = documentFileName([sessionCompanyName(), `Balance Sheet ${filePeriod(null, asOfDate)}`], "csv")
     a.click()
     window.URL.revokeObjectURL(url)
   }

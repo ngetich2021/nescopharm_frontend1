@@ -1,5 +1,6 @@
 import apiCall from "./api"
 import * as XLSX from "xlsx"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 function toQueryString(params: Record<string, any>): string {
   return (
@@ -219,7 +220,7 @@ export async function exportSuppliers(): Promise<void> {
   sheet["!cols"] = Object.keys(rows[0] ?? {}).map((k) => ({ wch: Math.max(k.length + 2, 18) }))
   const book = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(book, sheet, "Suppliers")
-  XLSX.writeFile(book, `suppliers_${new Date().toISOString().split("T")[0]}.xlsx`)
+  XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Suppliers List", todayFileDate()], "xlsx"))
 }
 
 // Import suppliers from file

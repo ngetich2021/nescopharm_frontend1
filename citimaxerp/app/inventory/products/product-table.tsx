@@ -34,6 +34,7 @@ import { EditProductSheet } from "./components/edit-product-sheet"
 import { ProductDetailsSheet } from "./components/product-details-sheet"
 import { DeleteProductConfirmationDialog } from "./components/DeleteProductConfirmationDialog"
 import { ProductTableSkeleton } from "./components/product-table-skeleton"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 // Helper function to normalize image URLs
 function normalizeImageUrl(url: string | undefined | null): string {
@@ -127,7 +128,7 @@ const exportSheet = (products: Product[]) => [
   ...products.flatMap(exportRows).map((row, i) => [i + 1, ...row]),
 ]
 
-const exportFileName = (ext: string) => `products_${new Date().toISOString().split("T")[0]}.${ext}`
+const exportFileName = (ext: string) => documentFileName([sessionCompanyName(), "Products List", todayFileDate()], ext)
 
 function downloadCSVTemplate(products: Product[]) {
   const csvContent = exportSheet(products)

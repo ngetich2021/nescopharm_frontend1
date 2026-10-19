@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
 import { documentCode } from "@/lib/price-codes"
 import { buildBuyerBlock } from "@/lib/customer-address"
+import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -39,6 +40,15 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
     load()
   }, [id])
 
+  const fileBase = () =>
+    quote
+      ? documentFileName([
+          buildBuyerBlock(quote.customer).name,
+          `Quotation ${quote.quote_number}${isPricing ? " (Pricing)" : ""}`,
+          fileDate(quote.created_at),
+        ])
+      : "Quotation"
+
   const handleDownloadPDF = async () => {
     if (!quoteRef.current || !quote) return
     setIsDownloading(true)
@@ -61,7 +71,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
       const imgX = (pdfWidth - canvas.width * ratio) / 2
 
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", imgX, 10, canvas.width * ratio, canvas.height * ratio)
-      pdf.save(`Quotation-${quote.quote_number}${isPricing ? "-Pricing" : ""}.pdf`)
+      pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Quotation PDF downloaded" })
     } catch (err) {
       console.error("Failed to generate PDF:", err)
@@ -119,7 +129,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
             </Button>
             <div className="flex gap-2">
               <DocumentViewToggle value={view} onChange={setView} />
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Button variant="outline" size="sm" onClick={() => printWithFileName(fileBase())}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>

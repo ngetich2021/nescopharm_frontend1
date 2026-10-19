@@ -18,6 +18,7 @@ import {
   DollarSign
 } from "lucide-react"
 import { financeApi, type CashFlowStatement } from "@/lib/finance"
+import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
 
 export default function CashFlowStatementPage() {
   const [cashFlowStatement, setCashFlowStatement] = useState<CashFlowStatement | null>(null)
@@ -105,13 +106,13 @@ export default function CashFlowStatementPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `cash-flow-statement-${fromDate}-to-${toDate}.csv`
+    a.download = documentFileName([sessionCompanyName(), `Cash Flow Statement ${filePeriod(fromDate, toDate)}`], "csv")
     a.click()
     URL.revokeObjectURL(url)
   }
 
   const handlePrint = () => {
-    window.print()
+    printWithFileName(documentFileName([sessionCompanyName(), `Cash Flow Statement ${filePeriod(fromDate, toDate)}`]))
   }
 
   const formatCurrency = (amount: number) => {

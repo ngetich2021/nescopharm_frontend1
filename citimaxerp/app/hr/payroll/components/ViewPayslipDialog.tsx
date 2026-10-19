@@ -26,6 +26,7 @@ import {
   formatKES,
   monthName,
 } from "@/lib/payroll-runs"
+import { documentFileName } from "@/lib/document-names"
 
 // ---------------------------------------------------------------------------
 // Props
@@ -116,7 +117,7 @@ export function ViewPayslipDialog({
       const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = blobUrl
-      a.download = `payslip-${emp.employee_number}-${run.pay_year}-${String(run.pay_month).padStart(2, "0")}.pdf`
+      a.download = documentFileName([`${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim(), `Payslip ${new Date(run.pay_year, run.pay_month - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" })}`, emp.employee_number], "pdf")
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

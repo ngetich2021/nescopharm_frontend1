@@ -27,6 +27,7 @@ import {
 } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
+import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
 
 interface TrialBalanceData {
   accounts: TrialBalance[]
@@ -96,7 +97,7 @@ export default function TrialBalancePage() {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `trial-balance-${asOfDate}.csv`
+    a.download = documentFileName([sessionCompanyName(), `Trial Balance ${filePeriod(null, asOfDate)}`], "csv")
     a.click()
     window.URL.revokeObjectURL(url)
   }

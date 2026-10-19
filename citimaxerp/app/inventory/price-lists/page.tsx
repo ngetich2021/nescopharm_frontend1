@@ -23,6 +23,7 @@ import {
   type PriceListImportResult,
 } from "@/lib/price-lists"
 import * as XLSX from "xlsx"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 const OTHER = "__other__"
 
@@ -87,7 +88,7 @@ export default function PriceListsPage() {
       ])
       const book = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(book, sheet, res.list_name)
-      XLSX.writeFile(book, `${res.list_name}_${new Date().toISOString().split("T")[0]}.xlsx`)
+      XLSX.writeFile(book, documentFileName([sessionCompanyName(), `${res.list_name} Price List`, todayFileDate()], "xlsx"))
       toast({ title: "Downloaded", description: `${res.rows.length} ${res.list_name} prices exported.` })
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message || "Could not export the price list.", variant: "destructive" })

@@ -17,6 +17,7 @@ import {
   TrendingDown
 } from "lucide-react"
 import { financeApi, type IncomeStatement } from "@/lib/finance"
+import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
 
 export default function IncomeStatementPage() {
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
@@ -94,13 +95,13 @@ export default function IncomeStatementPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `income-statement-${fromDate}-to-${toDate}.csv`
+    a.download = documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`], "csv")
     a.click()
     URL.revokeObjectURL(url)
   }
 
   const handlePrint = () => {
-    window.print()
+    printWithFileName(documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`]))
   }
 
   const formatCurrency = (amount: number) => {

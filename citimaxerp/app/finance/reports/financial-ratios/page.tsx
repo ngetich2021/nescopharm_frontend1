@@ -22,6 +22,7 @@ import {
   BarChart3
 } from "lucide-react"
 import { financeApi, type FinancialRatios } from "@/lib/finance"
+import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
 
 export default function FinancialRatiosPage() {
   const [financialRatios, setFinancialRatios] = useState<FinancialRatios | null>(null)
@@ -118,13 +119,13 @@ export default function FinancialRatiosPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `financial-ratios-${asOfDate}.csv`
+    a.download = documentFileName([sessionCompanyName(), `Financial Ratios ${filePeriod(null, asOfDate)}`], "csv")
     a.click()
     URL.revokeObjectURL(url)
   }
 
   const handlePrint = () => {
-    window.print()
+    printWithFileName(documentFileName([sessionCompanyName(), `Financial Ratios ${filePeriod(null, asOfDate)}`]))
   }
 
   const formatPercentage = (value: number) => {

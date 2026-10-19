@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ViewPayslipDialog } from "../components/ViewPayslipDialog";
 import { EditPayslipDialog } from "../components/EditPayslipDialog";
+import { documentFileName, sessionCompanyName } from "@/lib/document-names"
 
 interface Payslip {
   id: string;
@@ -190,9 +191,10 @@ export default function PayrollRunDetailPage() {
     const token = localStorage.getItem("token") ?? "";
     const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
     const url = `${base}/payroll-runs/${runId}/export/${type}`;
+    const payPeriod = new Date(run.pay_year, run.pay_month - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
     const filename = type === 'p10'
-      ? `P10-${run.pay_year}-${String(run.pay_month).padStart(2, "0")}.csv`
-      : `payroll-${run.pay_year}-${String(run.pay_month).padStart(2, "0")}.csv`;
+      ? documentFileName([sessionCompanyName(), `P10 Return ${payPeriod}`], "csv")
+      : documentFileName([sessionCompanyName(), `Payroll ${payPeriod}`], "csv");
 
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => {

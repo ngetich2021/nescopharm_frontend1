@@ -22,6 +22,7 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { useRouter } from "next/navigation"
 import { BatchDetailsSheet } from "@/app/inventory/components/batch-details-sheet"
 import type { Batch } from "@/types/batches"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 function RemainingCell({ available, received }: { available: number; received: number }) {
   const pct = received > 0 ? Math.min(Math.max(available / received, 0), 1) : 0
@@ -137,7 +138,7 @@ async function fetchAllAndExport(format: "csv" | "excel") {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `batches_${new Date().toISOString().split("T")[0]}.csv`
+    link.download = documentFileName([sessionCompanyName(), "Product Batches", todayFileDate()], "csv")
     link.style.visibility = "hidden"
     document.body.appendChild(link)
     link.click()
@@ -149,7 +150,7 @@ async function fetchAllAndExport(format: "csv" | "excel") {
     ws["!cols"] = EXPORT_HEADERS.map((h) => ({ wch: Math.max(h.length, 14) }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Batches")
-    XLSX.writeFile(wb, `batches_${new Date().toISOString().split("T")[0]}.xlsx`)
+    XLSX.writeFile(wb, documentFileName([sessionCompanyName(), "Product Batches", todayFileDate()], "xlsx"))
   }
 }
 

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { getDisbursedAllowances, type DisbursedAllowance } from "@/lib/employees"
+import { documentFileName, sessionCompanyName } from "@/lib/document-names"
 
 type SortKey = "employee_number" | "employee_name" | "department" | "name" | "amount" | "is_taxable" | "updated_at"
 
@@ -101,7 +102,7 @@ export default function AllowancesPage() {
     sheet["!cols"] = [{ wch: 6 }, { wch: 12 }, { wch: 26 }, { wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 9 }, { wch: 18 }]
     const book = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(book, sheet, "Disbursed Allowances")
-    XLSX.writeFile(book, `disbursed-allowances-${month}.xlsx`)
+    XLSX.writeFile(book, documentFileName([sessionCompanyName(), `Disbursed Allowances ${month}`], "xlsx"))
   }
 
   return (

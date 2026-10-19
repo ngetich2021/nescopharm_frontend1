@@ -16,6 +16,7 @@ import { Loader2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionGuard } from "@/components/PermissionGuard";
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -147,7 +148,7 @@ export function CustomersPage() {
     ];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Customers");
-    XLSX.writeFile(workbook, `customers_export_${new Date().toISOString().split("T")[0]}.xlsx`);
+    XLSX.writeFile(workbook, documentFileName([sessionCompanyName(), "Customers List", todayFileDate()], "xlsx"));
     toast({ title: "Export Successful", description: `Exported ${filteredCustomers.length} customers to Excel.` });
   };
 

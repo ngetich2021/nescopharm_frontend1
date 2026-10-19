@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useDataCache } from "@/lib/data-cache" // Import the data cache hook
 import * as XLSX from "xlsx"
 import { CustomersTableSkeleton } from "./customers-table-skeleton"
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 export default function Customers() {
   // Changed to default export
@@ -295,7 +296,7 @@ export default function Customers() {
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, "Customers")
-    XLSX.writeFile(workbook, `customers_export_${new Date().toISOString().split("T")[0]}.xlsx`)
+    XLSX.writeFile(workbook, documentFileName([sessionCompanyName(), "Customers List", todayFileDate()], "xlsx"))
     toast({ title: "Export Successful", description: `Exported ${customersToExport.length} customers to Excel.` })
   }
 

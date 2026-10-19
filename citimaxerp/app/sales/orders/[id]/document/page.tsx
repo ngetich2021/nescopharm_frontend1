@@ -12,6 +12,7 @@ import { buildBuyerBlock, mergeCustomerSources, type CustomerAddressSource } fro
 import { ArrowLeft, Download, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 
 export default function OrderDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -66,14 +67,23 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
     getOrder()
   }, [id])
 
+  const fileBase = () =>
+    order
+      ? documentFileName([
+          buildBuyerBlock(mergeCustomerSources(customerDetails, order.customer as CustomerAddressSource | null)).name,
+          `Sales Order ${order.order_number}`,
+          fileDate(order.created_at),
+        ])
+      : "Sales Order"
+
   const handlePrint = () => {
-    window.print()
+    printWithFileName(fileBase())
   }
 
   // Allow linking straight to a print dialog, e.g. a "Print" button elsewhere in the app.
   useEffect(() => {
     if (!isLoading && order && typeof window !== 'undefined' && window.location.search.includes('autoprint=1')) {
-      const timer = setTimeout(() => window.print(), 300)
+      const timer = setTimeout(() => printWithFileName(fileBase()), 300)
       return () => clearTimeout(timer)
     }
   }, [isLoading, order])
@@ -117,7 +127,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
       const imgY = 10
 
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
-      pdf.save(`Order-${order.order_number}.pdf`)
+      pdf.save(`${fileBase()}.pdf`)
 
       toast({
         title: "Success",

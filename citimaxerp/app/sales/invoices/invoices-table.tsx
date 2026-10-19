@@ -44,6 +44,7 @@ import { useRouter } from "next/navigation"
 import { invalidateCacheKey } from "@/lib/data-cache"
 import { EditInvoiceSheet } from "@/components/sheets/edit-invoice-sheet"
 import { DeleteInvoiceConfirmationDialog } from "./components/DeleteInvoiceConfirmationDialog"
+import { documentFileName, fileDate } from "@/lib/document-names"
 
 interface InvoicesTableProps {
   initialInvoices?: Invoice[]
@@ -311,27 +312,9 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
     })
   }
 
-  const handleDownloadPDF = async (invoiceId: string) => {
-    try {
-      const response = await fetch(`/api/invoices/${invoiceId}/download-pdf`)
-      if (!response.ok) throw new Error('Failed to download PDF')
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `invoice-${invoiceId}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to download PDF",
-        variant: "destructive",
-      })
-    }
+  // The document page builds the PDF (with the customer-named file) itself.
+  const handleDownloadPDF = (invoiceId: string) => {
+    router.push(`/sales/invoices/${invoiceId}/document?download=1`)
   }
 
   const handleDownloadCSV = (invoice: Invoice) => {
@@ -354,7 +337,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `invoice-${invoice.invoice_number}.csv`)
+    link.setAttribute('download', documentFileName([(invoice.customer as any)?.business_name || invoice.customer?.name, `Invoice ${invoice.invoice_number}`, fileDate(invoice.invoice_date)], 'csv'))
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
