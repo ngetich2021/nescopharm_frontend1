@@ -143,8 +143,8 @@ class Order extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    // Only the GM or a Director may sign an order off for invoicing.
-    public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director'];
+    // Only the GM, a Director or the Warehouse Manager may sign an order off for invoicing.
+    public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director', 'warehouse manager'];
 
     public static function canApproveInvoices(?User $user): bool
     {

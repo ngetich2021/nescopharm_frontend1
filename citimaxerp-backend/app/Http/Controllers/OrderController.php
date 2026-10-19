@@ -910,7 +910,7 @@ class OrderController extends Controller
         if (!Order::canApproveInvoices($user)) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Only the GM or a Director can approve an order for invoicing.',
+                'message' => 'Only the GM, a Director or the Warehouse Manager can approve an order for invoicing.',
             ], 403);
         }
 

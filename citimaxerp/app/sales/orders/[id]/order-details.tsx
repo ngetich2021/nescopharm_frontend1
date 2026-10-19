@@ -102,7 +102,7 @@ interface OrderDetailsProps {
 }
 
 // Only these roles may sign an order off for invoicing (mirrors Order::INVOICE_APPROVER_ROLES).
-const INVOICE_APPROVER_ROLES = ["gm", "general manager", "director", "directors", "managing director"]
+const INVOICE_APPROVER_ROLES = ["gm", "general manager", "director", "directors", "managing director", "warehouse manager"]
 
 export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   const router = useRouter()
@@ -325,7 +325,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
     if (!isInvoiceApproved) {
       toast({
         title: "Approval required",
-        description: "The GM or a Director must approve this order before it can be invoiced.",
+        description: "The GM, a Director or the Warehouse Manager must approve this order before it can be invoiced.",
         variant: "destructive",
       })
       return

@@ -111,7 +111,7 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
       if (availableOrders.length === 0) {
         toast({
           title: "No Available Orders",
-          description: "No completed or confirmed orders approved by the GM or a Director are available for invoicing.",
+          description: "No completed or confirmed orders approved by the GM, a Director or the Warehouse Manager are available for invoicing.",
           variant: "destructive",
         })
       }
