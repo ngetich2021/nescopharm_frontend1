@@ -174,9 +174,10 @@ class Product extends Model
         $this->attributes['is_taxable'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
     }
 
+    // Every product is stock-tracked, so orders can never exceed what is in stock.
     public function setTrackInventoryAttribute($value)
     {
-        $this->attributes['track_inventory'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['track_inventory'] = 'true';
     }
 
     public function setHasPackagingAttribute($value)

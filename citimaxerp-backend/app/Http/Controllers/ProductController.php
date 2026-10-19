@@ -986,7 +986,7 @@ class ProductController extends Controller
                     'unit_cost' => $number($cell('cost')),
                     'hs_code' => $cell('hs_code') ?: null,
                     'low_stock_threshold' => $number($cell('reorder')) !== null ? (int) $number($cell('reorder')) : null,
-                    'track_inventory' => $yesNo($cell('track')),
+                    'track_inventory' => true, // every product is stock-tracked
                     'is_active' => $yesNo($cell('active')),
                     'brand' => $cell('brand') ?: null,
                 ], fn ($v) => $v !== null);
@@ -1897,7 +1897,7 @@ class ProductController extends Controller
                 'is_taxable' => ($productData['is_taxable'] ?? true) ? 'true' : 'false',
                 'tax_rate' => $productData['tax_rate'] ?? null,
                 'hs_code' => $productData['hs_code'] ?? null,
-                'track_inventory' => filter_var($productData['track_inventory'] ?? true, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false',
+                'track_inventory' => 'true', // every product is stock-tracked
                 'has_packaging' => ($productData['has_packaging'] ?? false) ? 'true' : 'false',
                 'base_unit' => $productData['base_unit'] ?? null,
                 'weight' => $productData['weight'] ?? null,

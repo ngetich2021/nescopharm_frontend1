@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, ShoppingCart, Trash2, X, Pencil, Edit, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
 import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { StockHint, stockCheck } from "@/components/stock-hint"
 import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
 import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
@@ -430,6 +431,28 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const totals = orderTotals(orderItems, discount)
   const calculateTotal = () => totals.total
 
+  // Pieces available for a line. If this order's stock was already taken, the server puts it
+  // back before re-checking, so this order's original pieces of the same item count as available.
+  const availableFor = (item: OrderItem): number | null => {
+    const product = products.find((p) => p.id === item.product_id)
+    if (!product) return null
+    let available: number
+    if (item.variant_id) {
+      const variant = product.variants?.find((v) => String(v.id) === String(item.variant_id))
+      if (!variant) return null
+      available = Number(variant.stock_quantity ?? 0)
+    } else {
+      available = Number(product.stock_quantity ?? 0)
+    }
+    if ((order as any)?.stock_deducted_at) {
+      available += (order?.order_items ?? [])
+        .filter((o) => o.product_id === item.product_id && String(o.variant_id ?? "") === String(item.variant_id ?? ""))
+        .reduce((sum, o) => sum + stockCheck(Number(o.quantity), o.price_unit, 0).needed, 0)
+    }
+    return available
+  }
+  const shortLines = orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
+
   const creditOverage = paymentOption === 'credit' && creditTerms?.credit_days
     ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
     : 0
@@ -835,9 +858,10 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                                       handleUpdateQuantity(index, value)
                                     }
                                   }}
-                                  className="h-8 w-20 text-center"
+                                  className={`h-8 w-20 text-center ${stockCheck(item.quantity, item.price_unit, availableFor(item)).short ? "border-red-500" : ""}`}
                                 />
                               </div>
+                              <StockHint quantity={item.quantity} priceUnit={item.price_unit} available={availableFor(item)} />
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{item.tax_rate > 0 ? `${item.tax_rate}%` : "—"}</div>
@@ -1079,10 +1103,16 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
             >
               Cancel
             </Button>
+            {shortLines.length > 0 && (
+              <p className="text-sm text-red-600 self-center mr-auto">
+                Not enough stock for {shortLines.length === 1 ? "1 item" : `${shortLines.length} items`}. Lower the quantity to continue.
+              </p>
+            )}
             <Button
               onClick={handleUpdateOrder}
               disabled={
                 loading ||
+                shortLines.length > 0 ||
                 (paymentOption === 'credit' && !creditTerms?.credit_days) ||
                 (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) ||
                 (paymentOption === 'instant' && amountPaid < calculateTotal()) ||

@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Plus, Search, ShoppingCart, Trash2, X, Pencil, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
 import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { StockHint, stockCheck } from "@/components/stock-hint"
 import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
@@ -359,6 +360,18 @@ export function CreateOrderModal({
   const calculateSubtotal = () => totals.subtotal
   const calculateTax = () => totals.tax
   const calculateTotal = () => totals.total
+
+  // Pieces in stock for a line's product or size; null until the product's details are loaded.
+  const availableFor = (item: OrderItem): number | null => {
+    const product = products.find((p) => p.id === item.product_id)
+    if (!product) return null
+    if (item.variant_id) {
+      const variant = product.variants?.find((v) => String(v.id) === String(item.variant_id))
+      return variant ? Number(variant.stock_quantity ?? 0) : null
+    }
+    return Number(product.stock_quantity ?? 0)
+  }
+  const shortLines = orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
 
   const creditOverage = paymentOption === 'credit' && creditTerms?.credit_days
     ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
@@ -798,9 +811,10 @@ export function CreateOrderModal({
                                       handleUpdateQuantity(index, value)
                                     }
                                   }}
-                                  className="h-8 w-20 text-center"
+                                  className={`h-8 w-20 text-center ${stockCheck(item.quantity, item.price_unit, availableFor(item)).short ? "border-red-500" : ""}`}
                                 />
                               </div>
+                              <StockHint quantity={item.quantity} priceUnit={item.price_unit} available={availableFor(item)} />
                               {/* Packaging Breakdown Display */}
                               {(() => {
                                 const product = products.find((p) => p.id === item.product_id)
@@ -1075,10 +1089,16 @@ export function CreateOrderModal({
             >
               Cancel
             </Button>
+            {shortLines.length > 0 && (
+              <p className="text-sm text-red-600 self-center mr-auto">
+                Not enough stock for {shortLines.length === 1 ? "1 item" : `${shortLines.length} items`}. Lower the quantity to continue.
+              </p>
+            )}
             <Button
               onClick={handleCreateOrder}
               disabled={
                 loading ||
+                shortLines.length > 0 ||
                 (paymentOption === 'credit' && !creditTerms?.credit_days) ||
                 (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) ||
                 (paymentOption === 'instant' && (amountPaid < calculateTotal() || !instantPaymentMethod))
