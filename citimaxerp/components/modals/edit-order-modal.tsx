@@ -524,6 +524,109 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   }
 
 
+
+  // Sits under the last line so long orders don't need a scroll back up.
+  const addProductPicker = (
+<Popover open={openProductDropdown} onOpenChange={(open) => {
+                setOpenProductDropdown(open)
+                if (!open) {
+                  setPendingProduct(null)
+                  setPendingVariant("")
+                }
+              }}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Product
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  {pendingProduct && pendingProduct.variants && pendingProduct.variants.length > 0 ? (
+                    <div className="p-4 space-y-2">
+                      <div className="font-medium mb-2">Pick size</div>
+                      <Select
+                        value={pendingVariant}
+                        onValueChange={(value) => setPendingVariant(value)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={`${pendingProduct.name} - pick size`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pendingProduct.variants?.map((variant: ProductVariant) => (
+                            <SelectItem key={variant.id} value={variant.id.toString()}>
+                              {sizedName(pendingProduct.name, variant.name)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        className="w-full mt-2"
+                        disabled={!pendingVariant}
+                        onClick={() => handleAddProduct(pendingProduct, pendingVariant)}
+                      >
+                        Add to Order
+                      </Button>
+                      <Button
+                        className="w-full mt-2"
+                        variant="outline"
+                        onClick={() => {
+                          setPendingProduct(null)
+                          setPendingVariant("")
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Search by description, item no. or code (e.g. NSPD 001)..."
+                        value={productSearchQuery}
+                        onValueChange={setProductSearchQuery}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No products found</CommandEmpty>
+                        {priceCodeHits(filteredProducts, productSearchQuery).length > 0 && (
+                          <CommandGroup heading="Price codes">
+                            {priceCodeHits(filteredProducts, productSearchQuery).map(({ product, option }) => (
+                              <CommandItem key={`code-${product.id}-${option.code}`} onSelect={() => handleAddProduct(product, undefined, option)}>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold">{option.code}</span>
+                                  <span className="text-sm text-gray-500">{product.name} | {describeOption(option)}</span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                        <CommandGroup>
+                          {filteredProducts.map((product) => (
+                            <CommandItem
+                              key={product.id}
+                              onSelect={() => {
+                                if (product.variants && product.variants.length > 0) {
+                                  setPendingProduct(product)
+                                  setPendingVariant("")
+                                } else {
+                                  handleAddProduct(product)
+                                }
+                              }}
+                            >
+                              <div className="flex flex-col">
+                                <span>{product.name}</span>
+                                <span className="text-sm text-gray-500">
+                                  No. {product.item_number ?? '-'} | NSPV Ksh. {parseFloat(product.price || '0').toFixed(2)}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  )}
+                </PopoverContent>
+              </Popover>
+  )
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl overflow-y-auto">
@@ -611,111 +714,12 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
 
           {/* Order Items */}
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium">Order Items</h3>
-              <Popover open={openProductDropdown} onOpenChange={(open) => {
-                setOpenProductDropdown(open)
-                if (!open) {
-                  setPendingProduct(null)
-                  setPendingVariant("")
-                }
-              }}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Product
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0" align="end">
-                  {pendingProduct && pendingProduct.variants && pendingProduct.variants.length > 0 ? (
-                    <div className="p-4 space-y-2">
-                      <div className="font-medium mb-2">Pick size</div>
-                      <Select
-                        value={pendingVariant}
-                        onValueChange={(value) => setPendingVariant(value)}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder={`${pendingProduct.name} - pick size`} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {pendingProduct.variants?.map((variant: ProductVariant) => (
-                            <SelectItem key={variant.id} value={variant.id.toString()}>
-                              {sizedName(pendingProduct.name, variant.name)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        className="w-full mt-2"
-                        disabled={!pendingVariant}
-                        onClick={() => handleAddProduct(pendingProduct, pendingVariant)}
-                      >
-                        Add to Order
-                      </Button>
-                      <Button
-                        className="w-full mt-2"
-                        variant="outline"
-                        onClick={() => {
-                          setPendingProduct(null)
-                          setPendingVariant("")
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  ) : (
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        placeholder="Search by description, item no. or code (e.g. NSPD 001)..."
-                        value={productSearchQuery}
-                        onValueChange={setProductSearchQuery}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No products found</CommandEmpty>
-                        {priceCodeHits(filteredProducts, productSearchQuery).length > 0 && (
-                          <CommandGroup heading="Price codes">
-                            {priceCodeHits(filteredProducts, productSearchQuery).map(({ product, option }) => (
-                              <CommandItem key={`code-${product.id}-${option.code}`} onSelect={() => handleAddProduct(product, undefined, option)}>
-                                <div className="flex flex-col">
-                                  <span className="font-semibold">{option.code}</span>
-                                  <span className="text-sm text-gray-500">{product.name} | {describeOption(option)}</span>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                        <CommandGroup>
-                          {filteredProducts.map((product) => (
-                            <CommandItem
-                              key={product.id}
-                              onSelect={() => {
-                                if (product.variants && product.variants.length > 0) {
-                                  setPendingProduct(product)
-                                  setPendingVariant("")
-                                } else {
-                                  handleAddProduct(product)
-                                }
-                              }}
-                            >
-                              <div className="flex flex-col">
-                                <span>{product.name}</span>
-                                <span className="text-sm text-gray-500">
-                                  No. {product.item_number ?? '-'} | NSPV Ksh. {parseFloat(product.price || '0').toFixed(2)}
-                                </span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  )}
-                </PopoverContent>
-              </Popover>
-            </div>
+            <h3 className="text-lg font-medium">Order Items</h3>
 
             {orderItems.length === 0 ? (
               <div className="text-center p-6 border border-dashed rounded-md">
-                <p className="text-gray-500">No items added yet. Click "Add Product" to add items to this order.</p>
+                <p className="text-gray-500">No items added yet. Click "Add Product" below to add items to this order.</p>
+                <div className="mt-3 flex justify-center">{addProductPicker}</div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -837,6 +841,8 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                     onSaved={handleItemEdited}
                   />
                 </div>
+
+                <div>{addProductPicker}</div>
 
                 <div className="border rounded-md p-4 space-y-4">
                   <div className="flex justify-between items-center">

@@ -433,10 +433,6 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-4">
                 <CardTitle className="text-xl font-semibold">Quote Items</CardTitle>
-                <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
               </CardHeader>
               <CardContent className="space-y-4">
                 {productsError && (
@@ -451,9 +447,15 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
 
                 {fields.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
-                    No items added yet. Click "Add Item" to get started.
+                    No items added yet. Click "Add Item" below to get started.
                   </div>
                 )}
+
+                {/* Under the last line so long quotes don't need a scroll back up. */}
+                <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Item
+                </Button>
               </CardContent>
             </Card>
 
