@@ -207,6 +207,12 @@ function ItemNameCell({ form, index, product, onResolved }: { form: UseFormRetur
             form.setValue(`items.${index}.variant_id`, null)
             form.setValue(`items.${index}.description`, picked.name)
           }}
+          onPickSize={(picked, size) => {
+            onResolved(picked)
+            form.setValue(`items.${index}.product_id`, picked.id, { shouldValidate: true })
+            form.setValue(`items.${index}.variant_id`, size.id, { shouldValidate: true })
+            form.setValue(`items.${index}.description`, sizedName(picked.name, size.name))
+          }}
         />
       </div>
     )
