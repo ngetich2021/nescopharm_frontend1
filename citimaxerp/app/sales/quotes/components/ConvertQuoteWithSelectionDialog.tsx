@@ -48,7 +48,7 @@ export function ConvertQuoteWithSelectionDialog({
     
     const searchLower = searchTerm.toLowerCase()
     const quoteNumber = formatQuoteNumber(quote).toLowerCase()
-    const customerName = (quote.customer?.name || "").toLowerCase()
+    const customerName = `${quote.customer?.business_name || ""} ${quote.customer?.name || ""}`.toLowerCase()
     const customerEmail = (quote.customer?.email || "").toLowerCase()
     
     return quoteNumber.includes(searchLower) || 

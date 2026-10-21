@@ -1000,7 +1000,7 @@ class QuoteController extends Controller
                 $user = $request->user();
                 $query = Quote::with([
                     'customer' => function ($query) {
-                        $query->select('id', 'name', 'email', 'phone');
+                        $query->select('id', 'name', 'email', 'phone', 'business_name', 'customer_type');
                     },
                     'submittedBy' => function ($query) {
                         // users has no `name` column (first_name/last_name only,
@@ -1074,7 +1074,8 @@ class QuoteController extends Controller
             $query = Quote::where('id', $id)
                 ->with([
                     'customer' => function ($query) {
-                        $query->select('id', 'name', 'email', 'phone', 'business_name', 'customer_type', 'payment_method', 'account_id')
+                        $query->select('id', 'name', 'email', 'phone', 'business_name', 'customer_type', 'payment_method', 'account_id',
+                            'address', 'postal_code', 'city', 'county', 'country', 'pin_number')
                             ->with(['account' => fn ($q) => $q->select('id', 'credit_days')]);
                     },
                     'submittedBy' => function ($query) {
