@@ -305,17 +305,14 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                 // An individual with no PIN of their own falls back to a
                 // director's, which only the account carries.
                 const pin = buyer.kraPin || customerAccount?.directors?.find((d) => d.pin?.trim())?.pin
-                const email = customerDetails?.email || invoice.customer?.email
-                const phone = customerDetails?.phone || invoice.customer?.phone
+                // The contact person and their phone/email are printed as the reference
+                // in the box alongside, so the buyer block carries only the business.
                 return (
                   <div className="text-gray-900">
                     <p className="font-semibold">{buyer.name}</p>
-                    {buyer.careOf && <p>c/o {buyer.careOf}</p>}
                     {buyer.addressLines.map((line) => (
                       <p key={line}>{line}</p>
                     ))}
-                    {email && <p>{email}</p>}
-                    {phone && <p>{phone}</p>}
                     {pin && <p className="font-semibold">KRA PIN: {pin}</p>}
                   </div>
                 )
@@ -328,6 +325,14 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                 without an overly tall document. */}
             <div className="divide-y divide-gray-300">
               {(() => {
+                // Few customers have the dedicated contact-person fields filled; for the rest
+                // the customer's own name, phone and email are the person to reach.
+                const cust: any = customerDetails || invoice.customer || {}
+                const contactName = cust.contact_person_name?.trim() || cust.name?.trim()
+                const contactPhone = cust.contact_person_phone?.trim() || cust.phone?.trim()
+                const contactEmail = cust.contact_person_email?.trim() || cust.email?.trim()
+                const contactValue = [contactName, contactPhone, contactEmail].filter(Boolean).join(" · ") || "N/A"
+
                 const cells = [
                   { label: "Invoice No.", value: invoice.invoice_number },
                   { label: "Dated", value: new Date(invoice.invoice_date).toLocaleDateString() },
@@ -353,6 +358,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                   { label: "Dispatch Doc No.", value: invoice.dispatch_doc_no || "N/A" },
                   { label: "Dispatched Through", value: invoice.dispatched_through || "N/A" },
                   { label: "Destination", value: invoice.destination || "N/A" },
+                  { label: "Contact Person", value: contactValue },
                 ]
 
                 const rows: (typeof cells)[] = []
