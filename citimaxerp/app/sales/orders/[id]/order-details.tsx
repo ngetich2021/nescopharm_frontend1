@@ -39,6 +39,7 @@ import { EditOrderModal } from "@/components/modals/edit-order-modal"
 import { CreateDispatchModal } from "./create-dispatch-modal"
 import apiCall from "@/lib/api"
 import { formatPackagingForDisplay } from "@/lib/packaging-utils"
+import { orderItemUnit, piecesPerPack } from "@/lib/price-codes"
 
 // API type definitions
 interface OrderItem {
@@ -841,10 +842,14 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                   </TableHeader>
                   <TableBody>
                     {order.order_items?.map(item => {
-                      // Determine quantity display
-                      const displayQty = item.packagingUnit 
+                      // Lines priced per pack (e.g. "Per pack of 100's") count packs; show the pieces.
+                      // base_quantity holds the pieces the backend reserved, for lines whose unit isn't on hand.
+                      const storedPieces = Number((item as any).base_quantity || 0)
+                      const perPack = piecesPerPack(orderItemUnit(item))
+                        ?? (storedPieces > Number(item.quantity) && Number(item.quantity) > 0 ? storedPieces / Number(item.quantity) : null)
+                      const displayQty = item.packagingUnit
                         ? `${item.unit_quantity || item.quantity} ${item.packagingUnit.unit_abbreviation}`
-                        : `${item.quantity} PCS`;
+                        : `${(perPack ? Number(item.quantity) * perPack : Number(item.quantity)).toLocaleString()} PCS`;
                       
                       // Get breakdown text from API (priority) or calculate as fallback
                       let breakdown = '';
@@ -904,6 +909,11 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                           <TableCell>
                             <div className="space-y-1">
                               <div className="font-medium">{displayQty}</div>
+                              {!item.packagingUnit && perPack && (
+                                <div className="text-xs text-muted-foreground">
+                                  {Number(item.quantity).toLocaleString()} {Number(item.quantity) === 1 ? 'pack' : 'packs'} of {perPack.toLocaleString()}
+                                </div>
+                              )}
                               {item.packagingUnit && (
                                 <div className="text-xs text-muted-foreground">
                                   ({totalPieces} {item.product?.base_unit || 'pcs'} total)
@@ -929,6 +939,9 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                               <div>KES {formatAmount(item.unit_price)}</div>
                               {item.packagingUnit && (
                                 <div className="text-xs text-muted-foreground">per {item.packagingUnit.unit_abbreviation}</div>
+                              )}
+                              {!item.packagingUnit && perPack && (
+                                <div className="text-xs text-muted-foreground">per pack of {perPack.toLocaleString()}</div>
                               )}
                               {/* Which named price tier this was - staff-only
                                   reference, never shown on a printed order. */}

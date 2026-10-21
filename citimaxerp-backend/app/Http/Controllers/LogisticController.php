@@ -13,6 +13,9 @@ use Illuminate\Support\Str;
 
 class LogisticController extends Controller
 {
+    // delivery_method for a dispatch the customer collects / transports themselves.
+    public const CUSTOMER_ARRANGED = 'customer_arranged';
+
     /**
      * Initialize the controller with middleware for authentication.
      */
@@ -275,7 +278,10 @@ class LogisticController extends Controller
         try {
             return DB::transaction(function () use ($request, $logistic, $user) {
                 $updates = $request->except(['update_order_status']);
-                if ($request->has('delivery_cost') || $request->has('amount_paid')) {
+                $customerArranged = $request->input('delivery_method', $logistic->delivery_method) === self::CUSTOMER_ARRANGED;
+                if ($customerArranged) {
+                    $updates['payment_status'] = 'not_applicable';
+                } elseif ($request->has('delivery_cost') || $request->has('amount_paid')) {
                     $updates['payment_status'] = $this->resolvePaymentStatus(
                         $request->input('delivery_cost', $logistic->delivery_cost),
                         $request->input('amount_paid', $logistic->amount_paid)
@@ -603,8 +609,12 @@ class LogisticController extends Controller
                 // holds the dispatch - some transporters are paid on the spot, others
                 // on credit - so the dispatch, delivery note and order move on now and
                 // the invoice is settled whenever accounting pays it.
+                // Customer arranges (and pays for) their own transport: the dispatch is only
+                // recorded - no rate, no cost and no delivery invoice for accounting.
+                $customerArranged = $request->input('delivery_method') === self::CUSTOMER_ARRANGED;
+
                 $deliveryRate = null;
-                if ($request->filled('delivery_rate_id') && $request->filled('number_of_cartons')) {
+                if (!$customerArranged && $request->filled('delivery_rate_id') && $request->filled('number_of_cartons')) {
                     $deliveryRate = \App\Models\DeliveryRate::where('company_id', $dispatch->company_id)
                         ->where('id', $request->input('delivery_rate_id'))
                         ->where('status', 'approved')
@@ -621,6 +631,9 @@ class LogisticController extends Controller
                 if ($deliveryRate) {
                     $deliveryCost = $deliveryRate->rate_per_carton * (int) $request->input('number_of_cartons');
                     $amountPaid = 0;
+                } elseif ($customerArranged) {
+                    $deliveryCost = 0;
+                    $amountPaid = 0;
                 }
 
                 $logistic = Logistic::create([
@@ -630,7 +643,8 @@ class LogisticController extends Controller
                     'delivery_rate_id' => $deliveryRate?->id,
                     'number_of_cartons' => $request->input('number_of_cartons'),
                     'delivery_person_id' => $request->input('delivery_person_id'),
-                    'logistics_provider' => $deliveryRate?->transporter_name ?? $request->input('logistics_provider'),
+                    'logistics_provider' => $deliveryRate?->transporter_name
+                        ?? ($request->filled('logistics_provider') ? $request->input('logistics_provider') : ($customerArranged ? "Customer's own transport" : null)),
                     'delivery_method' => $request->input('delivery_method'),
                     'vehicle_type' => $request->input('vehicle_type'),
                     'vehicle_id' => $request->input('vehicle_id'),
@@ -656,7 +670,9 @@ class LogisticController extends Controller
                     'cheque_number' => $request->input('cheque_number'),
                     'bank_name' => $request->input('bank_name'),
                     'cheque_maturity_date' => $request->input('cheque_maturity_date'),
-                    'payment_status' => $deliveryRate ? 'unpaid' : $this->resolvePaymentStatus($deliveryCost, $amountPaid),
+                    'payment_status' => $customerArranged
+                        ? 'not_applicable'
+                        : ($deliveryRate ? 'unpaid' : $this->resolvePaymentStatus($deliveryCost, $amountPaid)),
                 ]);
 
                 // Link back to the dispatch so OrderDispatch::logistic() resolves
@@ -723,7 +739,9 @@ class LogisticController extends Controller
                     'status' => 'success',
                     'message' => $deliveryRate
                         ? 'Logistics record created. A delivery invoice has been sent to accounting for payment.'
-                        : 'Logistics record created successfully.',
+                        : ($customerArranged
+                            ? "Dispatch recorded. The customer is arranging their own transport, so no delivery invoice was raised."
+                            : 'Logistics record created successfully.'),
                     'logistic' => $logistic->load(['orderDispatch', 'deliveryPerson', 'deliveryRate', 'deliveryInvoice']),
                 ], 201);
             });

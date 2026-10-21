@@ -140,13 +140,17 @@ export function piecesPerPack(unit: string | null | undefined): number | null {
   return n > 1 ? n : null
 }
 
-// The unit a dispatch line was sold in: the order line's, else the product's tier for that code.
-export function dispatchItemUnit(item: any): string | null {
-  if (item?.order_item?.price_unit) return item.order_item.price_unit
-  const code = item?.order_item?.price_label
-  const option = priceOptionsFor(item?.product).find((o) => o.code === code)
+// The unit an order line was sold in: its own, else the product's tier for its price code.
+export function orderItemUnit(orderItem: any, product?: any): string | null {
+  if (orderItem?.price_unit) return orderItem.price_unit
+  const code = orderItem?.price_label
+  if (!code) return null
+  const option = priceOptionsFor(product ?? orderItem?.product).find((o) => o.code === code)
   return option?.unit ?? null
 }
+
+// The unit a dispatch line was sold in: the order line's, else the product's tier for that code.
+export const dispatchItemUnit = (item: any): string | null => orderItemUnit(item?.order_item, item?.product)
 
 // Code for a dispatch line: the one it was sold under (e.g. "NSPH 001"), else the item's own codes.
 export function dispatchItemCode(item: any): string {

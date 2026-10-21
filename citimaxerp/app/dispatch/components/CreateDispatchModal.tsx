@@ -54,6 +54,9 @@ const DELIVERY_METHODS = [
   { value: "express", label: "Express" },
 ];
 
+// Mirrors LogisticController::CUSTOMER_ARRANGED.
+const CUSTOMER_ARRANGED = "customer_arranged";
+
 const VEHICLE_TYPES = [
   { value: "van", label: "Van" },
   { value: "truck", label: "Truck" },
@@ -79,6 +82,9 @@ export function CreateLogisticsModal({
   const [fetchingRates, setFetchingRates] = useState(false);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | "">("");
   const [selectedRateId, setSelectedRateId] = useState<string>("");
+  // "customer": they collect / send their own transport - recorded only, no delivery invoice.
+  const [arrangedBy, setArrangedBy] = useState<"company" | "customer">("company");
+  const customerArranged = arrangedBy === "customer";
 
   // Form State - only order_dispatch_id and delivery_status are required
   const [formData, setFormData] = useState<CreateLogisticsData>({
@@ -102,6 +108,7 @@ export function CreateLogisticsModal({
       loadDeliveryRates();
       setSelectedZone("");
       setSelectedRateId("");
+      setArrangedBy("company");
 
       // Pre-fill with dispatch data - all fields remain editable.
       // delivery_locations has no single "address"/"name" column, so we
@@ -208,6 +215,22 @@ export function CreateLogisticsModal({
   };
 
   const handleCreate = async () => {
+    if (customerArranged) {
+      setLoading(true);
+      try {
+        const { delivery_rate_id, number_of_cartons, ...rest } = formData;
+        await createLogistics({ ...rest, delivery_method: CUSTOMER_ARRANGED });
+        toast({ title: "Success", description: "Dispatch recorded. Customer's own transport - no delivery invoice raised." });
+        onOpenChange(false);
+        onSuccess?.();
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message || "Failed to create logistics entry.", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!selectedRateId) {
       toast({ title: "Missing Information", description: "Please select a zone and transporter.", variant: "destructive" });
       return;
@@ -315,6 +338,28 @@ export function CreateLogisticsModal({
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="grid gap-2 mt-4">
+                  <Label>Transport Arranged By *</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { value: "company", title: "Us (our transporter)", hint: "Delivery invoice goes to accounting" },
+                      { value: "customer", title: "Customer (own transport)", hint: "Recorded only - nothing to pay" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setArrangedBy(opt.value)}
+                        className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                          arrangedBy === opt.value ? "border-blue-600 bg-white ring-1 ring-blue-600" : "border-gray-200 bg-white/60 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="font-medium text-gray-900">{opt.title}</div>
+                        <div className="text-xs text-gray-500">{opt.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* OPTIONAL FIELDS SECTION */}
@@ -367,12 +412,12 @@ export function CreateLogisticsModal({
                 <div className="grid gap-2 mb-4">
                   <Label htmlFor="logistics_provider" className="flex items-center gap-1">
                     <Package className="h-3.5 w-3.5" />
-                    Logistics Provider
+                    {customerArranged ? "Customer's Transporter / Collected By" : "Logistics Provider"}
                     <span className="text-xs text-gray-400 font-normal">(optional)</span>
                   </Label>
                   <Input
                     id="logistics_provider"
-                    placeholder="e.g., DHL Express, FedEx"
+                    placeholder={customerArranged ? "e.g., ABC Couriers, or the driver's name" : "e.g., DHL Express, FedEx"}
                     value={formData.logistics_provider || ""}
                     onChange={(e) => handleChange("logistics_provider", e.target.value)}
                   />
@@ -380,7 +425,7 @@ export function CreateLogisticsModal({
 
                 {/* Delivery Method & Vehicle Type - OPTIONAL */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="grid gap-2">
+                  {!customerArranged && <div className="grid gap-2">
                     <Label htmlFor="delivery_method">Delivery Method <span className="text-xs text-gray-400">(optional)</span></Label>
                     <Select value={formData.delivery_method} onValueChange={(value) => handleChange("delivery_method", value)}>
                       <SelectTrigger id="delivery_method">
@@ -392,7 +437,7 @@ export function CreateLogisticsModal({
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div>}
                   <div className="grid gap-2">
                     <Label htmlFor="vehicle_type">Vehicle Type <span className="text-xs text-gray-400">(optional)</span></Label>
                     <Select value={formData.vehicle_type} onValueChange={(value) => handleChange("vehicle_type", value)}>
@@ -430,7 +475,7 @@ export function CreateLogisticsModal({
                   </div>
                 </div>
 
-                <div className="grid gap-2 mb-4">
+                {!customerArranged && <div className="grid gap-2 mb-4">
                   <Label htmlFor="transporter_invoice_number">Transporter Invoice <span className="text-xs text-gray-400">(optional)</span></Label>
                   <Input
                     id="transporter_invoice_number"
@@ -438,7 +483,7 @@ export function CreateLogisticsModal({
                     value={formData.transporter_invoice_number || ""}
                     onChange={(e) => handleChange("transporter_invoice_number", e.target.value)}
                   />
-                </div>
+                </div>}
 
                 {/* Recipient Information - OPTIONAL */}
                 <div className="border-t border-gray-200 pt-4 mb-4">
@@ -555,7 +600,7 @@ export function CreateLogisticsModal({
                     only enters carton count. The app calculates the total and
                     raises a Delivery Invoice for accounting to pay before this
                     dispatch can proceed. No manual money entry here. */}
-                <div className="border-t border-gray-200 pt-4 mb-4">
+                {!customerArranged && <div className="border-t border-gray-200 pt-4 mb-4">
                   <h5 className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-1">
                     <Wallet className="h-3.5 w-3.5" />
                     Delivery Cost
@@ -636,11 +681,11 @@ export function CreateLogisticsModal({
                     {selectedRate && cartons > 0 && (
                       <p className="text-xs text-gray-500">
                         This will raise a Delivery Invoice of <strong>KES {calculatedTotal.toLocaleString()}</strong> for
-                        accounting to pay before the dispatch proceeds.
+                        accounting to pay.
                       </p>
                     )}
                   </div>
-                </div>
+                </div>}
 
                 {/* Estimated Delivery Time - OPTIONAL */}
                 <div className="grid gap-2 mb-4">

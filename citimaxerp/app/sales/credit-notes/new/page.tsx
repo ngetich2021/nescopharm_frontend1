@@ -31,6 +31,9 @@ import { formatCurrency } from "@/lib/utils"
 import { ArrowLeft, Check, ChevronsUpDown, Loader2, Plus, Trash2 } from "lucide-react"
 
 interface EditableLineItem {
+  // Kept from the invoice line so issuing the note puts the goods back in stock.
+  product_id?: string
+  variant_id?: string
   description: string
   quantity: number
   unit: string
@@ -83,6 +86,8 @@ function mapInvoiceLineItemsToCreditNoteItems(invoiceLineItems?: Invoice["line_i
   }
 
   return invoiceLineItems.map((lineItem) => ({
+    product_id: lineItem.product_id || undefined,
+    variant_id: lineItem.variant_id || undefined,
     description: lineItem.description || "",
     quantity: parseCreditNoteAmount(lineItem.quantity) || 0,
     unit: lineItem.unit || "pcs",
@@ -175,6 +180,8 @@ export default function NewCreditNotePage() {
 
       const mappedLineItems: EditableLineItem[] =
         creditNote.line_items?.map((lineItem) => ({
+          product_id: lineItem.product_id || undefined,
+          variant_id: lineItem.variant_id || undefined,
           description: lineItem.description || "",
           quantity: parseCreditNoteAmount(lineItem.quantity) || 0,
           unit: lineItem.unit || "pcs",
@@ -276,6 +283,8 @@ export default function NewCreditNotePage() {
   const handleSubmit = async () => {
     const normalizedLineItems = lineItems
       .map((lineItem) => ({
+        product_id: lineItem.product_id,
+        variant_id: lineItem.variant_id,
         description: lineItem.description.trim(),
         quantity: Number(lineItem.quantity || 0),
         unit_price: Number(lineItem.unit_price || 0),

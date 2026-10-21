@@ -139,11 +139,12 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
   const destination = dispatch.delivery_location?.landmark || dispatch.logistic?.delivery_location || "N/A"
   const customerPin = customerDetails?.pin_number || (dispatch.order?.customer as any)?.pin_number || 'N/A'
   const companySlug = company?.name?.toLowerCase().trim().split(/\s+/)[0]
-  // Public-folder copy first (same origin, always available), then the API-served one.
+  // The company's current letterhead (the one invoices print) first; the bundled
+  // public-folder copy is only a fallback when that can't load.
   const letterheadCandidates = [
+    company?.letterhead_url,
     companySlug && `/company/${companySlug}-letterhead.jpg`,
     '/company/nescopharm-letterhead.jpg',
-    company?.letterhead_url,
   ].filter((s, i, arr): s is string => !!s && arr.indexOf(s) === i)
   const letterheadSrc = letterheadCandidates[letterheadIndex]
   const dispatchDate = dispatch.dispatch_date || dispatch.created_at

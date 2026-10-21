@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Traits\HandlesDatabaseErrors;
+use App\Services\PackagingCalculatorService;
 use App\Services\TaxCompliance\EtimsCreditNoteService;
 use App\Services\TaxCompliance\EtimsTaxType;
 
@@ -173,6 +174,11 @@ class CreditNoteController extends Controller
             $creditNote->load('lineItems');
             $creditNote->calculateTotals();
 
+            if ($message = $this->overCreditMessage($invoice, $creditNote)) {
+                DB::rollBack();
+                return response()->json(['message' => $message], 422);
+            }
+
             DB::commit();
 
             return response()->json([
@@ -300,6 +306,12 @@ class CreditNoteController extends Controller
 
                 $creditNote->load('lineItems');
                 $creditNote->calculateTotals();
+
+                $invoice = Invoice::where('company_id', $companyId)->find($creditNote->invoice_id);
+                if ($invoice && ($message = $this->overCreditMessage($invoice, $creditNote))) {
+                    DB::rollBack();
+                    return response()->json(['message' => $message], 422);
+                }
             }
 
             DB::commit();
@@ -766,9 +778,27 @@ class CreditNoteController extends Controller
         ];
     }
 
+    // An invoice can't be credited for more than it billed, counting its other live credit notes.
+    protected function overCreditMessage(Invoice $invoice, CreditNote $creditNote): ?string
+    {
+        $otherCredits = (float) CreditNote::where('invoice_id', $invoice->id)
+            ->where('id', '!=', $creditNote->id)
+            ->where('status', '!=', 'void')
+            ->sum('total_amount');
+        $available = round((float) $invoice->total_amount - $otherCredits, 2);
+
+        if (round((float) $creditNote->total_amount, 2) <= $available) {
+            return null;
+        }
+
+        return 'This credit note (' . number_format((float) $creditNote->total_amount, 2) . ') is more than is left to credit on '
+            . $invoice->invoice_number . ' (' . number_format(max(0, $available), 2) . ' of ' . number_format((float) $invoice->total_amount, 2) . ').';
+    }
+
     protected function restoreInventoryForCreditNoteLineItem(CreditNote $creditNote, CreditNoteLineItem $lineItem, string $userId): void
     {
-        $quantity = (int) round((float) $lineItem->quantity);
+        // Lines copied from the invoice keep its unit ("Per pack of 100's"), so stock comes back in pieces.
+        $quantity = PackagingCalculatorService::piecesFor($lineItem->quantity, $lineItem->unit);
 
         if ($quantity <= 0 || !$lineItem->product_id) {
             return;
@@ -815,7 +845,7 @@ class CreditNoteController extends Controller
             'unit_cost' => $variant?->cost ?? $product->unit_cost,
             'unit_price' => $lineItem->unit_price,
             'total_cost' => $quantity * (float) ($variant?->cost ?? $product->unit_cost ?? 0),
-            'total_value' => $quantity * (float) $lineItem->unit_price,
+            'total_value' => (float) $lineItem->quantity * (float) $lineItem->unit_price,
             'movement_date' => now(),
             'created_by' => $userId,
             'notes' => 'Inventory restored from issued credit note',

@@ -594,6 +594,11 @@ export function DispatchDetailsSheet({
                               </span>
                            </p>
                         )}
+                        {(localDispatch.logistic as any).delivery_method === 'customer_arranged' && (
+                           <p className="text-xs text-gray-600">
+                              Transport: <span className="font-semibold text-gray-800">Customer&apos;s own - nothing to pay</span>
+                           </p>
+                        )}
                         <div className="grid grid-cols-2 gap-3">
                            <div>
                               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Driver</p>
