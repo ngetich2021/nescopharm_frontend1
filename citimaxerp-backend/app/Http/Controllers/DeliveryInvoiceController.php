@@ -203,11 +203,11 @@ class DeliveryInvoiceController extends Controller
                 'paid_by' => $user->id,
             ]);
 
-            // Unblock the logistics record and let the dispatch proceed.
+            // Payment only settles the transporter - the dispatch already moved on when
+            // logistics were recorded, so its delivery status is left as it is.
             $logistic = \App\Models\Logistic::where('delivery_invoice_id', $invoice->id)->first();
             if ($logistic) {
                 $logistic->update([
-                    'delivery_status' => 'dispatched',
                     'payment_status' => 'paid',
                     'amount_paid' => $invoice->total_amount,
                     'payment_method' => $request->input('payment_method'),
@@ -217,26 +217,12 @@ class DeliveryInvoiceController extends Controller
                     'bank_name' => $request->input('bank_name'),
                     'cheque_maturity_date' => $request->input('cheque_maturity_date'),
                 ]);
-
-                $dispatch = $logistic->orderDispatch;
-                if ($dispatch) {
-                    $dispatch->status = 'in_transit';
-                    $dispatch->dispatch_date = now();
-                    $dispatch->save();
-
-                    if ($dispatch->order) {
-                        $dispatch->order->update(['status' => 'dispatched']);
-                    }
-
-                    // Auto-generate delivery note once payment is received
-                    DeliveryNoteController::generateForDispatch($dispatch, $user->id);
-                }
             }
         });
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Delivery invoice marked as paid. The dispatch can now proceed.',
+            'message' => 'Delivery invoice marked as paid.',
             'delivery_invoice' => $invoice->fresh(['orderDispatch.order', 'deliveryRate', 'createdBy', 'paidBy']),
         ], 200);
     }

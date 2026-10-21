@@ -577,10 +577,14 @@ export function DispatchDetailsSheet({
                               {toSentenceCase(localDispatch.logistic.delivery_status || localDispatch.logistic.status || 'pending')}
                            </Badge>
                         </div>
-                        {localDispatch.logistic.delivery_status === 'pending_payment' && (
-                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                              Awaiting payment of the delivery invoice from accounting. The dispatch will proceed automatically once paid.
-                           </div>
+                        {(localDispatch.logistic as any).delivery_invoice_id && (
+                           // Informational only - transporter payment never holds the dispatch.
+                           <p className="text-xs text-gray-600">
+                              Transporter payment:{" "}
+                              <span className={localDispatch.logistic.payment_status === 'paid' ? "font-semibold text-green-700" : "font-semibold text-amber-700"}>
+                                 {localDispatch.logistic.payment_status === 'paid' ? 'Paid' : 'Unpaid - with accounting'}
+                              </span>
+                           </p>
                         )}
                         <div className="grid grid-cols-2 gap-3">
                            <div>

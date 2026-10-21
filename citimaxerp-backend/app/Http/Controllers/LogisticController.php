@@ -599,11 +599,11 @@ class LogisticController extends Controller
             return DB::transaction(function () use ($request, $dispatch, $user) {
                 // Rate-based path: transporter + zone rate approved by GM/Director,
                 // warehouse manager just enters carton count. The app computes the
-                // cost and raises a Delivery Invoice - the dispatch is held at its
-                // current status until the accountant pays it (see
-                // DeliveryInvoiceController::pay()).
+                // cost and raises a Delivery Invoice for the accountant. Payment never
+                // holds the dispatch - some transporters are paid on the spot, others
+                // on credit - so the dispatch, delivery note and order move on now and
+                // the invoice is settled whenever accounting pays it.
                 $deliveryRate = null;
-                $pendingPayment = false;
                 if ($request->filled('delivery_rate_id') && $request->filled('number_of_cartons')) {
                     $deliveryRate = \App\Models\DeliveryRate::where('company_id', $dispatch->company_id)
                         ->where('id', $request->input('delivery_rate_id'))
@@ -614,8 +614,6 @@ class LogisticController extends Controller
                     if (!$deliveryRate) {
                         throw new \Exception('Selected delivery rate is not approved or not available.');
                     }
-
-                    $pendingPayment = true;
                 }
 
                 $deliveryCost = $request->input('delivery_cost');
@@ -638,7 +636,7 @@ class LogisticController extends Controller
                     'vehicle_id' => $request->input('vehicle_id'),
                     'tracking_number' => $request->input('tracking_number'),
                     'transporter_invoice_number' => $request->input('transporter_invoice_number'),
-                    'delivery_status' => $pendingPayment ? 'pending_payment' : $request->input('delivery_status'),
+                    'delivery_status' => $request->input('delivery_status'),
                     'recipient_name' => $request->input('recipient_name'),
                     'recipient_phone' => $request->input('recipient_phone'),
                     'delivery_address' => $request->input('delivery_address'),
@@ -658,7 +656,7 @@ class LogisticController extends Controller
                     'cheque_number' => $request->input('cheque_number'),
                     'bank_name' => $request->input('bank_name'),
                     'cheque_maturity_date' => $request->input('cheque_maturity_date'),
-                    'payment_status' => $pendingPayment ? 'unpaid' : $this->resolvePaymentStatus($deliveryCost, $amountPaid),
+                    'payment_status' => $deliveryRate ? 'unpaid' : $this->resolvePaymentStatus($deliveryCost, $amountPaid),
                 ]);
 
                 // Link back to the dispatch so OrderDispatch::logistic() resolves
@@ -686,47 +684,45 @@ class LogisticController extends Controller
 
                     $logistic->delivery_invoice_id = $invoice->id;
                     $logistic->save();
-
-                    \App\Http\Controllers\DeliveryNoteController::generateForDispatch($dispatch, $user->id);
                 }
 
-                // Pending-payment dispatches are held where they are (typically
-                // 'approved') until the delivery invoice is paid - the requested
-                // delivery_status/order_status changes below are skipped in that case.
-                if (!$pendingPayment) {
-                    // Update order status if requested and order exists
-                    if ($request->input('update_order_status', true) && $dispatch->order) {
-                        $order = $dispatch->order;
-                        $deliveryStatus = $request->input('delivery_status');
-                        if ($deliveryStatus === 'delivered') {
-                            $order->update(['status' => 'completed']);
-                        } elseif (in_array($deliveryStatus, ['failed', 'returned', 'cancelled'])) {
-                            // Decide if order should be cancelled or just flagged; usually depends on workflow
-                            // Keeping it simple as per previous logic logic, but strict 'cancelled' might be aggressive
-                            $order->update(['status' => 'cancelled']);
-                        } elseif ($deliveryStatus === 'dispatched' || $deliveryStatus === 'in_transit') {
-                            $order->update(['status' => 'dispatched']);
-                        }
-                    }
+                \App\Http\Controllers\DeliveryNoteController::generateForDispatch($dispatch, $user->id);
 
-                    // Update Dispatch Status as well to keep them in sync
-                    // Map 'dispatched' from logistics to 'in_transit' for order_dispatch
-                    $dispatchStatus = $request->input('delivery_status');
-                    if ($dispatchStatus === 'dispatched') {
-                        $dispatchStatus = 'in_transit';
+                // Update order status if requested and order exists
+                if ($request->input('update_order_status', true) && $dispatch->order) {
+                    $order = $dispatch->order;
+                    $deliveryStatus = $request->input('delivery_status');
+                    if ($deliveryStatus === 'delivered') {
+                        $order->update(['status' => 'completed']);
+                    } elseif (in_array($deliveryStatus, ['failed', 'returned', 'cancelled'])) {
+                        // Decide if order should be cancelled or just flagged; usually depends on workflow
+                        // Keeping it simple as per previous logic logic, but strict 'cancelled' might be aggressive
+                        $order->update(['status' => 'cancelled']);
+                    } elseif ($deliveryStatus === 'dispatched' || $deliveryStatus === 'in_transit') {
+                        $order->update(['status' => 'dispatched']);
                     }
+                }
 
-                    // Ensure the status is valid for order_dispatches
-                    if (in_array($dispatchStatus, ['pending', 'approved', 'in_transit', 'delivered', 'cancelled'])) {
-                        $dispatch->status = $dispatchStatus;
-                        $dispatch->save();
+                // Update Dispatch Status as well to keep them in sync
+                // Map 'dispatched' from logistics to 'in_transit' for order_dispatch
+                $dispatchStatus = $request->input('delivery_status');
+                if ($dispatchStatus === 'dispatched') {
+                    $dispatchStatus = 'in_transit';
+                }
+
+                // Ensure the status is valid for order_dispatches
+                if (in_array($dispatchStatus, ['pending', 'approved', 'in_transit', 'delivered', 'cancelled'])) {
+                    $dispatch->status = $dispatchStatus;
+                    if (in_array($dispatchStatus, ['in_transit', 'delivered']) && !$dispatch->dispatch_date) {
+                        $dispatch->dispatch_date = now();
                     }
+                    $dispatch->save();
                 }
 
                 return response()->json([
                     'status' => 'success',
-                    'message' => $pendingPayment
-                        ? 'Logistics record created. A delivery invoice has been sent to accounting - the dispatch will proceed once it is paid.'
+                    'message' => $deliveryRate
+                        ? 'Logistics record created. A delivery invoice has been sent to accounting for payment.'
                         : 'Logistics record created successfully.',
                     'logistic' => $logistic->load(['orderDispatch', 'deliveryPerson', 'deliveryRate', 'deliveryInvoice']),
                 ], 201);
