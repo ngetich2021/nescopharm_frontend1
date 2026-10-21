@@ -64,7 +64,15 @@ import {
 import { format } from "date-fns";
 import { cn, toSentenceCase } from "@/lib/utils";
 import { VisuallyHidden } from "@/components/ui/visually-hidden";
-import { dispatchItemCode } from "@/lib/price-codes";
+import { dispatchItemCode, dispatchItemUnit, piecesPerPack } from "@/lib/price-codes";
+
+// Dispatch quantities are in the pack the line was sold in ("Per pack of 100"), as on the printed note.
+const packLine = (item: any) => {
+  const packs = Number(item?.quantity || 0);
+  const unit = dispatchItemUnit(item);
+  const perPack = piecesPerPack(unit);
+  return { packs, unit, perPack, pieces: perPack ? packs * perPack : packs };
+};
 
 interface DispatchDetailsSheetProps {
   open: boolean;
@@ -677,12 +685,26 @@ export function DispatchDetailsSheet({
                          <Badge variant="default">{toSentenceCase(deliveryNote.status)}</Badge>
                       </div>
                       <div className="space-y-2">
-                         {deliveryNote.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between text-sm border-b border-gray-100 pb-2 last:border-0">
-                               <span className="text-gray-700">{item.product_name}</span>
-                               <span className="font-medium">{item.quantity_dispatched ?? item.delivered_quantity ?? 0} pcs</span>
-                            </div>
-                         ))}
+                         {(localDispatch.items || []).map((item, idx) => {
+                            const { packs, unit, perPack, pieces } = packLine(item);
+                            return (
+                               <div key={idx} className="flex justify-between gap-3 text-sm border-b border-gray-100 pb-2 last:border-0">
+                                  <span className="text-gray-700">{item.product ? sizedName(item.product.name, item.variant?.name) : "Product"}</span>
+                                  <span className="text-right whitespace-nowrap">
+                                     <span className="font-medium">{packs.toLocaleString()} x {unit || "unit"}</span>
+                                     {perPack && <span className="block text-xs text-gray-500">= {pieces.toLocaleString()} pcs</span>}
+                                  </span>
+                               </div>
+                            );
+                         })}
+                      </div>
+                      <div className="flex gap-2">
+                         <Link href={`/dispatch/${localDispatch.id}/delivery-note`}>
+                            <Button size="sm" variant="outline">View</Button>
+                         </Link>
+                         <Link href={`/dispatch/${localDispatch.id}/delivery-note?autoprint=1`}>
+                            <Button size="sm" variant="outline">Print</Button>
+                         </Link>
                       </div>
                    </CardContent>
                 </Card>
@@ -833,10 +855,16 @@ export function DispatchDetailsSheet({
                            )}
                          </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{item.quantity}</div>
-                        <div className="text-xs font-medium text-gray-500 uppercase">Units</div>
-                      </div>
+                      {(() => {
+                        const { packs, unit, perPack, pieces } = packLine(item);
+                        return (
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{packs.toLocaleString()}</div>
+                            <div className="text-xs font-medium text-gray-500">{unit || "Units"}</div>
+                            {perPack && <div className="text-xs text-gray-500">= {pieces.toLocaleString()} pcs</div>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                   {(!localDispatch.items || localDispatch.items.length === 0) && (
