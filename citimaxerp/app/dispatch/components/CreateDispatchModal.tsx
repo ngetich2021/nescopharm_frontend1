@@ -25,6 +25,7 @@ import { Loader2, Plus, Truck, User, Phone, MapPin, Package, Wallet } from "luci
 import { OrderDispatch } from "@/lib/order-dispatches";
 import { createLogistics, CreateLogisticsData } from "@/lib/logistics";
 import { getDeliveryPersons, createDeliveryPerson, DeliveryPerson } from "@/lib/delivery-persons";
+import { DeliveryPersonPicker } from "@/components/delivery-person-picker";
 import { getDeliveryRates, DeliveryRate, DeliveryZone } from "@/lib/delivery-rates";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -341,39 +342,25 @@ export function CreateLogisticsModal({
                       </Button>
                     )}
                   </div>
-                  <Select
+                  <DeliveryPersonPicker
+                    id="delivery_person_id"
+                    persons={deliveryPersons}
                     value={formData.delivery_person_id}
-                    onValueChange={(value) => handleChange("delivery_person_id", value)}
-                    open={isSelectOpen}
-                    onOpenChange={setIsSelectOpen}
-                  >
-                    <SelectTrigger id="delivery_person_id">
-                      <SelectValue placeholder={fetchingDeliveryPersons ? "Loading..." : "Select delivery person"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {deliveryPersons.length === 0 && !fetchingDeliveryPersons ? (
-                        <div className="p-2 text-center text-sm text-muted-foreground">
-                          No delivery persons available.<br />
-                          {canAddDeliveryPerson ? (
-                            <button type="button" className="text-blue-600 hover:underline mt-1" onClick={() => { setIsSelectOpen(false); setShowAddDeliveryPerson(true); }}>
-                              Add one now
-                            </button>
-                          ) : (
-                            <span className="text-xs">Only GM, Director or Warehouse Manager can add one.</span>
-                          )}
-                        </div>
-                      ) : (
-                        deliveryPersons.map((person) => (
-                          <SelectItem key={person.id} value={person.id}>
-                            <div className="flex flex-col">
-                              <span>{person.full_name || person.name}</span>
-                              <span className="text-xs text-muted-foreground">{person.phone_number || person.phone}</span>
-                            </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    onChange={(value) => handleChange("delivery_person_id", value)}
+                    loading={fetchingDeliveryPersons}
+                    empty={
+                      <div className="p-2 text-center text-sm text-muted-foreground">
+                        No delivery persons available.<br />
+                        {canAddDeliveryPerson ? (
+                          <button type="button" className="text-blue-600 hover:underline mt-1" onClick={() => { setIsSelectOpen(false); setShowAddDeliveryPerson(true); }}>
+                            Add one now
+                          </button>
+                        ) : (
+                          <span className="text-xs">Only GM, Director or Warehouse Manager can add one.</span>
+                        )}
+                      </div>
+                    }
+                  />
                 </div>
 
                 {/* Logistics Provider - OPTIONAL */}

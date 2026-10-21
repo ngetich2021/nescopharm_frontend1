@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { createLogistics, CreateLogisticsData } from "@/lib/logistics"
 import { listOrderDispatches, OrderDispatch } from "@/lib/order-dispatches"
 import { getDeliveryPersons, DeliveryPerson } from "@/lib/delivery-persons"
+import { DeliveryPersonPicker } from "@/components/delivery-person-picker"
 import { getCustomerDisplayName } from "@/lib/customers"
 
 interface CreateLogisticsSheetProps {
@@ -228,27 +229,13 @@ export function CreateLogisticsSheet({ isOpen, onOpenChange, onLogisticsCreated 
               <Label htmlFor="delivery_person_id">
                 Delivery Person <span className="text-xs text-gray-400 font-normal">(optional)</span>
               </Label>
-              <Select
+              <DeliveryPersonPicker
+                id="delivery_person_id"
+                persons={deliveryPersons}
                 value={formData.delivery_person_id}
-                onValueChange={(value) => handleSelectChange("delivery_person_id", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingDeliveryPersons ? "Loading..." : "Select delivery person"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {loadingDeliveryPersons ? (
-                    <SelectItem value="loading" disabled>Loading...</SelectItem>
-                  ) : deliveryPersons.length > 0 ? (
-                    deliveryPersons.map((person) => (
-                      <SelectItem key={person.id} value={person.id}>
-                        {person.full_name} ({person.phone_number})
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="none" disabled>No delivery persons found</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+                onChange={(value) => handleSelectChange("delivery_person_id", value)}
+                loading={loadingDeliveryPersons}
+              />
             </div>
 
             {/* Logistics Provider - OPTIONAL */}

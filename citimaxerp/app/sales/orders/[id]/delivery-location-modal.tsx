@@ -42,6 +42,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getDeliveryPersons, DeliveryPerson } from "@/lib/delivery-persons"
+import { DeliveryPersonPicker } from "@/components/delivery-person-picker"
 
 // Use the API types instead of database types
 // Only use house_number, estate, landmark, city in DeliveryLocation
@@ -490,29 +491,13 @@ export function DeliveryLocationModal({
           {/* Delivery Person and Method */}
           <div className="space-y-2">
             <Label htmlFor="deliveryPerson">Assign Delivery Person</Label>
-            <Select
+            <DeliveryPersonPicker
+              id="deliveryPerson"
+              persons={deliveryPersons}
               value={selectedDeliveryPerson}
-              onValueChange={setSelectedDeliveryPerson}
-              // disabled={!selectedLocationId || deliveryPersons.length === 0}
-            >
-              <SelectTrigger id="deliveryPerson">
-                <SelectValue placeholder={deliveryPersons.length === 0 ? "No delivery persons found" : "Select a delivery person"} />
-              </SelectTrigger>
-              <SelectContent>
-                {deliveryPersons.length === 0 ? (
-                  <div className="px-4 py-2 text-muted-foreground text-sm">No delivery persons found</div>
-                ) : (
-                  deliveryPersons.map((person: any) => (
-                    <SelectItem key={person.id} value={person.id}>
-                      {person.full_name || person.name}
-                      {person.phone_number || person.phone ? ` (${person.phone_number || person.phone})` : ""}
-                      {person.availability_status ? ` - ${person.availability_status.replace('_', ' ')} ` : ""}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          
+              onChange={setSelectedDeliveryPerson}
+            />
+
             {/* If deliveryPersons is empty but API returned something unexpected, show a warning */}
             {deliveryPersons.length === 0 && !loading && (
               <div className="text-xs text-primary mt-1">

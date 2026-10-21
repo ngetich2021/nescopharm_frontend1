@@ -43,13 +43,13 @@ class DeliveryManagementPermissionsSeeder extends Seeder
                     foreach ($roles as $role) {
                         if (!$role->permissions()->where('permission_id', $permission->id)->exists()) {
                             $role->permissions()->attach($permission->id, ['granted_at' => now()]);
-                            $this->command->info("Assigned {$permissionKey} to {$role->name} ({$company->name})");
+                            $this->command?->info("Assigned {$permissionKey} to {$role->name} ({$company->name})");
                         }
                     }
                 }
             }
         }
 
-        $this->command->info('Delivery management permissions seeding completed.');
+        $this->command?->info('Delivery management permissions seeding completed.');
     }
 }
