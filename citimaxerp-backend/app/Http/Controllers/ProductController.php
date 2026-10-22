@@ -1329,6 +1329,17 @@ class ProductController extends Controller
                     // Same name on several products: the one that has this size is the one meant.
                     $named = $named->filter(fn ($p) => $variants->get($p->id)?->has($sizeKey($size)))->values();
                 }
+                if ($named->count() > 1) {
+                    // Several products share this name (e.g. one per price list). A batch already in the
+                    // system belongs to exactly one of them, so a re-imported export still lands on it.
+                    $holding = $named->filter(function ($p) use ($existingBatchNumbers, $batchKey, $variants, $sizeKey, $size, $batchNumber) {
+                        $variantId = $size !== '' ? $variants->get($p->id)?->get($sizeKey($size))?->id : null;
+                        return $existingBatchNumbers->has($batchKey($p->id, $variantId, $batchNumber));
+                    })->values();
+                    if ($holding->count() === 1) {
+                        $named = $holding;
+                    }
+                }
                 if ($named->isEmpty()) {
                     $sized = $bySizedName->get(mb_strtolower($description), collect());
                     if ($size !== '') {
