@@ -666,13 +666,49 @@ class OrderController extends Controller
             ], 400);
         }
 
+        // Re-dating an order across go-live moves it between a past sale (no stock, no approvals)
+        // and a normal one. Its invoice was raised under the old rules, so that has to go first.
+        $toHistorical = null;
+        if ($request->filled('order_date')) {
+            $willBeHistorical = Order::isHistoricalDate($request->input('order_date'));
+            if ($willBeHistorical !== (bool) $order->is_historical) {
+                if (\App\Models\Invoice::where('order_id', $order->id)->exists()) {
+                    return response()->json([
+                        'status' => 'failed',
+                        'message' => 'This order is already invoiced, so its date cannot be moved '
+                            . ($willBeHistorical ? 'before' : 'on or after') . ' go-live ('
+                            . \Carbon\Carbon::parse(Order::HISTORICAL_CUTOFF)->format('d-m-Y') . '). Cancel the invoice first.',
+                    ], 400);
+                }
+                $toHistorical = $willBeHistorical;
+            }
+        }
+
         try {
             Log::info('Order update attempt', [
                 'user_id' => $request->user()->id,
                 'order_id' => $id,
                 'request' => $request->all(),
             ]);
-            return DB::transaction(function () use ($request, $order) {
+            return DB::transaction(function () use ($request, $order, $toHistorical) {
+                if ($toHistorical === true) {
+                    // Put back any stock it took while flagged as a current sale, then mark it past.
+                    // Booleans bind as integers here, which Postgres rejects for a boolean column.
+                    app(\App\Services\OrderStockService::class)->restore($order, "Order {$order->order_number} re-dated as a past sale");
+                    DB::update(
+                        "UPDATE orders SET is_historical = true, status = 'completed', invoice_approved_at = COALESCE(invoice_approved_at, NOW()), invoice_approved_by = COALESCE(invoice_approved_by, ?) WHERE id = ?",
+                        [$request->user()->id, $order->id]
+                    );
+                    $order->refresh();
+                } elseif ($toHistorical === false) {
+                    // A current sale goes through the usual sign-off and takes stock once receipted.
+                    DB::update(
+                        'UPDATE orders SET is_historical = false, invoice_approved_at = NULL, invoice_approved_by = NULL, invoice_approval_comment = NULL WHERE id = ?',
+                        [$order->id]
+                    );
+                    $order->refresh();
+                }
+
                 if ($request->has('customer_id')) {
                     $customer = Customer::find($request->input('customer_id'));
                     if (!$this->hasPermission($request, 'can_update_orders', $customer->company_id)) {
@@ -844,6 +880,17 @@ class OrderController extends Controller
                     'notes',
                     'order_date',
                 ]));
+
+                if ($toHistorical === true && $order->status !== 'cancelled' && $order->status !== 'completed') {
+                    // A past sale already happened (the form resends whatever status it loaded).
+                    $order->update(['status' => 'completed']);
+                } elseif ($toHistorical === false) {
+                    $orderStock = app(\App\Services\OrderStockService::class);
+                    if ($orderStock->hasReceipt($order)) {
+                        $orderStock->deduct($order->fresh());
+                    }
+                    $approvalReset = true;
+                }
 
                 if ($approvalReset) {
                     // The earlier alert was cleared at approval; ask the approvers again.

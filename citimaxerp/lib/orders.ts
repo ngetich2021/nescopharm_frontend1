@@ -13,6 +13,7 @@ export interface Order {
   payment_status: string
   payment_type?: 'cash' | 'credit'
   credit_terms_days?: number | null
+  order_date?: string | null
   created_at: string
   updated_at: string
   item_count: number
