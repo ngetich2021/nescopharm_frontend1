@@ -23,7 +23,7 @@ class ImportSchemas
     }
 
     /** Sales dated before this were made in the previous system; their stock is already out of the opening balances. */
-    public const PAST_INVOICE_CUTOFF = '2026-10-17';
+    public const PAST_INVOICE_CUTOFF = \App\Models\Order::HISTORICAL_CUTOFF;
 
     public static function get(string $entity): ?array
     {

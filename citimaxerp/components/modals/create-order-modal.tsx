@@ -53,7 +53,18 @@ type Company = { id: string; name: string }
 
 type ProductWithVariants = Product & { variants?: ProductVariant[] }
 
-export function CreateOrderModal({ 
+// Go-live date; matches Order::HISTORICAL_CUTOFF on the backend.
+const HISTORICAL_CUTOFF = "2026-10-17"
+
+// Local (not UTC) date, so late-evening orders don't land on tomorrow.
+const todayIso = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+const formatCutoff = () => HISTORICAL_CUTOFF.split("-").reverse().join("-")
+
+export function CreateOrderModal({
   children, 
   onOrderCreated 
 }: { 
@@ -71,6 +82,10 @@ export function CreateOrderModal({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [notes, setNotes] = useState("")
+  const [orderDate, setOrderDate] = useState(todayIso())
+  // A sale dated before go-live was made in the previous system: it is recorded for
+  // sales and accounts only, and the backend leaves stock untouched for it.
+  const isPastSale = orderDate < HISTORICAL_CUTOFF
   // Global tax state removed in favor of per-product tax
   // const [includeTax, setIncludeTax] = useState(true)
   // const [taxRate, setTaxRate] = useState(16)
@@ -371,7 +386,7 @@ export function CreateOrderModal({
     }
     return Number(product.stock_quantity ?? 0)
   }
-  const shortLines = orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
+  const shortLines = isPastSale ? [] : orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
 
   const creditOverage = paymentOption === 'credit' && creditTerms?.credit_days
     ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
@@ -431,6 +446,7 @@ export function CreateOrderModal({
         tax: taxAmount,
         currency: "KES",
         notes,
+        order_date: orderDate,
         items: orderItems.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -454,6 +470,7 @@ export function CreateOrderModal({
           amount_paid: downPaymentAmount,
           transaction_id: downPaymentTransactionRef || undefined,
           status: 'completed',
+          payment_date: orderDate,
         })
       }
 
@@ -466,6 +483,7 @@ export function CreateOrderModal({
           amount_paid: amountPaid,
           transaction_id: instantPaymentReference || undefined,
           status: 'completed',
+          payment_date: orderDate,
         })
       }
 
@@ -500,7 +518,7 @@ export function CreateOrderModal({
     setSelectedCustomer(null)
     setOrderItems([])
     setNotes("")
-    setNotes("")
+    setOrderDate(todayIso())
     // setIncludeTax(true)
     // setTaxRate(16)
     setSearchQuery("")
@@ -993,6 +1011,24 @@ export function CreateOrderModal({
           {/* Order Details */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Order Details</h3>
+
+            <div className="space-y-2">
+              <Label htmlFor="order-date">Order Date</Label>
+              <Input
+                id="order-date"
+                type="date"
+                max={todayIso()}
+                value={orderDate}
+                onChange={(e) => setOrderDate(e.target.value || todayIso())}
+                className="md:w-1/2"
+              />
+              {isPastSale && (
+                <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                  Past sale (before {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
+                  but stock will not change - those goods left before your opening stock was taken.
+                </p>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">

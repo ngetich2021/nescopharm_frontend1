@@ -145,6 +145,14 @@ class Order extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    /** Go-live: sales dated before this were made in the previous system, so they never move stock. */
+    public const HISTORICAL_CUTOFF = '2026-10-17';
+
+    public static function isHistoricalDate($date): bool
+    {
+        return !empty($date) && \Carbon\Carbon::parse($date)->toDateString() < self::HISTORICAL_CUTOFF;
+    }
+
     // Only the GM, a Director or the Warehouse Manager may sign an order off for invoicing.
     public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director', 'warehouse manager'];
 

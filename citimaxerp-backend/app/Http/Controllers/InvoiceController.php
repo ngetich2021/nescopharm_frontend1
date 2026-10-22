@@ -698,7 +698,10 @@ class InvoiceController extends Controller
             // Calculate invoice status based on payment amount
             $amountPaid = $order->amount_paid ?? 0;
             $totalAmount = $order->final_amount;
-            $invoiceDate = $request->invoice_date ?? now()->toDateString();
+            // A past (pre-go-live) sale is invoiced on the day it was made, so sales, due date and aging fall in the right period.
+            $invoiceDate = $order->is_historical && $order->order_date
+                ? $order->order_date->toDateString()
+                : ($request->invoice_date ?? now()->toDateString());
             $paymentOption = $request->input('payment_option');
             $alreadySettled = $totalAmount > 0 && (float) $amountPaid >= (float) $totalAmount;
 
@@ -758,7 +761,8 @@ class InvoiceController extends Controller
                 'amount_paid' => 0,
                 'balance_amount' => $totalAmount,
                 'invoice_number' => $this->generateInvoiceNumber($user->company_id),
-                'etims_requested' => $request->boolean('generate_etims_receipt', true),
+                // Past sales were never meant for eTIMS from this system.
+                'etims_requested' => !$order->is_historical && $request->boolean('generate_etims_receipt', true),
             ]);
 
             $order->update([

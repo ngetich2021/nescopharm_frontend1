@@ -296,6 +296,11 @@ class OrderController extends Controller
             ], 403);
         }
 
+        // A sale dated before go-live was made in the previous system: it counts towards sales
+        // and receivables but its goods left before the opening stock was taken, so it is
+        // neither checked against nor taken out of stock.
+        $isHistorical = Order::isHistoricalDate($request->input('order_date'));
+
         try {
             Log::info('Order creation attempt', [
                 'user_id' => $request->user()->id,
@@ -452,7 +457,7 @@ class OrderController extends Controller
                 }
 
                 // Validate stock if track_inventory is true
-                if ($product->track_inventory && $baseQuantity > $stockQuantity) {
+                if ($product->track_inventory && !$isHistorical && $baseQuantity > $stockQuantity) {
                     return response()->json([
                         'status' => 'failed',
                         'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $packs, $item['price_unit'] ?? null, $baseQuantity, (int) $stockQuantity),
@@ -463,7 +468,7 @@ class OrderController extends Controller
                 $totalTaxAmount += $packs * $unitPrice * EtimsTaxType::rateForProduct($product) / 100;
             }
 
-            return DB::transaction(function () use ($request, $user, $customer, $totalAmount, $items, $belowMinimumPrice, $totalTaxAmount, $orderCredit) {
+            return DB::transaction(function () use ($request, $user, $customer, $totalAmount, $items, $belowMinimumPrice, $totalTaxAmount, $orderCredit, $isHistorical) {
                 $discount = $request->input('discount', 0);
                 // VAT is added on top of prices and always calculated from the
                 // items (never taken from the request); a discount reduces the
@@ -509,6 +514,13 @@ class OrderController extends Controller
                     'requires_approval' => $requiresApprovalBool,
                     'order_date' => $request->input('order_date', now()),
                 ]);
+
+                if ($isHistorical) {
+                    // Booleans bind as integers here, which Postgres rejects for a boolean column.
+                    DB::update('UPDATE orders SET is_historical = true WHERE id = ?', [$order->id]);
+                    $order->is_historical = true;
+                    $order->syncOriginalAttribute('is_historical');
+                }
 
                 // Create order items and update stock
                 foreach ($items as $item) {
@@ -735,7 +747,7 @@ class OrderController extends Controller
                             $belowMinimumPrice = true;
                         }
                         $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
-                        if ($product->track_inventory && $piecesNeeded > $stockQuantity) {
+                        if ($product->track_inventory && !$order->is_historical && $piecesNeeded > $stockQuantity) {
                             return response()->json([
                                 'status' => 'failed',
                                 'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, (int) $stockQuantity),
@@ -1019,7 +1031,8 @@ class OrderController extends Controller
         // Stock is only taken when the order is receipted, so an order (e.g. one
         // converted from a quote) may have lost its stock since it was raised.
         // Re-check before anything leaves the store.
-        if (!$order->stock_deducted_at) {
+        // A past (pre-go-live) sale's goods left long ago - there is no stock to check.
+        if (!$order->stock_deducted_at && !$order->is_historical) {
             $order->loadMissing('orderItems.product', 'orderItems.variant');
             foreach ($order->orderItems as $index => $item) {
                 if ($error = $this->insufficientStockMessage($item->product, $item->variant, (int) ($item->base_quantity ?: $item->quantity))) {
