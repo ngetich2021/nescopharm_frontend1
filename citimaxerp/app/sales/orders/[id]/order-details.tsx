@@ -384,8 +384,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
     try {
       const invoiceData = {
         invoice_date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        payment_terms: 'Net 30',
+        // due_date/payment_terms left to the backend, which derives them from
+        // the customer's GM-approved credit days (or due-on-receipt for cash)
         notes: order.notes || '',
         payment_option: isOrderFullySettled ? 'instant' as const : invoicePaymentOption,
         payment_method: invoicePaymentOption === 'instant' ? invoicePaymentMethod : undefined,
