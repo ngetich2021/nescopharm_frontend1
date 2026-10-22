@@ -43,7 +43,8 @@ class OrderStockService
 
     public function deduct(Order $order): void
     {
-        if ($order->stock_deducted_at || $order->status === 'cancelled') {
+        // A sale imported from the previous system left stock before the opening balances were taken.
+        if ($order->stock_deducted_at || $order->status === 'cancelled' || $order->is_historical) {
             return;
         }
 
@@ -82,7 +83,7 @@ class OrderStockService
 
     public function restore(Order $order, string $note): void
     {
-        if (!$order->stock_deducted_at) {
+        if (!$order->stock_deducted_at || $order->is_historical) {
             return;
         }
 

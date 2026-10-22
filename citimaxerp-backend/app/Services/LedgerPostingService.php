@@ -274,7 +274,11 @@ class LedgerPostingService
         $settings = $this->settings($dispatch->company_id);
         $desired = null;
 
-        if (!$deleted && $settings && $settings->perpetual_inventory) {
+        // A historical (migrated) sale's stock is already out of the opening balances, so
+        // booking its cost again would take it out of Inventory twice.
+        $historical = (bool) Order::whereKey($dispatch->order_id)->value('is_historical');
+
+        if (!$deleted && !$historical && $settings && $settings->perpetual_inventory) {
             $shippedStatuses = $settings->cogs_recognition === 'on_delivery' ? ['delivered'] : ['in_transit', 'delivered'];
             if (in_array($dispatch->status, $shippedStatuses, true)) {
                 $cost = $this->money(

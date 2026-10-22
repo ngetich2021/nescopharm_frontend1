@@ -106,6 +106,7 @@ class DataImportController extends Controller
                 'suppliers' => $this->importSuppliers($body, $cells, $user->company_id, $headingRow),
                 'customers' => $this->importCustomers($body, $cells, $user, $headingRow),
                 'opening_stock' => $this->importOpeningStock($body, $cells, $user, $headingRow),
+                'past_invoices' => $this->importPastInvoices($body, $cells, $user, $headingRow),
             };
             $dryRun ? DB::rollBack() : DB::commit();
         } catch (\Throwable $e) {
@@ -201,6 +202,63 @@ class DataImportController extends Controller
     {
         $trimmed = trim((string) $name);
         return is_numeric($trimmed) ? (string) (float) $trimmed : mb_strtolower($trimmed);
+    }
+
+    /**
+     * The company's items indexed by name. Items are matched on their name rather than a code,
+     * because that is what people actually write on an order or invoice. A sized item can also be
+     * written out in full, e.g. "Et Tubes Uncuffed Id 3.5".
+     */
+    private function catalogue(string $companyId): array
+    {
+        $products = Product::where('company_id', $companyId)->get();
+        $variants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get();
+
+        $byName = [];
+        foreach ($products as $product) {
+            $byName[$this->nameKey($product->name)][] = [$product, null];
+        }
+        foreach ($variants as $variant) {
+            $product = $products->firstWhere('id', $variant->product_id);
+            if ($product) {
+                $byName[$this->nameKey(ProductVariant::sizedName($product->name, $variant->name))][] = [$product, $variant];
+            }
+        }
+
+        return [
+            'byName' => $byName,
+            'sizes' => $variants->groupBy('product_id')->map(fn ($group) => $group->keyBy(fn ($v) => $this->sizeKey($v->name))),
+        ];
+    }
+
+    /** Resolve an item name (and optional size) to [product, variant, error]. */
+    private function matchItem(array $catalogue, string $itemName, string $size): array
+    {
+        $matches = $catalogue['byName'][$this->nameKey($itemName)] ?? [];
+        // With a size of its own, the name must be the plain item, not an already-sized one.
+        if ($size !== '') {
+            $matches = array_values(array_filter($matches, fn ($m) => $m[1] === null));
+        }
+
+        if (!$matches) {
+            return [null, null, "No item called \"{$itemName}\"."];
+        }
+        if (count($matches) > 1) {
+            return [null, null, "\"{$itemName}\" matches more than one item - add the size."];
+        }
+
+        [$product, $variant] = $matches[0];
+        $sizes = $catalogue['sizes']->get($product->id);
+        if ($size !== '') {
+            $variant = $sizes?->get($this->sizeKey($size));
+            if (!$variant) {
+                return [null, null, "\"{$itemName}\" has no size \"{$size}\"."];
+            }
+        } elseif (!$variant && ($sizes?->isNotEmpty() ?? false)) {
+            return [null, null, "\"{$itemName}\" comes in sizes - put the size in the Size column, or write it into the description."];
+        }
+
+        return [$product, $variant, null];
     }
 
     private function blankSummary(): array
@@ -443,6 +501,307 @@ class DataImportController extends Controller
 
         return [$summary, $results];
     }
+
+    /**
+     * Recreate invoices from the previous system as order -> invoice -> delivered dispatch. The
+     * order is marked historical, which keeps OrderStockService from deducting stock when its
+     * payment is recorded and keeps the dispatch from posting cost of goods sold: the goods had
+     * already left before the opening stock balances were captured.
+     */
+    private function importPastInvoices(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+        $catalogue = $this->catalogue($companyId);
+        $customers = Customer::with('account')->where('company_id', $companyId)->get();
+        $existingNumbers = \App\Models\Invoice::where('company_id', $companyId)->pluck('invoice_number')
+            ->map(fn ($n) => mb_strtolower(trim($n)))->flip();
+        $storeId = DB::table('stores')->where('company_id', $companyId)->value('id');
+        $cutoff = ImportSchemas::PAST_INVOICE_CUTOFF;
+
+        // Rows sharing an invoice number are one invoice; its header comes from its first row.
+        $invoices = [];
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $number = $cell('invoice_number');
+            if ($number === '') {
+                $summary['rows']++;
+                $summary['errors']++;
+                $results[] = ['row' => $line, 'key' => '', 'name' => $cell('item_name'), 'status' => 'error', 'message' => 'Invoice Number is required.'];
+                continue;
+            }
+            $key = mb_strtolower($number);
+            $invoices[$key] ??= ['number' => $number, 'row' => $line, 'cell' => $cell, 'lines' => [], 'errors' => []];
+
+            [$product, $variant, $error] = $this->matchItem($catalogue, $cell('item_name'), $cell('size'));
+            $quantity = $this->number($cell('quantity'));
+            $unitPrice = $this->number($cell('unit_price'));
+            $vat = $cell('vat_rate') === '' ? null : $this->number($cell('vat_rate'));
+
+            if ($error) {
+                $invoices[$key]['errors'][] = "Row {$line}: {$error}";
+            } elseif ($quantity === null || $quantity <= 0) {
+                $invoices[$key]['errors'][] = "Row {$line}: Quantity must be a number greater than zero.";
+            } elseif ($unitPrice === null || $unitPrice < 0) {
+                $invoices[$key]['errors'][] = "Row {$line}: Unit Price is missing or is not a number.";
+            } elseif ($cell('vat_rate') !== '' && ($vat === null || $vat < 0)) {
+                $invoices[$key]['errors'][] = "Row {$line}: VAT % is not a number.";
+            } else {
+                $invoices[$key]['lines'][] = [
+                    'product' => $product,
+                    'variant' => $variant,
+                    'quantity' => $quantity,
+                    'unit_price' => round($unitPrice, 2),
+                    'vat' => $vat,
+                    'discount' => round($this->number($cell('discount')) ?? 0, 2),
+                ];
+            }
+        }
+
+        foreach ($invoices as $key => $invoice) {
+            $summary['rows']++;
+            $cell = $invoice['cell'];
+            $customerName = $cell('customer');
+            $result = ['row' => $invoice['row'], 'key' => $invoice['number'], 'name' => $customerName];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            if ($existingNumbers->has($key)) {
+                $summary['unchanged']++;
+                $results[] = $result + ['status' => 'unchanged', 'message' => 'Already in the system - skipped.'];
+                continue;
+            }
+            if ($invoice['errors']) {
+                $fail(implode(' ', $invoice['errors']));
+                continue;
+            }
+
+            $invoiceDate = $this->date($cell('invoice_date'));
+            if (!$invoiceDate) {
+                $fail('Invoice Date is missing or could not be read. Use YYYY-MM-DD.');
+                continue;
+            }
+            if ($invoiceDate >= $cutoff) {
+                $fail("Invoice Date {$invoiceDate} is not before " . date('d-m-Y', strtotime($cutoff)) . ' - enter invoices from that date onwards in the system the normal way.');
+                continue;
+            }
+
+            $needle = mb_strtolower(trim($customerName));
+            $customer = $needle === '' ? null : $customers->first(fn ($c) =>
+                mb_strtolower(trim((string) $c->name)) === $needle
+                || mb_strtolower(trim((string) $c->business_name)) === $needle
+                || mb_strtolower(trim((string) $c->customer_number)) === $needle);
+            if (!$customer) {
+                $fail("No customer called \"{$customerName}\". Import your customers first.");
+                continue;
+            }
+
+            // Same rule as a live invoice: credit customers get their GM-approved days.
+            $isCredit = $customer->payment_method === 'credit';
+            $creditDays = $isCredit && $customer->account
+                ? ($customer->account->credit_days ?? (is_numeric($customer->account->credit_period_required) ? (int) $customer->account->credit_period_required : null))
+                : null;
+            $dueDate = $this->date($cell('due_date'));
+            if ($dueDate === false) {
+                $fail('Due Date could not be read. Use YYYY-MM-DD.');
+                continue;
+            }
+            $dueDate ??= $isCredit
+                ? \Carbon\Carbon::parse($invoiceDate)->addDays($creditDays ?? 30)->toDateString()
+                : $invoiceDate;
+            $paymentTerms = $isCredit ? 'Net ' . ($creditDays ?? 30) : 'Due on Receipt';
+
+            $amountPaid = round($this->number($cell('amount_paid')) ?? 0, 2);
+            $paymentDate = $this->date($cell('payment_date'));
+            if ($paymentDate === false) {
+                $fail('Payment Date could not be read. Use YYYY-MM-DD.');
+                continue;
+            }
+
+            // Work out each line's VAT the way a live invoice does; a 0% line keeps the
+            // item's own exempt / zero-rated classification.
+            $lines = array_map(function ($l) {
+                $productCode = \App\Services\TaxCompliance\EtimsTaxType::forProduct($l['product']);
+                $code = $l['vat'] === null ? $productCode : \App\Services\TaxCompliance\EtimsTaxType::fromInput(null, $l['vat']);
+                if ($l['vat'] !== null && (float) $l['vat'] == 0.0) {
+                    $code = in_array($productCode, ['A', 'C', 'D'], true) ? $productCode : 'D';
+                }
+                $net = round($l['quantity'] * $l['unit_price'] - $l['discount'], 2);
+                $rate = \App\Services\TaxCompliance\EtimsTaxType::rate($code);
+                return $l + ['code' => $code, 'rate' => $rate, 'net' => $net, 'tax' => round($net * $rate / 100, 2)];
+            }, $invoice['lines']);
+
+            $subtotal = round(array_sum(array_map(fn ($l) => $l['quantity'] * $l['unit_price'], $lines)), 2);
+            $discount = round(array_sum(array_column($lines, 'discount')), 2);
+            $tax = round(array_sum(array_column($lines, 'tax')), 2);
+            $total = round($subtotal - $discount + $tax, 2);
+            if ($amountPaid > $total + 0.01) {
+                $fail('Amount Paid (' . number_format($amountPaid, 2) . ') is more than the invoice total (' . number_format($total, 2) . ').');
+                continue;
+            }
+
+            $stamp = \Carbon\Carbon::parse($invoiceDate)->setTime(12, 0);
+            $notes = $cell('notes') ?: 'Imported from the previous system';
+
+            // order_number is capped at 20 characters, so a long old invoice number gets a short unique one.
+            $orderNumber = 'H-' . $invoice['number'];
+            if (mb_strlen($orderNumber) > 20 || \App\Models\Order::where('order_number', $orderNumber)->exists()) {
+                $orderNumber = 'H-' . strtoupper(Str::random(10));
+            }
+
+            $order = \App\Models\Order::create([
+                'id' => (string) Str::uuid(),
+                'order_number' => $orderNumber,
+                'customer_id' => $customer->id,
+                'payment_type' => $isCredit ? 'credit' : 'cash',
+                'credit_terms_days' => $creditDays,
+                'total_amount' => $subtotal,
+                'discount' => $discount,
+                'tax' => $tax,
+                'final_amount' => $total,
+                'amount_paid' => $amountPaid,
+                'status' => 'completed',
+                'payment_status' => $amountPaid >= $total ? 'paid' : ($amountPaid > 0 ? 'partial' : 'unpaid'),
+                'dispatch_status' => 'delivered',
+                'currency' => 'KES',
+                'company_id' => $companyId,
+                'notes' => $notes,
+                'order_date' => $stamp,
+                'created_at' => $stamp,
+                'invoice_approved_by' => $user->id,
+                'invoice_approved_at' => $stamp,
+            ]);
+            // Booleans bind as integers here, which Postgres rejects for a boolean column.
+            DB::update('UPDATE orders SET is_historical = true WHERE id = ?', [$order->id]);
+            $order->is_historical = true;
+            $order->syncOriginalAttribute('is_historical');
+
+            $invoiceModel = \App\Models\Invoice::create([
+                'company_id' => $companyId,
+                'customer_id' => $customer->id,
+                'order_id' => $order->id,
+                'payment_type' => $isCredit ? 'credit' : 'cash',
+                'credit_terms_days' => $creditDays,
+                'type' => 'sales',
+                'status' => 'sent',
+                'invoice_number' => $invoice['number'],
+                'invoice_date' => $invoiceDate,
+                'due_date' => $dueDate,
+                'sent_at' => $stamp,
+                'currency' => 'KES',
+                'payment_terms' => $paymentTerms,
+                'mode_of_payment' => $paymentTerms,
+                'reference_number' => $order->order_number,
+                'reference_date' => $invoiceDate,
+                'notes' => $notes,
+                'created_by' => $user->id,
+                'subtotal' => 0,
+                'tax_amount' => 0,
+                'discount_amount' => 0,
+                'total_amount' => 0,
+                'amount_paid' => 0,
+                'balance_amount' => 0,
+                // Historical sales were never meant for eTIMS from this system.
+                'etims_requested' => false,
+                'metadata' => ['historical' => true],
+            ]);
+
+            $dispatch = \App\Models\OrderDispatch::create([
+                // Own series, keyed on the (unique) invoice number, so it never collides with live dispatches.
+                'dispatch_number' => 'HD-' . $invoice['number'],
+                'order_id' => $order->id,
+                'company_id' => $companyId,
+                'from_store_id' => $storeId,
+                'approval_status' => 'approved',
+                'status' => 'delivered',
+                'dispatch_date' => $stamp,
+                'actual_delivery_date' => $stamp,
+                'final_approved_at' => $stamp,
+                'notes' => 'Historical sale imported from the previous system - no stock moved.',
+                'created_by' => $user->id,
+            ]);
+
+            foreach ($lines as $l) {
+                $description = ProductVariant::sizedName($l['product']->name, $l['variant']?->name);
+                $orderItem = \App\Models\OrderItem::create([
+                    'id' => (string) Str::uuid(),
+                    'order_id' => $order->id,
+                    'product_id' => $l['product']->id,
+                    'variant_id' => $l['variant']?->id,
+                    'quantity' => $l['quantity'],
+                    'base_quantity' => (int) $l['quantity'],
+                    'unit_price' => $l['unit_price'],
+                    'total_price' => round($l['quantity'] * $l['unit_price'], 2),
+                    'tax_rate' => $l['rate'],
+                    'tax_amount' => $l['tax'],
+                    'company_id' => $companyId,
+                ]);
+                \App\Models\InvoiceLineItem::create([
+                    'invoice_id' => $invoiceModel->id,
+                    'product_id' => $l['product']->id,
+                    'variant_id' => $l['variant']?->id,
+                    'description' => $description,
+                    'quantity' => $l['quantity'],
+                    'unit' => 'pcs',
+                    'unit_price' => $l['unit_price'],
+                    'discount_amount' => $l['discount'],
+                    'tax_rate' => $l['rate'],
+                    'metadata' => ['etims_tax_type_code' => $l['code'], 'historical' => true],
+                ]);
+                \App\Models\OrderDispatchItem::create([
+                    'order_dispatch_id' => $dispatch->id,
+                    'order_item_id' => $orderItem->id,
+                    'product_id' => $l['product']->id,
+                    'variant_id' => $l['variant']?->id,
+                    'quantity' => (int) $l['quantity'],
+                    'base_quantity' => (int) $l['quantity'],
+                    'delivered_quantity' => (int) $l['quantity'],
+                ]);
+            }
+
+            $invoiceModel->load('lineItems');
+            $invoiceModel->calculateTotals();
+
+            if ($amountPaid > 0) {
+                app(\App\Services\InvoicePaymentApplicationService::class)->applyPayment(
+                    $invoiceModel,
+                    $user,
+                    min($amountPaid, (float) $invoiceModel->total_amount),
+                    $cell('payment_method') ?: 'cash',
+                    'HIST-PAY-' . $invoice['number'],
+                    'Payment brought across from the previous system',
+                    $paymentDate ?: $invoiceDate,
+                );
+                $invoiceModel->refresh();
+            }
+
+            // Status as of today: paid, part-paid, overdue or still open (sent).
+            $paid = (float) $invoiceModel->amount_paid;
+            $pastDue = now()->startOfDay()->isAfter($dueDate);
+            $invoiceModel->update([
+                'status' => $paid >= (float) $invoiceModel->total_amount - 0.01 ? 'paid'
+                    : ($pastDue ? 'overdue' : ($paid > 0 ? 'partially_paid' : 'sent')),
+            ]);
+
+            $existingNumbers->put($key, true);
+            $summary['created']++;
+            $results[] = $result + [
+                'status' => 'created',
+                'message' => count($lines) . ' item' . (count($lines) === 1 ? '' : 's') . ', total ' . number_format((float) $invoiceModel->total_amount, 2)
+                    . ($paid > 0 ? ', paid ' . number_format($paid, 2) : ''),
+            ];
+        }
+
+        return [$summary, $results];
+    }
+
     /**
      * Read a purchase order sheet and resolve it against the catalogue WITHOUT saving anything.
      * The New Purchase Order form fills itself from what comes back, so the buyer still reviews and
@@ -491,25 +850,7 @@ class DataImportController extends Controller
         }
 
         $cells = $this->rowReader($columns);
-        $products = Product::where('company_id', $companyId)->get();
-        $variants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get();
-        $variantsByProduct = $variants->groupBy('product_id')
-            ->map(fn ($group) => $group->keyBy(fn ($v) => $this->sizeKey($v->name)));
-
-        // Items are matched on their name rather than a code, because that is what buyers and
-        // suppliers actually write on an order. Names are compared on letters and digits only, so
-        // "2ml syringe without needle" and "2 Ml Syringe Without Needle" are the same item.
-        $byName = [];
-        foreach ($products as $product) {
-            $byName[$this->nameKey($product->name)][] = [$product, null];
-        }
-        // A sized item can also be written out in full, e.g. "Et Tubes Uncuffed Id 3.5".
-        foreach ($variants as $variant) {
-            $product = $products->firstWhere('id', $variant->product_id);
-            if ($product) {
-                $byName[$this->nameKey(ProductVariant::sizedName($product->name, $variant->name))][] = [$product, $variant];
-            }
-        }
+        $catalogue = $this->catalogue($companyId);
 
         $header = ['supplier_id' => null, 'supplier_name' => null, 'order_date' => null, 'delivery_date' => null, 'comments' => null];
         $lines = [];
@@ -550,31 +891,9 @@ class DataImportController extends Controller
             if ($itemName === '') {
                 continue;
             }
-            $size = $cell('size');
-            $matches = $byName[$this->nameKey($itemName)] ?? [];
-            // With a size of its own, the name must be the plain item, not an already-sized one.
-            if ($size !== '') {
-                $matches = array_values(array_filter($matches, fn ($m) => $m[1] === null));
-            }
-
-            if (!$matches) {
-                $problems[] = ['row' => $line, 'message' => "No item called \"{$itemName}\"."];
-                continue;
-            }
-            if (count($matches) > 1) {
-                $problems[] = ['row' => $line, 'message' => "\"{$itemName}\" matches more than one item - add the size, or pick it in the form."];
-                continue;
-            }
-
-            [$product, $variant] = $matches[0];
-            if ($size !== '') {
-                $variant = $variantsByProduct->get($product->id)?->get($this->sizeKey($size));
-                if (!$variant) {
-                    $problems[] = ['row' => $line, 'message' => "\"{$itemName}\" has no size \"{$size}\"."];
-                    continue;
-                }
-            } elseif (!$variant && ($variantsByProduct->get($product->id)?->isNotEmpty() ?? false)) {
-                $problems[] = ['row' => $line, 'message' => "\"{$itemName}\" comes in sizes - put the size in the Size column, or write it into the description."];
+            [$product, $variant, $error] = $this->matchItem($catalogue, $itemName, $cell('size'));
+            if ($error) {
+                $problems[] = ['row' => $line, 'message' => $error];
                 continue;
             }
 

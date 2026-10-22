@@ -18,8 +18,12 @@ class ImportSchemas
             'opening_stock' => self::openingStock(),
             'purchase_order_items' => self::purchaseOrderItems(),
             'product_receipt_items' => self::productReceiptItems(),
+            'past_invoices' => self::pastInvoices(),
         ];
     }
+
+    /** Sales dated before this were made in the previous system; their stock is already out of the opening balances. */
+    public const PAST_INVOICE_CUTOFF = '2026-10-17';
 
     public static function get(string $entity): ?array
     {
@@ -211,6 +215,42 @@ class ImportSchemas
                 ['key' => 'expiry_date', 'label' => 'Expiry Date', 'type' => 'date', 'example' => '2028-01-02'],
                 ['key' => 'unit_price', 'label' => 'Unit Price', 'type' => 'number', 'example' => '', 'help' => 'Optional. Blank uses the price on the purchase order line.'],
                 ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
+            ],
+        ];
+    }
+
+    /**
+     * Sales invoices raised in the previous system. Each one is recreated as a completed
+     * order, its invoice and a delivered dispatch, so it counts in sales, receivables, VAT and
+     * the customer's history - but it is marked historical, so it never moves stock or posts
+     * cost of goods sold (that stock was already gone when the opening balances were taken).
+     */
+    private static function pastInvoices(): array
+    {
+        $cutoff = date('d-m-Y', strtotime(self::PAST_INVOICE_CUTOFF));
+
+        return [
+            'key' => 'past_invoices',
+            'label' => 'Past Invoices',
+            'order' => 7,
+            'description' => "Invoices raised in your old system before {$cutoff}. Each becomes an order, its invoice and a delivered dispatch, so it counts in sales, customer balances and VAT - without touching stock.",
+            'matching' => "One row per item; rows with the same Invoice Number make one invoice, and its date, customer and payment are taken from its first row. Customers are matched on name or customer number, items on their name (spacing, case and punctuation ignored). Invoice dates must be before {$cutoff}. An invoice number already in the system is skipped, so the same sheet can be uploaded again safely.",
+            'permission' => 'can_create_invoices',
+            'columns' => [
+                ['key' => 'invoice_number', 'label' => 'Invoice Number', 'type' => 'text', 'required' => true, 'example' => 'INV-2026-0412', 'help' => 'The number from your old system. Repeat it on every item row of the same invoice.'],
+                ['key' => 'invoice_date', 'label' => 'Invoice Date', 'type' => 'date', 'required' => true, 'example' => '2026-09-30', 'help' => "Must be before {$cutoff}. Use YYYY-MM-DD; dates with slashes are read day first."],
+                ['key' => 'customer', 'label' => 'Customer Name', 'type' => 'text', 'required' => true, 'example' => 'Bidii Pharmacy', 'aliases' => ['customer', 'customernumber', 'client'], 'help' => 'Must already exist - import customers first. A customer number also works.'],
+                ['key' => 'due_date', 'label' => 'Due Date', 'type' => 'date', 'example' => '2026-10-30', 'help' => 'Optional. Blank uses the customer\'s GM-approved credit days, or the invoice date for a cash customer.'],
+                ['key' => 'item_name', 'label' => 'Item Name & Description', 'type' => 'text', 'required' => true, 'example' => '2 Ml Syringe Without Needle', 'aliases' => ['item', 'itemdescription', 'description', 'productname', 'product', 'name'], 'help' => 'Spacing, case and punctuation are ignored when matching.'],
+                ['key' => 'size', 'label' => 'Size', 'type' => 'text', 'example' => '', 'help' => 'Leave blank for an item without sizes, or when the size is already part of the description.'],
+                ['key' => 'quantity', 'label' => 'Quantity', 'type' => 'number', 'required' => true, 'example' => '10'],
+                ['key' => 'unit_price', 'label' => 'Unit Price (excl. VAT)', 'type' => 'number', 'required' => true, 'example' => '1200.00', 'aliases' => ['unitprice', 'price']],
+                ['key' => 'vat_rate', 'label' => 'VAT %', 'type' => 'number', 'example' => '16', 'aliases' => ['vat', 'taxrate'], 'help' => 'Optional. Blank uses the item\'s own VAT rate (0 for exempt items).'],
+                ['key' => 'discount', 'label' => 'Line Discount', 'type' => 'number', 'example' => '0', 'help' => 'Optional. An amount off this line, before VAT.'],
+                ['key' => 'amount_paid', 'label' => 'Amount Paid', 'type' => 'number', 'example' => '5000', 'help' => 'Optional. What the customer had already paid on this invoice. Taken from its first row.'],
+                ['key' => 'payment_date', 'label' => 'Payment Date', 'type' => 'date', 'example' => '2026-10-05', 'help' => 'Optional. Blank uses the invoice date.'],
+                ['key' => 'payment_method', 'label' => 'Payment Method', 'type' => 'text', 'example' => 'Bank Transfer', 'help' => 'Optional. Blank records the payment as Cash.'],
+                ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => 'Migrated from old system'],
             ],
         ];
     }

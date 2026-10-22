@@ -45,7 +45,7 @@ export default function DataImportPage() {
 
   return (
     <PermissionGuard
-      permissions={["can_manage_system", "can_manage_company", "can_create_suppliers", "can_create_customers", "can_adjust_closing_stock", "can_create_purchase_orders"]}
+      permissions={["can_manage_system", "can_manage_company", "can_create_suppliers", "can_create_customers", "can_adjust_closing_stock", "can_create_purchase_orders", "can_create_invoices"]}
     >
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div>

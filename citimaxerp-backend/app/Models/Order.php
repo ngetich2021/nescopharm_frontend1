@@ -109,6 +109,7 @@ class Order extends Model
         'invoice_approval_comment',
         'invoice_contact_person',
         'invoice_contact_phone',
+        'is_historical',
     ];
 
     protected $casts = [
@@ -125,6 +126,7 @@ class Order extends Model
         'order_date' => 'datetime',
         'stock_deducted_at' => 'datetime',
         'invoice_approved_at' => 'datetime',
+        'is_historical' => 'boolean',
     ];
 
     // Forms send order_date: null when the field is left blank, and sales reports
