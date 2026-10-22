@@ -828,6 +828,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">S/No</TableHead>
                       <TableHead>Item</TableHead>
                       <TableHead>Quantity</TableHead>
                       {/* Only show Packaging column if any item has packaging details */}
@@ -842,7 +843,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {order.order_items?.map(item => {
+                    {order.order_items?.map((item, lineIndex) => {
                       // Lines priced per pack (e.g. "Per pack of 100's") count packs; show the pieces.
                       // base_quantity holds the pieces the backend reserved, for lines whose unit isn't on hand.
                       const storedPieces = Number((item as any).base_quantity || 0)
@@ -893,6 +894,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
 
                       return (
                         <TableRow key={item.id}>
+                          <TableCell className="text-muted-foreground">{lineIndex + 1}</TableCell>
                           <TableCell>
                             {item.product ? sizedName(item.product.name, item.variant?.name || (item as any).variant_name) : 'Unknown Product'}
                             {item.batch_allocations && item.batch_allocations.length > 0 && (

@@ -1273,9 +1273,15 @@ class ProductController extends Controller
             ->keyBy(fn ($s) => mb_strtolower(trim((string) $s->name)));
         $changeLog = [];
         $sizeKey = fn ($name) => is_numeric($t = trim((string) $name)) ? (string) (float) $t : mb_strtolower($t);
-        $variants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get()
+        $allVariants = ProductVariant::whereIn('product_id', $products->pluck('id'))->get();
+        $variants = $allVariants
             ->groupBy('product_id')
             ->map(fn ($group) => $group->keyBy(fn ($v) => $sizeKey($v->name)));
+        // Sheets often carry the full sized description ("Gloves Latex 7.5") with the Size column blank.
+        $productsById = $products->keyBy('id');
+        $bySizedName = $allVariants
+            ->filter(fn ($v) => $productsById->has($v->product_id))
+            ->groupBy(fn ($v) => mb_strtolower(preg_replace('/\s+/', ' ', trim(ProductVariant::sizedName($productsById[$v->product_id]->name, $v->name)))));
 
         // Suppliers reuse batch numbers across different products, so a batch is only the same batch within one product/size.
         $batchKey = fn ($productId, $variantId, $batchNumber) => $productId . '|' . ($variantId ?? '') . '|' . $batchNumber;
@@ -1288,13 +1294,15 @@ class ProductController extends Controller
             for ($i = 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
                 $cell = fn ($key) => isset($columns[$key]) ? trim(preg_replace('/\s+/', ' ', (string) ($row[$columns[$key]] ?? ''))) : '';
-                if (implode('', array_map(fn ($c) => trim((string) $c), $row)) === '') {
-                    continue;
-                }
-                $summary['rows']++;
                 $batchNumber = $cell('batch_number');
                 $description = $cell('description');
                 $size = $cell('size');
+                // Rows with neither an item nor a batch are leftovers (a stray status, a formatted
+                // or zero-filled row below the data), not batches - skip them instead of erroring.
+                if ($batchNumber === '' && $description === '') {
+                    continue;
+                }
+                $summary['rows']++;
                 $result = [
                     'row' => $i + 1,
                     'batch_number' => $batchNumber,
@@ -1316,6 +1324,21 @@ class ProductController extends Controller
                     continue;
                 }
                 $named = $byName->get(mb_strtolower($description), collect());
+                $variant = null;
+                if ($named->count() > 1 && $size !== '') {
+                    // Same name on several products: the one that has this size is the one meant.
+                    $named = $named->filter(fn ($p) => $variants->get($p->id)?->has($sizeKey($size)))->values();
+                }
+                if ($named->isEmpty()) {
+                    $sized = $bySizedName->get(mb_strtolower($description), collect());
+                    if ($size !== '') {
+                        $sized = $sized->filter(fn ($v) => $sizeKey($v->name) === $sizeKey($size))->values();
+                    }
+                    if ($sized->count() === 1) {
+                        $variant = $sized->first();
+                        $named = collect([$productsById[$variant->product_id]]);
+                    }
+                }
                 if ($named->count() !== 1) {
                     $summary['errors']++;
                     $results[] = $result + ['status' => 'error', 'message' => $named->isEmpty()
@@ -1325,8 +1348,7 @@ class ProductController extends Controller
                 }
                 $product = $named->first();
 
-                $variant = null;
-                if ($size !== '') {
+                if (!$variant && $size !== '') {
                     $variant = $variants->get($product->id)?->get($sizeKey($size));
                     if (!$variant) {
                         $summary['errors']++;

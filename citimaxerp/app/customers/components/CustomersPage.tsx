@@ -24,6 +24,7 @@ export function CustomersPage() {
   const [selectedAccount, setSelectedAccount] = useState<CustomerAccountWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
@@ -68,16 +69,30 @@ export function CustomersPage() {
     }
   };
 
-  // Filter customers by search; ordering (most recent first) comes from the API
-  const filteredCustomers = customers
-    .filter((customer) => {
-    const searchLower = search.toLowerCase();
-    return (
-      customer.name?.toLowerCase().includes(searchLower) ||
-      customer.email?.toLowerCase().includes(searchLower) ||
-      customer.phone?.toLowerCase().includes(searchLower) ||
-      customer.company?.toLowerCase().includes(searchLower)
-    );
+  // Every word typed must appear somewhere in the customer's details, in any order, so
+  // "coptic hospital" finds "The Coptic Mission Hospital" (a business name, which the old
+  // search never looked at). Ordering (most recent first) comes from the API.
+  const searchWords = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const filteredCustomers = customers.filter((customer) => {
+    if (statusFilter !== "all" && customer.status !== statusFilter) return false;
+    if (searchWords.length === 0) return true;
+    const haystack = [
+      customer.name,
+      customer.business_name,
+      customer.trading_name,
+      customer.customer_number,
+      customer.contact_person_name,
+      customer.email,
+      customer.phone,
+      customer.city,
+      customer.county,
+      customer.region,
+      customer.address,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return searchWords.every((word) => haystack.includes(word));
   });
 
   // Pagination calculations
@@ -266,7 +281,16 @@ export function CustomersPage() {
           onDeleteCustomer={handleDeleteCustomer}
           onViewAccount={handleViewAccount}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            // Results start on page 1 - staying on, say, page 2 would show an empty page.
+            setCurrentPage(1);
+          }}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(value) => {
+            setStatusFilter(value);
+            setCurrentPage(1);
+          }}
           currentPage={currentPage}
           totalPages={totalPages}
           rowsPerPage={rowsPerPage}

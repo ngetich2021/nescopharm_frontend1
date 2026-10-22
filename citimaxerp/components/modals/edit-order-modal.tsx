@@ -802,6 +802,9 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                          S/No
+                        </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-full sm:w-auto">
                           Product
                         </th>
@@ -827,6 +830,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                         const itemKey = getOrderItemKey(item)
                         return (
                           <tr key={index}>
+                            <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
                             <td className="px-4 py-3 max-w-[240px]">
                               {variants.length > 0 ? (
                                 <Select

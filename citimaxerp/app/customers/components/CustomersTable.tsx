@@ -50,6 +50,8 @@ interface CustomersTableProps {
   onViewAccount: (customer: Customer) => void;
   search: string;
   onSearchChange: (search: string) => void;
+  statusFilter: string;
+  onStatusFilterChange: (status: string) => void;
   currentPage: number;
   totalPages: number;
   rowsPerPage: number;
@@ -70,6 +72,8 @@ export function CustomersTable({
   onViewAccount,
   search,
   onSearchChange,
+  statusFilter,
+  onStatusFilterChange,
   currentPage,
   totalPages,
   rowsPerPage,
@@ -117,13 +121,13 @@ export function CustomersTable({
           <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
             <Input
-              placeholder="Search customers by name, email, or phone..."
+              placeholder="Search by name, business, customer #, phone..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               className="pl-8 w-full md:w-[300px]"
             />
           </div>
-          <Select value="all" onValueChange={() => {}}>
+          <Select value={statusFilter} onValueChange={onStatusFilterChange}>
             <SelectTrigger className="w-[150px]">
               <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Filter" />

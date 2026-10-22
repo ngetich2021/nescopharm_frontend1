@@ -299,6 +299,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
             <table className="w-full">
               <thead>
                 <tr className="border-b-2 border-gray-300">
+                  <th className="text-left py-3 pr-2 text-sm font-semibold text-gray-700 w-12">S/NO</th>
                   <th className="text-left py-3 text-sm font-semibold text-gray-700">PRODUCT</th>
                   <th className="text-right py-3 text-sm font-semibold text-gray-700">QTY</th>
                   <th className="text-right py-3 text-sm font-semibold text-gray-700">UNIT PRICE</th>
@@ -308,6 +309,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
               <tbody>
                 {order.order_items && order.order_items.map((item, index) => (
                   <tr key={item.id || index} className="border-b border-gray-200">
+                    <td className="py-3 pr-2 text-sm text-gray-900">{index + 1}</td>
                     <td className="py-3 text-sm text-gray-900">
                       {item.product ? sizedName(item.product.name, (item as any).variant?.name || item.variant_name) : 'Product'}
                     </td>
