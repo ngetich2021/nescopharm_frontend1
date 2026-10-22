@@ -188,16 +188,29 @@ export default function Customers() {
   // Create a safe version of customers that can't be null
   const safeCustomers = (customers || []).filter(customer => customer !== null)
   
-  const filteredCustomers = safeCustomers.filter(
-    (customer) =>
-      (statusFilter === "all" || customer?.status === statusFilter) &&
-      ((customer?.name && customer.name.toLowerCase().includes(search.toLowerCase())) ||
-        (customer?.business_name && customer.business_name.toLowerCase().includes(search.toLowerCase())) ||
-        (customer?.email && customer.email.toLowerCase().includes(search.toLowerCase())) ||
-        (customer?.phone && customer.phone.toLowerCase().includes(search.toLowerCase())) ||
-        (customer?.city && customer.city.toLowerCase().includes(search.toLowerCase())) ||
-        (customer?.address && customer.address.toLowerCase().includes(search.toLowerCase()))),
-  )
+  // Every word typed must appear somewhere in the customer's details, in any order, so
+  // "coptic hospital" finds "The Coptic Mission Hospital" and extra spaces don't matter.
+  const searchWords = search.toLowerCase().split(/\s+/).filter(Boolean)
+  const filteredCustomers = safeCustomers.filter((customer) => {
+    if (statusFilter !== "all" && customer?.status !== statusFilter) return false
+    if (searchWords.length === 0) return true
+    const haystack = [
+      customer?.name,
+      customer?.business_name,
+      customer?.customer_number,
+      customer?.contact_person_name,
+      customer?.email,
+      customer?.phone,
+      customer?.city,
+      customer?.county,
+      customer?.region,
+      customer?.address,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+    return searchWords.every((word) => haystack.includes(word))
+  })
 
   const totalPages = Math.ceil(filteredCustomers.length / rowsPerPage)
   const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
@@ -345,7 +358,11 @@ export default function Customers() {
                 className="pl-8 max-w-sm"
                 placeholder="Search customers..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  // Results start on page 1 - staying on, say, page 3 would show an empty page.
+                  setCurrentPage(1)
+                }}
                 disabled={isEffectivelyLoading && safeCustomers.length === 0}
               />
             </div>
@@ -353,7 +370,10 @@ export default function Customers() {
               <Filter className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
               <Select
                 value={statusFilter}
-                onValueChange={setStatusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value)
+                  setCurrentPage(1)
+                }}
                 disabled={isEffectivelyLoading && safeCustomers.length === 0}
               >
                 <SelectTrigger className="w-[180px] pl-8">
