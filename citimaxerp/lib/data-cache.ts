@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { DATA_CHANGED_EVENT } from './api';
 
 // Default cache expiration time in milliseconds (5 minutes)
 const DEFAULT_CACHE_EXPIRATION = 5 * 60 * 1000;
@@ -88,6 +89,20 @@ const cleanOldCacheEntries = (): void => {
   } catch (e) {
   }
 };
+
+// Any successful write (create/update/delete/convert...) can change what a cached
+// list shows, so drop every cached list - the next screen opened loads fresh data
+// instead of serving a copy from before the change.
+if (typeof window !== 'undefined') {
+  window.addEventListener(DATA_CHANGED_EVENT, () => {
+    try {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('cache_'))
+        .forEach(key => localStorage.removeItem(key));
+    } catch (e) {
+    }
+  });
+}
 
 /**
  * Uses localStorage to cache data and prevent unnecessary API calls
@@ -237,7 +252,8 @@ export function useDataCache<T>(
     if (!enabled) return;
     
     setIsLoading(true);
-    
+    let servedFromCache = false;
+
     try {
       // Check cache first, unless we're forcing a refresh
       if (!forceRefresh) {
@@ -245,14 +261,15 @@ export function useDataCache<T>(
         if (cachedItem && isCacheValid(cachedItem.timestamp, cachedItem.isError)) {
           // We still set data from error cache, but we'll retry in the background if it's an error
           setData(cachedItem.data);
-          
+
           if (!cachedItem.isError) {
+            servedFromCache = true;
             onSuccess?.(cachedItem.data);
             setError(null);
             setIsLoading(false);
-            return;
           }
-          // If it's an error cache, we'll continue to fetch in the background
+          // Show the cached copy straight away, but still revalidate in the
+          // background so changes made elsewhere (other users) appear promptly
         }
       }
       
@@ -283,8 +300,11 @@ export function useDataCache<T>(
       setRetryCount(0); // Reset retry count on success
       onSuccess?.(freshData);
     } catch (e) {
+      // A failed background revalidation keeps the cached copy already on screen
+      if (servedFromCache) return;
+
       const errorObj = e instanceof Error ? e : new Error(String(e));
-      
+
       // If we have cached data, keep showing it despite the error
       const cachedItem = getFromCache();
       if (cachedItem && !forceRefresh) {
