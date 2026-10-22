@@ -111,7 +111,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   // The server says whether this user may approve; the role list is only a fallback for older responses.
   const canApproveInvoice =
     order.can_approve_invoice ?? INVOICE_APPROVER_ROLES.includes((userProfile?.role?.name ?? "").trim().toLowerCase())
-  const isInvoiceApproved = !!order.invoice_approved_at
+  // A past (pre-go-live) sale has nothing left to approve.
+  const isInvoiceApproved = !!order.invoice_approved_at || !!order.is_historical
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [approvalComment, setApprovalComment] = useState("")

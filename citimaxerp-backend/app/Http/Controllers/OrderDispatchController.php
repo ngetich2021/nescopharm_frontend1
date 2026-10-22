@@ -302,8 +302,17 @@ class OrderDispatchController extends Controller
             $dispatch->special_instructions = $request->special_instructions;
             $dispatch->created_by = $user->id;
 
-            // Handle approvers
-            if ($request->has('approvers') && !empty($request->approvers)) {
+            // A past (pre-go-live) sale was delivered long ago: record it as approved and
+            // delivered on the sale date, with no approval round and no stock check.
+            if ($order->is_historical) {
+                $saleDate = $order->order_date ?? now();
+                $dispatch->approvers = [];
+                $dispatch->approval_status = 'approved';
+                $dispatch->status = 'delivered';
+                $dispatch->dispatch_date = $saleDate;
+                $dispatch->actual_delivery_date = $saleDate;
+                $dispatch->final_approved_at = now();
+            } elseif ($request->has('approvers') && !empty($request->approvers)) {
                 // Custom approvers provided
                 $approvers = collect($request->approvers)->map(function ($userId, $index) {
                     return [
@@ -322,7 +331,7 @@ class OrderDispatchController extends Controller
             }
 
             // Validate at least 1 approver
-            if (empty($dispatch->approvers)) {
+            if (!$order->is_historical && empty($dispatch->approvers)) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
@@ -361,7 +370,7 @@ class OrderDispatchController extends Controller
             }
 
             // Update order dispatch status
-            $order->dispatch_status = 'dispatch_created';
+            $order->dispatch_status = $order->is_historical ? 'delivered' : 'dispatch_created';
             $order->save();
 
             DB::commit();

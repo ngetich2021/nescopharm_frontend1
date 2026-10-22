@@ -31,6 +31,8 @@ export interface Order {
   // GM / Director sign-off required before the order can be invoiced.
   invoice_approved_by?: string | null
   invoice_approved_at?: string | null
+  // A sale dated before go-live: no approvals, no stock movement.
+  is_historical?: boolean
   invoice_approval_comment?: string | null
   invoice_contact_person?: string | null
   invoice_contact_phone?: string | null

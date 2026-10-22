@@ -51,6 +51,8 @@ export function CreateDispatchModal({
 }: CreateDispatchModalProps) {
 
   const [loading, setLoading] = useState(false)
+  // A past (pre-go-live) sale is recorded as already delivered, with no approval round.
+  const isPastSale = !!order.is_historical
   const [notes, setNotes] = useState("")
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState("")
   const [specialInstructions, setSpecialInstructions] = useState("")
@@ -130,7 +132,7 @@ export function CreateDispatchModal({
         return
       }
 
-      if (selectedApprovers.length === 0) {
+      if (!isPastSale && selectedApprovers.length === 0) {
         toast.error("Please select at least one approver")
         return
       }
@@ -149,12 +151,14 @@ export function CreateDispatchModal({
           product_id: item.product_id,
           quantity_dispatched: item.quantity_to_dispatch,
         })),
-        approvers: selectedApprovers,
+        approvers: isPastSale ? undefined : selectedApprovers,
       }
 
       const response = await createOrderDispatch(payload)
 
-      if (shouldSubmit && response.data?.id) {
+      if (isPastSale) {
+        toast.success(`Dispatch ${response.data.dispatch_number} recorded as delivered`)
+      } else if (shouldSubmit && response.data?.id) {
         await submitDispatchForApproval(response.data.id)
         toast.success(`Dispatch ${response.data.dispatch_number} created and submitted for approval`)
       } else {
@@ -190,8 +194,15 @@ export function CreateDispatchModal({
           {/* Dispatch Items Section */}
 
 
+          {isPastSale && (
+            <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              Past sale: this dispatch is recorded as already delivered on the sale date. No approvals are needed and
+              stock does not change.
+            </p>
+          )}
+
           {/* Details Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4", isPastSale && "hidden")}>
             {/* Approvers Section - Moved here */}
             {/* Approvers Section - Dropdown with Search */}
             <div className="space-y-2 flex flex-col">
@@ -296,13 +307,22 @@ export function CreateDispatchModal({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button variant="outline" onClick={() => handleSubmit(false)} disabled={loading}>
-            Save Draft
-          </Button>
-          <Button onClick={() => handleSubmit(true)} disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Create & Submit
-          </Button>
+          {isPastSale ? (
+            <Button onClick={() => handleSubmit(false)} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Record Dispatch
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => handleSubmit(false)} disabled={loading}>
+                Save Draft
+              </Button>
+              <Button onClick={() => handleSubmit(true)} disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create & Submit
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

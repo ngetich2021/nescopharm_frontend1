@@ -163,7 +163,8 @@ class Order extends Model
 
     public function isInvoiceApproved(): bool
     {
-        return (bool) $this->invoice_approved_at;
+        // A past (pre-go-live) sale already happened, so there is nothing left to approve.
+        return (bool) $this->invoice_approved_at || (bool) $this->is_historical;
     }
 
     public function invoiceApprover()

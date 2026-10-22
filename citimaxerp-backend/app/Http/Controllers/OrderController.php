@@ -517,9 +517,12 @@ class OrderController extends Controller
 
                 if ($isHistorical) {
                     // Booleans bind as integers here, which Postgres rejects for a boolean column.
-                    DB::update('UPDATE orders SET is_historical = true WHERE id = ?', [$order->id]);
-                    $order->is_historical = true;
-                    $order->syncOriginalAttribute('is_historical');
+                    // A past sale already happened, so it is complete and signed off for invoicing straight away.
+                    DB::update(
+                        "UPDATE orders SET is_historical = true, status = 'completed', invoice_approved_at = NOW(), invoice_approved_by = ? WHERE id = ?",
+                        [$user->id, $order->id]
+                    );
+                    $order->refresh();
                 }
 
                 // Create order items and update stock
@@ -568,7 +571,9 @@ class OrderController extends Controller
                     $orderStock->deduct($order);
                 }
 
-                app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $user->id);
+                if (!$isHistorical) {
+                    app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $user->id);
+                }
 
                 $message = 'Order created successfully.';
                 if ($belowMinimumPrice) {
