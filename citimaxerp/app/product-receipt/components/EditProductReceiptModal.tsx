@@ -547,9 +547,9 @@ export function EditProductReceiptModal({
     return true;
   };
 
-  async function onSubmit(data: ProductReceiptFormValues) {
+  async function onSubmit() {
     if (!productReceipt) return;
-    
+
     // Check update permission
     if (!hasPermission("can_update_product_receipts") && !isAdmin()) {
       toast({
@@ -560,14 +560,19 @@ export function EditProductReceiptModal({
       return;
     }
 
+    // Fields live in local state, not the react-hook-form values, so validate them directly
+    if (!validateForm()) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
-        supplier_id: data.supplier_id || null,
+        supplier_id: supplierId || null,
         contractor_id: null,
-        document_type: data.document_type,
-        reference_number: data.reference_number.trim(),
-        store_id: data.store_id,
+        document_type: documentType || "receipt",
+        reference_number: referenceNumber.trim(),
+        store_id: storeId,
         shipping_cost: 0,
         logistics_cost: 0,
         ...Object.fromEntries(
@@ -631,7 +636,13 @@ export function EditProductReceiptModal({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSubmit();
+            }}
+            className="space-y-4"
+          >
             {/* Check if user has permission to edit before showing form */}
             {hasPermission("can_update_product_receipts") || isAdmin() ? (
               <>
@@ -1323,6 +1334,30 @@ export function EditProductReceiptModal({
                     )}
                   </CardContent>
                 </Card>
+
+                <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-2 border-t bg-background px-6 py-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting || loading}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -1332,8 +1367,9 @@ export function EditProductReceiptModal({
                   You do not have permission to edit product receipts. 
                   Please contact your administrator for access.
                 </p>
-                <Button 
-                  className="mt-4" 
+                <Button
+                  type="button"
+                  className="mt-4"
                   onClick={() => onOpenChange(false)}
                 >
                   Close
