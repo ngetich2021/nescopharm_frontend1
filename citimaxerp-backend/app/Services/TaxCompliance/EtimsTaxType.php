@@ -41,21 +41,28 @@ final class EtimsTaxType
      * Only an explicit VAT category or tax rate counts. is_taxable alone is
      * not trusted: the product forms default it to true on every save, so a
      * product with no rate set is Non-VAT rather than an assumed 16%.
+     *
+     * The linked VAT category (set once by the eTIMS category sync) only
+     * refines the code when it carries the same rate as the product's own tax
+     * fields - e.g. telling Exempt (A) apart from Zero-rated (C). When a user
+     * later changes the product's tax, the edited fields win, so a product
+     * switched from 16% to non-taxable stops charging VAT.
      */
     public static function forProduct(Product $product): string
     {
-        $vatCategoryCode = $product->vatCategory?->etims_tax_type_code;
-        if (self::isValid($vatCategoryCode)) {
+        if ($product->is_taxable === false || $product->tax_rate === null) {
+            $fieldCode = 'D';
+        } else {
+            $rate = (float) $product->tax_rate;
+            $fieldCode = $rate === 0.0 ? 'C' : self::forRate($rate);
+        }
+
+        $vatCategoryCode = $product->vat_category_id ? $product->vatCategory?->etims_tax_type_code : null;
+        if (self::isValid($vatCategoryCode) && self::rate($vatCategoryCode) === self::rate($fieldCode)) {
             return strtoupper((string) $vatCategoryCode);
         }
 
-        if ($product->is_taxable === false || $product->tax_rate === null) {
-            return 'D';
-        }
-
-        $rate = (float) $product->tax_rate;
-
-        return $rate === 0.0 ? 'C' : self::forRate($rate);
+        return $fieldCode;
     }
 
     public static function rateForProduct(?Product $product): float

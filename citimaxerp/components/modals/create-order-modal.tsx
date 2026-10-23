@@ -18,6 +18,7 @@ import { StockHint, stockCheck } from "@/components/stock-hint"
 import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
+import { OrderVatSelect } from "@/components/order-vat-select"
 import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
 import { InstantPaymentPrompt } from "@/components/instant-payment-prompt"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -341,6 +342,12 @@ export function CreateOrderModal({
     item.total_price = item.quantity * price
     item.tax_amount = price * item.quantity * (item.tax_rate / 100)
     setOrderItems(updatedItems)
+  }
+
+  const handleUpdateTaxRate = (index: number, rate: number) => {
+    setOrderItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, tax_rate: rate, tax_amount: item.unit_price * item.quantity * (rate / 100) } : item)),
+    )
   }
 
   // The pen edits the item itself, so every line using it takes the new name, and lines priced
@@ -857,9 +864,7 @@ export function CreateOrderModal({
                               })()}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">
-                                {item.tax_rate}%
-                              </div>
+                              <OrderVatSelect value={item.tax_rate} onChange={(rate) => handleUpdateTaxRate(index, rate)} label={`VAT for row ${index + 1}`} />
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm text-gray-900">Ksh. {(item.total_price + item.tax_amount).toFixed(2)}</div>

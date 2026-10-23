@@ -69,7 +69,20 @@ class OrderController extends Controller
         return $role->hasPermission($permission);
     }
 
+    /**
+     * VAT rate for an order line: the rate picked on the line when one is sent
+     * (so a product's tax can be overridden per order), otherwise the
+     * product's current tax. Snapped to the eTIMS rates (0 / 8 / 16).
+     */
+    protected function lineTaxRate(array $item, ?Product $product): float
+    {
+        $rate = $item['tax_rate'] ?? null;
+        if ($rate !== null && $rate !== '') {
+            return EtimsTaxType::rate(EtimsTaxType::fromInput(null, $rate));
+        }
 
+        return EtimsTaxType::rateForProduct($product);
+    }
 
     /**
      * Generate a unique order number for the company.
@@ -196,7 +209,7 @@ class OrderController extends Controller
                         $query->select('*');
                     },
                     'orderItems' => function ($query) {
-                        $query->select('id', 'order_id', 'product_id', 'variant_id', 'quantity', 'base_quantity', 'packaging_breakdown', 'unit_price', 'price_label', 'total_price')
+                        $query->select('id', 'order_id', 'product_id', 'variant_id', 'quantity', 'base_quantity', 'packaging_breakdown', 'unit_price', 'price_label', 'total_price', 'tax_rate', 'tax_amount')
                             ->with([
                                 'product' => function ($query) {
                                     $query->select('id', 'name', 'price', 'store_id', 'has_packaging', 'base_unit', 'tax_rate', 'is_taxable')
@@ -279,6 +292,7 @@ class OrderController extends Controller
             'items.*.unit_price' => 'required|numeric|min:0|max:999999.99',
             'items.*.price_label' => 'nullable|string|max:100',
             'items.*.price_unit' => 'nullable|string|max:50',
+            'items.*.tax_rate' => 'nullable|numeric|min:0|max:100',
             'order_date' => 'nullable|date',
         ]);
 
@@ -466,7 +480,7 @@ class OrderController extends Controller
                 }
 
                 $totalAmount += $packs * $unitPrice;
-                $totalTaxAmount += $packs * $unitPrice * EtimsTaxType::rateForProduct($product) / 100;
+                $totalTaxAmount += $packs * $unitPrice * $this->lineTaxRate($item, $product) / 100;
             }
 
             return DB::transaction(function () use ($request, $user, $customer, $totalAmount, $items, $belowMinimumPrice, $totalTaxAmount, $orderCredit, $isHistorical) {
@@ -560,8 +574,8 @@ class OrderController extends Controller
                         'price_label' => $item['price_label'] ?? null,
                         'price_unit' => $item['price_unit'] ?? null,
                         'total_price' => $packs * $unitPrice,
-                        'tax_rate' => EtimsTaxType::rateForProduct($product),
-                        'tax_amount' => round($unitPrice * $packs * EtimsTaxType::rateForProduct($product) / 100, 2),
+                        'tax_rate' => $this->lineTaxRate($item, $product),
+                        'tax_amount' => round($unitPrice * $packs * $this->lineTaxRate($item, $product) / 100, 2),
                         'company_id' => $user->company_id,
                     ]);
                 }
@@ -657,6 +671,7 @@ class OrderController extends Controller
             'items.*.unit_price' => 'required_with:items|numeric|min:0|max:999999.99',
             'items.*.price_label' => 'nullable|string|max:100',
             'items.*.price_unit' => 'nullable|string|max:50',
+            'items.*.tax_rate' => 'nullable|numeric|min:0|max:100',
             'order_date' => 'nullable|date',
         ]);
 
@@ -738,9 +753,13 @@ class OrderController extends Controller
 
                     // Changed lines need a fresh sign-off before they can be invoiced. The edit form
                     // always resends every line, so compare them - a notes-only save keeps the approval.
-                    $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '']);
+                    // Each incoming line's VAT is resolved up front so a tax change counts as a change too.
+                    $items = collect($request->input('items'))
+                        ->map(fn ($item) => ['tax_rate' => $this->lineTaxRate($item, Product::find($item['product_id']))] + $item)
+                        ->all();
+                    $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '', round((float) ($l['tax_rate'] ?? 0), 2)]);
                     $before = $order->orderItems()->get()->map(fn ($i) => $lineKey($i->toArray()))->sort()->values()->all();
-                    $after = collect($request->input('items'))->map($lineKey)->sort()->values()->all();
+                    $after = collect($items)->map($lineKey)->sort()->values()->all();
                     if ($before !== $after && $order->isInvoiceApproved() && !\App\Models\Invoice::where('order_id', $order->id)->exists()) {
                         $order->fill([
                             'invoice_approved_by' => null,
@@ -755,7 +774,6 @@ class OrderController extends Controller
                     // Delete old items
                     $order->orderItems()->delete();
 
-                    $items = $request->input('items');
                     $totalAmount = 0;
                     $belowMinimumPrice = false;
                     foreach ($items as $index => $item) {
@@ -802,8 +820,7 @@ class OrderController extends Controller
 
                     $newTotalTax = 0;
                     foreach ($items as $item) {
-                        $product = Product::find($item['product_id']);
-                        $newTotalTax += $item['unit_price'] * $item['quantity'] * EtimsTaxType::rateForProduct($product) / 100;
+                        $newTotalTax += $item['unit_price'] * $item['quantity'] * $item['tax_rate'] / 100;
                     }
 
                     $tax = round($totalAmount > 0 ? $newTotalTax * max(0, $totalAmount - $discount) / $totalAmount : 0, 2);
@@ -839,8 +856,8 @@ class OrderController extends Controller
                             'price_label' => $item['price_label'] ?? null,
                             'price_unit' => $item['price_unit'] ?? null,
                             'total_price' => $item['quantity'] * $item['unit_price'],
-                            'tax_rate' => EtimsTaxType::rateForProduct($product),
-                            'tax_amount' => round($item['unit_price'] * $item['quantity'] * EtimsTaxType::rateForProduct($product) / 100, 2),
+                            'tax_rate' => $item['tax_rate'],
+                            'tax_amount' => round($item['unit_price'] * $item['quantity'] * $item['tax_rate'] / 100, 2),
                         ]);
                     }
 

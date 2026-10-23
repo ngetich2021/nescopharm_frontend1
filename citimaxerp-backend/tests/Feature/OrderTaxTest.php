@@ -80,4 +80,65 @@ class OrderTaxTest extends TestCase
         $this->assertEquals(16.00, $orderItem->tax_rate);
         $this->assertEquals(32.00, $orderItem->tax_amount);
     }
+
+    public function test_order_line_tax_can_be_overridden_on_create_and_edit()
+    {
+        $this->user->role->update(['permissions' => ['can_create_orders', 'can_view_orders', 'can_update_orders']]);
+
+        $product = Product::factory()->create([
+            'company_id' => $this->company->id,
+            'price' => 100,
+            'is_taxable' => true,
+            'tax_rate' => 16.00,
+            'stock_quantity' => 100,
+            'track_inventory' => true,
+        ]);
+        $customerId = \App\Models\Customer::factory()->create(['company_id' => $this->company->id])->id;
+
+        $response = $this->postJson('/api/orders', [
+            'items' => [['product_id' => $product->id, 'quantity' => 2, 'unit_price' => 100, 'tax_rate' => 0]],
+            'status' => 'pending',
+            'customer_id' => $customerId,
+        ]);
+        $response->assertStatus(201);
+        $order = Order::find($response->json('order.id'));
+
+        $this->assertEquals(0.00, $order->tax);
+        $this->assertEquals(200.00, $order->final_amount);
+        $this->assertEquals(0.00, OrderItem::where('order_id', $order->id)->value('tax_rate'));
+
+        $this->putJson("/api/orders/{$order->id}", [
+            'items' => [['product_id' => $product->id, 'quantity' => 2, 'unit_price' => 100, 'tax_rate' => 8]],
+        ])->assertStatus(200);
+
+        $order->refresh();
+        $this->assertEquals(16.00, $order->tax);
+        $this->assertEquals(216.00, $order->final_amount);
+        $this->assertEquals(8.00, OrderItem::where('order_id', $order->id)->value('tax_rate'));
+    }
+
+    public function test_product_switched_off_tax_stops_charging_vat_despite_old_vat_category()
+    {
+        $standardRated = \App\Models\TaxRate::withoutGlobalScopes()->create([
+            'company_id' => $this->company->id,
+            'name' => 'VAT 16%',
+            'code' => 'B',
+            'rate' => 0.16,
+            'etims_tax_type_code' => 'B',
+        ]);
+
+        $product = Product::factory()->create([
+            'company_id' => $this->company->id,
+            'price' => 100,
+            'is_taxable' => true,
+            'tax_rate' => 16.00,
+            'vat_category_id' => $standardRated->id,
+        ]);
+        $this->assertEquals(16.0, \App\Services\TaxCompliance\EtimsTaxType::rateForProduct($product->fresh()));
+
+        $product->update(['is_taxable' => false, 'tax_rate' => null]);
+
+        $this->assertEquals('D', \App\Services\TaxCompliance\EtimsTaxType::forProduct($product->fresh()));
+        $this->assertEquals(0.0, \App\Services\TaxCompliance\EtimsTaxType::rateForProduct($product->fresh()));
+    }
 }

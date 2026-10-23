@@ -28,6 +28,7 @@ import { Product, ProductVariant, getProducts, getProductById } from "@/lib/prod
 import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { OrderDetail } from "@/lib/orders"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
+import { OrderVatSelect } from "@/components/order-vat-select"
 
 type Customer = LibCustomer
 
@@ -241,7 +242,8 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
         quantity: item.quantity,
         unit_price: parseFloat(item.unit_price),
         total_price: parseFloat(item.total_price),
-        tax_rate: vatRateForProduct(item.product as any),
+        // The VAT the order was saved with (it may have been changed from the product's).
+        tax_rate: (item as any).tax_rate != null ? Number((item as any).tax_rate) : vatRateForProduct(item.product as any),
         variant_id: item.variant_id || undefined,
         variant_name: item.variant_name || undefined,
         price_label: item.price_label ?? null,
@@ -418,6 +420,10 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
     setOrderItems(updatedItems)
   }
 
+  const handleUpdateTaxRate = (index: number, rate: number) => {
+    setOrderItems((prev) => prev.map((item, i) => (i === index ? { ...item, tax_rate: rate } : item)))
+  }
+
   // The pen edits the item itself, so every line using it takes the new name, and lines priced
   // with the same code take the new price and unit.
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -538,6 +544,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
           unit_price: item.unit_price,
           price_label: item.price_label || null,
           price_unit: item.price_unit || null,
+          tax_rate: item.tax_rate,
           ...(item.variant_id ? { variant_id: item.variant_id } : {}),
         })),
       }
@@ -887,7 +894,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                               {!isPastSale && <StockHint quantity={item.quantity} priceUnit={item.price_unit} available={availableFor(item)} />}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{item.tax_rate > 0 ? `${item.tax_rate}%` : "—"}</div>
+                              <OrderVatSelect value={item.tax_rate} onChange={(rate) => handleUpdateTaxRate(index, rate)} label={`VAT for row ${index + 1}`} />
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm text-gray-900">Ksh. {item.total_price.toFixed(2)}</div>
