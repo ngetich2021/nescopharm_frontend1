@@ -158,7 +158,8 @@ class OrderController extends Controller
                 }
 
                 $perPage = (int) $request->input('per_page', 1000);
-                $orders = $query->select('id', 'customer_id', 'company_id', 'order_number', 'total_amount', 'discount', 'tax', 'final_amount', 'status', 'payment_status', 'invoice_approved_at', 'created_at', 'updated_at')
+                $orders = $query->select('id', 'customer_id', 'company_id', 'order_number', 'total_amount', 'discount', 'tax', 'final_amount', 'status', 'payment_status', 'invoice_approved_at', 'order_date', 'created_at', 'updated_at')
+                    ->orderBy('order_date', 'desc')
                     ->orderBy('created_at', 'desc')
                     ->paginate($perPage);
 

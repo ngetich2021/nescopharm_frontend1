@@ -177,7 +177,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
         [
           formatOrderNumber(order),
           (order.customer as any)?.business_name || order.customer?.name || "Unknown",
-          new Date(order.created_at).toLocaleDateString(),
+          new Date(order.order_date || order.created_at).toLocaleDateString(),
           formatStatus(order.status),
           Number.parseFloat(order.final_amount || order.total_amount || "0").toFixed(2),
         ].join(","),
@@ -280,7 +280,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                       <tr>
                         <td>${formatOrderNumber(order)}</td>
                         <td>${order.customer?.name || "Unknown"}</td>
-                        <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                        <td>${new Date(order.order_date || order.created_at).toLocaleDateString()}</td>
                         <td>
                           <span class="badge ${badgeClass}">
                             ${formatStatus(order.status)}
@@ -396,7 +396,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                     <tr>
                       <td>${formatOrderNumber(order)}</td>
                       <td>${(order.customer as any)?.business_name || order.customer?.name || "Unknown"}</td>
-                      <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                      <td>${new Date(order.order_date || order.created_at).toLocaleDateString()}</td>
                       <td>
                         <span class="badge ${badgeClass}">
                           ${formatStatus(order.status)}
@@ -656,7 +656,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      {new Date(order.created_at).toLocaleDateString()}
+                      {new Date(order.order_date || order.created_at).toLocaleDateString()}
                       <div className="text-xs text-muted-foreground">
                         {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </div>
