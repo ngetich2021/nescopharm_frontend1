@@ -229,6 +229,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
   const filteredCustomers = customers.filter(customer => {
     const matchesSearch = customerSearchTerm === "" ||
       customer.name?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+      customer.business_name?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
       customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
       customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
 

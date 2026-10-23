@@ -306,7 +306,8 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
         return (
           (customer?.name && customer.name.toLowerCase().includes(query)) ||
           (customer?.email && customer.email.toLowerCase().includes(query)) ||
-          (customer?.phone && customer.phone.toLowerCase().includes(query))
+          (customer?.phone && customer.phone.toLowerCase().includes(query)) ||
+          (customer?.business_name && customer.business_name.toLowerCase().includes(query))
         )
       })
     : []

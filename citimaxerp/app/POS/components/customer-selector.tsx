@@ -59,6 +59,7 @@ export function CustomerSelector({ selectedCustomer, onCustomerSelect }: Custome
   const filteredCustomers = customers.filter(
     (customer: Customer) =>
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.business_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phone?.includes(searchTerm),
   )

@@ -262,6 +262,7 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
 
   const filteredCustomers = customers.filter(customer =>
     customer.name?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+    customer.business_name?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
     customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
     customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
   )
