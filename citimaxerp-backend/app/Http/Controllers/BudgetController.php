@@ -377,14 +377,14 @@ class BudgetController extends Controller
             $query->where('budget_type', $budgetType);
         }
 
-        $summary = $query->selectRaw('
+        $summary = $query->selectRaw("
                 COUNT(*) as total_budgets,
-                COUNT(CASE WHEN status = "approved" THEN 1 END) as approved_budgets,
-                COUNT(CASE WHEN status = "draft" THEN 1 END) as draft_budgets,
-                COUNT(CASE WHEN status = "submitted" THEN 1 END) as pending_budgets,
+                COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_budgets,
+                COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_budgets,
+                COUNT(CASE WHEN status = 'submitted' THEN 1 END) as pending_budgets,
                 SUM(total_budget) as total_budget_amount,
                 AVG(total_budget) as average_budget_amount
-            ')
+            ")
             ->first();
 
         return response()->json($summary);

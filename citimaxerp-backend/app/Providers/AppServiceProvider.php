@@ -29,6 +29,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Booleans bound as '1'/'0' so Postgres accepts them (see App\Database\PostgresConnection).
+        \Illuminate\Database\Connection::resolverFor('pgsql', fn ($pdo, $database, $prefix, $config) =>
+            new \App\Database\PostgresConnection($pdo, $database, $prefix, $config));
+
         // Register AccountingIntegrationService as a singleton
         $this->app->singleton(AccountingIntegrationService::class, function ($app) {
             return new AccountingIntegrationService();

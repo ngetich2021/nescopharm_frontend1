@@ -75,6 +75,12 @@ class FinancialStatementService
      */
     protected function isContraAccount(ChartOfAccount $account): bool
     {
+        // The chart records each account's normal side (e.g. Sales Returns is a debit-normal
+        // income account); only fall back to guessing from the name when it isn't set.
+        if (in_array($account->normal_balance, ['debit', 'credit'], true)) {
+            $natural = in_array($account->account_type, ['asset', 'expense']) ? 'debit' : 'credit';
+            return $account->normal_balance !== $natural;
+        }
         $name = strtolower($account->account_name);
         return str_contains($name, 'accumulated depreciation')
             || str_contains($name, 'allowance for')
@@ -97,25 +103,31 @@ class FinancialStatementService
     /**
      * Calculate the balance for a single account as of a specific date
      */
+    /** @var array<string, \Illuminate\Support\Collection> grouped movements per company + date range */
+    protected array $movementCache = [];
+
+    /**
+     * Debit/credit totals for one account over a date range, read from a single grouped query
+     * per range (cached) rather than one query per account - reports used to take a minute or
+     * more against the remote database and timed out in production.
+     */
+    protected function movementFor(string $accountId, ?string $from, string $to): array
+    {
+        $key = "{$this->companyId}|{$from}|{$to}";
+        $this->movementCache[$key] ??= app(LedgerBalanceService::class)->movements($this->companyId, $from, $to);
+        $m = $this->movementCache[$key]->get($accountId);
+
+        return [(float) ($m->debit ?? 0), (float) ($m->credit ?? 0)];
+    }
+
     public function calculateAccountBalance(ChartOfAccount $account, ?string $asOfDate = null): float
     {
         $date = $asOfDate ?? $this->asOfDate ?? now()->toDateString();
-        
+
         // Get opening balance
         $opening = (float) ($account->opening_balance ?? 0);
-        
-        // Get journal entry totals
-        $totals = JournalEntryItem::where('account_id', $account->id)
-            ->whereHas('journalEntry', function ($q) use ($date) {
-                $q->where('company_id', $this->companyId)
-                  ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
-                  ->where('entry_date', '<=', $date);
-            })
-            ->selectRaw('COALESCE(SUM(debit_amount), 0) as total_debits, COALESCE(SUM(credit_amount), 0) as total_credits')
-            ->first();
 
-        $debits = (float) ($totals->total_debits ?? 0);
-        $credits = (float) ($totals->total_credits ?? 0);
+        [$debits, $credits] = $this->movementFor($account->id, null, $date);
 
         // Calculate balance based on normal balance direction
         if ($this->hasDebitNormalBalance($account)) {
@@ -130,17 +142,7 @@ class FinancialStatementService
      */
     public function calculateAccountActivity(ChartOfAccount $account, string $dateFrom, string $dateTo): float
     {
-        $totals = JournalEntryItem::where('account_id', $account->id)
-            ->whereHas('journalEntry', function ($q) use ($dateFrom, $dateTo) {
-                $q->where('company_id', $this->companyId)
-                  ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
-                  ->whereBetween('entry_date', [$dateFrom, $dateTo]);
-            })
-            ->selectRaw('COALESCE(SUM(debit_amount), 0) as total_debits, COALESCE(SUM(credit_amount), 0) as total_credits')
-            ->first();
-
-        $debits = (float) ($totals->total_debits ?? 0);
-        $credits = (float) ($totals->total_credits ?? 0);
+        [$debits, $credits] = $this->movementFor($account->id, $dateFrom, $dateTo);
 
         // For income/revenue accounts, credits increase
         // For expense accounts, debits increase
@@ -280,30 +282,30 @@ class FinancialStatementService
                 'account_id' => $account->id,
                 'account_code' => $account->account_code,
                 'account_name' => $account->account_name,
-                'amount' => round(abs($activity), 2),
+                'amount' => round($activity, 2),
             ];
 
             switch ($account->account_type) {
                 case 'income':
                     if ($account->account_subtype === 'other_income') {
                         $otherIncome[] = $row;
-                        $totalOtherIncome += abs($activity);
+                        $totalOtherIncome += $activity;
                     } else {
                         $revenue[] = $row;
-                        $totalRevenue += abs($activity);
+                        $totalRevenue += $activity;
                     }
                     break;
                     
                 case 'expense':
                     if ($account->account_subtype === 'cost_of_goods_sold') {
                         $costOfGoodsSold[] = $row;
-                        $totalCOGS += abs($activity);
+                        $totalCOGS += $activity;
                     } elseif ($account->account_subtype === 'other_expense') {
                         $otherExpenses[] = $row;
-                        $totalOtherExpenses += abs($activity);
+                        $totalOtherExpenses += $activity;
                     } else {
                         $operatingExpenses[] = $row;
-                        $totalOperatingExpenses += abs($activity);
+                        $totalOperatingExpenses += $activity;
                     }
                     break;
             }
@@ -372,12 +374,16 @@ class FinancialStatementService
     {
         $date = $asOfDate ?? $this->asOfDate ?? now()->toDateString();
         
-        // First get net income to add to equity
-        $incomeStatement = $this->getIncomeStatement(
-            Carbon::parse($date)->startOfYear()->toDateString(),
-            $date
-        );
-        $netIncome = $incomeStatement['sections']['net_income'];
+        // Profit for the financial year to date goes into equity as Net Income. Earlier years'
+        // profit is never closed off by journal, so it is carried as Retained Earnings - without
+        // it the sheet is out by every prior year's result and never balances.
+        $startMonth = (int) (\App\Models\CompanyAccountingSettings::where('company_id', $this->companyId)->value('financial_year_start_month') ?: 1);
+        $yearStart = Carbon::create(Carbon::parse($date)->year, $startMonth, 1);
+        if ($yearStart->gt(Carbon::parse($date))) {
+            $yearStart->subYear();
+        }
+        $netIncome = $this->getIncomeStatement($yearStart->toDateString(), $date)['sections']['net_income'];
+        $retainedEarnings = $this->getIncomeStatement('1900-01-01', $yearStart->copy()->subDay()->toDateString())['sections']['net_income'];
         
         $accountBalances = $this->getAllAccountBalances($date);
         
@@ -447,6 +453,17 @@ class FinancialStatementService
                     $totalEquity += $acc['balance'];
                     break;
             }
+        }
+
+        if (abs($retainedEarnings) >= 0.01) {
+            $equity[] = [
+                'account_id' => null,
+                'account_code' => 'RETAINED',
+                'account_name' => 'Retained Earnings (prior years)',
+                'is_contra' => $retainedEarnings < 0,
+                'amount' => round($retainedEarnings, 2),
+            ];
+            $totalEquity += $retainedEarnings;
         }
 
         // Add current period net income to equity section

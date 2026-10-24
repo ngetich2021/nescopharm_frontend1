@@ -964,13 +964,14 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     Route::get('budgets/{id}/vs-actual', [BudgetController::class, 'getBudgetVsActual']);
 
     // Accounts Payable - Specific routes must come before resource routes
-    Route::get('accounts-payable/aging-report', [AccountsPayableController::class, 'getAgingReport']);
+    // Aging is built from invoices / goods received (AgingController); the old AR/AP tables were never created.
+    Route::get('accounts-payable/aging-report', [\App\Http\Controllers\AgingController::class, 'payables']);
     Route::get('accounts-payable-summary', [AccountsPayableController::class, 'getSummary']);
     Route::apiResource('accounts-payable', AccountsPayableController::class);
     Route::post('accounts-payable/{id}/record-payment', [AccountsPayableController::class, 'recordPayment']);
 
     // Accounts Receivable - Specific routes must come before resource routes
-    Route::get('accounts-receivable/aging-report', [AccountsReceivableController::class, 'getAgingReport']);
+    Route::get('accounts-receivable/aging-report', [\App\Http\Controllers\AgingController::class, 'receivables']);
     Route::get('accounts-receivable-summary', [AccountsReceivableController::class, 'getSummary']);
     Route::apiResource('accounts-receivable', AccountsReceivableController::class);
     Route::post('accounts-receivable/{id}/record-payment', [AccountsReceivableController::class, 'recordPayment']);
