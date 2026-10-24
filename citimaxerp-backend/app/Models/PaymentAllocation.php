@@ -65,7 +65,7 @@ class PaymentAllocation extends Model
         static::created(function (PaymentAllocation $allocation) {
             $order = $allocation->invoice?->order_id ? Order::find($allocation->invoice->order_id) : null;
             $stock = app(\App\Services\OrderStockService::class);
-            if ($order && $stock->hasReceipt($order)) {
+            if ($order && $stock->shouldTakeStock($order)) {
                 $stock->deduct($order);
             }
         });

@@ -38,13 +38,13 @@ class Payment extends Model
         'updated_at' => 'datetime',
     ];
 
-    // A receipt is what moves an order's stock out of inventory (see OrderStockService).
+    // A receipt moves an order's stock out of inventory if its dispatch hasn't already (see OrderStockService).
     protected static function booted(): void
     {
         static::saved(function (Payment $payment) {
             $stock = app(\App\Services\OrderStockService::class);
             foreach ($stock->ordersForPayment($payment) as $order) {
-                if ($stock->hasReceipt($order)) {
+                if ($stock->shouldTakeStock($order)) {
                     $stock->deduct($order);
                 }
             }

@@ -620,7 +620,7 @@ class OrderController extends Controller
                     // Use unit price from request
                     $unitPrice = $item['unit_price'];
 
-                    // Stock (and FEFO batches) are only taken once the order is receipted - see OrderStockService.
+                    // Stock (and FEFO batches) are taken once the order is dispatched or receipted - see OrderStockService.
                     $batchAllocations = null;
 
                     OrderItem::create([
@@ -646,7 +646,7 @@ class OrderController extends Controller
 
                 // Orders created already paid come with their receipt.
                 $orderStock = app(\App\Services\OrderStockService::class);
-                if ($orderStock->hasReceipt($order)) {
+                if ($orderStock->shouldTakeStock($order)) {
                     $orderStock->deduct($order);
                 }
 
@@ -983,7 +983,7 @@ class OrderController extends Controller
                     $order->update(['status' => 'completed']);
                 } elseif ($toHistorical === false) {
                     $orderStock = app(\App\Services\OrderStockService::class);
-                    if ($orderStock->hasReceipt($order)) {
+                    if ($orderStock->shouldTakeStock($order)) {
                         $orderStock->deduct($order->fresh());
                     }
                     $approvalReset = true;

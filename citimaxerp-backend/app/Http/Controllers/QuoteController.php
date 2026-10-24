@@ -844,7 +844,7 @@ class QuoteController extends Controller
                         'tax_amount' => round($item->netAmount() * $itemTaxRate / 100, 2),
                         'company_id' => $quote->company_id,
                     ]);
-                    // Stock is taken when the order is receipted - see OrderStockService.
+                    // Stock is taken when the order is dispatched or receipted - see OrderStockService.
                 }
 
                 // Create delivery details

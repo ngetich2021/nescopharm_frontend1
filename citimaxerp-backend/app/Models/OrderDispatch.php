@@ -70,6 +70,17 @@ class OrderDispatch extends Model
                 $model->dispatch_number = $prefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
             }
         });
+
+        // Goods leaving (dispatch approved) takes the order's stock; a cancelled or deleted
+        // dispatch puts it back unless the order has been receipted (see OrderStockService).
+        $syncStock = function (OrderDispatch $dispatch) {
+            if (($dispatch->wasChanged(['status', 'approval_status']) || $dispatch->wasRecentlyCreated || !$dispatch->exists)
+                && $order = Order::find($dispatch->order_id)) {
+                app(\App\Services\OrderStockService::class)->sync($order);
+            }
+        };
+        static::saved($syncStock);
+        static::deleted($syncStock);
     }
 
     /**

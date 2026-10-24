@@ -9,11 +9,28 @@ use App\Models\ProductVariant;
 use Illuminate\Support\Facades\DB;
 
 /**
- * An order only takes stock out of inventory once a receipt (payment) has been recorded
- * against it. Until then its lines leave stock untouched.
+ * An order takes its stock out of inventory as soon as a dispatch is raised for it (credit
+ * sales), or a receipt is recorded (counter / cash sales, which never get a dispatch), whichever
+ * comes first. A cancelled or rejected dispatch puts it back. Until then its lines leave stock
+ * untouched.
  */
 class OrderStockService
 {
+    public function shouldTakeStock(Order $order): bool
+    {
+        return $this->isDispatched($order) || $this->hasReceipt($order);
+    }
+
+    // A dispatch has been raised and not cancelled or rejected - the goods are committed to go.
+    public function isDispatched(Order $order): bool
+    {
+        return DB::table('order_dispatches')
+            ->where('order_id', $order->id)
+            ->where('status', '!=', 'cancelled')
+            ->where('approval_status', '!=', 'rejected')
+            ->exists();
+    }
+
     public function hasReceipt(Order $order): bool
     {
         $invoiceIds = DB::table('invoices')->where('order_id', $order->id)->pluck('id');
@@ -34,10 +51,10 @@ class OrderStockService
 
     public function sync(Order $order): void
     {
-        if ($this->hasReceipt($order)) {
+        if ($this->shouldTakeStock($order)) {
             $this->deduct($order);
         } else {
-            $this->restore($order, "Order {$order->order_number}: receipt removed");
+            $this->restore($order, "Order {$order->order_number}: no longer dispatched or receipted");
         }
     }
 
