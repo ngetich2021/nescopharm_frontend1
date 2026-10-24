@@ -30,7 +30,7 @@ import { CreateOrderModal } from "@/components/modals/create-order-modal"
 import { EditOrderModal } from "@/components/modals/edit-order-modal"
 import { DeleteOrderConfirmationDialog } from "./components/DeleteOrderConfirmationDialog"
 import { toast } from "@/components/ui/use-toast"
-import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate } from "@/lib/orders"
+import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate, declinedDeletesAt } from "@/lib/orders"
 import { PermissionGuard } from "@/components/PermissionGuard"
 
 interface OrdersTableProps {
@@ -631,7 +631,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                         badgeClass = "bg-yellow-100 text-yellow-800 border-yellow-500"
                       } else if (statusLower.includes("process")) {
                         badgeClass = "bg-blue-100 text-blue-800 border-blue-500"
-                      } else if (statusLower.includes("fail")) {
+                      } else if (statusLower.includes("fail") || statusLower.includes("reject")) {
                         badgeClass = "bg-red-100 text-red-800 border-red-500"
                       } else if (statusLower.includes("cancel")) {
                         badgeClass = "bg-gray-100 text-gray-800 border-gray-500"
@@ -654,6 +654,11 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                           </Badge>
                           {(order.is_historical || isPastSaleDate(order.order_date)) && (
                             <span className="text-[11px] text-muted-foreground">Past sale · no stock</span>
+                          )}
+                          {declinedDeletesAt(order) && (
+                            <span className="text-[11px] text-red-600">
+                              Deletes {declinedDeletesAt(order)!.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                            </span>
                           )}
                         </div>
                       )

@@ -202,6 +202,16 @@ class OrderController extends Controller
             ], 403);
         }
 
+        // Declined orders past their time are cleared before listing, at most every 5 minutes,
+        // in case the scheduler (orders:purge-declined) isn't running.
+        if (\Illuminate\Support\Facades\Cache::add('orders:purge-declined', 1, 300)) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('orders:purge-declined');
+            } catch (\Throwable $e) {
+                Log::warning('Purging declined orders failed', ['error' => $e->getMessage()]);
+            }
+        }
+
         try {
             return $this->executeWithRetry(function () use ($request, $mine) {
                 $user = $request->user();
@@ -737,6 +747,7 @@ class OrderController extends Controller
             'items.*.price_unit' => 'nullable|string|max:50',
             'items.*.tax_rate' => 'nullable|numeric|min:0|max:100',
             'order_date' => 'nullable|date',
+            'sales_rep_id' => 'nullable|uuid|exists:users,id',
         ]);
 
         if ($validator->fails()) {
@@ -971,6 +982,7 @@ class OrderController extends Controller
                     'currency',
                     'notes',
                     'order_date',
+                    'sales_rep_id',
                 ]));
 
                 if ($invoice && ($invoiceNeedsSync || $invoice->customer_id !== $order->customer_id)) {
@@ -1044,12 +1056,9 @@ class OrderController extends Controller
 
         // Deleting takes the order's invoice, receipts and dispatch with it (old-system orders are
         // cleared this way so both systems match). Only a credit note against the invoice stops it.
-        $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
-        if ($invoice && ($creditNotes = \App\Models\CreditNote::where('invoice_id', $invoice->id)->pluck('credit_note_number'))->isNotEmpty()) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => "Invoice {$invoice->invoice_number} has credit note(s) " . $creditNotes->filter()->implode(', ') . '. Delete those first.',
-            ], 400);
+        $deletion = app(\App\Services\OrderDeletionService::class);
+        if ($blocker = $deletion->blocker($order)) {
+            return response()->json(['status' => 'failed', 'message' => $blocker], 400);
         }
 
         try {
@@ -1057,58 +1066,16 @@ class OrderController extends Controller
                 'user_id' => $request->user()->id,
                 'order_id' => $id,
             ]);
-            return DB::transaction(function () use ($order, $invoice, $request) {
-                // Receipts: one taken for this order alone goes with it. A receipt that also pays
-                // other invoices (or was mapped here from elsewhere) stays, just no longer applied here.
-                $allocations = $invoice ? \App\Models\PaymentAllocation::where('invoice_id', $invoice->id)->get() : collect();
-                $paymentIds = $allocations->pluck('payment_id')
-                    ->merge(\App\Models\Payment::where('order_id', $order->id)->pluck('id'))
-                    ->merge($invoice ? \App\Models\Payment::where('invoice_id', $invoice->id)->pluck('id') : [])
-                    ->unique();
-                $allocations->each->delete();
-                foreach (\App\Models\Payment::whereIn('id', $paymentIds)->get() as $payment) {
-                    $ownReceipt = $payment->order_id === $order->id || ($invoice && $payment->invoice_id === $invoice->id);
-                    if ($ownReceipt && !$payment->allocations()->exists()) {
-                        $payment->delete();
-                    } else {
-                        $payment->update([
-                            'order_id' => $payment->order_id === $order->id ? null : $payment->order_id,
-                            'invoice_id' => $invoice && $payment->invoice_id === $invoice->id ? null : $payment->invoice_id,
-                        ]);
-                    }
-                }
-
-                if ($invoice) {
-                    $invoice->lineItems()->delete();
-                    $invoice->delete();
-                }
-
-                // Dispatch items, delivery notes and logistics rows cascade from the dispatch.
-                \App\Models\OrderDispatch::where('order_id', $order->id)->get()->each->delete();
-                // Older side tables, not on every database (the AccountsReceivable model's own table name is off).
-                foreach (['accounts_receivable', 'debts'] as $table) {
-                    if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
-                        DB::table($table)->where('order_id', $order->id)->delete();
-                    }
-                }
-
-                app(\App\Services\OrderStockService::class)->restore($order->fresh(), "Order {$order->order_number} deleted");
-
-                // Delete related records. Gone for good, so a re-import can reuse its number.
-                $order->orderItems()->delete();
-                $order->deliveryDetails()->delete();
-                $order->forceDelete();
-
-                Log::info('Order deleted', [
-                    'user_id' => $request->user()->id,
-                    'order_id' => $order->id,
-                    'company_id' => $order->company_id,
-                ]);
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Order deleted successfully.',
-                ], 200);
-            });
+            $deletion->delete($order);
+            Log::info('Order deleted', [
+                'user_id' => $request->user()->id,
+                'order_id' => $order->id,
+                'company_id' => $order->company_id,
+            ]);
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Order deleted successfully.',
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Failed to delete order', ['error' => $e->getMessage()]);
             return response()->json([
@@ -1146,6 +1113,14 @@ class OrderController extends Controller
                 'message' => 'This order has already been invoiced.',
             ], 400);
         }
+        if (in_array($order->status, ['rejected', 'cancelled'], true)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $order->status === 'cancelled'
+                    ? 'This order is cancelled. Restore it first.'
+                    : 'This order was rejected and is about to be deleted.',
+            ], 400);
+        }
 
         $validator = Validator::make($request->all(), [
             'comment' => 'required|string|max:2000',
@@ -1172,6 +1147,128 @@ class OrderController extends Controller
             'status' => 'success',
             'message' => 'Order approved.',
             'order' => $order->fresh()->load('invoiceApprover:id,first_name,last_name,email'),
+        ]);
+    }
+
+    /**
+     * An order awaiting approval, for the approver's decision: found in their company, not yet
+     * invoiced. Returns the order or an error response.
+     */
+    private function orderForDecision(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!Order::canApproveInvoices($user)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director or the Warehouse Manager can decide on orders.'], 403);
+        }
+        $order = Order::where('id', $id)->where('company_id', $user->company_id)->first();
+        if (!$order) {
+            return response()->json(['status' => 'failed', 'message' => 'Order not found.'], 404);
+        }
+        if (\App\Models\Invoice::where('order_id', $order->id)->exists()) {
+            return response()->json(['status' => 'failed', 'message' => 'This order has already been invoiced, so it can no longer be rejected or cancelled.'], 400);
+        }
+        return $order;
+    }
+
+    // Rejected and cancelled orders give back any stock they took and clear the approval alert.
+    private function declineOrder(Order $order, array $fields, string $userId): void
+    {
+        DB::transaction(function () use ($order, $fields) {
+            $order->update($fields);
+            app(\App\Services\OrderStockService::class)->restore($order->fresh(), "Order {$order->order_number} {$fields['status']}");
+        });
+        app(\App\Services\NotificationService::class)->resolve('order_invoice_pending', 'order_id', $order->id);
+    }
+
+    /** Reject: the order is deleted after an hour (orders:purge-declined). */
+    public function reject(Request $request, $id)
+    {
+        $order = $this->orderForDecision($request, $id);
+        if (!$order instanceof Order) {
+            return $order;
+        }
+        if (in_array($order->status, ['rejected', 'cancelled'], true)) {
+            return response()->json(['status' => 'failed', 'message' => "This order is already {$order->status}."], 400);
+        }
+        $validator = Validator::make($request->all(), ['reason' => 'required|string|max:2000']);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => 'Say why the order is rejected.'], 422);
+        }
+
+        $this->declineOrder($order, [
+            'status' => 'rejected',
+            'rejected_at' => now(),
+            'rejected_by' => $request->user()->id,
+            'rejection_reason' => $request->input('reason'),
+            'invoice_approved_at' => null,
+            'invoice_approved_by' => null,
+        ], $request->user()->id);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Order {$order->order_number} rejected. It will be deleted in " . Order::REJECTED_KEEP_MINUTES . ' minutes.',
+            'order' => $order->fresh(),
+        ]);
+    }
+
+    /** Cancel: can be restored for 24 hours, then deleted (orders:purge-declined). */
+    public function cancel(Request $request, $id)
+    {
+        $order = $this->orderForDecision($request, $id);
+        if (!$order instanceof Order) {
+            return $order;
+        }
+        if (in_array($order->status, ['rejected', 'cancelled'], true)) {
+            return response()->json(['status' => 'failed', 'message' => "This order is already {$order->status}."], 400);
+        }
+
+        $this->declineOrder($order, [
+            'status' => 'cancelled',
+            'status_before_cancel' => $order->status,
+            'cancelled_at' => now(),
+            'cancelled_by' => $request->user()->id,
+            'cancellation_reason' => $request->input('reason'),
+            'invoice_approved_at' => null,
+            'invoice_approved_by' => null,
+        ], $request->user()->id);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Order {$order->order_number} cancelled. It can be restored for " . Order::CANCELLED_KEEP_HOURS . ' hours, then it is deleted.',
+            'order' => $order->fresh(),
+        ]);
+    }
+
+    /** Restore a cancelled order: back to awaiting approval, and the approvers are alerted again. */
+    public function restore(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!Order::canApproveInvoices($user)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director or the Warehouse Manager can restore orders.'], 403);
+        }
+        $order = Order::where('id', $id)->where('company_id', $user->company_id)->first();
+        if (!$order) {
+            return response()->json(['status' => 'failed', 'message' => 'Order not found.'], 404);
+        }
+        if ($order->status !== 'cancelled') {
+            return response()->json(['status' => 'failed', 'message' => 'Only a cancelled order can be restored.'], 400);
+        }
+
+        $order->update([
+            'status' => $order->status_before_cancel && $order->status_before_cancel !== 'cancelled' ? $order->status_before_cancel : 'pending',
+            'status_before_cancel' => null,
+            'cancelled_at' => null,
+            'cancelled_by' => null,
+            'cancellation_reason' => null,
+        ]);
+        // Takes its stock again if it had already been dispatched or receipted.
+        app(\App\Services\OrderStockService::class)->sync($order->fresh());
+        app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $user->id);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Order {$order->order_number} restored. It is awaiting approval again.",
+            'order' => $order->fresh(),
         ]);
     }
 

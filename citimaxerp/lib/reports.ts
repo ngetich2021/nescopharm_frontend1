@@ -158,6 +158,10 @@ export async function getSalesReport(params: {
   payment_status?: string;
   location_id?: string;
   city?: string;
+  county?: string;
+  region?: string;
+  // A rep's user id, or "unassigned" for orders without one.
+  sales_rep_id?: string;
   category_id?: string;
   category?: string;
 }): Promise<SalesReportResponse> {
@@ -171,6 +175,9 @@ export async function getSalesReport(params: {
     if (params.payment_status) queryParams.append('payment_status', params.payment_status);
     if (params.location_id) queryParams.append('location_id', params.location_id);
     if (params.city) queryParams.append('city', params.city);
+    if (params.county) queryParams.append('county', params.county);
+    if (params.region) queryParams.append('region', params.region);
+    if (params.sales_rep_id) queryParams.append('sales_rep_id', params.sales_rep_id);
     if (params.category_id) queryParams.append('category_id', params.category_id);
     if (params.category) queryParams.append('category', params.category);
 

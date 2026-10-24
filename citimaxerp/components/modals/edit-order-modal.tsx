@@ -27,6 +27,7 @@ import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts, getProductById } from "@/lib/products"
 import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { OrderDetail, HISTORICAL_CUTOFF } from "@/lib/orders"
+import { fetchSalesReps, SalesRep } from "@/lib/invoices"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
 import { OrderVatSelect } from "@/components/order-vat-select"
 
@@ -127,6 +128,12 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const [downPaymentTransactionRef, setDownPaymentTransactionRef] = useState("")
   const [instantPaymentMethod, setInstantPaymentMethod] = useState("")
   const [instantPaymentReference, setInstantPaymentReference] = useState("")
+  const [salesReps, setSalesReps] = useState<SalesRep[]>([])
+  const [salesRepId, setSalesRepId] = useState<string>("")
+
+  useEffect(() => {
+    if (open) fetchSalesReps().then(setSalesReps).catch(() => setSalesReps([]))
+  }, [open])
 
   useEffect(() => {
     const customerId = selectedCustomer?.id
@@ -257,6 +264,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       const itemsSubtotal = items.reduce((sum, item) => sum + item.total_price, 0)
       const storedDiscount = parseFloat(order.discount || "0")
       setNotes(order.notes || "")
+      setSalesRepId((order as any).sales_rep_id || "")
       setOrderDate((order.order_date || order.created_at || "").slice(0, 10) || todayIso())
       setDiscount(itemsSubtotal > 0 ? (storedDiscount / itemsSubtotal) * 100 : 0)
       setTrackingNumber(order.tracking_number || "")
@@ -540,6 +548,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
         currency: "KES",
         notes,
         order_date: orderDate,
+        sales_rep_id: salesRepId || null,
         items: orderItems.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -1082,6 +1091,24 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                   but stock will not change - those goods left before your opening stock was taken.
                 </p>
               )}
+            </div>
+
+            {/* Who the sale counts towards in the sales-by-rep report. */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-sales-rep">Sales Rep</Label>
+              <Select value={salesRepId || "none"} onValueChange={(v) => setSalesRepId(v === "none" ? "" : v)}>
+                <SelectTrigger id="edit-sales-rep" className="md:w-1/2">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {salesReps.map((rep) => (
+                    <SelectItem key={rep.id} value={rep.id}>
+                      {rep.full_name || `${rep.first_name} ${rep.last_name}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

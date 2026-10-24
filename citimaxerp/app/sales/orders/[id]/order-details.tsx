@@ -29,7 +29,7 @@ import { fetchInvoices, fetchInvoiceByOrderId, Invoice, createInvoiceFromOrder }
 import { fetchCustomerCreditTerms, CustomerCreditTerms } from "@/lib/customers"
 import { getInvoiceStatusColor, getInvoiceStatusLabel } from "@/lib/invoice-status"
 import { getLogistics, createLogistics, CreateLogisticsData, Logistics as ApiLogistics } from "@/lib/logistics"
-import { fetchOrderById, OrderDetail, approveOrderForInvoice } from "@/lib/orders"
+import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, declinedDeletesAt } from "@/lib/orders"
 import { useAuth } from "@/lib/auth-context"
 import { Textarea } from "@/components/ui/textarea"
 import { DeliveryLocation as ApiDeliveryLocation } from "@/lib/delivery-locations"
@@ -143,7 +143,43 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
       setIsApproving(false)
     }
   }
-  
+
+  // Reject (deleted after an hour) or cancel (restorable for 24 hours, then deleted).
+  const isDeclined = order.status === "rejected" || order.status === "cancelled"
+  const deletesAt = declinedDeletesAt(order)
+  const [declineAction, setDeclineAction] = useState<"reject" | "cancel" | null>(null)
+  const [declineReason, setDeclineReason] = useState("")
+  const [isDeciding, setIsDeciding] = useState(false)
+
+  const handleDecline = async () => {
+    if (!declineAction || (declineAction === "reject" && !declineReason.trim())) return
+    setIsDeciding(true)
+    try {
+      const message = declineAction === "reject"
+        ? await rejectOrder(order.id, declineReason.trim())
+        : await cancelOrder(order.id, declineReason.trim() || undefined)
+      toast({ title: declineAction === "reject" ? "Order rejected" : "Order cancelled", description: message })
+      setDeclineAction(null)
+      refreshOrder?.()
+    } catch (error: any) {
+      toast({ title: "Could not update the order", description: error.message, variant: "destructive" })
+    } finally {
+      setIsDeciding(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    setIsDeciding(true)
+    try {
+      toast({ title: "Order restored", description: await restoreOrder(order.id) })
+      refreshOrder?.()
+    } catch (error: any) {
+      toast({ title: "Could not restore the order", description: error.message, variant: "destructive" })
+    } finally {
+      setIsDeciding(false)
+    }
+  }
+
   // Format number with thousand separators
   const formatAmount = (amount: string | number): string => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -663,7 +699,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
               className={`text-xs sm:text-sm ${
                 getCurrentStatus() === "completed"
                   ? "bg-green-100 text-green-800"
-                  : getCurrentStatus() === "cancelled"
+                  : ["cancelled", "rejected"].includes(getCurrentStatus())
                     ? "bg-red-100 text-red-800"
                     : getCurrentStatus() === "dispatched"
                       ? "bg-blue-100 text-blue-800"
@@ -676,15 +712,17 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
-          <Button 
-            variant="outline" 
-            onClick={() => setIsCreateDispatchModalOpen(true)} 
-            size="sm" 
+          {!isDeclined && (
+          <Button
+            variant="outline"
+            onClick={() => setIsCreateDispatchModalOpen(true)}
+            size="sm"
             className="text-xs sm:text-sm h-8 sm:h-9"
           >
             <Truck className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
             Create Dispatch
           </Button>
+          )}
           {orderInvoice && (
             <Button
               variant="outline"
@@ -743,14 +781,69 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
       </div>
 
       {/* Approvers see the pending sign-off up front, not only under the Invoices tab. */}
-      {canApproveInvoice && !isInvoiceApproved && !isLoadingInvoice && !orderInvoice && (
-        <div className="border rounded-lg p-3 sm:p-4 text-xs sm:text-sm bg-amber-50 border-amber-200 flex items-center justify-between gap-2">
-          <span className="text-amber-800 font-medium">This order is awaiting your approval. Check the items below, then approve.</span>
-          <Button size="sm" className="h-8 text-xs" onClick={openApproveDialog}>
-            Approve
-          </Button>
+      {canApproveInvoice && !isInvoiceApproved && !isDeclined && !isLoadingInvoice && !orderInvoice && (
+        <div className="border rounded-lg p-3 sm:p-4 text-xs sm:text-sm bg-amber-50 border-amber-200 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-amber-800 font-medium">This order is awaiting your approval. Check the items below, then decide.</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setDeclineReason(""); setDeclineAction("cancel") }}>
+              Cancel order
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs border-red-200 text-red-700 hover:bg-red-50" onClick={() => { setDeclineReason(""); setDeclineAction("reject") }}>
+              Reject
+            </Button>
+            <Button size="sm" className="h-8 text-xs" onClick={openApproveDialog}>
+              Approve
+            </Button>
+          </div>
         </div>
       )}
+
+      {/* A declined order: when it goes, why, and (cancelled only) the way back. */}
+      {isDeclined && (
+        <div className={`border rounded-lg p-3 sm:p-4 text-xs sm:text-sm flex flex-wrap items-center justify-between gap-2 ${order.status === "rejected" ? "bg-red-50 border-red-200 text-red-800" : "bg-gray-50 border-gray-300 text-gray-800"}`}>
+          <div>
+            <p className="font-medium">
+              {order.status === "rejected" ? "This order was rejected" : "This order was cancelled"}
+              {deletesAt && ` and will be deleted ${deletesAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}.`}
+            </p>
+            {(order.rejection_reason || order.cancellation_reason) && (
+              <p className="mt-0.5">Reason: {order.rejection_reason || order.cancellation_reason}</p>
+            )}
+          </div>
+          {order.status === "cancelled" && canApproveInvoice && (
+            <Button size="sm" className="h-8 text-xs" onClick={handleRestore} disabled={isDeciding}>
+              Restore
+            </Button>
+          )}
+        </div>
+      )}
+
+      <Dialog open={declineAction !== null} onOpenChange={(o) => !o && setDeclineAction(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{declineAction === "reject" ? `Reject order ${order.order_number}` : `Cancel order ${order.order_number}`}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {declineAction === "reject"
+              ? "The order will be deleted in 1 hour. This can't be undone."
+              : "The order can be restored for 24 hours. After that it is deleted."}
+          </p>
+          <div className="space-y-1.5">
+            <Label>Reason{declineAction === "reject" ? " *" : " (optional)"}</Label>
+            <Textarea rows={3} value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeclineAction(null)} disabled={isDeciding}>Back</Button>
+            <Button
+              variant={declineAction === "reject" ? "destructive" : "default"}
+              onClick={handleDecline}
+              disabled={isDeciding || (declineAction === "reject" && !declineReason.trim())}
+            >
+              {isDeciding ? "Saving..." : declineAction === "reject" ? "Reject order" : "Cancel order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Main Content - Responsive Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -1106,7 +1199,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                       <div><span className="text-muted-foreground">Comment: </span>{order.invoice_approval_comment}</div>
                     )}
                   </div>
-                ) : !orderInvoice && (
+                ) : !orderInvoice && !isDeclined && (
                   <div className="border rounded-lg p-3 text-xs bg-amber-50 border-amber-200 flex items-center justify-between gap-2">
                     <span className="text-amber-800">Awaiting order approval (GM / Director / Warehouse Manager).</span>
                     {canApproveInvoice && (

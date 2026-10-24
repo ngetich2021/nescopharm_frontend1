@@ -110,9 +110,22 @@ class Order extends Model
         'invoice_contact_person',
         'invoice_contact_phone',
         'is_historical',
+        'rejected_at',
+        'rejected_by',
+        'rejection_reason',
+        'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
+        'status_before_cancel',
     ];
 
+    // How long a declined order stays before orders:purge-declined deletes it.
+    public const REJECTED_KEEP_MINUTES = 60;
+    public const CANCELLED_KEEP_HOURS = 24;
+
     protected $casts = [
+        'rejected_at' => 'datetime',
+        'cancelled_at' => 'datetime',
         'total_amount' => 'decimal:2',
         'discount' => 'decimal:2',
         'tax' => 'decimal:2',

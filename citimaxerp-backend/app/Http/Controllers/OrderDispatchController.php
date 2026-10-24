@@ -752,6 +752,16 @@ class OrderDispatchController extends Controller
         try {
             $dispatch->reject($user, $request->reason);
 
+            // Back to the orders it goes: the order is ready for a new dispatch (its stock was
+            // put back when the dispatch was rejected - see OrderStockService).
+            $order = $dispatch->order;
+            $stillOpen = OrderDispatch::where('order_id', $dispatch->order_id)->where('id', '!=', $dispatch->id)
+                ->whereNotIn('status', ['cancelled', 'rejected'])->where('approval_status', '!=', 'rejected')->exists();
+            if ($order && !$stillOpen && !$order->is_historical) {
+                $order->dispatch_status = 'pending';
+                $order->save();
+            }
+
             app(\App\Services\NotificationService::class)->notifyDecision(
                 $dispatch->created_by, "Dispatch {$dispatch->dispatch_number}", 'rejected',
                 "/dispatch", $user->id, $request->reason,
@@ -762,7 +772,7 @@ class OrderDispatchController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Dispatch rejected successfully',
+                'message' => 'Dispatch rejected. The order is back in Orders, where a new dispatch can be created.',
                 'data' => $dispatch,
             ], 200);
 

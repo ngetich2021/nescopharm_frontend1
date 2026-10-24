@@ -428,7 +428,7 @@ class DashboardController extends Controller
     private function salesOrders($companyId, $dateRange = null)
     {
         $query = Order::where('orders.company_id', $companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
         if ($dateRange) {
             $query->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
         }
@@ -441,7 +441,7 @@ class DashboardController extends Controller
         return DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.company_id', $companyId)
-            ->where('orders.status', '!=', 'cancelled')
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
             ->whereNull('orders.deleted_at')
             ->where(DB::raw(self::ORDER_DAY), '>=', $from)
             ->when($to, fn ($q) => $q->where(DB::raw(self::ORDER_DAY), '<=', $to));
@@ -611,7 +611,7 @@ class DashboardController extends Controller
         // Repeat customers (customers with more than one order)
         $repeatCustomers = Customer::where('company_id', $companyId)
             ->whereHas('orders', function ($query) use ($dateRange) {
-                $query->where('orders.status', '!=', 'cancelled')
+                $query->whereNotIn('orders.status', ['cancelled', 'rejected'])
                     ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
             }, '>', 1)
             ->count();
@@ -1129,14 +1129,14 @@ class DashboardController extends Controller
         // Customers who made repeat purchases
         $repeatCustomers = Customer::where('company_id', $companyId)
             ->whereHas('orders', function ($query) use ($dateRange) {
-                $query->where('orders.status', '!=', 'cancelled')
+                $query->whereNotIn('orders.status', ['cancelled', 'rejected'])
                     ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
             }, '>', 1)
             ->count();
 
         $totalCustomersWithOrders = Customer::where('company_id', $companyId)
             ->whereHas('orders', function ($query) use ($dateRange) {
-                $query->where('orders.status', '!=', 'cancelled')
+                $query->whereNotIn('orders.status', ['cancelled', 'rejected'])
                     ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
             })
             ->count();
@@ -1216,7 +1216,7 @@ class DashboardController extends Controller
         return DB::table('customers')
             ->join('orders', 'customers.id', '=', 'orders.customer_id')
             ->where('customers.company_id', $companyId)
-            ->where('orders.status', '!=', 'cancelled')
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
             ->whereNull('orders.deleted_at')
             ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']])
             ->selectRaw('
@@ -1354,7 +1354,7 @@ class DashboardController extends Controller
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->join('products', 'order_items.product_id', '=', 'products.id')
             ->where('orders.company_id', $companyId)
-            ->where('orders.status', '!=', 'cancelled')
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
             ->where(DB::raw(self::ORDER_DAY), '>=', $last12Months)
             ->selectRaw('
                 products.id,
@@ -1399,7 +1399,7 @@ class DashboardController extends Controller
                     ->from('order_items')
                     ->join('orders', 'order_items.order_id', '=', 'orders.id')
                     ->where('orders.company_id', $companyId)
-                    ->where('orders.status', '!=', 'cancelled')
+                    ->whereNotIn('orders.status', ['cancelled', 'rejected'])
                     ->where(DB::raw(self::ORDER_DAY), '>=', $deadStockThreshold);
             })
             ->selectRaw('

@@ -12,6 +12,24 @@ class Customer extends Model
 {
     use HasFactory, SoftDeletes, HasUuids;
 
+    // County and region are what sales are reported by. They're worked out from whatever was typed
+    // (county, or the "state"/city fields, often a town or a misspelling) and kept in step when
+    // those change; a county that can't be recognised is left as typed.
+    protected static function booted(): void
+    {
+        static::saving(function (Customer $customer) {
+            if ($customer->isDirty(['county', 'state', 'city']) || !$customer->county || !$customer->region) {
+                $county = $customer->isDirty('county') && $customer->county
+                    ? \App\Support\KenyaLocations::countyFrom($customer->county, $customer->state, $customer->city)
+                    : \App\Support\KenyaLocations::countyFrom($customer->state, $customer->city, $customer->county);
+                if ($county) {
+                    $customer->county = $county;
+                    $customer->region = \App\Support\KenyaLocations::regionFor($county);
+                }
+            }
+        });
+    }
+
     public function documents()
     {
         return $this->morphMany(Document::class, 'documentable');

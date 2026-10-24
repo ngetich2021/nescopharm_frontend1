@@ -40,6 +40,12 @@ export interface Order {
   invoice_approver?: { id: string; first_name: string; last_name: string } | null
   // Whether the logged-in user may approve this order (set by the order details endpoint).
   can_approve_invoice?: boolean
+  // Set when the approver rejected or cancelled the order (deleted after 1h / 24h).
+  rejected_at?: string | null
+  rejection_reason?: string | null
+  cancelled_at?: string | null
+  cancellation_reason?: string | null
+  sales_rep_id?: string | null
   // The order's invoice, if raised (order details endpoint). Editing the order updates it.
   invoice?: { id: string; invoice_number: string; status: string; etims_status?: string | null } | null
 }
@@ -282,4 +288,29 @@ export async function approveOrderForInvoice(
     throw new Error(typeof response.message === "string" ? response.message : "Failed to approve order for invoicing")
   }
   return response.order
+}
+
+// The approver's other decisions. Reject: deleted after an hour. Cancel: can be restored for
+// 24 hours, then deleted. Restore: a cancelled order goes back to awaiting approval.
+async function decideOrder(orderId: string, action: "reject" | "cancel" | "restore", reason?: string): Promise<string> {
+  const response = await apiCall<{ status: string; message?: string }>(
+    `/orders/${orderId}/${action}`,
+    "POST",
+    reason ? { reason } : {},
+    true,
+  )
+  if (response.status !== "success") {
+    throw new Error(typeof response.message === "string" ? response.message : `Could not ${action} the order`)
+  }
+  return response.message ?? ""
+}
+export const rejectOrder = (orderId: string, reason: string) => decideOrder(orderId, "reject", reason)
+export const cancelOrder = (orderId: string, reason?: string) => decideOrder(orderId, "cancel", reason)
+export const restoreOrder = (orderId: string) => decideOrder(orderId, "restore")
+
+// When a declined order is deleted (matches Order::REJECTED_KEEP_MINUTES / CANCELLED_KEEP_HOURS).
+export function declinedDeletesAt(order: { status?: string; rejected_at?: string | null; cancelled_at?: string | null }): Date | null {
+  if (order.status === "rejected" && order.rejected_at) return new Date(new Date(order.rejected_at).getTime() + 60 * 60 * 1000)
+  if (order.status === "cancelled" && order.cancelled_at) return new Date(new Date(order.cancelled_at).getTime() + 24 * 60 * 60 * 1000)
+  return null
 }

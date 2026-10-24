@@ -19,6 +19,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('stock:send-low-stock-alerts')->dailyAt('07:30');
         $schedule->command('batches:refresh-status')->dailyAt('00:05');
         $schedule->command('employees:apply-terminations')->dailyAt('00:10');
+        $schedule->command('orders:purge-declined')->everyFiveMinutes()->withoutOverlapping();
         $schedule->command('customers:generate-statements')->monthlyOn(1, '01:00');
 
         // Recover eTIMS invoices left locked by an interrupted worker.

@@ -438,6 +438,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/orders/{id}', [OrderController::class, 'destroy'])->name('orders.destroy');
     Route::post('/orders/{id}/dispatch', [OrderController::class, 'dispatch'])->name('orders.dispatch');
     Route::post('/orders/{id}/approve-invoice', [OrderController::class, 'approveInvoice'])->name('orders.approveInvoice');
+    Route::post('/orders/{id}/reject', [OrderController::class, 'reject'])->name('orders.reject');
+    Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+    Route::post('/orders/{id}/restore', [OrderController::class, 'restore'])->name('orders.restore');
 
     // Quote routes
     Route::get('/quotes', [QuoteController::class, 'index']);

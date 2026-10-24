@@ -3,8 +3,11 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getSalesReport, getCustomerLocationData, CustomerLocationData } from "@/lib/reports"
-import { getCustomers, Customer } from "@/lib/customers"
+import { getSalesReport } from "@/lib/reports"
+import { getCustomers, getCustomerDisplayName, Customer } from "@/lib/customers"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { ArrowUpDown, Check, ChevronsUpDown, UserCheck } from "lucide-react"
 import { getProductCategories, ProductCategory } from "@/lib/product-categories"
 import { DataTable } from "@/components/ui/data-table"
 import { PermissionGuard } from "@/components/PermissionGuard"
@@ -34,133 +37,60 @@ import {
 } from "recharts"
 import { cn } from "@/lib/utils"
 
-// Mock Data from User Request
-const MOCK_DATA = {
-    "status": "success",
-    "data": {
-        "total_sales": "3652338.00",
-        "total_subtotal": "3652338.00",
-        "total_discount": "0.00",
-        "total_tax": "0.00",
-        "order_count": 59,
-        "average_order_value": "61904.033898305085",
-        "total_items_count": 597265,
-        "summary_by_date": [
-            {
-                "date": "2026-01-27",
-                "total": "825618.30",
-                "count": 4,
-                "item_count": 152261
-            },
-            {
-                "date": "2026-01-28",
-                "total": "2826719.70",
-                "count": 55,
-                "item_count": 445004
-            }
-        ],
-        "top_categories": [
-            {
-                "category": "Medical Supplies", // Added name for demo
-                "total_revenue": "3652338.00"
-            }
-        ],
-        "top_products": [
-            {
-                "name": "Syringe",
-                "sku": "SYR-001",
-                "total_quantity": 535240,
-                "total_revenue": "1687214.00"
-            },
-            {
-                "name": "Tape",
-                "sku": "TAP-002",
-                "total_quantity": 10568,
-                "total_revenue": "730179.00"
-            },
-            {
-                "name": "Bandage",
-                "sku": "BND-003",
-                "total_quantity": 21293,
-                "total_revenue": "394208.80"
-            },
-            {
-                "name": "Suture",
-                "sku": "STR-004",
-                "total_quantity": 11112,
-                "total_revenue": "323231.00"
-            },
-            {
-                "name": "Catheter",
-                "sku": "CTH-005",
-                "total_quantity": 3610,
-                "total_revenue": "114335.20"
-            }
-        ],
-        "top_customers": [
-            {
-                "name": "Lenexa Healthcare Ltd",
-                "location": "Nairobi",
-                "order_count": 9,
-                "total_spent": "1388604.10"
-            },
-            {
-                "name": "Stofix Kenya Ltd",
-                "location": "Nairobi",
-                "order_count": 3,
-                "total_spent": "292831.00"
-            },
-            {
-                "name": "Veteran Pharmaceuticals Ltd",
-                "location": "Nairobi",
-                "order_count": 6,
-                "total_spent": "242607.00"
-            },
-            {
-                "name": "Arap Tosha Chemist",
-                "location": "Kakamega",
-                "order_count": 1,
-                "total_spent": "205140.00"
-            },
-            {
-                "name": "Pharma Choice Pharmaceutical Ltd",
-                "location": "Nairobi",
-                "order_count": 1,
-                "total_spent": "188208.48"
-            }
-        ],
-        "payment_status_breakdown": [
-            {
-                "payment_status": "unpaid",
-                "count": 59,
-                "total": "3652338.00"
-            }
-        ]
-    }
-}
-
 type DateRangeType = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'this_year' | 'custom'
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+const kes = (v: any) => `KES ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+// Clickable column header that sorts the table (click again to reverse).
+const sortable = (label: string, align: "left" | "right" = "left") => ({ column }: any) => (
+  <button
+    type="button"
+    className={cn("inline-flex items-center gap-1 font-medium hover:text-foreground", align === "right" && "ml-auto")}
+    onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+  >
+    {label}
+    <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
+  </button>
+)
+// Sort numbers as numbers (the API sends amounts as strings).
+const num = (key: string) => (row: any) => Number(row[key] || 0)
+
+// Region / county / town / sales rep tables share the same columns.
+const breakdownColumns = (label: string) => [
+  { accessorKey: "name", header: sortable(label) },
+  { id: "total", accessorFn: num("total"), header: sortable("Sales"), cell: ({ row }: any) => kes(row.original.total) },
+  { id: "share", accessorFn: num("share"), header: sortable("Share"), cell: ({ row }: any) => `${row.original.share}%` },
+  { id: "order_count", accessorFn: num("order_count"), header: sortable("Orders") },
+  { id: "customer_count", accessorFn: num("customer_count"), header: sortable("Customers") },
+  { id: "average_order", accessorFn: num("average_order"), header: sortable("Avg Order"), cell: ({ row }: any) => kes(row.original.average_order) },
+]
+
 export default function SalesReportPage() {
-  const [data, setData] = useState<any>(MOCK_DATA.data) // Initialize with MOCK_DATA for check
-  const [loading, setLoading] = useState(false)
-  
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
   // Filter States
   const [dateRange, setDateRange] = useState<DateRangeType>('last_30_days')
   const [dateFrom, setDateFrom] = useState<string>("")
   const [dateTo, setDateTo] = useState<string>("")
+  const [region, setRegion] = useState<string>("all")
+  const [county, setCounty] = useState<string>("all")
   const [city, setCity] = useState<string>("all")
+  const [salesRepId, setSalesRepId] = useState<string>("all")
   const [orderStatus, setOrderStatus] = useState<string>("all")
   const [paymentStatus, setPaymentStatus] = useState<string>("all")
   const [customerId, setCustomerId] = useState<string>("all")
+  const [customerOpen, setCustomerOpen] = useState(false)
   const [categoryId, setCategoryId] = useState<string>("all")
 
   // Options Data
   const [customers, setCustomers] = useState<Customer[]>([])
   const [categories, setCategories] = useState<ProductCategory[]>([])
-  const [locations, setLocations] = useState<CustomerLocationData[]>([])
+  // Region / county / town / rep choices come with the report; kept from the first load so
+  // filtering doesn't shrink the lists.
+  const [options, setOptions] = useState<{ regions: string[]; counties: string[]; cities: string[]; reps: { id: string; name: string }[] }>({ regions: [], counties: [], cities: [], reps: [] })
 
   const { toast } = useToast()
 
@@ -168,14 +98,12 @@ export default function SalesReportPage() {
   useEffect(() => {
     async function loadOptions() {
       try {
-        const [custData, catData, locData] = await Promise.all([
+        const [custData, catData] = await Promise.all([
             getCustomers(),
             getProductCategories({ is_active: true }),
-            getCustomerLocationData()
         ])
         setCustomers(custData || [])
         setCategories(catData || [])
-        setLocations(locData || [])
       } catch (e) {
         console.error("Failed to load filter options", e)
       }
@@ -183,27 +111,25 @@ export default function SalesReportPage() {
     loadOptions()
   }, [])
 
+  // Local dates (toISOString is UTC, which turns Kenyan "today" into yesterday around midnight).
+  const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d) }
+
   const calculateDateFrom = (range: DateRangeType) => {
     const today = new Date()
     switch (range) {
       case 'today':
-        return today.toISOString().split('T')[0]
+        return ymd(today)
       case 'yesterday':
-        const yesterday = new Date(today)
-        yesterday.setDate(today.getDate() - 1)
-        return yesterday.toISOString().split('T')[0]
+        return daysAgo(1)
       case 'last_7_days':
-        const last7 = new Date(today)
-        last7.setDate(today.getDate() - 7)
-        return last7.toISOString().split('T')[0]
+        return daysAgo(7)
       case 'last_30_days':
-        const last30 = new Date(today)
-        last30.setDate(today.getDate() - 30)
-        return last30.toISOString().split('T')[0]
+        return daysAgo(30)
       case 'this_month':
-        return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
+        return ymd(new Date(today.getFullYear(), today.getMonth(), 1))
       case 'this_year':
-        return new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0]
+        return ymd(new Date(today.getFullYear(), 0, 1))
       case 'custom':
         return dateFrom
       default:
@@ -220,27 +146,35 @@ export default function SalesReportPage() {
       const params: any = { type: 'performance' }
       const effectiveDateFrom = calculateDateFrom(dateRange)
       if (effectiveDateFrom) params.date_from = effectiveDateFrom
+      if (dateRange === 'yesterday') params.date_to = daysAgo(1)
       if (dateRange === 'custom' && dateTo) params.date_to = dateTo
-      if (city && city !== 'all') params.city = city
+      if (region !== 'all') params.region = region
+      if (county !== 'all') params.county = county
+      if (city !== 'all') params.city = city
+      if (salesRepId !== 'all') params.sales_rep_id = salesRepId
       if (orderStatus && orderStatus !== 'all') params.status = orderStatus
       if (paymentStatus && paymentStatus !== 'all') params.payment_status = paymentStatus
       if (customerId && customerId !== 'all') params.customer_id = customerId
       if (categoryId && categoryId !== 'all') params.category_id = categoryId
 
-      console.log("Fetching report with params:", params)
       const resp = await getSalesReport(params)
       if (requestId !== latestRequest.current) return
 
       if (resp.status === "success") {
         setData(resp.data)
-      } else {
-        // Fallback or error - for now keeping MOCK data on error might be confusing, but explicit error is better
-        toast({
-            title: "Warning",
-            description: resp.message || "Could not fetch fresh data. Showing cached/mock data.",
-            variant: "destructive", // Changed to destructive to signal actual api fail
+        const d: any = resp.data
+        setOptions((prev) => prev.regions.length || prev.reps.length ? prev : {
+          regions: d?.location_options?.regions ?? [],
+          counties: d?.location_options?.counties ?? [],
+          cities: d?.location_options?.cities ?? [],
+          reps: d?.sales_rep_options ?? [],
         })
-        // In real app, maybe don't overwrite with mock data if real fetch failed, providing the mock was just for dev
+      } else {
+        toast({
+            title: "Could not load the sales report",
+            description: resp.message || "Please try again.",
+            variant: "destructive",
+        })
       }
     } catch (error: any) {
       if (requestId !== latestRequest.current) return
@@ -252,17 +186,21 @@ export default function SalesReportPage() {
     } finally {
       if (requestId === latestRequest.current) setLoading(false)
     }
-  }, [dateRange, dateFrom, dateTo, city, orderStatus, paymentStatus, customerId, categoryId, toast])
+  }, [dateRange, dateFrom, dateTo, region, county, city, salesRepId, orderStatus, paymentStatus, customerId, categoryId, toast])
 
-  // Trigger fetch on initial load or filters change? 
-  // Let's make it manual to avoid spamming or auto for UX? 
-  // The 'Identify Trends' button suggests manual. Let's stick to manual or Effect if desired.
-  // Existing code had manual button. I'll keep the button but also initial load.
+  // Real figures straight away, and again whenever a filter changes (a custom range waits for
+  // its start date).
   useEffect(() => {
-    // Initial fetch
-    // fetchReport() 
-    // Commented out to use Mock Data by default as requested for development
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    if (dateRange === 'custom' && !dateFrom) return
+    fetchReport()
+  }, [fetchReport]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Counties of the chosen region only.
+  const countyChoices = useMemo(() => {
+    if (region === 'all') return options.counties
+    const inRegion = new Set((data?.sales_by_county ?? []).map((c: any) => c.name))
+    return options.counties.filter((c) => inRegion.has(c) || c === county)
+  }, [options.counties, region, county, data])
 
   const chartData = useMemo(() => {
     if (!data?.summary_by_date) return []
@@ -282,38 +220,35 @@ export default function SalesReportPage() {
     }))
   }, [data])
 
+  // Every column header sorts; amounts sort as numbers.
   const topProductsColumns = [
-    { accessorKey: "name", header: "Product Name" },
-    { accessorKey: "sku", header: "SKU" },
-    { accessorKey: "total_quantity", header: "Units Sold" },
-    { 
-        accessorKey: "total_revenue", 
-        header: "Total Revenue", 
-        cell: ({ row }: any) => `KES ${parseFloat(row.original.total_revenue).toLocaleString()}` 
-    },
+    { accessorKey: "name", header: sortable("Product Name") },
+    { accessorKey: "sku", header: sortable("SKU") },
+    { id: "total_quantity", accessorFn: num("total_quantity"), header: sortable("Units Sold") },
+    { id: "total_revenue", accessorFn: num("total_revenue"), header: sortable("Total Revenue"), cell: ({ row }: any) => kes(row.original.total_revenue) },
   ]
 
+  // Customers by business name (the server sends it as "name"), with where they are.
   const topCustomersColumns = [
-    { accessorKey: "name", header: "Customer" },
-    { accessorKey: "location", header: "Location" },
-    { accessorKey: "order_count", header: "Orders" },
-    { 
-        accessorKey: "total_spent", 
-        header: "Total Spent", 
-        cell: ({ row }: any) => `KES ${parseFloat(row.original.total_spent).toLocaleString()}` 
-    },
+    { accessorKey: "name", header: sortable("Customer") },
+    { accessorKey: "county", header: sortable("County") },
+    { accessorKey: "region", header: sortable("Region") },
+    { accessorKey: "location", header: sortable("Town") },
+    { id: "order_count", accessorFn: num("order_count"), header: sortable("Orders") },
+    { id: "total_spent", accessorFn: num("total_spent"), header: sortable("Total Spent"), cell: ({ row }: any) => kes(row.original.total_spent) },
   ]
 
   const summaryColumns = [
-    { accessorKey: "date", header: "Date" },
-    { accessorKey: "count", header: "Orders" },
-    { accessorKey: "item_count", header: "Items Sold" },
-    { 
-        accessorKey: "total", 
-        header: "Total Revenue", 
-        cell: ({ row }: any) => `KES ${parseFloat(row.original.total).toLocaleString()}` 
-    },
+    { accessorKey: "date", header: sortable("Date") },
+    { id: "count", accessorFn: num("count"), header: sortable("Orders") },
+    { id: "item_count", accessorFn: num("item_count"), header: sortable("Items Sold") },
+    { id: "total", accessorFn: num("total"), header: sortable("Total Revenue"), cell: ({ row }: any) => kes(row.original.total) },
   ]
+
+  const customerLabel = (id: string) => {
+    const c = customers.find((x) => x.id === id)
+    return c ? getCustomerDisplayName(c) : "All Customers"
+  }
 
   return (
     <PermissionGuard permissions={["can_view_reports_menu", "can_manage_system", "can_manage_company"]}>
@@ -385,21 +320,60 @@ export default function SalesReportPage() {
                 </>
               )}
 
-              {/* Location Filter */}
+              {/* Where the customer is */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5" />
-                  Location
+                  Region
+                </label>
+                <Select value={region} onValueChange={(v) => { setRegion(v); setCounty("all") }}>
+                   <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
+                   <SelectContent>
+                       <SelectItem value="all">All Regions</SelectItem>
+                       {options.regions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                   </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" />
+                  County
+                </label>
+                <Select value={county} onValueChange={setCounty}>
+                   <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
+                   <SelectContent>
+                       <SelectItem value="all">All Counties</SelectItem>
+                       {countyChoices.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                   </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Town
                 </label>
                 <Select value={city} onValueChange={setCity}>
-                   <SelectTrigger className="h-9 bg-background/50">
-                       <SelectValue placeholder="All Locations" />
-                   </SelectTrigger>
+                   <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
                    <SelectContent>
-                       <SelectItem value="all">All Locations</SelectItem>
-                       {locations.map((loc, idx) => (
-                           <SelectItem key={idx} value={loc.city}>{loc.city}</SelectItem>
-                       ))}
+                       <SelectItem value="all">All Towns</SelectItem>
+                       {options.cities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                   </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Sales Rep
+                </label>
+                <Select value={salesRepId} onValueChange={setSalesRepId}>
+                   <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
+                   <SelectContent>
+                       <SelectItem value="all">All Sales Reps</SelectItem>
+                       {options.reps.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                       <SelectItem value="unassigned">Unassigned</SelectItem>
                    </SelectContent>
                 </Select>
               </div>
@@ -449,17 +423,44 @@ export default function SalesReportPage() {
                     <Users className="h-3.5 w-3.5" />
                     Customer
                  </label>
-                 <Select value={customerId} onValueChange={setCustomerId}>
-                   <SelectTrigger className="h-9 bg-background/50">
-                       <SelectValue placeholder="All Customers" />
-                   </SelectTrigger>
-                   <SelectContent>
-                       <SelectItem value="all">All Customers</SelectItem>
-                       {customers.map((c) => (
-                           <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                       ))}
-                   </SelectContent>
-                 </Select>
+                 {/* Searchable, by business name (or contact name), number, phone or town. */}
+                 <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                   <PopoverTrigger asChild>
+                     <Button variant="outline" role="combobox" className="h-9 w-full justify-between bg-background/50 font-normal">
+                       <span className="truncate">{customerId === "all" ? "All Customers" : customerLabel(customerId)}</span>
+                       <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                     </Button>
+                   </PopoverTrigger>
+                   <PopoverContent className="w-[320px] p-0" align="start">
+                     <Command>
+                       <CommandInput placeholder="Search customer..." />
+                       <CommandList>
+                         <CommandEmpty>No customer found.</CommandEmpty>
+                         <CommandGroup>
+                           <CommandItem value="all customers" onSelect={() => { setCustomerId("all"); setCustomerOpen(false) }}>
+                             <Check className={cn("mr-2 h-4 w-4", customerId === "all" ? "opacity-100" : "opacity-0")} />
+                             All Customers
+                           </CommandItem>
+                           {[...customers]
+                             .sort((a, b) => getCustomerDisplayName(a).localeCompare(getCustomerDisplayName(b)))
+                             .map((c) => (
+                               <CommandItem
+                                 key={c.id}
+                                 value={`${getCustomerDisplayName(c)} ${c.name} ${(c as any).customer_number ?? ""} ${(c as any).phone ?? ""} ${(c as any).city ?? ""} ${c.id}`}
+                                 onSelect={() => { setCustomerId(c.id); setCustomerOpen(false) }}
+                               >
+                                 <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
+                                 <div className="min-w-0">
+                                   <p className="truncate">{getCustomerDisplayName(c)}</p>
+                                   {getCustomerDisplayName(c) !== c.name && <p className="truncate text-xs text-muted-foreground">{c.name}</p>}
+                                 </div>
+                               </CommandItem>
+                             ))}
+                         </CommandGroup>
+                       </CommandList>
+                     </Command>
+                   </PopoverContent>
+                 </Popover>
               </div>
 
               {/* Category Filter */}
@@ -503,27 +504,27 @@ export default function SalesReportPage() {
                 {/* Summary Cards */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <EnhancedMetricCard
-                        title="Total Sales"
+                        title="Sales"
                         value={parseFloat(data?.total_sales || 0)}
                         currency="KES"
                         icon={TrendingUp}
                         gradient="from-emerald-500/10 to-teal-500/10"
-                        description="Gross revenue before deductions"
+                        description="Order totals incl. VAT, less credit notes"
                     />
                     <EnhancedMetricCard
-                        title="Net Sales"
+                        title="Subtotal (excl. VAT)"
                         value={parseFloat(data?.total_subtotal || 0)}
                         currency="KES"
                         icon={DollarSign}
                         gradient="from-blue-500/10 to-indigo-500/10"
-                        description="Revenue after discounts"
+                        description="Order lines before VAT and discounts"
                     />
                     <EnhancedMetricCard
                         title="Total Orders"
                         value={data?.order_count || 0}
                         icon={ShoppingBag}
                         gradient="from-purple-500/10 to-pink-500/10"
-                        description="Number of completed transactions"
+                        description="Orders in the period (excl. cancelled)"
                     />
                     <EnhancedMetricCard
                         title="Avg Order Value"
@@ -689,11 +690,18 @@ export default function SalesReportPage() {
                 {/* Detailed Data Tabs */}
                 <Card className="shadow-sm">
                     <Tabs defaultValue="products" className="w-full">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle>Detailed Breakdown</CardTitle>
-                            <TabsList className="grid w-full max-w-[400px] grid-cols-3">
-                                <TabsTrigger value="products">Top Products</TabsTrigger>
-                                <TabsTrigger value="customers">Top Customers</TabsTrigger>
+                        <CardHeader className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <CardTitle>Detailed Breakdown</CardTitle>
+                                <CardDescription>Click a column heading to sort. Every table can be exported.</CardDescription>
+                            </div>
+                            <TabsList className="flex h-auto flex-wrap">
+                                <TabsTrigger value="products">Products</TabsTrigger>
+                                <TabsTrigger value="customers">Customers</TabsTrigger>
+                                <TabsTrigger value="region">By Region</TabsTrigger>
+                                <TabsTrigger value="county">By County</TabsTrigger>
+                                <TabsTrigger value="town">By Town</TabsTrigger>
+                                <TabsTrigger value="rep">By Sales Rep</TabsTrigger>
                                 <TabsTrigger value="daily">Daily Log</TabsTrigger>
                             </TabsList>
                         </CardHeader>
@@ -713,6 +721,23 @@ export default function SalesReportPage() {
                                     filterColumn="name"
                                     exportFileName="top_customers_sales"
                                 />
+                            </TabsContent>
+                            <TabsContent value="region" className="mt-0">
+                                <DataTable columns={breakdownColumns("Region")} data={data?.sales_by_region || []} filterColumn="name" exportFileName="sales_by_region" />
+                            </TabsContent>
+                            <TabsContent value="county" className="mt-0">
+                                <DataTable columns={breakdownColumns("County")} data={data?.sales_by_county || []} filterColumn="name" exportFileName="sales_by_county" />
+                            </TabsContent>
+                            <TabsContent value="town" className="mt-0">
+                                <DataTable columns={breakdownColumns("Town")} data={data?.sales_by_city || []} filterColumn="name" exportFileName="sales_by_town" />
+                            </TabsContent>
+                            <TabsContent value="rep" className="mt-0">
+                                <DataTable columns={breakdownColumns("Sales Rep")} data={data?.sales_by_rep || []} filterColumn="name" exportFileName="sales_by_rep" />
+                                {(data?.sales_by_rep || []).every((r: any) => r.id === "unassigned") && (
+                                    <p className="mt-3 text-sm text-muted-foreground">
+                                        No orders have a sales rep yet. Pick the rep when creating or editing an order (roles marked as sales reps appear in that list).
+                                    </p>
+                                )}
                             </TabsContent>
                             <TabsContent value="daily" className="mt-0">
                                 <DataTable 

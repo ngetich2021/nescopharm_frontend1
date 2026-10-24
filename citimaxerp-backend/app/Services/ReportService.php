@@ -243,7 +243,7 @@ class ReportService
         $salesByVariant = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled')
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
             ->whereIn('order_items.variant_id', $variantIds)
             ->whereNotNull('orders.stock_deducted_at')
             ->whereBetween('orders.stock_deducted_at', [$dateFrom, $dateTo])
@@ -263,7 +263,7 @@ class ReportService
         $salesByProduct = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled')
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
             ->whereIn('order_items.product_id', $productIds)
             ->whereNull('order_items.variant_id')
             ->whereNotNull('orders.stock_deducted_at')
@@ -436,7 +436,7 @@ class ReportService
     public function getSalesPerformanceSummary(array $filters = []): array
     {
         $query = Order::query()->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         $this->applyOrderFilters($query, $filters);
 
@@ -456,13 +456,15 @@ class ReportService
             'total_credited' => $creditedRevenue,
             'order_count' => $query->count(),
             'average_order_value' => $query->avg('orders.final_amount') ?? 0,
-            'total_items_count' => DB::table('order_items')
-                ->join('orders', 'order_items.order_id', '=', 'orders.id')
-                ->where('orders.company_id', $this->companyId)
-                ->where('orders.status', '!=', 'cancelled')
-                ->when(isset($filters['date_from']), fn($q) => $q->where('orders.order_date', '>=', $filters['date_from']))
-                ->when(isset($filters['date_to']), fn($q) => $q->where('orders.order_date', '<=', $filters['date_to']))
-                ->sum('order_items.quantity'),
+            // Same filters as everything else on the report (it used to honour dates only).
+            'total_items_count' => (function () use ($filters) {
+                $q = DB::table('order_items')
+                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
+                    ->where('orders.company_id', $this->companyId)
+                    ->whereNotIn('orders.status', ['cancelled', 'rejected']);
+                $this->applyOrderFilters($q, $filters);
+                return $q->sum('order_items.quantity');
+            })(),
         ];
 
         // Summary by date
@@ -495,7 +497,7 @@ class ReportService
         $itemCountsQuery = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         $this->applyOrderFilters($itemCountsQuery, $filters);
 
@@ -520,15 +522,16 @@ class ReportService
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->join('products', 'order_items.product_id', '=', 'products.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         $this->applyOrderFilters($topCategoriesQuery, $filters);
 
+        // Products are filed under a category record; the old free-text column is the fallback.
         $topCategories = $topCategoriesQuery
-            ->select('products.category', DB::raw('SUM(order_items.quantity * order_items.unit_price) as total_revenue'))
-            ->groupBy('products.category')
+            ->leftJoin('product_categories', 'products.category_id', '=', 'product_categories.id')
+            ->select(DB::raw("COALESCE(product_categories.name, products.category, 'Uncategorized') as category"), DB::raw('SUM(order_items.quantity * order_items.unit_price) as total_revenue'))
+            ->groupBy(DB::raw("COALESCE(product_categories.name, products.category, 'Uncategorized')"))
             ->orderBy('total_revenue', 'desc')
-            ->limit(5)
             ->get()->toArray();
 
         // Top Products - build query with all filters
@@ -536,7 +539,7 @@ class ReportService
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->join('products', 'order_items.product_id', '=', 'products.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         $this->applyOrderFilters($topProductsQuery, $filters);
 
@@ -544,7 +547,7 @@ class ReportService
             ->select('products.name', 'products.sku', DB::raw('SUM(order_items.quantity) as total_quantity'), DB::raw('SUM(order_items.quantity * order_items.unit_price) as total_revenue'))
             ->groupBy('products.id', 'products.name', 'products.sku')
             ->orderBy('total_revenue', 'desc')
-            ->limit(5)
+            ->limit(200)
             ->get()->toArray();
 
         // Top Customers - build query with all filters
@@ -552,26 +555,94 @@ class ReportService
             ->join('customers', 'orders.customer_id', '=', 'customers.id')
             ->leftJoin('delivery_locations', 'orders.delivery_location_id', '=', 'delivery_locations.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         $this->applyOrderFilters($topCustomersQuery, $filters);
 
         $topCustomers = $topCustomersQuery
             ->select(
-                DB::raw("CASE WHEN customers.customer_type != 'individual' AND customers.business_name IS NOT NULL THEN customers.business_name ELSE customers.name END as name"),
+                DB::raw("COALESCE(NULLIF(TRIM(customers.business_name), ''), customers.name) as name"),
                 DB::raw("COALESCE(delivery_locations.city, customers.city, 'Unknown') as location"),
+                DB::raw("COALESCE(customers.county, 'Unknown') as county"),
+                DB::raw("COALESCE(customers.region, 'Unknown') as region"),
                 DB::raw('COUNT(*) as order_count'),
                 DB::raw('SUM(orders.final_amount) as total_spent')
             )
-            ->groupBy('customers.id', 'customers.name', 'customers.customer_type', 'customers.business_name', 'delivery_locations.city', 'customers.city')
+            ->groupBy('customers.id', 'customers.name', 'customers.customer_type', 'customers.business_name', 'delivery_locations.city', 'customers.city', 'customers.county', 'customers.region')
             ->orderBy('total_spent', 'desc')
-            ->limit(5)
+            ->limit(500)
             ->get()->toArray();
+
+        // Sales by where the customer is: region, county and town, each with its share of the total.
+        $byLocation = function (string $column) use ($filters) {
+            $q = DB::table('orders')
+                ->join('customers', 'orders.customer_id', '=', 'customers.id')
+                ->where('orders.company_id', $this->companyId)
+                ->whereNotIn('orders.status', ['cancelled', 'rejected']);
+            $this->applyOrderFilters($q, $filters);
+            $rows = $q->select(
+                DB::raw("COALESCE(NULLIF(TRIM(customers.{$column}), ''), 'Unknown') as name"),
+                DB::raw('COUNT(DISTINCT customers.id) as customer_count'),
+                DB::raw('COUNT(*) as order_count'),
+                DB::raw('SUM(orders.final_amount) as total')
+            )
+                ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(customers.{$column}), ''), 'Unknown')"))
+                ->orderBy('total', 'desc')
+                ->get();
+            $sum = (float) $rows->sum('total');
+            return $rows->map(fn ($r) => [
+                'name' => $r->name,
+                'customer_count' => (int) $r->customer_count,
+                'order_count' => (int) $r->order_count,
+                'total' => round((float) $r->total, 2),
+                'average_order' => $r->order_count ? round((float) $r->total / $r->order_count, 2) : 0,
+                'share' => $sum > 0 ? round((float) $r->total / $sum * 100, 1) : 0,
+            ])->values()->all();
+        };
+
+        // Sales by the rep on each order.
+        $repQuery = DB::table('orders')
+            ->leftJoin('users', 'orders.sales_rep_id', '=', 'users.id')
+            ->where('orders.company_id', $this->companyId)
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
+        $this->applyOrderFilters($repQuery, $filters);
+        $repRows = $repQuery->select(
+            DB::raw("COALESCE(orders.sales_rep_id::text, 'unassigned') as id"),
+            DB::raw("COALESCE(NULLIF(TRIM(CONCAT(users.first_name, ' ', users.last_name)), ''), 'Unassigned') as name"),
+            DB::raw('COUNT(DISTINCT orders.customer_id) as customer_count'),
+            DB::raw('COUNT(*) as order_count'),
+            DB::raw('SUM(orders.final_amount) as total')
+        )->groupBy('orders.sales_rep_id', 'users.first_name', 'users.last_name')->orderBy('total', 'desc')->get();
+        $repSum = (float) $repRows->sum('total');
+        $salesByRep = $repRows->map(fn ($r) => [
+            'id' => $r->id,
+            'name' => $r->name,
+            'customer_count' => (int) $r->customer_count,
+            'order_count' => (int) $r->order_count,
+            'total' => round((float) $r->total, 2),
+            'average_order' => $r->order_count ? round((float) $r->total / $r->order_count, 2) : 0,
+            'share' => $repSum > 0 ? round((float) $r->total / $repSum * 100, 1) : 0,
+        ])->values()->all();
+
+        // Rep filter choices: sales-rep users plus anyone already on an order.
+        $repOptions = DB::table('users')
+            ->where('company_id', $this->companyId)
+            ->where(fn ($q) => $q->whereIn('id', DB::table('orders')->where('company_id', $this->companyId)->whereNotNull('sales_rep_id')->select('sales_rep_id'))
+                ->orWhereIn('role_id', DB::table('roles')->whereRaw('is_sales_rep = true')->select('id')))
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name'])
+            ->map(fn ($u) => ['id' => $u->id, 'name' => trim("{$u->first_name} {$u->last_name}")])
+            ->values()->all();
+
+        // Filter choices: every region / county / town the company's customers are in.
+        $options = fn (string $column) => DB::table('customers')->where('company_id', $this->companyId)
+            ->whereNull('deleted_at')->whereNotNull($column)->whereRaw("TRIM({$column}) <> ''")
+            ->distinct()->orderBy($column)->pluck($column)->values()->all();
 
         // Payment status breakdown - build query with all filters
         $paymentStatusQuery = DB::table('orders')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         $this->applyOrderFilters($paymentStatusQuery, $filters);
 
@@ -586,6 +657,16 @@ class ReportService
             'top_products' => $topProducts,
             'top_customers' => $topCustomers,
             'payment_status_breakdown' => $paymentStatusBreakdown,
+            'sales_by_region' => $byLocation('region'),
+            'sales_by_county' => $byLocation('county'),
+            'sales_by_city' => $byLocation('city'),
+            'sales_by_rep' => $salesByRep,
+            'sales_rep_options' => $repOptions,
+            'location_options' => [
+                'regions' => $options('region'),
+                'counties' => $options('county'),
+                'cities' => $options('city'),
+            ],
         ]);
     }
 
@@ -595,7 +676,7 @@ class ReportService
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->join('products', 'order_items.product_id', '=', 'products.id')
             ->where('orders.company_id', $this->companyId)
-            ->where('orders.status', '!=', 'cancelled');
+            ->whereNotIn('orders.status', ['cancelled', 'rejected']);
 
         if (isset($filters['date_from'])) {
             $query->where('orders.order_date', '>=', $filters['date_from']);
@@ -737,10 +818,26 @@ class ReportService
             $query->where($table . '.order_date', '>=', $filters['date_from']);
         }
         if (isset($filters['date_to'])) {
-            $query->where($table . '.order_date', '<=', $filters['date_to']);
+            // order_date carries a time, so "to the 24th" means before the 25th.
+            $query->where($table . '.order_date', '<', \Carbon\Carbon::parse($filters['date_to'])->addDay()->toDateString());
         }
         if (isset($filters['customer_id'])) {
             $query->where($table . '.customer_id', $filters['customer_id']);
+        }
+        if (!empty($filters['sales_rep_id'])) {
+            $filters['sales_rep_id'] === 'unassigned'
+                ? $query->whereNull($table . '.sales_rep_id')
+                : $query->where($table . '.sales_rep_id', $filters['sales_rep_id']);
+        }
+        // Where the customer is: region, county or town (from the customer record, which every
+        // order has - delivery locations are rarely filled in).
+        foreach (['region' => 'region', 'county' => 'county', 'city' => 'city'] as $filter => $column) {
+            if (!empty($filters[$filter])) {
+                $query->whereIn($table . '.customer_id', DB::table('customers')
+                    ->where('company_id', $this->companyId)
+                    ->whereRaw("LOWER(TRIM({$column})) = ?", [mb_strtolower(trim($filters[$filter]))])
+                    ->select('id'));
+            }
         }
         if (isset($filters['status'])) {
             $query->where($table . '.status', $filters['status']);
@@ -750,10 +847,6 @@ class ReportService
         }
         if (isset($filters['location_id'])) {
             $query->where($table . '.delivery_location_id', $filters['location_id']);
-        }
-        if (isset($filters['city'])) {
-            $query->join('delivery_locations', $table . '.delivery_location_id', '=', 'delivery_locations.id')
-                ->where('delivery_locations.city', 'ILIKE', '%' . $filters['city'] . '%');
         }
         if (isset($filters['category_id'])) {
             // For queries that join with products table
@@ -775,8 +868,23 @@ class ReportService
         if (isset($filters['customer_id'])) {
             $query->where('customer_id', $filters['customer_id']);
         }
-        if (isset($filters['status'])) {
-            $query->where('status', $filters['status']);
+        // A credit note belongs to the rep of the order its invoice came from.
+        if (!empty($filters['sales_rep_id'])) {
+            $orders = DB::table('orders')->where('company_id', $this->companyId);
+            $filters['sales_rep_id'] === 'unassigned'
+                ? $orders->whereNull('sales_rep_id')
+                : $orders->where('sales_rep_id', $filters['sales_rep_id']);
+            $query->whereIn('invoice_id', DB::table('invoices')->whereIn('order_id', $orders->select('id'))->select('id'));
+        }
+        // Same customer location filters as the orders they're netted against. (The order
+        // "status" filter isn't applied: credit note statuses are a different set.)
+        foreach (['region', 'county', 'city'] as $column) {
+            if (!empty($filters[$column])) {
+                $query->whereIn('customer_id', DB::table('customers')
+                    ->where('company_id', $this->companyId)
+                    ->whereRaw("LOWER(TRIM({$column})) = ?", [mb_strtolower(trim($filters[$column]))])
+                    ->select('id'));
+            }
         }
     }
 }
