@@ -1016,6 +1016,12 @@ Route::middleware('auth:sanctum')->prefix('dashboard')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     // Invoices - Specific routes must come before resource routes
     Route::get('invoices/statistics', [InvoiceController::class, 'getStatistics']);
+    // Filing: invoices by customer with the number their printed copy is filed under
+    Route::get('filing', [\App\Http\Controllers\FilingController::class, 'index']);
+    Route::post('filing/import', [\App\Http\Controllers\FilingController::class, 'import']);
+    Route::post('filing/create-invoices', [\App\Http\Controllers\FilingController::class, 'createInvoices']);
+    Route::post('filing/match-orders', [\App\Http\Controllers\FilingController::class, 'matchOrders']);
+    Route::patch('filing/{id}', [\App\Http\Controllers\FilingController::class, 'update']);
     Route::get('invoices/aging-report', [InvoiceController::class, 'getAgingReport']);
     Route::get('invoices/by-order/{orderId}', [InvoiceController::class, 'getByOrderId']);
     Route::post('invoices/from-order/{orderId}', [InvoiceController::class, 'createFromOrder']);

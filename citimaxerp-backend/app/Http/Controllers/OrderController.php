@@ -85,69 +85,6 @@ class OrderController extends Controller
     }
 
     /**
-     * An invoiced order that's corrected (e.g. VAT added to a past sale) takes its invoice
-     * with it: same lines, discount and VAT, keeping what's already been paid against it.
-     * Built the way InvoiceController::createFromOrder builds an invoice from an order.
-     */
-    protected function syncInvoiceWithOrder(Order $order, \App\Models\Invoice $invoice): void
-    {
-        $order->load('orderItems.product', 'orderItems.variant');
-        $previous = $invoice->lineItems()->get()->keyBy(fn ($l) => $l->product_id . '|' . $l->variant_id);
-        $subtotal = (float) $order->orderItems->sum(fn ($i) => (float) $i->quantity * (float) $i->unit_price);
-        $discountRatio = $subtotal > 0 ? min(1, (float) ($order->discount ?? 0) / $subtotal) : 0;
-
-        $invoice->lineItems()->delete();
-        foreach ($order->orderItems as $item) {
-            // A 0% line keeps the product's own exempt / zero-rated classification.
-            $rate = (float) ($item->tax_rate ?? 0);
-            $code = EtimsTaxType::fromInput(null, $rate);
-            if ($rate == 0.0 && $item->product) {
-                $productCode = EtimsTaxType::forProduct($item->product);
-                $code = in_array($productCode, ['A', 'C', 'D'], true) ? $productCode : 'D';
-            }
-            // Batch / expiry details carry over from the line it replaces.
-            $old = $previous->get($item->product_id . '|' . $item->variant_id);
-            \App\Models\InvoiceLineItem::create([
-                'invoice_id' => $invoice->id,
-                'product_id' => $item->product_id,
-                'variant_id' => $item->variant_id,
-                'description' => $item->product
-                    ? ProductVariant::sizedName($item->product->name, $item->variant?->name)
-                    : ($old?->description ?? 'Item'),
-                'quantity' => $item->quantity,
-                'unit' => $item->price_unit ?: ($old?->unit ?? 'pcs'),
-                'batch_number' => $old?->batch_number,
-                'expiry_date' => $old?->expiry_date,
-                'unit_price' => $item->unit_price,
-                'discount_amount' => round((float) $item->quantity * (float) $item->unit_price * $discountRatio, 2),
-                'tax_rate' => EtimsTaxType::rate($code),
-                'metadata' => array_merge($old?->metadata ?? [], ['etims_tax_type_code' => $code, 'price_label' => $item->price_label]),
-            ]);
-        }
-
-        $invoice->customer_id = $order->customer_id;
-        $invoice->amount_paid = (float) $invoice->getTotalAllocatedAmount();
-        $invoice->load('lineItems');
-        $invoice->calculateTotals();
-
-        $paid = (float) $invoice->amount_paid;
-        $total = (float) $invoice->total_amount;
-        if (!in_array($invoice->status, ['draft', 'cancelled'], true)) {
-            $invoice->update([
-                'status' => $paid >= $total - 0.01 ? 'paid'
-                    : ($invoice->due_date && now()->startOfDay()->isAfter($invoice->due_date) ? 'overdue'
-                    : ($paid > 0 ? 'partially_paid' : 'sent')),
-            ]);
-        }
-
-        // The order form resends the payment fields it loaded; the invoice is what was actually paid.
-        $order->update([
-            'amount_paid' => $paid,
-            'payment_status' => $paid >= $total - 0.01 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
-        ]);
-    }
-
-    /**
      * Generate a unique order number for the company.
      *
      * @param string $companyId
@@ -987,7 +924,7 @@ class OrderController extends Controller
 
                 if ($invoice && ($invoiceNeedsSync || $invoice->customer_id !== $order->customer_id)) {
                     // The invoice is what statements and balances read, so it follows the corrected order.
-                    $this->syncInvoiceWithOrder($order, $invoice);
+                    app(\App\Services\InvoiceOrderService::class)->syncWithOrder($order, $invoice);
                 }
 
                 if ($toHistorical === true && $order->status !== 'cancelled' && $order->status !== 'completed') {

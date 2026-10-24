@@ -6,6 +6,7 @@ import { useState, useEffect } from "react" // Import useEffect
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  FolderOpen,
   LayoutDashboard,
   Users,
   ShoppingCart,
@@ -125,6 +126,7 @@ function Sidebar() {
     // { name: "Breakages", href: "/breakages", icon: AlertTriangle, permission: "can_view_breakages_menu" },
     // { name: "Repairs", href: "/repairs", icon: Wrench, permission: "can_view_repairs_menu" },
     { name: "Receipts", href: "/payments", icon: ReceiptText, permission: "can_view_payments_menu" },
+    { name: "Filing", href: "/filing", icon: FolderOpen, permission: "can_view_sales_menu" },
     { name: "Payments", href: "/supplier-payments", icon: Banknote, permission: "can_view_payments_menu" },
     { name: "Suppliers", href: "/suppliers", icon: Truck, permission: "can_view_suppliers_menu" },
     { name: "Purchase Orders", href: "/purchase-orders", icon: Package, permission: "can_view_purchase_orders_menu" },
