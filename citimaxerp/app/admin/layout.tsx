@@ -31,9 +31,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen overflow-hidden">
       <AdminSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* min-w-0 keeps wide pages from pushing the top bar's right side off screen. */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <TopNav /> {/* Add TopNav here */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-auto bg-gray-50 p-6">{children}</main>
       </div>
     </div>
   )
