@@ -40,17 +40,17 @@ export default function POSPage() {
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full grid-cols-3 h-auto gap-1 p-1">
-            <TabsTrigger value="pos" className="flex flex-col xs:flex-row items-center gap-1 xs:gap-2 text-xs sm:text-sm py-2">
+            <TabsTrigger value="pos" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
               <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">POS</span>
+              <span className="hidden sm:inline">POS</span>
             </TabsTrigger>
-            <TabsTrigger value="orders" className="flex flex-col xs:flex-row items-center gap-1 xs:gap-2 text-xs sm:text-sm py-2">
+            <TabsTrigger value="orders" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
               <History className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Orders</span>
+              <span className="hidden sm:inline">Orders</span>
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex flex-col xs:flex-row items-center gap-1 xs:gap-2 text-xs sm:text-sm py-2">
+            <TabsTrigger value="analytics" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2">
               <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Analytics</span>
+              <span className="hidden sm:inline">Analytics</span>
             </TabsTrigger>
           </TabsList>
 

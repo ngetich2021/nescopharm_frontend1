@@ -101,12 +101,15 @@ export function POSInterface() {
 
   // Show sticky checkout button on mobile if cart has items
   useEffect(() => {
+    // Inside the app layout the page scrolls within <main>, not the window.
+    const scroller: HTMLElement | Window = document.querySelector("main") ?? window
+    const scrolled = () => (scroller instanceof Window ? scroller.scrollY : scroller.scrollTop)
     const handleScroll = () => {
       // Show sticky button if scrolled past 400px (cart likely not visible)
-      setShowStickyCheckout(window.innerWidth < 1024 && cartItems.length > 0 && window.scrollY > 400)
+      setShowStickyCheckout(window.innerWidth < 1024 && cartItems.length > 0 && scrolled() > 400)
     }
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
+    scroller.addEventListener("scroll", handleScroll)
+    return () => scroller.removeEventListener("scroll", handleScroll)
   }, [cartItems.length])
 
   const addToCart = (product: any, variant?: any) => {

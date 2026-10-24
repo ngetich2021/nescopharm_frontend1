@@ -1,14 +1,12 @@
 import { CartProvider } from "./components/pos-interface"
-import { TopNav } from "@/components/navigation/top-nav"
+import { AppLayout } from "@/components/layouts/app-layout"
 
+// The till sits in the app layout like every other section: sidebar and top bar, with wide
+// content scrolling inside the page area rather than pushing the top bar off screen.
 export default function POSLayout({ children }: { children: React.ReactNode }) {
   return (
     <CartProvider>
-      {/* The top bar stays the width of the screen; anything wider in the till scrolls on its own. */}
-      <div className="flex min-h-screen w-full flex-col overflow-x-clip">
-        <TopNav />
-        <div className="min-w-0 flex-1 overflow-x-auto">{children}</div>
-      </div>
+      <AppLayout>{children}</AppLayout>
     </CartProvider>
   )
-} 
+}
