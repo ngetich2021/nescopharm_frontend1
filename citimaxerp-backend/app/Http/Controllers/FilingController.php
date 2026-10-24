@@ -20,15 +20,24 @@ class FilingController extends Controller
     {
     }
 
-    protected function allowed(Request $request, string $permission): bool
+    /** Company admins, or a role with any of the given permissions. */
+    protected function allowed(Request $request, string ...$permissions): bool
     {
         $role = $request->user()?->role;
-        return $role && ($role->hasPermission('can_manage_system') || $role->hasPermission('can_manage_company') || $role->hasPermission($permission));
+        if (!$role) {
+            return false;
+        }
+        foreach (['can_manage_system', 'can_manage_company', ...$permissions] as $permission) {
+            if ($role->hasPermission($permission)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function index(Request $request): JsonResponse
     {
-        if (!$this->allowed($request, 'can_view_invoices')) {
+        if (!$this->allowed($request, 'can_view_filing', 'can_view_invoices')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         $companyId = $request->user()->company_id;
@@ -109,7 +118,7 @@ class FilingController extends Controller
     /** Set or clear one invoice's file number. */
     public function update(Request $request, string $id): JsonResponse
     {
-        if (!$this->allowed($request, 'can_update_invoices')) {
+        if (!$this->allowed($request, 'can_view_filing', 'can_update_invoices')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         $validator = Validator::make($request->all(), ['file_number' => 'nullable|string|max:50']);
@@ -128,7 +137,7 @@ class FilingController extends Controller
      */
     public function import(Request $request): JsonResponse
     {
-        if (!$this->allowed($request, 'can_update_invoices')) {
+        if (!$this->allowed($request, 'can_view_filing', 'can_update_invoices')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         $validator = Validator::make($request->all(), [

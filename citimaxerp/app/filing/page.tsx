@@ -320,7 +320,7 @@ export default function FilingPage() {
   const s = data?.summary
 
   return (
-    <PermissionGuard permissions={["can_view_invoices", "can_view_sales_menu", "can_manage_system", "can_manage_company"]}>
+    <PermissionGuard permissions={["can_view_filing", "can_view_invoices", "can_manage_system", "can_manage_company"]}>
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -330,7 +330,7 @@ export default function FilingPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh</Button>
             <Button variant="outline" size="sm" onClick={exportExcel} disabled={!visible.length}><Download className="mr-2 h-4 w-4" /> Export Excel</Button>
-            <PermissionGuard permissions={["can_update_invoices", "can_manage_system", "can_manage_company"]} hideOnDenied>
+            <PermissionGuard permissions={["can_view_filing", "can_update_invoices", "can_manage_system", "can_manage_company"]} hideOnDenied>
               <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()} disabled={busy}>
                 {busy && importRows ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} Import Excel
               </Button>

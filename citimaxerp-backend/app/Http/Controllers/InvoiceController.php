@@ -408,7 +408,8 @@ class InvoiceController extends Controller
             return $this->executeWithRetry(function () use ($request, $id) {
                 $user = $request->user();
                 $companyId = $user->company_id;
-                if (!$this->hasPermission($request, 'can_view_invoices', $companyId)) {
+                // Filing users print invoices from the Filing tab.
+                if (!$this->hasPermission($request, 'can_view_invoices', $companyId) && !$this->hasPermission($request, 'can_view_filing', $companyId)) {
                     return response()->json(['message' => 'Unauthorized'], 403);
                 }
                 $invoice = Invoice::with(['customer', 'order.invoiceApprover:id,first_name,last_name', 'lineItems.product', 'lineItems.variant', 'createdBy', 'company'])
