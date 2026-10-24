@@ -5,7 +5,8 @@
 export function printHtml(html: string, title = "Print") {
   const frame = document.createElement("iframe")
   frame.setAttribute("aria-hidden", "true")
-  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden"
+  // A real page width, just off-screen: a zero-sized frame lays the page out squashed.
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0"
   document.body.appendChild(frame)
 
   const doc = frame.contentDocument

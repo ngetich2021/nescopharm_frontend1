@@ -166,26 +166,31 @@ export default function FilingPage() {
   // A short list to file by: order, amount and file number for each invoice, one section per customer.
   const printList = (list: { name: string; invoices: FilingInvoice[] }[]) => {
     const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string)
+    // The heading row repeats only if a long list runs onto another page; the total prints once.
     const sections = list.map((g) => `
-      <section>
-        <h2>${esc(g.name)}</h2>
-        <table>
-          <thead><tr><th class="n">S/No</th><th>Order</th><th class="r">Amount (KES)</th><th class="f">File No</th></tr></thead>
-          <tbody>${g.invoices.map((i, idx) => `<tr><td class="n">${idx + 1}</td><td>${esc(i.order_number || i.invoice_number)}</td><td class="r">${kes(i.total_amount)}</td><td class="f">${esc(i.file_number || "")}</td></tr>`).join("")}</tbody>
-          <tfoot><tr><td></td><td>${g.invoices.length} order${g.invoices.length === 1 ? "" : "s"}</td><td class="r">${kes(g.invoices.reduce((t, i) => t + i.total_amount, 0))}</td><td></td></tr></tfoot>
-        </table>
-      </section>`).join("")
+      <h2>${esc(g.name)}</h2>
+      <table>
+        <colgroup><col class="n"><col class="o"><col class="r"><col class="f"></colgroup>
+        <thead><tr><th>S/No</th><th>Order</th><th class="r">Amount (KES)</th><th class="f">File No</th></tr></thead>
+        <tbody>
+          ${g.invoices.map((i, idx) => `<tr><td>${idx + 1}</td><td>${esc(i.order_number || i.invoice_number)}</td><td class="r">${kes(i.total_amount)}</td><td class="f">${esc(i.file_number || "")}</td></tr>`).join("")}
+          <tr class="total"><td></td><td>${g.invoices.length} order${g.invoices.length === 1 ? "" : "s"}</td><td class="r">${kes(g.invoices.reduce((t, i) => t + i.total_amount, 0))}</td><td></td></tr>
+        </tbody>
+      </table>`).join("")
     printHtml(`<!DOCTYPE html><html><head><title>Filing list</title><style>
-      body { font-family: Arial, sans-serif; font-size: 12px; margin: 16px; color: #111; }
-      h1 { font-size: 16px; margin: 0 0 12px; }
-      h2 { font-size: 14px; margin: 18px 0 6px; }
-      section { break-inside: avoid; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; }
-      th { background: #f1f1f1; }
-      .n { width: 40px; } .r { text-align: right; } .f { width: 90px; text-align: center; font-weight: bold; }
-      tfoot td { font-weight: bold; }
-    </style></head><body><h1>Filing list - ${new Date().toLocaleDateString("en-GB")}</h1>${sections}</body></html>`)
+      @page { size: A4; margin: 0; }
+      body { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; padding: 12mm 14mm; color: #111; }
+      h1 { font-size: 13pt; margin: 0 0 4mm; display: flex; justify-content: space-between; }
+      h1 small { font-size: 9pt; font-weight: normal; color: #555; }
+      h2 { font-size: 11.5pt; margin: 5mm 0 1.5mm; break-after: avoid; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      col.n { width: 12%; } col.o { width: 34%; } col.r { width: 30%; } col.f { width: 24%; }
+      th, td { border: 1px solid #888; padding: 2.4mm 3mm; text-align: left; white-space: nowrap; overflow: hidden; }
+      th { background: #eee; font-size: 10pt; }
+      tr { break-inside: avoid; }
+      .r { text-align: right; } .f { text-align: center; font-weight: bold; }
+      tr.total td { font-weight: bold; background: #f7f7f7; }
+    </style></head><body><h1><span>Filing list</span><small>${new Date().toLocaleDateString("en-GB")}</small></h1>${sections}</body></html>`)
   }
 
   const exportExcel = () => {
