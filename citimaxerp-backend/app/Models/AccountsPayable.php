@@ -10,6 +10,7 @@ class AccountsPayable extends Model
 {
     use HasFactory;
 
+    protected $table = 'accounts_payable';
     protected $primaryKey = 'id';
     public $incrementing = false;
     protected $keyType = 'string';
@@ -25,6 +26,7 @@ class AccountsPayable extends Model
         'total_amount',
         'paid_amount',
         'balance_amount',
+        'remaining_amount',
         'status',
         'description',
         'payment_terms',
@@ -165,5 +167,16 @@ class AccountsPayable extends Model
     public function scopeByCompany($query, $companyId)
     {
         return $query->where('company_id', $companyId);
+    }
+
+    // The controllers call it remaining_amount; the column is balance_amount.
+    public function getRemainingAmountAttribute()
+    {
+        return $this->balance_amount;
+    }
+
+    public function setRemainingAmountAttribute($value): void
+    {
+        $this->attributes['balance_amount'] = $value;
     }
 }

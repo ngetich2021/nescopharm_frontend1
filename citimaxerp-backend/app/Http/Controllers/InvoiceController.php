@@ -1167,9 +1167,9 @@ class InvoiceController extends Controller
                 SUM(total_amount) as total_amount,
                 SUM(amount_paid) as total_paid,
                 SUM(balance_amount) as total_outstanding,
-                COUNT(CASE WHEN status = "paid" THEN 1 END) as paid_invoices,
-                COUNT(CASE WHEN status = "draft" THEN 1 END) as draft_invoices,
-                COUNT(CASE WHEN status = "sent" THEN 1 END) as sent_invoices,
+                COUNT(CASE WHEN status = \'paid\' THEN 1 END) as paid_invoices,
+                COUNT(CASE WHEN status = \'draft\' THEN 1 END) as draft_invoices,
+                COUNT(CASE WHEN status = \'sent\' THEN 1 END) as sent_invoices,
                 COUNT(CASE WHEN due_date < NOW() AND balance_amount > 0 THEN 1 END) as overdue_invoices,
                 AVG(total_amount) as average_invoice_amount
             ')

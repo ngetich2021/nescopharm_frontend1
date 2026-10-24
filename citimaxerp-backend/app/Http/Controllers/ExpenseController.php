@@ -840,8 +840,8 @@ class ExpenseController extends Controller
                 $monthlyTotals = Expense::where('company_id', $companyId)
                     ->whereBetween('expense_date', [$startDate, $endDate])
                     ->select(
-                        DB::raw('YEAR(expense_date) as year'),
-                        DB::raw('MONTH(expense_date) as month'),
+                        DB::raw('EXTRACT(YEAR FROM expense_date)::int as year'),
+                        DB::raw('EXTRACT(MONTH FROM expense_date)::int as month'),
                         DB::raw('SUM(amount) as total')
                     )
                     ->groupBy('year', 'month')

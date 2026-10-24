@@ -10,6 +10,7 @@ class AccountsReceivable extends Model
 {
     use HasFactory;
 
+    protected $table = 'accounts_receivable';
     protected $primaryKey = 'id';
     public $incrementing = false;
     protected $keyType = 'string';
@@ -24,6 +25,7 @@ class AccountsReceivable extends Model
         'total_amount',
         'paid_amount',
         'balance_amount',
+        'remaining_amount',
         'status',
         'description',
         'payment_terms',
@@ -244,4 +246,14 @@ class AccountsReceivable extends Model
         $this->attributes['is_recurring'] = $value === true || $value === 'true' || $value === 1 || $value === '1';
     }
 
+    // The controllers call it remaining_amount; the column is balance_amount.
+    public function getRemainingAmountAttribute()
+    {
+        return $this->balance_amount;
+    }
+
+    public function setRemainingAmountAttribute($value): void
+    {
+        $this->attributes['balance_amount'] = $value;
+    }
 }

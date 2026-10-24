@@ -302,8 +302,8 @@ class BankReconciliationController extends Controller
         $summary = $query->whereBetween('reconciliation_date', [$startDate, $endDate])
             ->selectRaw('
                 COUNT(*) as total_reconciliations,
-                COUNT(CASE WHEN status = "completed" THEN 1 END) as completed_reconciliations,
-                COUNT(CASE WHEN status = "draft" THEN 1 END) as draft_reconciliations,
+                COUNT(CASE WHEN status = \'completed\' THEN 1 END) as completed_reconciliations,
+                COUNT(CASE WHEN status = \'draft\' THEN 1 END) as draft_reconciliations,
                 SUM(ABS(difference)) as total_differences,
                 AVG(ABS(difference)) as average_difference
             ')

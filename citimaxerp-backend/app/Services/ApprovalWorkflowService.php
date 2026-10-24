@@ -419,13 +419,13 @@ class ApprovalWorkflowService
         }
 
         return [
-            'total_workflows' => $query->count(),
-            'pending_workflows' => $query->whereIn('status', ['pending', 'in_progress'])->count(),
-            'approved_workflows' => $query->where('status', 'approved')->count(),
-            'rejected_workflows' => $query->where('status', 'rejected')->count(),
-            'cancelled_workflows' => $query->where('status', 'cancelled')->count(),
-            'average_completion_time' => $query->whereNotNull('completed_at')
-                                              ->selectRaw('AVG(TIMESTAMPDIFF(HOUR, started_at, completed_at)) as avg_hours')
+            'total_workflows' => (clone $query)->count(),
+            'pending_workflows' => (clone $query)->whereIn('status', ['pending', 'in_progress'])->count(),
+            'approved_workflows' => (clone $query)->where('status', 'approved')->count(),
+            'rejected_workflows' => (clone $query)->where('status', 'rejected')->count(),
+            'cancelled_workflows' => (clone $query)->where('status', 'cancelled')->count(),
+            'average_completion_time' => (clone $query)->whereNotNull('completed_at')
+                                              ->selectRaw('AVG(EXTRACT(EPOCH FROM (completed_at - started_at)) / 3600) as avg_hours')
                                               ->first()
                                               ->avg_hours ?? 0,
         ];

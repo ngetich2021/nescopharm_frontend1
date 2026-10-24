@@ -894,8 +894,8 @@ class PaymentController extends Controller
                     ];
                 }
             } elseif ($groupBy === 'month') {
-                $records = $query->selectRaw('YEAR(payment_date) as year, MONTH(payment_date) as month, SUM(amount_paid) as total, COUNT(*) as count')
-                    ->groupBy(DB::raw('YEAR(payment_date), MONTH(payment_date)'))
+                $records = $query->selectRaw('EXTRACT(YEAR FROM payment_date)::int as year, EXTRACT(MONTH FROM payment_date)::int as month, SUM(amount_paid) as total, COUNT(*) as count')
+                    ->groupBy(DB::raw('EXTRACT(YEAR FROM payment_date), EXTRACT(MONTH FROM payment_date)'))
                     ->orderBy('year')
                     ->orderBy('month')
                     ->get();

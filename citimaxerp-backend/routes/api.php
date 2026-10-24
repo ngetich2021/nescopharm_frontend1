@@ -360,11 +360,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('breakages', [\App\Http\Controllers\BreakageController::class, 'index']); // List all breakages
         Route::post('breakages', [\App\Http\Controllers\BreakageController::class, 'store']); // Create a new breakage
         Route::get('breakages/my-assignable-items', [\App\Http\Controllers\BreakageController::class, 'myAssignableItems']); // List items assigned to the logged-in user and acknowledged
+        Route::get('breakages/my', [\App\Http\Controllers\BreakageController::class, 'myBreakages']); // List breakages for the logged-in user
         Route::get('breakages/{id}', [\App\Http\Controllers\BreakageController::class, 'show']); // Get a single breakage
         Route::match(['patch', 'put'], 'breakages/{id}', [\App\Http\Controllers\BreakageController::class, 'update']); // Update a breakage
         Route::delete('breakages/{id}', [\App\Http\Controllers\BreakageController::class, 'destroy']); // Delete a breakage
         Route::patch('breakages/{id}/approve', [\App\Http\Controllers\BreakageController::class, 'approve']); // Approve/reject a breakage
-        Route::get('breakages/my', [\App\Http\Controllers\BreakageController::class, 'myBreakages']); // List breakages for the logged-in user
         Route::get('breakages/company/{companyId}', [\App\Http\Controllers\BreakageController::class, 'companyBreakages']); // List breakages for a company
         Route::post('breakage-items/{itemId}/upload-image', [\App\Http\Controllers\BreakageController::class, 'uploadImage']); // Upload image for a breakage item
 
@@ -372,12 +372,12 @@ Route::middleware('auth:sanctum')->group(function () {
         // Dispatch (Transfers/Dispatch) routes
         Route::get('dispatches', [\App\Http\Controllers\DispatchController::class, 'index']); // List all dispatches
         Route::post('dispatches', [\App\Http\Controllers\DispatchController::class, 'store']); // Create a new dispatch
+        Route::get('dispatches/overdue', [\App\Http\Controllers\DispatchController::class, 'overdue']); // List overdue dispatch items
         Route::get('dispatches/{id}', [\App\Http\Controllers\DispatchController::class, 'show']); // Get a single dispatch
         Route::match(['patch', 'put'], 'dispatches/{id}', [\App\Http\Controllers\DispatchController::class, 'update']); // Update a dispatch
         Route::delete('dispatches/{id}', [\App\Http\Controllers\DispatchController::class, 'destroy']); // Delete a dispatch
         Route::patch('dispatches/{id}/acknowledge', [\App\Http\Controllers\DispatchController::class, 'acknowledge']); // Acknowledge receipt of items
         Route::patch('dispatches/{id}/return', [\App\Http\Controllers\DispatchController::class, 'markReturned']); // Mark items as returned
-        Route::get('dispatches/overdue', [\App\Http\Controllers\DispatchController::class, 'overdue']); // List overdue dispatch items
         Route::get('dispatches/{id}/requisition-note', [\App\Http\Controllers\DispatchController::class, 'printRequisitionNote']); // Download requisition note PDF
 
         // Requisition routes
@@ -487,6 +487,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Product routes
     Route::get('/products', [ProductController::class, 'index']);
     Route::get('/products/summary', [ProductController::class, 'getProductSummary'])->name('products.summary');
+    Route::get('products/batch-list', [InvoiceController::class, 'productBatchList']);
     Route::get('/products/{id}', [ProductController::class, 'show'])->name('products.show');
     Route::post('/products', [ProductController::class, 'store'])->name('products.store');
     Route::post('products/bulk', [ProductController::class, 'bulkStore']);
@@ -612,8 +613,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/expense-summary', [ExpenseController::class, 'summary'])->name('expenses.summary');
 
     // Debt routes
-    Route::apiResource('debts', DebtController::class);
     Route::get('debts/customers', [DebtController::class, 'customersWithDebt']);
+    Route::apiResource('debts', DebtController::class);
     Route::match(['patch', 'put'], 'debts/order/{order_id}', [DebtController::class, 'updateByOrderId']);
 
     // Supplier routes
@@ -1032,7 +1033,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('payment-allocations/{allocationId}', [InvoiceController::class, 'deallocatePayment']);
     Route::get('invoices-sales-reps', [InvoiceController::class, 'getSalesReps']);
     Route::post('invoices/{id}/assign-rep', [InvoiceController::class, 'assignRep']);
-    Route::get('products/batch-list', [InvoiceController::class, 'productBatchList']);
     Route::apiResource('invoices', InvoiceController::class);
 
     // PD Cheques

@@ -396,24 +396,26 @@ class AssetDepreciationController extends Controller
         $startDate = $request->get('start_date', now()->startOfYear());
         $endDate = $request->get('end_date', now()->endOfYear());
 
-        $summary = AssetDepreciation::whereBetween('depreciation_date', [$startDate, $endDate])
+        $summary = AssetDepreciation::where('company_id', $request->user()->company_id)
+            ->whereBetween('depreciation_date', [$startDate, $endDate])
             ->selectRaw('
                 COUNT(*) as total_entries,
                 SUM(depreciation_amount) as total_depreciation,
                 AVG(depreciation_amount) as average_depreciation,
                 COUNT(DISTINCT fixed_asset_id) as assets_depreciated,
-                depreciation_method,
-                YEAR(depreciation_date) as year,
-                MONTH(depreciation_date) as month
+                depreciation_type as depreciation_method,
+                EXTRACT(YEAR FROM depreciation_date)::int as year,
+                EXTRACT(MONTH FROM depreciation_date)::int as month
             ')
-            ->groupBy('depreciation_method', 'year', 'month')
+            ->groupByRaw('depreciation_type, 6, 7')
             ->orderBy('year', 'desc')
             ->orderBy('month', 'desc')
             ->get();
 
         // Get assets requiring depreciation
-        $assetsRequiringDepreciation = FixedAsset::where('status', 'active')
-            ->where('current_value', '>', 0)
+        $assetsRequiringDepreciation = FixedAsset::where('company_id', $request->user()->company_id)
+            ->where('status', 'active')
+            ->where('book_value', '>', 0)
             ->whereDoesntHave('depreciations', function ($query) {
                 $query->whereMonth('depreciation_date', now()->month)
                     ->whereYear('depreciation_date', now()->year);

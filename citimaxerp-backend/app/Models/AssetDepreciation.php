@@ -10,6 +10,7 @@ class AssetDepreciation extends Model
 {
     use HasFactory;
 
+    protected $table = 'asset_depreciation';
     protected $primaryKey = 'id';
     public $incrementing = false;
     protected $keyType = 'string';

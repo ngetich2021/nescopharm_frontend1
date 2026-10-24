@@ -371,4 +371,23 @@ class SubscriptionPlanController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * System admins only (admin portal). Same rule as RoleController / PermissionController.
+     */
+    private function hasSystemAdminPermission(Request $request): bool
+    {
+        $role = $request->user()?->role;
+        if (!$role) {
+            return false;
+        }
+
+        return $role->hasPermission('can_manage_system')
+            || !empty(array_intersect($role->getPermissionKeys(), [
+                'can_access_admin_portal',
+                'can_manage_all_users',
+                'can_manage_companies',
+                'can_manage_system_permissions',
+            ]));
+    }
 }

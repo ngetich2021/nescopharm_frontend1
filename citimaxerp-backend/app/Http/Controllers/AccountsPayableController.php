@@ -402,15 +402,15 @@ class AccountsPayableController extends Controller
         $startDate = $request->get('start_date', now()->startOfMonth());
         $endDate = $request->get('end_date', now()->endOfMonth());
 
-        $summary = AccountsPayable::whereBetween('invoice_date', [$startDate, $endDate])
+        $summary = AccountsPayable::where('company_id', $request->user()->company_id)->whereBetween('invoice_date', [$startDate, $endDate])
             ->selectRaw('
                 COUNT(*) as total_invoices,
                 SUM(total_amount) as total_amount,
                 SUM(paid_amount) as total_paid,
-                SUM(remaining_amount) as total_outstanding,
-                COUNT(CASE WHEN status = "paid" THEN 1 END) as paid_invoices,
-                COUNT(CASE WHEN status = "pending" THEN 1 END) as pending_invoices,
-                COUNT(CASE WHEN due_date < NOW() AND status != "paid" THEN 1 END) as overdue_invoices,
+                SUM(balance_amount) as total_outstanding,
+                COUNT(CASE WHEN status = \'paid\' THEN 1 END) as paid_invoices,
+                COUNT(CASE WHEN status = \'pending\' THEN 1 END) as pending_invoices,
+                COUNT(CASE WHEN due_date < NOW() AND status != \'paid\' THEN 1 END) as overdue_invoices,
                 AVG(total_amount) as average_invoice_amount
             ')
             ->first();

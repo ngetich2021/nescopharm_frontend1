@@ -10,6 +10,25 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class MetaPlatformCredential extends Model {
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
+    protected $fillable = [
+        'company_id',
+        'platform',
+        'app_id',
+        'access_token',
+        'app_secret',
+        'phone_number_id',
+        'page_id',
+        'business_account_id',
+        'instagram_account_id',
+        'webhook_verify_token',
+        'additional_config',
+        'is_active',
+        'expires_at',
+    ];
+
     protected $casts = [
         'id' => 'string',
         'company_id' => 'string',
