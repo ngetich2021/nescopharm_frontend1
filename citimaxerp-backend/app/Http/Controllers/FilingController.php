@@ -37,10 +37,9 @@ class FilingController extends Controller
             ->leftJoin('customers as c', 'c.id', '=', 'i.customer_id')
             ->leftJoin('orders as o', 'o.id', '=', 'i.order_id')
             ->where('i.company_id', $companyId)
-            ->where(fn ($q) => $q->whereNull('i.type')->orWhere('i.type', 'sales'))
             ->select([
                 'i.id', 'i.invoice_number', 'i.invoice_date', 'i.due_date', 'i.status',
-                'i.total_amount', 'i.amount_paid', 'i.balance_amount', 'i.file_number', 'i.filed_at',
+                'i.total_amount', 'i.amount_paid', 'i.balance_amount', 'i.file_number', 'i.filed_at', 'i.created_at',
                 'i.customer_id', 'c.business_name', 'c.name as customer_name',
                 'o.id as order_id', 'o.order_number', 'o.final_amount as order_amount',
             ])
@@ -58,6 +57,9 @@ class FilingController extends Controller
                     'balance_amount' => (float) $r->balance_amount,
                     'file_number' => $r->file_number,
                     'filed_at' => $r->filed_at,
+                    'created_at' => $r->created_at,
+                    // Invoiced in the last week - shown as new so it gets its file number.
+                    'is_new' => $r->created_at && \Carbon\Carbon::parse($r->created_at)->gt(now()->subDays(7)),
                     'customer_id' => $r->customer_id,
                     'customer' => $customer,
                     'order_id' => $r->order_id,
@@ -96,6 +98,7 @@ class FilingController extends Controller
             'summary' => [
                 'invoices' => $invoices->count(),
                 'filed' => $invoices->filter(fn ($i) => filled($i['file_number']))->count(),
+                'new_unfiled' => $invoices->filter(fn ($i) => $i['is_new'] && blank($i['file_number']))->count(),
                 'customers' => $invoices->pluck('customer_id')->unique()->count(),
                 'differs_from_order' => $invoices->where('differs_from_order', true)->count(),
                 'orders_without_invoice' => $missing->count(),

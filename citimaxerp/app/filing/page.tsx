@@ -90,7 +90,7 @@ export default function FilingPage() {
   const [search, setSearch] = useState("")
   const [customerId, setCustomerId] = useState<string>("all")
   const [customerOpen, setCustomerOpen] = useState(false)
-  const [filed, setFiled] = useState<"all" | "filed" | "unfiled">("all")
+  const [filed, setFiled] = useState<"all" | "filed" | "unfiled" | "new">("all")
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const fileInput = useRef<HTMLInputElement>(null)
@@ -115,6 +115,17 @@ export default function FilingPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Invoices created elsewhere (from an order, a past sale) show up when you come back to this tab.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") load() }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+  }, [load])
+
   const customers = useMemo(() => {
     const map = new Map<string, string>()
     data?.invoices.forEach((i) => map.set(i.customer_id ?? "none", i.customer))
@@ -125,7 +136,7 @@ export default function FilingPage() {
     const q = search.trim().toLowerCase()
     return (data?.invoices ?? []).filter((i) =>
       (customerId === "all" || (i.customer_id ?? "none") === customerId) &&
-      (filed === "all" || (filed === "filed" ? !!i.file_number : !i.file_number)) &&
+      (filed === "all" || (filed === "new" ? i.is_new : filed === "filed" ? !!i.file_number : !i.file_number)) &&
       (!q || [i.invoice_number, i.customer, i.order_number, i.file_number].some((v) => v?.toLowerCase().includes(q))),
     )
   }, [data, search, customerId, filed])
@@ -337,7 +348,7 @@ export default function FilingPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {stat("Invoices", s?.invoices ?? "-")}
           {stat("Filed", s ? `${s.filed} of ${s.invoices}` : "-", s && s.invoices ? `${Math.round((s.filed / s.invoices) * 100)}% have a file number` : undefined)}
-          {stat("Not filed", s ? s.invoices - s.filed : "-")}
+          {stat("Not filed", s ? s.invoices - s.filed : "-", s?.new_unfiled ? `${s.new_unfiled} new this week` : undefined)}
           {stat("Customers", s?.customers ?? "-")}
         </div>
 
@@ -401,6 +412,7 @@ export default function FilingPage() {
                 <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All invoices</SelectItem>
+                  <SelectItem value="new">New (last 7 days)</SelectItem>
                   <SelectItem value="unfiled">Not filed</SelectItem>
                   <SelectItem value="filed">Filed</SelectItem>
                 </SelectContent>
@@ -461,6 +473,7 @@ export default function FilingPage() {
                             <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                             <TableCell className="font-medium">
                               <Link href={`/sales/invoices/${i.id}/document`} className="hover:underline">{i.invoice_number}</Link>
+                              {i.is_new && <Badge variant="outline" className="ml-1.5 border-blue-200 bg-blue-50 px-1.5 py-0 text-[10px] text-blue-700">New</Badge>}
                               {i.differs_from_order && <span title={`Order total KES ${kes(i.order_amount)}`}><AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-amber-500" /></span>}
                             </TableCell>
                             <TableCell>{fmtDate(i.invoice_date)}</TableCell>

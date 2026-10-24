@@ -52,6 +52,8 @@ import {
   parseCreditNoteAmount,
 } from "@/lib/credit-notes"
 import { InvoiceEtimsBadge } from "@/components/etims/invoice-etims-badge"
+import { saveFileNumber } from "@/lib/filing"
+import { Input } from "@/components/ui/input"
 
 export default function InvoiceDetailPage() {
   const params = useParams()
@@ -627,6 +629,7 @@ export default function InvoiceDetailPage() {
                   {getInvoiceStatusLabel(invoice.status)}
                 </Badge>
               </div>
+              <InvoiceFileNumber invoice={invoice} onSaved={(file_number) => setInvoice({ ...invoice, file_number })} />
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium">Due Date</p>
@@ -1129,6 +1132,48 @@ export default function InvoiceDetailPage() {
           />
         </>
       )}
+    </div>
+  )
+}
+
+/** The number this invoice's printed copy is filed under - the same value as on the Filing tab. */
+function InvoiceFileNumber({ invoice, onSaved }: { invoice: Invoice; onSaved: (value: string | null) => void }) {
+  const { toast } = useToast()
+  const [value, setValue] = useState(invoice.file_number ?? "")
+  const [saving, setSaving] = useState(false)
+  useEffect(() => setValue(invoice.file_number ?? ""), [invoice.file_number])
+
+  const save = async () => {
+    const next = value.trim()
+    if (next === (invoice.file_number ?? "")) return
+    setSaving(true)
+    try {
+      const res = await saveFileNumber(invoice.id, next)
+      onSaved(res.file_number)
+      toast({ title: res.file_number ? `Filed as ${res.file_number}` : "File number cleared" })
+    } catch (err: any) {
+      setValue(invoice.file_number ?? "")
+      toast({ title: "Could not save the file number", description: err.message, variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-medium">File No</p>
+      <div className="mt-1 flex items-center gap-2">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          placeholder="Not filed"
+          className="h-8 w-28 font-semibold"
+          disabled={saving}
+        />
+        <Link href="/filing" className="text-xs text-blue-600 hover:underline">Filing</Link>
+      </div>
     </div>
   )
 }

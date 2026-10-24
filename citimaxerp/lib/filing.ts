@@ -11,6 +11,9 @@ export type FilingInvoice = {
   balance_amount: number
   file_number: string | null
   filed_at: string | null
+  created_at: string | null
+  /** Invoiced in the last 7 days. */
+  is_new: boolean
   customer_id: string | null
   customer: string
   order_id: string | null
@@ -32,7 +35,7 @@ export type OrderWithoutInvoice = {
 export type FilingData = {
   invoices: FilingInvoice[]
   orders_without_invoice: OrderWithoutInvoice[]
-  summary: { invoices: number; filed: number; customers: number; differs_from_order: number; orders_without_invoice: number }
+  summary: { invoices: number; filed: number; new_unfiled: number; customers: number; differs_from_order: number; orders_without_invoice: number }
 }
 
 export type FilingImportResult = {

@@ -3,6 +3,8 @@ import apiCall from "./api"
 export interface Invoice {
   id: string;
   invoice_number: string;
+  /** Number the printed copy is filed under (Filing tab). */
+  file_number?: string | null;
   company_id: string;
   customer_id: string;
   sales_rep_id?: string | null;
