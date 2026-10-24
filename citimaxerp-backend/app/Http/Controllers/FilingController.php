@@ -106,6 +106,8 @@ class FilingController extends Controller
             'orders_without_invoice' => $missing,
             'summary' => [
                 'invoices' => $invoices->count(),
+                // File numbers run from 1 to this.
+                'max_file_number' => $invoices->count(),
                 'filed' => $invoices->filter(fn ($i) => filled($i['file_number']))->count(),
                 'new_unfiled' => $invoices->filter(fn ($i) => $i['is_new'] && blank($i['file_number']))->count(),
                 'customers' => $invoices->pluck('customer_id')->unique()->count(),
@@ -121,19 +123,29 @@ class FilingController extends Controller
         if (!$this->allowed($request, 'can_view_filing', 'can_update_invoices')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        $validator = Validator::make($request->all(), ['file_number' => 'nullable|string|max:50']);
-        if ($validator->fails()) {
-            return response()->json(['message' => $validator->errors()->first()], 422);
+        $companyId = $request->user()->company_id;
+        $invoice = Invoice::where('company_id', $companyId)->findOrFail($id);
+
+        [$value, $error] = $this->normaliseFileNumber($request->input('file_number'), $this->maxFileNumber($companyId));
+        if ($error) {
+            return response()->json(['message' => $error], 422);
         }
-        $invoice = Invoice::where('company_id', $request->user()->company_id)->findOrFail($id);
-        $this->setFileNumber($invoice, $request->input('file_number'), $request->user()->id);
+        if ($value !== null) {
+            $taken = DB::table('invoices')->where('company_id', $companyId)->where('id', '!=', $invoice->id)
+                ->where('file_number', $value)->value('invoice_number');
+            if ($taken) {
+                return response()->json(['message' => "File No {$value} is already used by " . self::shortNumber($taken) . '.'], 422);
+            }
+        }
+        $this->setFileNumber($invoice, $value, $request->user()->id);
 
         return response()->json(['message' => 'File number saved', 'file_number' => $invoice->file_number]);
     }
 
     /**
      * File numbers from an Excel sheet: [{invoice_number, file_number}]. Without apply=true it only
-     * reports what would change, so the user sees it before anything is saved.
+     * reports what would change, so the user sees it before anything is saved. Each number must be
+     * 1..(number of invoices) and used once; numbers may move between invoices within one sheet.
      */
     public function import(Request $request): JsonResponse
     {
@@ -153,54 +165,129 @@ class FilingController extends Controller
         $apply = $request->boolean('apply');
 
         // Matched on the number as printed (INV-0074) or as stored (INV-9b267ea3-0074).
-        $invoices = collect();
-        foreach (DB::table('invoices')->where('company_id', $user->company_id)->get(['id', 'invoice_number', 'file_number']) as $i) {
-            $invoices[strtoupper($i->invoice_number)] = $i;
-            $invoices[strtoupper(self::shortNumber($i->invoice_number))] ??= $i;
+        $all = DB::table('invoices')->where('company_id', $user->company_id)->get(['id', 'invoice_number', 'file_number'])->keyBy('id');
+        $max = $all->count();
+        $byNumber = collect();
+        foreach ($all as $i) {
+            $byNumber[strtoupper($i->invoice_number)] = $i;
+            $byNumber[strtoupper(self::shortNumber($i->invoice_number))] ??= $i;
         }
 
+        $counts = ['update' => 0, 'clear' => 0, 'unchanged' => 0, 'not_found' => 0, 'skipped' => 0, 'invalid' => 0];
+        $rows = [];     // invoice id => the row it came from and its wanted value (null when the value was refused)
         $results = [];
-        $counts = ['update' => 0, 'clear' => 0, 'unchanged' => 0, 'not_found' => 0, 'skipped' => 0];
-        $seen = [];
         foreach ($request->input('rows') as $index => $row) {
             $number = strtoupper(trim((string) ($row['invoice_number'] ?? '')));
-            $file = trim((string) ($row['file_number'] ?? ''));
+            $raw = trim((string) ($row['file_number'] ?? ''));
             if ($number === '') {
                 $counts['skipped']++;
                 continue;
             }
-            $invoice = $invoices->get($number);
+            $invoice = $byNumber->get($number);
             if (!$invoice) {
                 $counts['not_found']++;
-                $results[] = ['row' => $index + 1, 'invoice_number' => $row['invoice_number'], 'file_number' => $file, 'result' => 'not_found', 'message' => 'No invoice with this number'];
+                $results[] = ['row' => $index + 1, 'invoice_number' => $row['invoice_number'], 'file_number' => $raw, 'result' => 'not_found', 'message' => 'No invoice with this number'];
                 continue;
             }
-            if (isset($seen[$invoice->id])) {
+            $short = self::shortNumber($invoice->invoice_number);
+            if (array_key_exists($invoice->id, $rows)) {
                 $counts['skipped']++;
-                $results[] = ['row' => $index + 1, 'invoice_number' => self::shortNumber($invoice->invoice_number), 'file_number' => $file, 'result' => 'skipped', 'message' => 'Listed twice in the sheet; the first row was used'];
+                $results[] = ['row' => $index + 1, 'invoice_number' => $short, 'file_number' => $raw, 'result' => 'skipped', 'message' => 'Listed twice in the sheet; the first row was used'];
                 continue;
             }
-            $seen[$invoice->id] = true;
+            [$value, $error] = $this->normaliseFileNumber($raw, $max);
+            if ($error) {
+                $counts['invalid']++;
+                $rows[$invoice->id] = null;
+                $results[] = ['row' => $index + 1, 'invoice_number' => $short, 'file_number' => $raw, 'previous' => $invoice->file_number, 'result' => 'invalid', 'message' => $error];
+                continue;
+            }
+            $rows[$invoice->id] = ['row' => $index + 1, 'value' => $value];
+        }
 
-            $current = (string) ($invoice->file_number ?? '');
-            $result = $file === $current ? 'unchanged' : ($file === '' ? 'clear' : 'update');
+        // Where every invoice ends up; a number wanted by two invoices is refused for each row that asks for it.
+        $wanted = collect($rows)->filter()->map(fn ($r) => $r['value']);
+        $refused = [];
+        do {
+            $final = $all->map(fn ($i) => $wanted->has($i->id) ? $wanted[$i->id] : $i->file_number)->filter(fn ($v) => $v !== null);
+            $clashing = $final->countBy()->filter(fn ($n) => $n > 1)->keys()->map(fn ($v) => (string) $v);
+            $again = $wanted->filter(fn ($v) => $v !== null && $clashing->contains($v));
+            foreach ($again as $id => $v) {
+                $others = $final->filter(fn ($fv, $fid) => (string) $fv === $v && $fid !== $id)->keys()
+                    ->map(fn ($fid) => self::shortNumber($all[$fid]->invoice_number))->implode(', ');
+                $refused[$id] = "File No {$v} is also used by {$others}";
+                $wanted->forget($id);
+            }
+        } while ($again->isNotEmpty());
+
+        $changes = [];
+        foreach ($rows as $id => $row) {
+            if ($row === null) {
+                continue;
+            }
+            $invoice = $all[$id];
+            $short = self::shortNumber($invoice->invoice_number);
+            $current = $invoice->file_number;
+            if (isset($refused[$id])) {
+                $counts['invalid']++;
+                $results[] = ['row' => $row['row'], 'invoice_number' => $short, 'file_number' => $row['value'], 'previous' => $current, 'result' => 'invalid', 'message' => $refused[$id]];
+                continue;
+            }
+            $result = $row['value'] === $current ? 'unchanged' : ($row['value'] === null ? 'clear' : 'update');
             $counts[$result]++;
             if ($result !== 'unchanged') {
-                $results[] = ['row' => $index + 1, 'invoice_number' => self::shortNumber($invoice->invoice_number), 'file_number' => $file, 'previous' => $current ?: null, 'result' => $result];
-                if ($apply) {
-                    $this->setFileNumber(Invoice::find($invoice->id), $file, $user->id);
-                }
+                $results[] = ['row' => $row['row'], 'invoice_number' => $short, 'file_number' => $row['value'] ?? '', 'previous' => $current, 'result' => $result];
+                $changes[$id] = $row['value'];
             }
         }
+
+        if ($apply && $changes) {
+            DB::transaction(function () use ($changes, $user) {
+                // Free the numbers first so two invoices can swap without tripping the unique rule.
+                DB::table('invoices')->whereIn('id', array_keys($changes))->update(['file_number' => null]);
+                foreach ($changes as $id => $value) {
+                    $this->setFileNumber(Invoice::find($id), $value, $user->id);
+                }
+            });
+        }
+        usort($results, fn ($x, $y) => $x['row'] <=> $y['row']);
 
         return response()->json([
             'applied' => $apply,
             'counts' => $counts,
+            'max' => $max,
             'rows' => $results,
             'message' => $apply
-                ? "Saved {$counts['update']} file number(s)" . ($counts['clear'] ? ", cleared {$counts['clear']}" : '')
+                ? "Saved {$counts['update']} file number(s)" . ($counts['clear'] ? ", cleared {$counts['clear']}" : '') . ($counts['invalid'] ? "; {$counts['invalid']} row(s) not saved" : '')
                 : 'Preview only - nothing saved yet',
         ]);
+    }
+
+    /** File numbers run from 1 to the number of invoices. */
+    protected function maxFileNumber(string $companyId): int
+    {
+        return DB::table('invoices')->where('company_id', $companyId)->count();
+    }
+
+    /**
+     * A whole number from 1 to $max ("007" and Excel's "7.0" are 7); empty clears it.
+     *
+     * @return array{0: ?string, 1: ?string} [value, error]
+     */
+    protected function normaliseFileNumber($raw, int $max): array
+    {
+        $raw = trim((string) $raw);
+        if ($raw === '') {
+            return [null, null];
+        }
+        if (!preg_match('/^\d+(\.0+)?$/', $raw)) {
+            return [null, "File No must be a whole number from 1 to {$max}"];
+        }
+        $n = (int) $raw;
+        if ($n < 1 || $n > $max) {
+            return [null, "File No must be from 1 to {$max} (there are {$max} invoices)"];
+        }
+        return [(string) $n, null];
     }
 
     /** Create the missing invoices for the given completed orders. */

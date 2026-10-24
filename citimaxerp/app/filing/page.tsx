@@ -40,7 +40,7 @@ const STATUS: Record<string, string> = {
 const EXPORT_HEADINGS = ["S/No", "Customer", "Invoice No", "Invoice Date", "Order No", "Amount (KES)", "Paid (KES)", "Balance (KES)", "Status", "File No"]
 
 /** File number cell: saves when you leave the box or press Enter. */
-function FileNumberInput({ invoice, onSaved }: { invoice: FilingInvoice; onSaved: (value: string | null) => void }) {
+function FileNumberInput({ invoice, max, onSaved }: { invoice: FilingInvoice; max: number; onSaved: (value: string | null) => void }) {
   const { toast } = useToast()
   const [value, setValue] = useState(invoice.file_number ?? "")
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle")
@@ -49,6 +49,12 @@ function FileNumberInput({ invoice, onSaved }: { invoice: FilingInvoice; onSaved
   const save = async () => {
     const next = value.trim()
     if (next === (invoice.file_number ?? "")) return
+    // Same rule as the server: a whole number from 1 to the number of invoices, used once.
+    if (next && (!/^\d+$/.test(next) || Number(next) < 1 || Number(next) > max)) {
+      setValue(invoice.file_number ?? "")
+      toast({ title: "Invalid file number", description: `File No must be a whole number from 1 to ${max}.`, variant: "destructive" })
+      return
+    }
     setState("saving")
     try {
       const res = await saveFileNumber(invoice.id, next)
@@ -69,7 +75,9 @@ function FileNumberInput({ invoice, onSaved }: { invoice: FilingInvoice; onSaved
         onChange={(e) => setValue(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-        placeholder="-"
+        inputMode="numeric"
+        placeholder={`1-${max}`}
+        title={`A whole number from 1 to ${max}, not used by another invoice`}
         className="h-8 w-20 text-center font-semibold"
       />
       {state === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
@@ -217,6 +225,7 @@ export default function FilingPage() {
     XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
       ["How to use this sheet"],
       ["1. Write each invoice's file number in the File No column (1, 2, 3 ...)."],
+      [`   A file number is a whole number from 1 to ${s?.max_file_number ?? s?.invoices ?? "the number of invoices"}, and each number is used for one invoice only.`],
       ["2. Keep the Invoice No column as it is - it is how each row finds its invoice."],
       ["3. Save the file and use Import Excel on the Filing tab. You will see the changes before anything is saved."],
       ["An empty File No clears that invoice's file number. Other columns are ignored on import."],
@@ -481,7 +490,7 @@ export default function FilingPage() {
                             <TableCell className="text-right font-mono">{kes(i.total_amount)}</TableCell>
                             <TableCell className={cn("text-right font-mono", i.balance_amount > 0.01 && "text-red-600")}>{kes(i.balance_amount)}</TableCell>
                             <TableCell><Badge variant="outline" className={cn("capitalize", STATUS[i.status])}>{i.status.replace("_", " ")}</Badge></TableCell>
-                            <TableCell><FileNumberInput invoice={i} onSaved={(v) => setFileNumberLocally(i.id, v)} /></TableCell>
+                            <TableCell><FileNumberInput invoice={i} max={s?.max_file_number ?? s?.invoices ?? 0} onSaved={(v) => setFileNumberLocally(i.id, v)} /></TableCell>
                             <TableCell>
                               <Button variant="ghost" size="icon" className="h-8 w-8" title="Print / PDF" onClick={() => printInvoices([i.id])}><Printer className="h-4 w-4" /></Button>
                             </TableCell>
@@ -501,7 +510,9 @@ export default function FilingPage() {
           <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5" /> Import file numbers</DialogTitle>
-              <DialogDescription>Check the changes below. Nothing is saved until you confirm.</DialogDescription>
+              <DialogDescription>
+                Check the changes below. Nothing is saved until you confirm. File numbers must be whole numbers from 1 to {preview?.max ?? s?.max_file_number ?? "the number of invoices"}, each used once.
+              </DialogDescription>
             </DialogHeader>
             {preview && (
               <div className="space-y-3 text-sm">
@@ -509,6 +520,7 @@ export default function FilingPage() {
                   <Badge className="bg-green-100 text-green-800" variant="outline">{preview.counts.update} to set</Badge>
                   {preview.counts.clear > 0 && <Badge className="bg-amber-100 text-amber-800" variant="outline">{preview.counts.clear} to clear</Badge>}
                   <Badge variant="outline">{preview.counts.unchanged} unchanged</Badge>
+                  {preview.counts.invalid > 0 && <Badge className="bg-red-100 text-red-700" variant="outline">{preview.counts.invalid} not allowed (won&apos;t be saved)</Badge>}
                   {preview.counts.not_found > 0 && <Badge className="bg-red-100 text-red-700" variant="outline">{preview.counts.not_found} not found</Badge>}
                   {preview.counts.skipped > 0 && <Badge variant="outline">{preview.counts.skipped} skipped</Badge>}
                 </div>
@@ -525,7 +537,7 @@ export default function FilingPage() {
                             <TableCell>{r.invoice_number}</TableCell>
                             <TableCell>{r.previous ?? "-"}</TableCell>
                             <TableCell className="font-semibold">{r.result === "clear" ? "(cleared)" : r.file_number || "-"}</TableCell>
-                            <TableCell className={cn("text-xs", r.result === "not_found" ? "text-red-600" : "text-muted-foreground")}>{r.message ?? ""}</TableCell>
+                            <TableCell className={cn("text-xs", r.result === "not_found" || r.result === "invalid" ? "text-red-600" : "text-muted-foreground")}>{r.message ?? ""}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

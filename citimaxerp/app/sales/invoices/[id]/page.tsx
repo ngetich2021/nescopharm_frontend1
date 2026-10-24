@@ -1168,7 +1168,9 @@ function InvoiceFileNumber({ invoice, onSaved }: { invoice: Invoice; onSaved: (v
           onChange={(e) => setValue(e.target.value)}
           onBlur={save}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          inputMode="numeric"
           placeholder="Not filed"
+          title="A whole number from 1 to the number of invoices, not used by another invoice"
           className="h-8 w-28 font-semibold"
           disabled={saving}
         />

@@ -35,13 +35,14 @@ export type OrderWithoutInvoice = {
 export type FilingData = {
   invoices: FilingInvoice[]
   orders_without_invoice: OrderWithoutInvoice[]
-  summary: { invoices: number; filed: number; new_unfiled: number; customers: number; differs_from_order: number; orders_without_invoice: number }
+  summary: { invoices: number; max_file_number: number; filed: number; new_unfiled: number; customers: number; differs_from_order: number; orders_without_invoice: number }
 }
 
 export type FilingImportResult = {
   applied: boolean
   message: string
-  counts: { update: number; clear: number; unchanged: number; not_found: number; skipped: number }
+  counts: { update: number; clear: number; unchanged: number; not_found: number; skipped: number; invalid: number }
+  max?: number
   rows: { row: number; invoice_number: string; file_number: string; previous?: string | null; result: string; message?: string }[]
 }
 
