@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 import {
   getAccountingSettings,
   updateAccountingSettings,

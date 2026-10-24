@@ -81,6 +81,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\SupplierPayment::class,
             \App\Models\PayrollRun::class,
             \App\Models\PayrollPayslip::class,
+            \App\Models\BankTransfer::class,
         ] as $model) {
             $model::observe(LedgerSyncObserver::class);
         }

@@ -42,7 +42,7 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
     description: '',
     is_active: true,
     opening_balance: '0',
-    currency_code: 'USD',
+    currency_code: 'KES',
     normal_balance: '' as 'debit' | 'credit' | ''
   })
 

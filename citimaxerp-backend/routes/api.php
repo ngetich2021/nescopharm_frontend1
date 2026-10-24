@@ -905,6 +905,11 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     Route::get('accounts/{id}/balance', [GeneralLedgerController::class, 'getAccountBalance']);
 
     // Bank Accounts
+    // Withdrawals / transfers between money accounts, with bank charges.
+    Route::get('bank-transfers/accounts', [\App\Http\Controllers\BankTransferController::class, 'accounts']);
+    Route::get('bank-transfers', [\App\Http\Controllers\BankTransferController::class, 'index']);
+    Route::post('bank-transfers', [\App\Http\Controllers\BankTransferController::class, 'store']);
+    Route::delete('bank-transfers/{id}', [\App\Http\Controllers\BankTransferController::class, 'destroy']);
     Route::apiResource('bank-accounts', BankAccountController::class);
     Route::get('bank-accounts/{id}/balance', [BankAccountController::class, 'getBalance']);
 

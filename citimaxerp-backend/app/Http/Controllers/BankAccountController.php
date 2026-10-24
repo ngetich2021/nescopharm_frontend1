@@ -75,6 +75,19 @@ class BankAccountController extends Controller
 
         $accounts = $query->orderBy('account_name')->get();
 
+        // The stored current_balance is never updated; the balance is what the ledger says the
+        // linked account holds (receipts, payments, withdrawals and bank charges).
+        $linked = $accounts->pluck('chartOfAccount')->filter();
+        if ($linked->isNotEmpty()) {
+            $balances = app(\App\Services\LedgerBalanceService::class)->balances($user->company_id, null, $linked);
+            $accounts->each(function ($account) use ($balances) {
+                if ($account->chart_of_account_id && $balances->has($account->chart_of_account_id)) {
+                    $account->current_balance = (float) $balances[$account->chart_of_account_id];
+                    $account->available_balance = $account->current_balance;
+                }
+            });
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => 'Bank accounts retrieved successfully.',

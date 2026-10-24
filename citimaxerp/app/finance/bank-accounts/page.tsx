@@ -40,6 +40,7 @@ import {
   Settings
 } from "lucide-react"
 import { financeApi, type BankAccount } from "@/lib/finance"
+import { BankTransfers } from "./bank-transfers"
 
 export default function BankAccountsPage() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
@@ -71,10 +72,10 @@ export default function BankAccountsPage() {
   }, [searchTerm, accountTypeFilter, activeFilter])
 
   const formatCurrency = (amount: string) => {
-    const numAmount = parseFloat(amount)
-    return new Intl.NumberFormat('en-US', {
+    const numAmount = parseFloat(amount) || 0
+    return new Intl.NumberFormat('en-KE', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'KES'
     }).format(numAmount)
   }
 
@@ -161,7 +162,7 @@ export default function BankAccountsPage() {
                 <p className="text-sm font-medium text-muted-foreground">Total Balance</p>
                 <p className="text-2xl font-bold">
                   {formatCurrency(
-                    bankAccounts.reduce((total, acc) => total + acc.current_balance, 0).toString()
+                    bankAccounts.reduce((total, acc) => total + Number(acc.current_balance || 0), 0).toString()
                   )}
                 </p>
               </div>
@@ -177,7 +178,7 @@ export default function BankAccountsPage() {
                 <p className="text-2xl font-bold">
                   {formatCurrency(
                     bankAccounts.length > 0 
-                      ? (bankAccounts.reduce((total, acc) => total + acc.current_balance, 0) / bankAccounts.length).toString()
+                      ? (bankAccounts.reduce((total, acc) => total + Number(acc.current_balance || 0), 0) / bankAccounts.length).toString()
                       : "0"
                   )}
                 </p>
@@ -314,6 +315,9 @@ export default function BankAccountsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Withdrawals change the balances above, so refresh them after each one. */}
+      <BankTransfers onChanged={fetchBankAccounts} />
     </div>
   )
 }

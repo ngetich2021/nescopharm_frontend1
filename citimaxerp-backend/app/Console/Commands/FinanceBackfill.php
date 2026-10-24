@@ -41,6 +41,7 @@ class FinanceBackfill extends Command
         'Dispatches (COGS)' => OrderDispatch::class,
         'Expenses' => Expense::class,
         'Payroll' => PayrollRun::class,
+        'Bank transfers' => \App\Models\BankTransfer::class,
     ];
 
     public function handle(LedgerPostingService $ledger, AccountingSetupService $setup): int

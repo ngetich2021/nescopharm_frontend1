@@ -67,6 +67,7 @@ class LedgerPostingService
             $model instanceof CreditNote => $this->syncCreditNote($model, $deleted),
             $model instanceof SupplierPayment => [$this->syncSupplierPayment($model, $deleted)],
             $model instanceof PayrollRun => $this->syncPayrollRun($model, $deleted),
+            $model instanceof \App\Models\BankTransfer => [$this->syncBankTransfer($model, $deleted)],
             default => [],
         };
     }
@@ -443,7 +444,9 @@ class LedgerPostingService
         $accrualDesired = null;
         $payoutDesired = null;
 
-        if (!$deleted && $settings && in_array($run->status, ['approved', 'paid'], true)) {
+        // A company that books salaries as monthly expenses keeps payroll off the ledger, or every
+        // month's salaries would be counted twice.
+        if (!$deleted && $settings && $settings->payroll_posts_to_ledger !== false && in_array($run->status, ['approved', 'paid'], true)) {
             // Payslips with no gross pay can still carry a statutory minimum
             // (e.g. SHIF 300) that is never actually withheld, so they are
             // left out - otherwise the entry cannot balance.
@@ -502,6 +505,35 @@ class LedgerPostingService
             $this->syncEntry($run, 'payroll_accrual', $accrualDesired),
             $this->syncEntry($run, 'payroll_payment', $payoutDesired),
         ];
+    }
+
+    /**
+     * Money moved between the company's own accounts (e.g. a bank withdrawal into cash):
+     * DR to-account (amount) + DR Bank Charges (charge) / CR from-account (amount + charge).
+     */
+    public function syncBankTransfer(\App\Models\BankTransfer $transfer, bool $deleted = false): ?JournalEntry
+    {
+        $settings = $this->settings($transfer->company_id);
+        $desired = null;
+        $amount = $this->money($transfer->amount);
+        $charges = $this->money($transfer->charges);
+
+        if (!$deleted && $settings && $amount + $charges > 0) {
+            $ref = $transfer->transfer_number;
+            $desired = [
+                'date' => $transfer->transfer_date,
+                'prefix' => 'TRF',
+                'reference' => $ref,
+                'description' => "Transfer {$ref}" . ($transfer->purpose ? " - {$transfer->purpose}" : ''),
+                'lines' => [
+                    ['account_id' => $transfer->to_account_id, 'debit' => $amount, 'description' => "Received {$ref}"],
+                    ['key' => 'bank_charges', 'fallback' => 'miscellaneous_expense', 'debit' => $charges, 'description' => "Bank charges {$ref}"],
+                    ['account_id' => $transfer->from_account_id, 'credit' => $amount + $charges, 'description' => "Withdrawn {$ref}" . ($charges > 0 ? ' (incl. charges)' : '')],
+                ],
+            ];
+        }
+
+        return $this->syncEntry($transfer, 'bank_transfer', $desired);
     }
 
     // =====================================================================
