@@ -624,20 +624,72 @@ class ReportService
             'share' => $repSum > 0 ? round((float) $r->total / $repSum * 100, 1) : 0,
         ])->values()->all();
 
-        // Rep filter choices: sales-rep users plus anyone already on an order.
+        // Filter choices narrow to what still applies: a chosen customer offers only their own
+        // region / county / town, a region only its counties, a county only its towns.
+        $options = function (string $column, array $narrowBy) use ($filters) {
+            $q = DB::table('customers')->where('company_id', $this->companyId)
+                ->whereNull('deleted_at')->whereNotNull($column)->whereRaw("TRIM({$column}) <> ''");
+            if (!empty($filters['customer_id'])) {
+                $q->where('id', $filters['customer_id']);
+            }
+            foreach ($narrowBy as $parent) {
+                if (!empty($filters[$parent])) {
+                    $q->whereRaw("LOWER(TRIM({$parent})) = ?", [mb_strtolower(trim($filters[$parent]))]);
+                }
+            }
+            return $q->distinct()->orderBy($column)->pluck($column)->values()->all();
+        };
+
+        // Rep choices: for a chosen customer or place, the reps on those orders; otherwise every
+        // sales-rep user plus anyone already on an order.
+        $narrowed = !empty($filters['customer_id']) || !empty($filters['region']) || !empty($filters['county']) || !empty($filters['city']);
+        $repsOnOrders = DB::table('orders')->where('company_id', $this->companyId)->whereNotNull('sales_rep_id');
+        if ($narrowed) {
+            $this->applyOrderFilters($repsOnOrders, array_diff_key($filters, ['sales_rep_id' => 1]));
+        }
         $repOptions = DB::table('users')
             ->where('company_id', $this->companyId)
-            ->where(fn ($q) => $q->whereIn('id', DB::table('orders')->where('company_id', $this->companyId)->whereNotNull('sales_rep_id')->select('sales_rep_id'))
-                ->orWhereIn('role_id', DB::table('roles')->whereRaw('is_sales_rep = true')->select('id')))
+            ->where(fn ($q) => $q->whereIn('id', $repsOnOrders->select('sales_rep_id'))
+                ->when(!$narrowed, fn ($q) => $q->orWhereIn('role_id', DB::table('roles')->whereRaw('is_sales_rep = true')->select('id'))))
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name'])
             ->map(fn ($u) => ['id' => $u->id, 'name' => trim("{$u->first_name} {$u->last_name}")])
             ->values()->all();
 
-        // Filter choices: every region / county / town the company's customers are in.
-        $options = fn (string $column) => DB::table('customers')->where('company_id', $this->companyId)
-            ->whereNull('deleted_at')->whereNotNull($column)->whereRaw("TRIM({$column}) <> ''")
-            ->distinct()->orderBy($column)->pluck($column)->values()->all();
+        // Every order behind the figures above (same filters), newest first.
+        $ordersQuery = DB::table('orders')
+            ->leftJoin('customers', 'orders.customer_id', '=', 'customers.id')
+            ->leftJoin('users as rep', 'orders.sales_rep_id', '=', 'rep.id')
+            ->where('orders.company_id', $this->companyId)
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
+            ->whereNull('orders.deleted_at');
+        $this->applyOrderFilters($ordersQuery, $filters);
+        $orders = $ordersQuery
+            ->orderByDesc('orders.order_date')
+            ->limit(2000)
+            ->get([
+                'orders.id', 'orders.order_number', 'orders.order_date', 'orders.status', 'orders.payment_status',
+                'orders.final_amount', 'orders.amount_paid', 'orders.tax',
+                DB::raw("COALESCE(NULLIF(TRIM(customers.business_name), ''), customers.name) as customer"),
+                'customers.county', 'customers.region', 'customers.city',
+                DB::raw("NULLIF(TRIM(CONCAT(rep.first_name, ' ', rep.last_name)), '') as sales_rep"),
+            ])
+            ->map(fn ($o) => [
+                'id' => $o->id,
+                // Shown short (ORD-0299) like everywhere else - see Order::getOrderNumberAttribute.
+                'order_number' => preg_match('/^(ORD)-(?:[\w-]+)-(\d{4})$/', (string) $o->order_number, $m) ? "{$m[1]}-{$m[2]}" : $o->order_number,
+                'order_date' => $o->order_date ? substr((string) $o->order_date, 0, 10) : null,
+                'customer' => $o->customer,
+                'county' => $o->county,
+                'region' => $o->region,
+                'town' => $o->city,
+                'sales_rep' => $o->sales_rep ?? 'Unassigned',
+                'status' => $o->status,
+                'payment_status' => $o->payment_status,
+                'total' => round((float) $o->final_amount, 2),
+                'paid' => round((float) $o->amount_paid, 2),
+                'vat' => round((float) $o->tax, 2),
+            ])->values()->all();
 
         // Payment status breakdown - build query with all filters
         $paymentStatusQuery = DB::table('orders')
@@ -661,11 +713,12 @@ class ReportService
             'sales_by_county' => $byLocation('county'),
             'sales_by_city' => $byLocation('city'),
             'sales_by_rep' => $salesByRep,
+            'orders' => $orders,
             'sales_rep_options' => $repOptions,
             'location_options' => [
-                'regions' => $options('region'),
-                'counties' => $options('county'),
-                'cities' => $options('city'),
+                'regions' => $options('region', []),
+                'counties' => $options('county', ['region']),
+                'cities' => $options('city', ['region', 'county']),
             ],
         ]);
     }

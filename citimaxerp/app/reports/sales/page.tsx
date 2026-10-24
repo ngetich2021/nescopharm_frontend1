@@ -163,7 +163,9 @@ export default function SalesReportPage() {
       if (resp.status === "success") {
         setData(resp.data)
         const d: any = resp.data
-        setOptions((prev) => prev.regions.length || prev.reps.length ? prev : {
+        // The server narrows these to what still applies (the chosen customer's region,
+        // the chosen region's counties...); refreshed with every load.
+        setOptions({
           regions: d?.location_options?.regions ?? [],
           counties: d?.location_options?.counties ?? [],
           cities: d?.location_options?.cities ?? [],
@@ -195,12 +197,22 @@ export default function SalesReportPage() {
     fetchReport()
   }, [fetchReport]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Counties of the chosen region only.
-  const countyChoices = useMemo(() => {
-    if (region === 'all') return options.counties
-    const inRegion = new Set((data?.sales_by_county ?? []).map((c: any) => c.name))
-    return options.counties.filter((c) => inRegion.has(c) || c === county)
-  }, [options.counties, region, county, data])
+  // The current choice always stays in its list, even while the next load is narrowing it.
+  const withSelected = (list: string[], selected: string) =>
+    selected === 'all' || list.includes(selected) ? list : [selected, ...list]
+  const regionChoices = withSelected(options.regions, region)
+  const countyChoices = withSelected(options.counties, county)
+  const cityChoices = withSelected(options.cities, city)
+
+  // A different customer starts from their own region / county / town / rep.
+  const chooseCustomer = (id: string) => {
+    setCustomerId(id)
+    setRegion("all")
+    setCounty("all")
+    setCity("all")
+    setSalesRepId("all")
+    setCustomerOpen(false)
+  }
 
   const chartData = useMemo(() => {
     if (!data?.summary_by_date) return []
@@ -243,6 +255,26 @@ export default function SalesReportPage() {
     { id: "count", accessorFn: num("count"), header: sortable("Orders") },
     { id: "item_count", accessorFn: num("item_count"), header: sortable("Items Sold") },
     { id: "total", accessorFn: num("total"), header: sortable("Total Revenue"), cell: ({ row }: any) => kes(row.original.total) },
+  ]
+
+  // Every order behind the figures, each linking to the order.
+  const ordersColumns = [
+    {
+      accessorKey: "order_number",
+      header: sortable("Order"),
+      cell: ({ row }: any) => (
+        <a href={`/sales/orders/${row.original.id}`} className="font-medium text-primary hover:underline">{row.original.order_number}</a>
+      ),
+    },
+    { accessorKey: "order_date", header: sortable("Date") },
+    { accessorKey: "customer", header: sortable("Customer") },
+    { accessorKey: "county", header: sortable("County"), cell: ({ row }: any) => row.original.county || "-" },
+    { accessorKey: "town", header: sortable("Town"), cell: ({ row }: any) => row.original.town || "-" },
+    { accessorKey: "sales_rep", header: sortable("Sales Rep") },
+    { accessorKey: "status", header: sortable("Status"), cell: ({ row }: any) => <span className="capitalize">{row.original.status}</span> },
+    { accessorKey: "payment_status", header: sortable("Payment"), cell: ({ row }: any) => <span className="capitalize">{row.original.payment_status}</span> },
+    { id: "total", accessorFn: num("total"), header: sortable("Total"), cell: ({ row }: any) => kes(row.original.total) },
+    { id: "paid", accessorFn: num("paid"), header: sortable("Paid"), cell: ({ row }: any) => kes(row.original.paid) },
   ]
 
   const customerLabel = (id: string) => {
@@ -326,11 +358,11 @@ export default function SalesReportPage() {
                   <MapPin className="h-3.5 w-3.5" />
                   Region
                 </label>
-                <Select value={region} onValueChange={(v) => { setRegion(v); setCounty("all") }}>
+                <Select value={region} onValueChange={(v) => { setRegion(v); setCounty("all"); setCity("all") }}>
                    <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
                    <SelectContent>
                        <SelectItem value="all">All Regions</SelectItem>
-                       {options.regions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                       {regionChoices.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                    </SelectContent>
                 </Select>
               </div>
@@ -340,7 +372,7 @@ export default function SalesReportPage() {
                   <MapPin className="h-3.5 w-3.5" />
                   County
                 </label>
-                <Select value={county} onValueChange={setCounty}>
+                <Select value={county} onValueChange={(v) => { setCounty(v); setCity("all") }}>
                    <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
                    <SelectContent>
                        <SelectItem value="all">All Counties</SelectItem>
@@ -358,7 +390,7 @@ export default function SalesReportPage() {
                    <SelectTrigger className="h-9 bg-background/50"><SelectValue /></SelectTrigger>
                    <SelectContent>
                        <SelectItem value="all">All Towns</SelectItem>
-                       {options.cities.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                       {cityChoices.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                    </SelectContent>
                 </Select>
               </div>
@@ -373,6 +405,9 @@ export default function SalesReportPage() {
                    <SelectContent>
                        <SelectItem value="all">All Sales Reps</SelectItem>
                        {options.reps.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                       {salesRepId !== "all" && salesRepId !== "unassigned" && !options.reps.some((r) => r.id === salesRepId) && (
+                         <SelectItem value={salesRepId}>{data?.sales_by_rep?.find((r: any) => r.id === salesRepId)?.name ?? "Selected rep"}</SelectItem>
+                       )}
                        <SelectItem value="unassigned">Unassigned</SelectItem>
                    </SelectContent>
                 </Select>
@@ -437,7 +472,7 @@ export default function SalesReportPage() {
                        <CommandList>
                          <CommandEmpty>No customer found.</CommandEmpty>
                          <CommandGroup>
-                           <CommandItem value="all customers" onSelect={() => { setCustomerId("all"); setCustomerOpen(false) }}>
+                           <CommandItem value="all customers" onSelect={() => chooseCustomer("all")}>
                              <Check className={cn("mr-2 h-4 w-4", customerId === "all" ? "opacity-100" : "opacity-0")} />
                              All Customers
                            </CommandItem>
@@ -447,7 +482,7 @@ export default function SalesReportPage() {
                                <CommandItem
                                  key={c.id}
                                  value={`${getCustomerDisplayName(c)} ${c.name} ${(c as any).customer_number ?? ""} ${(c as any).phone ?? ""} ${(c as any).city ?? ""} ${c.id}`}
-                                 onSelect={() => { setCustomerId(c.id); setCustomerOpen(false) }}
+                                 onSelect={() => chooseCustomer(c.id)}
                                >
                                  <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
                                  <div className="min-w-0">
@@ -689,13 +724,14 @@ export default function SalesReportPage() {
 
                 {/* Detailed Data Tabs */}
                 <Card className="shadow-sm">
-                    <Tabs defaultValue="products" className="w-full">
+                    <Tabs defaultValue="orders" className="w-full">
                         <CardHeader className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <CardTitle>Detailed Breakdown</CardTitle>
                                 <CardDescription>Click a column heading to sort. Every table can be exported.</CardDescription>
                             </div>
                             <TabsList className="flex h-auto flex-wrap">
+                                <TabsTrigger value="orders">Orders ({(data?.orders || []).length})</TabsTrigger>
                                 <TabsTrigger value="products">Products</TabsTrigger>
                                 <TabsTrigger value="customers">Customers</TabsTrigger>
                                 <TabsTrigger value="region">By Region</TabsTrigger>
@@ -706,6 +742,9 @@ export default function SalesReportPage() {
                             </TabsList>
                         </CardHeader>
                         <CardContent>
+                            <TabsContent value="orders" className="mt-0">
+                                <DataTable columns={ordersColumns} data={data?.orders || []} filterColumn="customer" exportFileName="sales_orders" />
+                            </TabsContent>
                             <TabsContent value="products" className="mt-0">
                                 <DataTable 
                                     columns={topProductsColumns} 
