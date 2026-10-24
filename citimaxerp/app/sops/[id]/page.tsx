@@ -96,6 +96,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { CapaTab } from "@/app/sops/components/capa-tab"
+import { FilePreviewDialog } from "@/components/file-preview"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -213,6 +214,7 @@ export default function SopDetailPage() {
   // Loading states
   const [isLoading, setIsLoading] = useState(true)
   const [isViewingDocument, setIsViewingDocument] = useState(false)
+  const [preview, setPreview] = useState<{ url: string; title: string } | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDeletingSop, setIsDeletingSop] = useState(false)
 
@@ -398,24 +400,13 @@ export default function SopDetailPage() {
 
   const handleViewDocument = async () => {
     if (!sop || !hasSopDocument(sop)) return
-    const previewWindow = window.open("about:blank", "_blank")
     try {
       setIsViewingDocument(true)
       const { blob, filename } = await viewSopDocument(sop)
-      const objectUrl = URL.createObjectURL(blob)
-      if (previewWindow && !previewWindow.closed) {
-        previewWindow.location.href = objectUrl
-        try { previewWindow.document.title = filename } catch { /* cross-origin */ }
-      } else {
-        const a = document.createElement("a")
-        a.href = objectUrl
-        a.target = "_blank"
-        a.rel = "noopener noreferrer"
-        a.click()
-      }
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+      // Shown in the page, not another window.
+      if (preview) URL.revokeObjectURL(preview.url)
+      setPreview({ url: URL.createObjectURL(blob), title: filename })
     } catch (error: any) {
-      if (previewWindow && !previewWindow.closed) previewWindow.close()
       console.error("Document view error:", error)
       toast({ title: "Cannot view document", description: "The document may not be available. Try downloading instead.", variant: "destructive" })
     } finally {
@@ -1532,6 +1523,12 @@ export default function SopDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <FilePreviewDialog
+        url={preview?.url ?? null}
+        title={preview?.title}
+        open={preview !== null}
+        onOpenChange={(open) => { if (!open && preview) { URL.revokeObjectURL(preview.url); setPreview(null) } }}
+      />
     </PermissionGuard>
   )
 }

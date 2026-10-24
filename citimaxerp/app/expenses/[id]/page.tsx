@@ -26,6 +26,7 @@ import { formatCurrency } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { getExpenseCategories } from "@/lib/expenses"
 import type { ExpenseCategory } from "@/types/expenses"
+import { FileLink } from "@/components/file-preview"
 
 export default function ExpenseDetailsPage() {
   const params = useParams()
@@ -218,14 +219,12 @@ export default function ExpenseDetailsPage() {
           {expense.receipt_url && (
             <div>
               <p className="text-sm font-medium text-gray-500">Receipt</p>
-              <a
+              <FileLink
                 href={expense.receipt_url}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-primary hover:underline flex items-center gap-1"
               >
                 View Receipt <ExternalLink className="h-4 w-4" />
-              </a>
+              </FileLink>
             </div>
           )}
           <div>

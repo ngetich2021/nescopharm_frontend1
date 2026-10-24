@@ -3,6 +3,7 @@
 import { FileText, Check, CheckCheck, CornerUpLeft } from "lucide-react";
 import type { Message } from "./message-area";
 import { useEffect, useRef } from "react";
+import { FileLink } from "@/components/file-preview"
 
 interface MessageListProps {
     messages: Message[];
@@ -124,15 +125,13 @@ export function MessageList({ messages, openImagePreview, onReply }: MessageList
                 )}
                 {message.type === "document" && message.media_url && (
                   <div className="mb-2">
-                    <a
+                    <FileLink
                       href={message.media_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="text-blue-600 underline flex items-center"
                     >
                       <FileText className="mr-2 h-4 w-4" />
                       Download Document
-                    </a>
+                    </FileLink>
                   </div>
                 )}
 

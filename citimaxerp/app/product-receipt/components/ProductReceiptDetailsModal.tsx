@@ -76,8 +76,13 @@ export function ProductReceiptDetailsModal({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download failed:', error);
-      // Fallback to opening in new tab
-      window.open(receipt.document_url, '_blank');
+      // Fall back to a plain link download (stays on this page)
+      const a = document.createElement('a');
+      a.href = receipt.document_url;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     }
   };
 

@@ -35,6 +35,7 @@ import {
 import { getCustomerAccount, updateCustomerAccount, type CustomerAccountWithDetails } from "@/lib/customer-accounts"
 import { getDocuments, type Document as CustomerDocument } from "@/lib/documents"
 import { compressImageIfLarge } from "@/lib/image-compression"
+import { FileLink } from "@/components/file-preview"
 
 // Deliberately a small structural subset (not the full Customer type) - the
 // different pages/modals that render this section each carry their own
@@ -145,7 +146,7 @@ function DocumentPreview({ document: doc, emptyLabel }: { document: CustomerDocu
   const url = (doc as any).url || doc.document_image || ""
   if (isImageUrl(url)) {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="block w-fit group">
+      <FileLink href={url} className="block w-fit group">
         <img
           src={url}
           alt={doc.document_name}
@@ -155,20 +156,18 @@ function DocumentPreview({ document: doc, emptyLabel }: { document: CustomerDocu
           <ExternalLink className="h-3 w-3" />
           Open full size
         </span>
-      </a>
+      </FileLink>
     )
   }
   return (
-    <a
+    <FileLink
       href={url || "#"}
-      target="_blank"
-      rel="noopener noreferrer"
       className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
     >
       <FileText className="h-4 w-4" />
       View {doc.document_name}
       <ExternalLink className="h-3 w-3" />
-    </a>
+    </FileLink>
   )
 }
 

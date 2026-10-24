@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Printer, Download, Eye } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getCustomerDisplayName } from "@/lib/customers"
+import { printHtml } from "@/lib/print-frame"
 
 interface ReceiptPrinterProps {
   order: any
@@ -96,10 +97,8 @@ export function ReceiptPrinter({ order }: ReceiptPrinterProps) {
   const handlePrint = () => {
     const receiptText = generateReceiptText()
 
-    // Create a new window for printing
-    const printWindow = window.open("", "_blank")
-    if (printWindow) {
-      printWindow.document.write(`
+    // Printed from a hidden frame on this page - no new window.
+    printHtml(`
         <html>
           <head>
             <title>Receipt - ${order.id}</title>
@@ -120,9 +119,6 @@ export function ReceiptPrinter({ order }: ReceiptPrinterProps) {
           <body>${receiptText}</body>
         </html>
       `)
-      printWindow.document.close()
-      printWindow.print()
-    }
 
     toast({
       title: "Receipt sent to printer",

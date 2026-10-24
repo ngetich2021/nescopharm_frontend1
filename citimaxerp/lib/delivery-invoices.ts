@@ -113,8 +113,19 @@ export async function exportDeliveryInvoicesToExcel(params?: {
   if (params?.search) qs.append('search', params.search);
 
   const queryString = qs.toString() ? `?${qs.toString()}` : '';
-  const url = `/delivery-invoices/export/excel${queryString}`;
-  window.open(url, '_blank');
+  // Downloaded here rather than opened in another window.
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/delivery-invoices/export/excel${queryString}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Export failed (${res.status})`);
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(await res.blob());
+  link.download = `delivery-invoices-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
 }
 
 export async function getDeliveryInvoice(id: string): Promise<DeliveryInvoice> {

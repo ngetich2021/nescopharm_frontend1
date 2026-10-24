@@ -6,14 +6,19 @@ use App\Http\Controllers\InvoiceController;
 use App\Models\Invoice;
 use App\Models\InvoiceLineItem;
 use App\Models\Order;
+use App\Models\OrderDispatch;
+use App\Models\OrderDispatchItem;
 use App\Models\ProductVariant;
 use App\Models\User;
 use App\Services\TaxCompliance\EtimsTaxType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Keeps an order and its invoice in step: creates the invoice a completed order is missing,
- * and brings an invoice back in line after its order was corrected.
+ * and brings an invoice back in line after its order was corrected. A past (pre-go-live) sale
+ * also gets a delivered dispatch on record, kept matching the order when it is edited.
  */
 class InvoiceOrderService
 {
@@ -117,5 +122,115 @@ class InvoiceOrderService
 
         $invoice = Invoice::where('order_id', $order->id)->first();
         return ['ok' => true, 'message' => 'Invoice created', 'invoice_number' => $invoice?->invoice_number];
+    }
+
+    public function isPastSale(Order $order): bool
+    {
+        return (bool) $order->is_historical || Order::isHistoricalDate($order->order_date);
+    }
+
+    /**
+     * A completed past sale has its invoice and a delivered dispatch, both matching the order.
+     * Nothing here moves stock: past sales never do (see OrderStockService).
+     *
+     * @return array{invoice: ?string, dispatch: ?string}
+     */
+    public function ensurePastOrderRecords(Order $order, User $user): array
+    {
+        $done = ['invoice' => null, 'dispatch' => null];
+        if (!$this->isPastSale($order) || $order->status !== 'completed' || !$order->orderItems()->exists()) {
+            return $done;
+        }
+
+        $invoice = Invoice::where('order_id', $order->id)->first();
+        if (!$invoice) {
+            $result = $this->createForOrder($order, $user);
+            $done['invoice'] = $result['ok'] ? 'created' : $result['message'];
+        }
+
+        $dispatch = OrderDispatch::where('order_id', $order->id)
+            ->where('status', '!=', 'cancelled')
+            ->where('approval_status', '!=', 'rejected')
+            ->orderBy('created_at')
+            ->first();
+        if (!$dispatch) {
+            $this->createPastDispatch($order->fresh(), $user);
+            $done['dispatch'] = 'created';
+        }
+
+        return $done;
+    }
+
+    /** The goods went out on the sale date: record the dispatch as approved and delivered then. */
+    protected function createPastDispatch(Order $order, User $user): OrderDispatch
+    {
+        return DB::transaction(function () use ($order, $user) {
+            $saleDate = $order->order_date ?? now();
+            $dispatch = new OrderDispatch();
+            $dispatch->id = (string) Str::uuid();
+            // Next number across every dispatch row, deleted ones included (the number is unique).
+            $prefix = 'ODI-' . substr($order->company_id, 0, 8) . '-';
+            $last = DB::table('order_dispatches')->where('dispatch_number', 'like', $prefix . '%')
+                ->selectRaw("MAX(CAST(SUBSTRING(dispatch_number FROM ?) AS INTEGER)) AS n", [strlen($prefix) + 1])
+                ->whereRaw("SUBSTRING(dispatch_number FROM ?) ~ '^[0-9]+$'", [strlen($prefix) + 1])
+                ->value('n');
+            $dispatch->dispatch_number = $prefix . str_pad(((int) $last) + 1, 4, '0', STR_PAD_LEFT);
+            $dispatch->order_id = $order->id;
+            $dispatch->company_id = $order->company_id;
+            $dispatch->delivery_location_id = $order->delivery_location_id;
+            $dispatch->approvers = [];
+            $dispatch->approval_status = 'approved';
+            $dispatch->status = 'delivered';
+            $dispatch->dispatch_date = $saleDate;
+            $dispatch->actual_delivery_date = $saleDate;
+            $dispatch->final_approved_at = now();
+            $dispatch->notes = 'Recorded for a past sale';
+            $dispatch->created_by = $user->id;
+            $dispatch->save();
+
+            $this->writeDispatchItems($order, $dispatch);
+
+            $order->dispatch_status = 'delivered';
+            $order->saveQuietly();
+
+            return $dispatch;
+        });
+    }
+
+    /** After a past sale is edited, its delivered dispatch lists the same lines. */
+    public function syncPastDispatches(Order $order): void
+    {
+        if (!$this->isPastSale($order)) {
+            return;
+        }
+        OrderDispatch::where('order_id', $order->id)
+            ->where('status', '!=', 'cancelled')
+            ->where('approval_status', '!=', 'rejected')
+            ->get()
+            ->each(fn (OrderDispatch $dispatch) => DB::transaction(function () use ($order, $dispatch) {
+                OrderDispatchItem::where('order_dispatch_id', $dispatch->id)->delete();
+                $this->writeDispatchItems($order, $dispatch);
+            }));
+    }
+
+    protected function writeDispatchItems(Order $order, OrderDispatch $dispatch): void
+    {
+        $delivered = $dispatch->status === 'delivered';
+        foreach ($order->orderItems()->with('product')->get() as $item) {
+            OrderDispatchItem::create([
+                'id' => (string) Str::uuid(),
+                'order_dispatch_id' => $dispatch->id,
+                'order_item_id' => $item->id,
+                'product_id' => $item->product_id,
+                'variant_id' => $item->variant_id,
+                'product_code' => $item->product->product_code ?? null,
+                'quantity' => $item->quantity,
+                'base_quantity' => $item->base_quantity,
+                'packaging_breakdown' => $item->packaging_breakdown ?? null,
+                'batch_allocations' => $item->batch_allocations ?: null,
+                'delivered_quantity' => $delivered ? $item->quantity : 0,
+                'damaged_quantity' => 0,
+            ]);
+        }
     }
 }

@@ -14,6 +14,7 @@ import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, RETURN_POLICY_PDF } from "@/components/invoices/invoice-document"
+import { FileLink } from "@/components/file-preview"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -194,10 +195,10 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                 {isDownloading ? 'Generating...' : 'Download PDF'}
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <a href={RETURN_POLICY_PDF} target="_blank" rel="noopener noreferrer">
+                <FileLink href={RETURN_POLICY_PDF}>
                   <FileText className="h-4 w-4 mr-2" />
                   Return Policy
-                </a>
+                </FileLink>
               </Button>
               <Button variant="outline" size="sm">
                 <Mail className="h-4 w-4 mr-2" />

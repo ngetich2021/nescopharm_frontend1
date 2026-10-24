@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, FileText, Plus } from "lucide-react";
+import { FileLink } from "@/components/file-preview"
 
 export interface DocumentData {
   id?: string; // For existing documents
@@ -155,14 +156,12 @@ export function DocumentForm({ documents, onChange }: DocumentFormProps) {
                 {doc.document_image ? (
                   <div>
                     <p>Current document: {doc.document_name}</p>
-                    <a 
-                      href={doc.document_image} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
+                    <FileLink 
+                      href={doc.document_image}
                       className="text-blue-600 hover:underline"
                     >
                       View Document
-                    </a>
+                    </FileLink>
                   </div>
                 ) : (
                   <p>Existing document: {doc.document_name}</p>

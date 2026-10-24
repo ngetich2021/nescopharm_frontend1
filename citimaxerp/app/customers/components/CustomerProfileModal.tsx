@@ -46,6 +46,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { ApplicationStatusSection } from "@/app/customers/[id]/application-status-section";
+import { FileLink } from "@/components/file-preview"
 
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
   pharmacy: "Pharmacy",
@@ -379,9 +380,9 @@ export function CustomerProfileModal({
                                 <li key={doc.id} className="flex flex-wrap items-center gap-x-3">
                                   <span className="text-gray-400 w-5">{i + 1}.</span>
                                   {doc.document_image ? (
-                                    <a href={doc.document_image} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                    <FileLink href={doc.document_image} className="text-blue-600 hover:underline">
                                       {doc.document_name}
-                                    </a>
+                                    </FileLink>
                                   ) : (
                                     <span>{doc.document_name}</span>
                                   )}

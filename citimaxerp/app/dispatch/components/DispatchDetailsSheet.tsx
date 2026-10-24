@@ -65,6 +65,7 @@ import { format } from "date-fns";
 import { cn, toSentenceCase } from "@/lib/utils";
 import { VisuallyHidden } from "@/components/ui/visually-hidden";
 import { dispatchItemCode, dispatchItemUnit, piecesPerPack } from "@/lib/price-codes";
+import { FileLink } from "@/components/file-preview"
 
 // Dispatch quantities are in the pack the line was sold in ("Per pack of 100"), as on the printed note.
 const packLine = (item: any) => {
@@ -650,9 +651,9 @@ export function DispatchDetailsSheet({
                                 </Badge>
                                 {localDispatch.logistic.delivery_note_url && (
                                   <div className="flex gap-2">
-                                     <a href={localDispatch.logistic.delivery_note_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-xs text-blue-600 hover:underline">
+                                     <FileLink href={localDispatch.logistic.delivery_note_url} className="inline-flex items-center text-xs text-blue-600 hover:underline">
                                         <Eye className="h-3.5 w-3.5 mr-1" /> View
-                                     </a>
+                                     </FileLink>
                                      <a href={localDispatch.logistic.delivery_note_url} download className="inline-flex items-center text-xs text-blue-600 hover:underline">
                                         <Download className="h-3.5 w-3.5 mr-1" /> Download
                                      </a>

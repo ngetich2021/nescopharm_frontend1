@@ -599,6 +599,14 @@ class OrderController extends Controller
 
                 if (!$isHistorical) {
                     app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $user->id);
+                } else {
+                    // A past sale is on record in full straight away: its invoice and delivered dispatch.
+                    try {
+                        // Own savepoint: a failure here must not spoil the order being saved.
+                        DB::transaction(fn () => app(\App\Services\InvoiceOrderService::class)->ensurePastOrderRecords($order->fresh(), $user));
+                    } catch (\Throwable $e) {
+                        Log::warning('Past order records not completed', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+                    }
                 }
 
                 $message = 'Order created successfully.';
@@ -936,6 +944,23 @@ class OrderController extends Controller
                         $orderStock->deduct($order->fresh());
                     }
                     $approvalReset = true;
+                }
+
+                // A past sale keeps its dispatch matching the order, and gets an invoice and
+                // dispatch on record if it is missing either.
+                $invoiceOrders = app(\App\Services\InvoiceOrderService::class);
+                if ($invoiceOrders->isPastSale($order->fresh())) {
+                    try {
+                        // Own savepoint: a failure here must not spoil the order being saved.
+                        DB::transaction(function () use ($invoiceOrders, $order, $request) {
+                            if ($request->has('items')) {
+                                $invoiceOrders->syncPastDispatches($order->fresh());
+                            }
+                            $invoiceOrders->ensurePastOrderRecords($order->fresh(), $request->user());
+                        });
+                    } catch (\Throwable $e) {
+                        Log::warning('Past order records not updated', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+                    }
                 }
 
                 if ($approvalReset) {

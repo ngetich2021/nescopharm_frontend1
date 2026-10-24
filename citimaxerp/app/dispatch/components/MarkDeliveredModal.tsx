@@ -14,6 +14,7 @@ import { Loader2, Upload, File, Download, Eye, CheckCircle2, Truck } from "lucid
 import { OrderDispatch } from "@/lib/order-dispatches";
 import { uploadDeliveryNote, updateLogistics, type Logistics } from "@/lib/logistics";
 import { useToast } from "@/hooks/use-toast";
+import { FileLink } from "@/components/file-preview"
 
 interface MarkDeliveredModalProps {
   open: boolean;
@@ -103,10 +104,10 @@ export function MarkDeliveredModal({ open, onOpenChange, dispatch, onSuccess }: 
                 {logistic?.delivery_note_url && (
                   <>
                     <Button variant="outline" size="sm" asChild>
-                      <a href={logistic.delivery_note_url} target="_blank" rel="noopener noreferrer">
+                      <FileLink href={logistic.delivery_note_url}>
                         <Eye className="mr-2 h-4 w-4" />
                         View
-                      </a>
+                      </FileLink>
                     </Button>
                     <Button variant="outline" size="sm" asChild>
                       <a href={logistic.delivery_note_url} download>

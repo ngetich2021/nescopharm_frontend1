@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import * as XLSX from "xlsx"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import {
   createMissingInvoices, getFiling, importFileNumbers, matchInvoicesToOrders, saveFileNumber, PRINT_KEY,
   type FilingData, type FilingImportResult, type FilingInvoice,
 } from "@/lib/filing"
+import { printHtml } from "@/lib/print-frame"
 
 const kes = (v: unknown) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
@@ -82,6 +84,7 @@ function FileNumberInput({ invoice, onSaved }: { invoice: FilingInvoice; onSaved
  */
 export default function FilingPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const [data, setData] = useState<FilingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -157,7 +160,32 @@ export default function FilingPage() {
       toast({ title: "Could not open the print view", variant: "destructive" })
       return
     }
-    window.open("/filing/print", "_blank")
+    router.push("/filing/print")
+  }
+
+  // A short list to file by: order, amount and file number for each invoice, one section per customer.
+  const printList = (list: { name: string; invoices: FilingInvoice[] }[]) => {
+    const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string)
+    const sections = list.map((g) => `
+      <section>
+        <h2>${esc(g.name)}</h2>
+        <table>
+          <thead><tr><th class="n">S/No</th><th>Order</th><th class="r">Amount (KES)</th><th class="f">File No</th></tr></thead>
+          <tbody>${g.invoices.map((i, idx) => `<tr><td class="n">${idx + 1}</td><td>${esc(i.order_number || i.invoice_number)}</td><td class="r">${kes(i.total_amount)}</td><td class="f">${esc(i.file_number || "")}</td></tr>`).join("")}</tbody>
+          <tfoot><tr><td></td><td>${g.invoices.length} order${g.invoices.length === 1 ? "" : "s"}</td><td class="r">${kes(g.invoices.reduce((t, i) => t + i.total_amount, 0))}</td><td></td></tr></tfoot>
+        </table>
+      </section>`).join("")
+    printHtml(`<!DOCTYPE html><html><head><title>Filing list</title><style>
+      body { font-family: Arial, sans-serif; font-size: 12px; margin: 16px; color: #111; }
+      h1 { font-size: 16px; margin: 0 0 12px; }
+      h2 { font-size: 14px; margin: 18px 0 6px; }
+      section { break-inside: avoid; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; }
+      th { background: #f1f1f1; }
+      .n { width: 40px; } .r { text-align: right; } .f { width: 90px; text-align: center; font-weight: bold; }
+      tfoot td { font-weight: bold; }
+    </style></head><body><h1>Filing list - ${new Date().toLocaleDateString("en-GB")}</h1>${sections}</body></html>`)
   }
 
   const exportExcel = () => {
@@ -292,8 +320,11 @@ export default function FilingPage() {
               </Button>
             </PermissionGuard>
             <input ref={fileInput} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && readImport(e.target.files[0])} />
-            <Button size="sm" onClick={() => printInvoices([...selected])} disabled={selected.size === 0}>
-              <Printer className="mr-2 h-4 w-4" /> Print / PDF{selected.size ? ` (${selected.size})` : ""}
+            <Button variant="outline" size="sm" onClick={() => printList(groups)} disabled={!groups.length} title="Order, amount and file number, by customer">
+              <Printer className="mr-2 h-4 w-4" /> Print list
+            </Button>
+            <Button size="sm" onClick={() => printInvoices([...selected])} disabled={selected.size === 0} title="The full invoices you ticked">
+              <Printer className="mr-2 h-4 w-4" /> Print invoices{selected.size ? ` (${selected.size})` : ""}
             </Button>
           </div>
         </div>
@@ -416,7 +447,7 @@ export default function FilingPage() {
                             </button>
                           </TableCell>
                           <TableCell colSpan={2} className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => printInvoices(ids)}><Printer className="mr-1.5 h-3.5 w-3.5" /> Print all</Button>
+                            <Button variant="ghost" size="sm" onClick={() => printList([g])} title="Order, amount and file number for each invoice"><Printer className="mr-1.5 h-3.5 w-3.5" /> Print all</Button>
                           </TableCell>
                         </TableRow>,
                         ...(isCollapsed ? [] : g.invoices.map((i, idx) => (
@@ -424,7 +455,7 @@ export default function FilingPage() {
                             <TableCell><Checkbox checked={selected.has(i.id)} onCheckedChange={(v) => setSelected(toggle(selected, [i.id], !!v))} /></TableCell>
                             <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                             <TableCell className="font-medium">
-                              <Link href={`/sales/invoices/${i.id}/document`} className="hover:underline" target="_blank">{i.invoice_number}</Link>
+                              <Link href={`/sales/invoices/${i.id}/document`} className="hover:underline">{i.invoice_number}</Link>
                               {i.differs_from_order && <span title={`Order total KES ${kes(i.order_amount)}`}><AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-amber-500" /></span>}
                             </TableCell>
                             <TableCell>{fmtDate(i.invoice_date)}</TableCell>

@@ -36,6 +36,7 @@ import { getLogisticsPaginated, updateLogistics, uploadDeliveryNote, reviewDeliv
 import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { usePermissions } from "@/hooks/use-permissions"
+import { FileLink } from "@/components/file-preview"
 
 function reviewerName(entry: Logistics) {
   const r = entry.delivery_note_reviewed_by
@@ -52,16 +53,14 @@ function DeliveryNoteCell({ entry }: { entry: Logistics }) {
     <div className="flex items-center gap-2">
       <Badge className="bg-green-100 text-green-800 border-green-500 hover:bg-green-100">Yes</Badge>
       {entry.delivery_note_url && (
-        <a
+        <FileLink
           href={entry.delivery_note_url}
-          target="_blank"
-          rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           className="text-muted-foreground hover:text-primary"
           title="Download delivery note"
         >
           <Download className="h-4 w-4" />
-        </a>
+        </FileLink>
       )}
       {status === "approved" && <span className="text-xs font-medium text-green-700">Approved</span>}
       {status === "pending_review" && <span className="text-xs font-medium text-amber-700">Awaiting review</span>}
@@ -598,10 +597,10 @@ export function LogisticsTable() {
                       )}
                       {viewingEntry.delivery_note_url && (
                         <Button variant="outline" size="sm" asChild>
-                          <a href={viewingEntry.delivery_note_url} target="_blank" rel="noopener noreferrer" download>
+                          <FileLink href={viewingEntry.delivery_note_url}>
                             <Download className="mr-2 h-4 w-4" />
                             Download Delivery Note
-                          </a>
+                          </FileLink>
                         </Button>
                       )}
 

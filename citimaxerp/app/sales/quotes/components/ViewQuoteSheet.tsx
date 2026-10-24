@@ -24,6 +24,7 @@ import { SendQuoteModal } from "@/components/modals/send-quote-modal"
 import apiCall from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { documentCode, piecesPerPack } from "@/lib/price-codes"
+import { FileLink } from "@/components/file-preview"
 
 interface ViewQuoteSheetProps {
   open: boolean
@@ -455,9 +456,9 @@ export function ViewQuoteSheet({
                 {quote.signed_quote_urls && (
                   <>
                     <Button variant="outline" size="sm" asChild>
-                      <a href={quote.signed_quote_urls.view} target="_blank" rel="noopener noreferrer">
+                      <FileLink href={quote.signed_quote_urls.view}>
                         <Eye className="h-4 w-4 mr-2" /> View
-                      </a>
+                      </FileLink>
                     </Button>
                     <Button variant="outline" size="sm" asChild>
                       <a href={quote.signed_quote_urls.download} download={quote.signed_quote_name || true}>

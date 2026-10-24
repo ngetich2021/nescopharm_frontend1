@@ -183,13 +183,19 @@ export function DocumentViewerModal({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download failed:', error);
-      // Fallback to opening in new tab
-      window.open(documentUrl, '_blank');
+      // Fall back to a plain link download (stays on this page)
+      handleOpenExternal();
     }
   };
 
+  // Saves the file through a plain link - never opens another window.
   const handleOpenExternal = () => {
-    window.open(documentUrl, '_blank');
+    const a = document.createElement('a');
+      a.href = documentUrl;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
   };
 
   const renderDocumentViewer = () => {
@@ -413,10 +419,10 @@ export function DocumentViewerModal({
                 size="sm"
                 onClick={handleOpenExternal}
                 className="flex items-center gap-2"
-                title="Open in new tab"
+                title="Save the file"
               >
                 <ExternalLink className="h-4 w-4" />
-                External
+                Save
               </Button>
               <Button
                 variant="outline"
@@ -459,7 +465,7 @@ export function DocumentViewerModal({
                 className="bg-[#E30040] hover:bg-[#E30040]/90 text-white flex items-center gap-2"
               >
                 <ExternalLink className="h-4 w-4" />
-                Open External
+                Save file
               </Button>
             </div>
           </div>

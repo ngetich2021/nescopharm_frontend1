@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Download, Loader2, Printer } from "lucide-react"
+import { ArrowLeft, Download, Loader2, Printer } from "lucide-react"
 import { getEtimsConfig } from "@/lib/etims"
 import { PRINT_KEY } from "@/lib/filing"
 import { printWithFileName } from "@/lib/document-names"
@@ -16,6 +17,7 @@ import { InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, type Inv
  */
 export default function FilingPrintPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const [docs, setDocs] = useState<InvoiceDocumentData[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -111,7 +113,8 @@ export default function FilingPrintPage() {
     <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
       <div className="sticky top-0 z-10 border-b bg-white print:hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="text-sm">
+          <div className="flex items-center gap-3 text-sm">
+            <Button variant="ghost" size="sm" onClick={() => router.push("/filing")}><ArrowLeft className="mr-2 h-4 w-4" /> Back to Filing</Button>
             {loading ? (
               <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading invoices {docs.length} of {total}...</span>
             ) : total === 0 ? (

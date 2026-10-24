@@ -276,8 +276,11 @@ class LedgerPostingService
         $desired = null;
 
         // A historical (migrated) sale's stock is already out of the opening balances, so
-        // booking its cost again would take it out of Inventory twice.
-        $historical = (bool) Order::whereKey($dispatch->order_id)->value('is_historical');
+        // booking its cost again would take it out of Inventory twice. Likewise any past
+        // (pre-go-live) sale whose stock never left in this system: cost follows the stock.
+        $order = Order::whereKey($dispatch->order_id)->first(['id', 'is_historical', 'order_date', 'stock_deducted_at']);
+        $historical = !$order || $order->is_historical
+            || (Order::isHistoricalDate($order->order_date) && !$order->stock_deducted_at);
 
         if (!$deleted && !$historical && $settings && $settings->perpetual_inventory) {
             $shippedStatuses = $settings->cogs_recognition === 'on_delivery' ? ['delivered'] : ['in_transit', 'delivered'];

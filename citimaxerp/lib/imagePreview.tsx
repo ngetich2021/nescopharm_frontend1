@@ -1,6 +1,7 @@
 import { X, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useEffect } from "react";
 import React from "react"; // Import React
+import { FileLink } from "@/components/file-preview"
 
 export function ImagePreview({
   images,
@@ -120,18 +121,15 @@ export function ImagePreview({
                   {currentImage.caption}
                 </p>
               )}
-              <a
+              <FileLink
                 href={currentImage.url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-white flex-shrink-0 flex items-center gap-2 p-2 hover:bg-white/20 rounded transition-colors"
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Download image"
               >
                 <Download size={20} />
                 <span className="hidden sm:inline text-sm">Download</span>{" "}
-              </a>
+              </FileLink>
             </div>
           </div>
         )}

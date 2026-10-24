@@ -11,6 +11,7 @@ import { ArrowLeft, CalendarIcon, CreditCard, Eye, FileText, Loader2, MessageCir
 import { getPaymentById, Payment } from "@/lib/payments"
 import { PaymentAllocationModal } from "@/components/modals/payment-allocation-modal"
 import { formatCurrency, formatDate, toSentenceCase } from "@/lib/utils"
+import { printHtml } from "@/lib/print-frame"
 
 interface PaymentDetailsSheetProps {
   paymentId: string
@@ -155,13 +156,7 @@ export function PaymentDetailsSheet({ paymentId, isOpen, onClose }: PaymentDetai
   }
 
   const handlePrintReceipt = () => {
-    const printWindow = window.open("", "_blank")
-    if (printWindow) {
-      printWindow.document.write(`<!DOCTYPE html><html><head><title>Receipt</title></head><body>${generateReceiptHTML()}</body></html>`)
-      printWindow.document.close()
-      printWindow.focus()
-      printWindow.print()
-    }
+    printHtml(`<!DOCTYPE html><html><head><title>Receipt</title></head><body>${generateReceiptHTML()}</body></html>`)
   }
 
   const handleSendWhatsApp = async () => {

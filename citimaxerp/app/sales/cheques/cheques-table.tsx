@@ -52,6 +52,7 @@ import {
 } from "@/lib/cheques"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { RecordIssuedChequeModal } from "./record-issued-cheque-modal"
+import { FileLink } from "@/components/file-preview"
 
 interface ChequesTableProps {
   initialCheques?: Cheque[]
@@ -301,15 +302,13 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
                     <div className="flex items-center gap-2">
                       {cheque.cheque_number}
                       {cheque.attachment_url && (
-                        <a
+                        <FileLink
                           href={cheque.attachment_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           title="View attached cheque"
                           className="text-muted-foreground hover:text-primary"
                         >
                           <Paperclip className="h-3.5 w-3.5" />
-                        </a>
+                        </FileLink>
                       )}
                     </div>
                   </TableCell>

@@ -37,6 +37,7 @@ import { getCachedStores } from "@/lib/stores"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Spinner } from "@/components/ui/spinner"
 import { Label } from "@/components/ui/label"
+import { FileLink } from "@/components/file-preview"
 
 const paymentMethods: PaymentMethod[] = ["cash", "card", "bank_transfer", "check", "other"]
 const recurringFrequencies: RecurringFrequency[] = ["weekly", "monthly", "quarterly", "yearly"]
@@ -688,14 +689,12 @@ export function CreateExpenseModal({
               {receiptUrl && (
                 <div className="relative w-full h-32 border rounded-md overflow-hidden flex items-center justify-center bg-gray-100">
                   {receiptUrl.endsWith(".pdf") ? (
-                    <a
+                    <FileLink
                       href={receiptUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="text-primary hover:underline flex items-center gap-1"
                     >
                       <FileText className="h-5 w-5" /> View PDF Receipt
-                    </a>
+                    </FileLink>
                   ) : (
                     <Image
                       src={receiptUrl || "/placeholder.svg"}
@@ -720,14 +719,12 @@ export function CreateExpenseModal({
               {!receiptFile && !receiptUrl && initialData?.receipt_url && (
                 <div className="relative w-full h-32 border rounded-md overflow-hidden flex items-center justify-center bg-gray-100">
                   {initialData.receipt_url.endsWith(".pdf") ? (
-                    <a
+                    <FileLink
                       href={initialData.receipt_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="text-primary hover:underline flex items-center gap-1"
                     >
                       <FileText className="h-5 w-5" /> View PDF Receipt
-                    </a>
+                    </FileLink>
                   ) : (
                     <Image
                       src={initialData.receipt_url || "/placeholder.svg"}
