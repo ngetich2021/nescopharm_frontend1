@@ -74,6 +74,7 @@ class FilingController extends Controller
             ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
             ->where('o.company_id', $companyId)
             ->where('o.status', 'completed')
+            ->whereNull('o.deleted_at')
             ->whereNotExists(fn ($q) => $q->from('invoices')->whereColumn('invoices.order_id', 'o.id'))
             ->select(['o.id', 'o.order_number', 'o.order_date', 'o.final_amount', 'o.is_historical', 'o.customer_id', 'c.business_name', 'c.name as customer_name'])
             ->get()
