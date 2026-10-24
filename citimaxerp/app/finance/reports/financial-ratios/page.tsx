@@ -93,9 +93,9 @@ export default function FinancialRatiosPage() {
       [`Period: ${fromDate} to ${asOfDate}`, ''],
       ['', ''],
       ['LIQUIDITY RATIOS', ''],
-      ['Current Ratio', financialRatios.liquidityRatios.currentRatio.toFixed(2)],
-      ['Quick Ratio', financialRatios.liquidityRatios.quickRatio.toFixed(2)],
-      ['Cash Ratio', financialRatios.liquidityRatios.cashRatio.toFixed(2)],
+      ['Current Ratio', Number(financialRatios.liquidityRatios.currentRatio ?? 0).toFixed(2)],
+      ['Quick Ratio', Number(financialRatios.liquidityRatios.quickRatio ?? 0).toFixed(2)],
+      ['Cash Ratio', Number(financialRatios.liquidityRatios.cashRatio ?? 0).toFixed(2)],
       ['', ''],
       ['PROFITABILITY RATIOS', ''],
       ['Gross Profit Margin', `${(financialRatios.profitabilityRatios.grossProfitMargin * 100).toFixed(1)}%`],
@@ -104,14 +104,14 @@ export default function FinancialRatiosPage() {
       ['Return on Equity', `${(financialRatios.profitabilityRatios.returnOnEquity * 100).toFixed(1)}%`],
       ['', ''],
       ['LEVERAGE RATIOS', ''],
-      ['Debt to Equity', financialRatios.leverageRatios.debtToEquity.toFixed(2)],
+      ['Debt to Equity', Number(financialRatios.leverageRatios.debtToEquity ?? 0).toFixed(2)],
       ['Debt to Assets', `${(financialRatios.leverageRatios.debtToAssets * 100).toFixed(1)}%`],
       ['Equity Ratio', `${(financialRatios.leverageRatios.equityRatio * 100).toFixed(1)}%`],
       ['', ''],
       ['EFFICIENCY RATIOS', ''],
-      ['Asset Turnover', financialRatios.efficiencyRatios.assetTurnover.toFixed(2)],
-      ['Inventory Turnover', financialRatios.efficiencyRatios.inventoryTurnover.toFixed(2)],
-      ['Receivable Turnover', financialRatios.efficiencyRatios.receivableTurnover.toFixed(2)],
+      ['Asset Turnover', Number(financialRatios.efficiencyRatios.assetTurnover ?? 0).toFixed(2)],
+      ['Inventory Turnover', Number(financialRatios.efficiencyRatios.inventoryTurnover ?? 0).toFixed(2)],
+      ['Receivable Turnover', Number(financialRatios.efficiencyRatios.receivableTurnover ?? 0).toFixed(2)],
     ]
 
     const csv = csvContent.map(row => row.join(',')).join('\n')
@@ -129,11 +129,11 @@ export default function FinancialRatiosPage() {
   }
 
   const formatPercentage = (value: number) => {
-    return `${(value * 100).toFixed(1)}%`
+    return `${(Number(value ?? 0) * 100).toFixed(1)}%`
   }
 
   const formatRatio = (value: number) => {
-    return value.toFixed(2)
+    return Number(value ?? 0).toFixed(2)
   }
 
   const getRatioStatus = (value: number, good: number, excellent: number) => {

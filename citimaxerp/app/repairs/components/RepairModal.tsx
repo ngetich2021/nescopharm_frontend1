@@ -280,7 +280,7 @@ export function RepairModal({
                           <span>Repair Cost</span>
                         </h4>
                         <p className="text-lg font-semibold text-green-600">
-                          ${currentRepair.cost.toFixed(2)}
+                          KES {Number(currentRepair.cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </div>
                     )}

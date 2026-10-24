@@ -18,6 +18,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect, useRef } from "react";
 import { assignConversation } from "@/lib/chat-api";
+import { getUsers } from "@/lib/users";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useCallback } from "react";
 
@@ -25,13 +26,6 @@ interface CustomerSidebarProps {
     conversation: Conversation;
 }
 
-const mockAgents = [
-  { id: "1", name: "Alice Agent" },
-  { id: "2", name: "Bob Support" },
-  { id: "3", name: "Charlie Admin" },
-];
-
-const mockTags = ["VIP", "Billing", "Escalated", "New"];
 
 const API_BASE = "/api/chat";
 
@@ -45,8 +39,18 @@ function getAuthToken() {
 
 export function CustomerSidebar({ conversation }: CustomerSidebarProps) {
     const [openSection, setOpenSection] = useState<string | null>(null);
-    const [assignedAgent, setAssignedAgent] = useState<string>(mockAgents[0].id);
-    const [tags, setTags] = useState<string[]>(["VIP"]);
+    // Agents are the company's active users (it listed made-up agents whose ids didn't exist).
+    const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+    const [assignedAgent, setAssignedAgent] = useState<string>((conversation as any).assigned_to ?? (conversation as any).agent_id ?? "");
+    const [tags, setTags] = useState<string[]>([]);
+
+    useEffect(() => {
+      getUsers()
+        .then((users) => setAgents(users
+          .filter((u) => u.is_active)
+          .map((u) => ({ id: u.id, name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email }))))
+        .catch(() => setAgents([]));
+    }, []);
     const [newTag, setNewTag] = useState("");
     const [assignLoading, setAssignLoading] = useState(false);
     const [tagLoading, setTagLoading] = useState(false);
@@ -226,7 +230,8 @@ export function CustomerSidebar({ conversation }: CustomerSidebarProps) {
                       onChange={handleAssignAgent}
                       disabled={assignLoading}
                     >
-                      {mockAgents.map((agent) => (
+                      <option value="" disabled>Unassigned</option>
+                      {agents.map((agent) => (
                         <option key={agent.id} value={agent.id}>{agent.name}</option>
                       ))}
                     </select>

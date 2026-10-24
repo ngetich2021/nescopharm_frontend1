@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
-import { getDailyReports, deleteEmployeePortalDailyReport } from "@/lib/daily-reports"
+import { getDailyReports } from "@/lib/daily-reports"
+import { deleteEmployeePortalDailyReport } from "@/lib/employee-portal"
 import type { DailyWorkReport, DailyWorkReportEntry } from "@/lib/daily-reports"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

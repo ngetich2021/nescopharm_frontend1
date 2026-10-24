@@ -69,10 +69,10 @@ export function ReceiptPrinter({ order }: ReceiptPrinterProps) {
     receipt += dashes + "\n"
 
     // Totals
-    receipt += leftRight("Subtotal:", `Ksh. ${order.subtotal.toFixed(2)}`) + "\n"
-    receipt += leftRight("Tax:", `Ksh. ${order.tax.toFixed(2)}`) + "\n"
+    receipt += leftRight("Subtotal:", `Ksh. ${Number(order.subtotal || 0).toFixed(2)}`) + "\n"
+    receipt += leftRight("Tax:", `Ksh. ${Number(order.tax || 0).toFixed(2)}`) + "\n"
     receipt += line + "\n"
-    receipt += leftRight("TOTAL:", `Ksh. ${order.total.toFixed(2)}`) + "\n"
+    receipt += leftRight("TOTAL:", `Ksh. ${Number(order.total || 0).toFixed(2)}`) + "\n"
     receipt += line + "\n"
 
     // Payments (show all payments made)
@@ -81,10 +81,10 @@ export function ReceiptPrinter({ order }: ReceiptPrinterProps) {
       order.payments.forEach((p: any, idx: number) => {
         receipt += leftRight(
           `${p.method.toUpperCase()}${p.txnCode ? ` (${p.txnCode})` : ""}${p.phone ? ` (${p.phone})` : ""}`,
-          `Ksh. ${p.amount.toFixed(2)}`
+          `Ksh. ${Number(p.amount || 0).toFixed(2)}`
         ) + "\n"
-        if (p.change > 0) {
-          receipt += leftRight("Change:", `Ksh. ${p.change.toFixed(2)}`) + "\n"
+        if (Number(p.change) > 0) {
+          receipt += leftRight("Change:", `Ksh. ${Number(p.change || 0).toFixed(2)}`) + "\n"
         }
       })
       receipt += dashes + "\n"

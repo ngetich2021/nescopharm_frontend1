@@ -31,7 +31,7 @@ import {
   Send
 } from "lucide-react";
 import { Employee, employeesApi } from "@/lib/employees";
-import { payrollApi } from "@/lib/payroll";
+import { processBulkPayroll } from "@/lib/payroll";
 import { useToast } from "@/hooks/use-toast";
 import { EmployeePayrollData, BulkPayrollRequest, BulkPayrollResponse } from "@/app/types";
 import { EmployeeSelectionSheet } from "./EmployeeSelectionSheet";
@@ -177,7 +177,7 @@ export function BulkPayrollPage() {
         custom_data: payrollDataMap,
       };
 
-      const response = await payrollApi.processBulkPayroll(requestData);
+      const response = await processBulkPayroll(requestData);
       
       setProcessingResult({ success: true, data: response as BulkPayrollResponse });
       setCurrentTab("results");

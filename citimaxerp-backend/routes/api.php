@@ -965,7 +965,7 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
 
     // Budgets - Specific routes must come before resource routes
     Route::get('budget-summary', [BudgetController::class, 'getSummary']);
-    Route::post('budgets/copy-from-previous', [BudgetController::class, 'copyFromPrevious']);
+    Route::get('budgets/options', [BudgetController::class, 'options']);
     Route::apiResource('budgets', BudgetController::class);
     Route::post('budgets/{id}/approve', [BudgetController::class, 'approve']);
     Route::post('budgets/{id}/reject', [BudgetController::class, 'reject']);

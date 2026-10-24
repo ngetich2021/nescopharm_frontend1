@@ -163,7 +163,7 @@ export function LogisticsDetailsSheet({ isOpen, onOpenChange, logisticsId }: Log
                   <div>
                     <h4 className="text-sm font-medium text-gray-500">Order Total</h4>
                     <p className="mt-1">
-                      {logistics.orders?.total_amount ? `Ksh. ${logistics.orders.total_amount.toFixed(2)}` : "N/A"}
+                      {logistics.orders?.total_amount ? `Ksh. ${Number(logistics.orders.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}
                     </p>
                   </div>
                 </div>
