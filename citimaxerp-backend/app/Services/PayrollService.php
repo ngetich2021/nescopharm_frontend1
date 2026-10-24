@@ -63,19 +63,21 @@ class PayrollService
             $monthStart = sprintf('%04d-%02d-01', $run->pay_year, $run->pay_month);
             $monthEnd = date('Y-m-t', strtotime($monthStart));
 
-            // Include only active employees who:
-            // 1. Were hired on or before the last day of the pay month
-            // 2. Were either never terminated OR terminated during this pay month
-            //    (if terminated, they only get paid the month they're terminated)
+            // Everyone employed during the pay month, judged by their dates, not by whether they are
+            // still active today (a month can be processed after someone has left):
+            // 1. hired on or before its last day, and
+            // 2. leaving on or after its first day - someone leaving during the month is paid pro rata
+            //    for it, someone leaving later gets the full month.
+            // Staff with no leaving date count while active; inactive without a date (e.g. suspended)
+            // are left out.
             $employees = Employee::where('company_id', $run->company_id)
-                ->whereRaw('is_active = true')
-                ->where(function ($q) use ($monthStart, $monthEnd) {
+                ->where(function ($q) use ($monthEnd) {
                     $q->whereNull('hire_date')
                       ->orWhere('hire_date', '<=', $monthEnd);
                 })
-                ->where(function ($q) use ($monthStart, $monthEnd) {
-                    $q->whereNull('termination_date')
-                      ->orWhereBetween('termination_date', [$monthStart, $monthEnd]);
+                ->where(function ($q) use ($monthStart) {
+                    $q->where('termination_date', '>=', $monthStart)
+                      ->orWhere(fn ($q) => $q->whereNull('termination_date')->whereRaw('is_active = true'));
                 })
                 ->get();
 

@@ -296,7 +296,7 @@ class User extends Authenticatable implements MustVerifyEmail
         if ($value === null) {
             $this->attributes['is_active'] = 'true';
         } else {
-            $this->attributes['is_active'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+            $this->attributes['is_active'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
         }
     }
 
@@ -310,7 +310,7 @@ class User extends Authenticatable implements MustVerifyEmail
         if ($value === null) {
             $this->attributes['email_verified'] = 'false';
         } else {
-            $this->attributes['email_verified'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+            $this->attributes['email_verified'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
         }
     }
 

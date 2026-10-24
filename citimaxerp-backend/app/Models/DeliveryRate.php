@@ -47,7 +47,7 @@ class DeliveryRate extends Model
         // in-memory value must be fixed back up or reads after save() lie).
         static::saving(function ($model) {
             if (array_key_exists('is_active', $model->attributes)) {
-                $model->attributes['is_active'] = filter_var($model->attributes['is_active'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+                $model->attributes['is_active'] = filter_var($model->attributes['is_active'], FILTER_VALIDATE_BOOLEAN) ? true : false;
             }
         });
 

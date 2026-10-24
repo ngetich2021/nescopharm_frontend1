@@ -167,7 +167,7 @@ class Permission extends Model
         if ($value === null) {
             $this->attributes['is_system'] = 'false';
         } else {
-            $this->attributes['is_system'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+            $this->attributes['is_system'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
         }
     }
 
@@ -177,7 +177,7 @@ class Permission extends Model
         if ($value === null) {
             $this->attributes['is_active'] = 'false';
         } else {
-            $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+            $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
         }
     }
 

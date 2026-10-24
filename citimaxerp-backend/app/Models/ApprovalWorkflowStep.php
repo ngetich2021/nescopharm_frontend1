@@ -179,7 +179,7 @@ class ApprovalWorkflowStep extends Model
      */
     public function setIsActiveAttribute($value)
     {
-        $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     /**
@@ -187,7 +187,7 @@ class ApprovalWorkflowStep extends Model
      */
     public function setIsRequiredAttribute($value)
     {
-        $this->attributes['is_required'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['is_required'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     /**
@@ -195,7 +195,7 @@ class ApprovalWorkflowStep extends Model
      */
     public function setAllowRejectionAttribute($value)
     {
-        $this->attributes['allow_rejection'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['allow_rejection'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     /**

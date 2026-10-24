@@ -87,7 +87,7 @@ class CreditNote extends Model
      */
     public function setEtimsRequestedAttribute($value): void
     {
-        $this->attributes['etims_requested'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['etims_requested'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     protected static function boot()

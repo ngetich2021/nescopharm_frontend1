@@ -19,7 +19,7 @@ class DashboardConfiguration extends Model
         if ($value === null) {
             $this->attributes['is_default'] = 'true';
         } else {
-            $this->attributes['is_default'] = $value ? 'true' : 'false';
+            $this->attributes['is_default'] = $value ? true : false;
         }
     }
 

@@ -122,18 +122,18 @@ class Role extends Model
         if ($value === null) {
             $this->attributes['is_active'] = 'false';
         } else {
-            $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+            $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
         }
     }
 
     public function setIsSalesRepAttribute($value)
     {
-        $this->attributes['is_sales_rep'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['is_sales_rep'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     public function setIsWarehouseInchargeAttribute($value)
     {
-        $this->attributes['is_warehouse_incharge'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['is_warehouse_incharge'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     // Scopes for PostgreSQL boolean queries

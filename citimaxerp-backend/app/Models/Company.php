@@ -128,7 +128,7 @@ class Company extends Model
         if ($value === null) {
             $this->attributes['is_active'] = 'true'; // Store as string for PostgreSQL
         } else {
-            $this->attributes['is_active'] = $value ? 'true' : 'false';
+            $this->attributes['is_active'] = $value ? true : false;
         }
     }
 
@@ -139,7 +139,7 @@ class Company extends Model
     {
         // Stored as 'true'/'false' text for PostgreSQL (a PHP bool binds as 1/0). Not in $casts: a
         // boolean cast reads 'false' as true, so switching it off was never detected as a change.
-        $this->attributes['is_first_time'] = ($value === null || filter_var($value, FILTER_VALIDATE_BOOLEAN)) ? 'true' : 'false';
+        $this->attributes['is_first_time'] = ($value === null || filter_var($value, FILTER_VALIDATE_BOOLEAN)) ? true : false;
     }
 
     /**

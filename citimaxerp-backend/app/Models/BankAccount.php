@@ -168,12 +168,12 @@ class BankAccount extends Model
     // so store the literal 'true'/'false' string instead (as elsewhere in the app).
     public function setIsActiveAttribute($value)
     {
-        $this->attributes['is_active'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['is_active'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     public function setAllowOverdraftAttribute($value)
     {
-        $this->attributes['allow_overdraft'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['allow_overdraft'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
 }

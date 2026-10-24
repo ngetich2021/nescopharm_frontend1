@@ -14,7 +14,7 @@ class DispatchItem extends Model
         if ($value === null) {
             $this->attributes['is_returnable'] = 'false';
         } else {
-            $this->attributes['is_returnable'] = $value ? 'true' : 'false';
+            $this->attributes['is_returnable'] = $value ? true : false;
         }
     }
 
@@ -34,7 +34,7 @@ class DispatchItem extends Model
         if ($value === null) {
             $this->attributes['is_returned'] = 'false';
         } else {
-            $this->attributes['is_returned'] = $value ? 'true' : 'false';
+            $this->attributes['is_returned'] = $value ? true : false;
         }
     }
 

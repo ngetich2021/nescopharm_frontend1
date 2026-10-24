@@ -185,16 +185,19 @@ export async function getEmployees(params?: {
   company_id?: string;
   department?: string;
   employment_status?: string;
+  // Current staff unless asked otherwise (the server's default): "former" or "all" for HR's register.
+  staff?: "current" | "former" | "all";
   search?: string;
   page?: number;
   per_page?: number;
 }): Promise<EmployeesResponse> {
   try {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.company_id) queryParams.append('company_id', params.company_id);
     if (params?.department) queryParams.append('department', params.department);
     if (params?.employment_status) queryParams.append('employment_status', params.employment_status);
+    if (params?.staff) queryParams.append('staff', params.staff);
     if (params?.search) queryParams.append('search', params.search);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.per_page) queryParams.append('per_page', params.per_page.toString());

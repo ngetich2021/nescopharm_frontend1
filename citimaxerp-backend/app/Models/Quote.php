@@ -45,7 +45,7 @@ class Quote extends Model
      */
     public function setBelowMinimumPriceAttribute($value)
     {
-        $this->attributes['below_minimum_price'] = $value ? 'true' : 'false';
+        $this->attributes['below_minimum_price'] = $value ? true : false;
     }
 
     /**
@@ -53,7 +53,7 @@ class Quote extends Model
      */
     public function setRequiresApprovalAttribute($value)
     {
-        $this->attributes['requires_approval'] = $value ? 'true' : 'false';
+        $this->attributes['requires_approval'] = $value ? true : false;
     }
 
     /**

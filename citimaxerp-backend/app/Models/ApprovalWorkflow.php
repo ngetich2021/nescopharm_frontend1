@@ -59,7 +59,7 @@ class ApprovalWorkflow extends Model
      */
     public function setIsActiveAttribute($value)
     {
-        $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['is_active'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     /**

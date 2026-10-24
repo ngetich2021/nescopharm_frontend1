@@ -99,7 +99,7 @@ class ProductVariant extends Model
         // Convert to boolean first
         $boolValue = ($value === true || $value === 1 || $value === '1' || $value === 'true' || $value === 'TRUE');
         // Store as string 'true' or 'false' for PostgreSQL
-        $this->attributes['is_active'] = $boolValue ? 'true' : 'false';
+        $this->attributes['is_active'] = $boolValue ? true : false;
     }
 
     // Get boolean value as actual boolean when retrieving

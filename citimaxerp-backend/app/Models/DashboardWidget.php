@@ -46,7 +46,7 @@ class DashboardWidget extends Model
         if ($value === null) {
             $this->attributes['is_active'] = 'true'; // Store as string for PostgreSQL
         } else {
-            $this->attributes['is_active'] = $value ? 'true' : 'false';
+            $this->attributes['is_active'] = $value ? true : false;
         }
     }
 
@@ -56,7 +56,7 @@ class DashboardWidget extends Model
         if ($value === null) {
             $this->attributes['is_system_widget'] = 'false'; // Store as string for PostgreSQL
         } else {
-            $this->attributes['is_system_widget'] = $value ? 'true' : 'false';
+            $this->attributes['is_system_widget'] = $value ? true : false;
         }
     }
 

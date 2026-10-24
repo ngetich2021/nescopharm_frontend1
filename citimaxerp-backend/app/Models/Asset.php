@@ -52,7 +52,7 @@ class Asset extends Model
         if ($value === null) {
             $this->attributes['is_active'] = 'true';
         } else {
-            $this->attributes['is_active'] = $value ? 'true' : 'false';
+            $this->attributes['is_active'] = $value ? true : false;
         }
     }
 

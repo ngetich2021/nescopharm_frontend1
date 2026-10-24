@@ -74,12 +74,12 @@ class Employee extends Model
         'employment_status',
     ];
 
-    // Boolean mutator for PostgreSQL compatibility
+    // Accepts form values ("true", "1", 1). Stored as a real boolean: the strings 'true'/'false' both
+    // read back as true, so switching someone off never saved (App\Database\PostgresConnection
+    // already binds booleans in a form Postgres accepts).
     public function setIsActiveAttribute($value)
     {
-        $this->attributes['is_active'] = $value === true || $value === 'true' || $value === 1 || $value === '1'
-            ? 'true'
-            : 'false';
+        $this->attributes['is_active'] = $value === true || $value === 'true' || $value === 1 || $value === '1';
     }
 
     protected static function boot()
@@ -100,6 +100,12 @@ class Employee extends Model
                         "Termination date ({$model->termination_date}) cannot be before hire date ({$model->hire_date})"
                     );
                 }
+            }
+
+            // Once the leaving date has arrived the employee is no longer active, however the date
+            // was entered. A future date is applied on the day by `employees:apply-terminations`.
+            if ($model->termination_date && $model->termination_date->lte(today())) {
+                $model->is_active = false;
             }
         });
     }
@@ -253,7 +259,8 @@ class Employee extends Model
     {
         $this->update([
             'termination_date' => $terminationDate,
-            'is_active' => false,
+            // A future leaving date takes effect on the day (employees:apply-terminations).
+            'is_active' => \Carbon\Carbon::parse($terminationDate)->isFuture(),
             'metadata' => array_merge($this->metadata ?? [], [
                 'termination_reason' => $reason,
                 'terminated_at' => now(),

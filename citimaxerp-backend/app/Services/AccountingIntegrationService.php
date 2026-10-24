@@ -260,11 +260,15 @@ class AccountingIntegrationService
     protected function generateEntryNumber(string $prefix = 'JE'): string
     {
         $date = now()->format('Ymd');
-        $count = JournalEntry::where('company_id', $this->companyId)
-            ->where('entry_number', 'like', "{$prefix}-{$date}-%")
-            ->count();
-        
-        return sprintf('%s-%s-%04d', $prefix, $date, $count + 1);
+        // Continue from the highest number used today, not the count: once an entry is deleted
+        // the count falls behind and the next number collides with one already taken.
+        $stem = "{$prefix}-{$date}-";
+        $last = (int) JournalEntry::where('company_id', $this->companyId)
+            ->where('entry_number', 'like', "{$stem}%")
+            ->selectRaw('MAX(CAST(SUBSTRING(entry_number FROM ?) AS INTEGER)) AS n', [strlen($stem) + 1])
+            ->value('n');
+
+        return sprintf('%s%04d', $stem, $last + 1);
     }
 
     /**

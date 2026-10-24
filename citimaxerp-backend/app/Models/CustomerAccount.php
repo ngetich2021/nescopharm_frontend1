@@ -36,7 +36,7 @@ class CustomerAccount extends Model
         if ($value === null) {
             $this->attributes['currently_defaulted'] = 'true';
         } else {
-            $this->attributes['currently_defaulted'] = $value ? 'true' : 'false';
+            $this->attributes['currently_defaulted'] = $value ? true : false;
         }
     }
 

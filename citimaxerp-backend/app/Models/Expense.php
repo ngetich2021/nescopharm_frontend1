@@ -195,7 +195,7 @@ class Expense extends Model
         if ($value === null) {
             $this->attributes['is_recurring'] = 'false'; // Store as string for PostgreSQL
         } else {
-            $this->attributes['is_recurring'] = ($value === true || $value === 1 || $value === '1' || $value === 'true') ? 'true' : 'false';
+            $this->attributes['is_recurring'] = ($value === true || $value === 1 || $value === '1' || $value === 'true') ? true : false;
         }
     }
 

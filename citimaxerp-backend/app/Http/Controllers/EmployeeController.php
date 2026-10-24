@@ -75,6 +75,17 @@ class EmployeeController extends Controller
             if ($bool !== null) {
                 $query->where('is_active', $bool);
             }
+        } else {
+            // Pickers (leave, supervisors, payroll selection...) only ever want current staff, so
+            // that's the default; the Employees page asks for former or all staff explicitly.
+            // The leaving date counts even before the nightly job has marked them inactive.
+            $today = now()->toDateString();
+            match ($request->input('staff', 'current')) {
+                'all' => null,
+                'former' => $query->where(fn ($q) => $q->whereRaw('is_active = false')->orWhere('termination_date', '<=', $today)),
+                default => $query->whereRaw('is_active = true')
+                    ->where(fn ($q) => $q->whereNull('termination_date')->orWhere('termination_date', '>', $today)),
+            };
         }
 
         if ($request->filled('department')) {
@@ -321,8 +332,9 @@ class EmployeeController extends Controller
             } elseif ($employmentStatus === 'inactive') {
                 $data['is_active'] = false;
             } elseif ($employmentStatus === 'terminated') {
-                $data['is_active'] = false;
                 $data['termination_date'] = $data['termination_date'] ?? now()->toDateString();
+                // Takes effect on the leaving date: until then they're still staff (and paid).
+                $data['is_active'] = \Carbon\Carbon::parse($data['termination_date'])->isFuture();
                 $metadata = $employee->metadata ?? [];
                 $metadata['terminated_at'] = now()->toDateTimeString();
                 $data['metadata'] = $metadata;

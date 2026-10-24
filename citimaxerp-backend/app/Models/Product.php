@@ -156,22 +156,22 @@ class Product extends Model
     // Mutators for PostgreSQL boolean compatibility
     public function setIsActiveAttribute($value)
     {
-        $this->attributes['is_active'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['is_active'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     public function setIsFeaturedAttribute($value)
     {
-        $this->attributes['is_featured'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['is_featured'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     public function setIsDigitalAttribute($value)
     {
-        $this->attributes['is_digital'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['is_digital'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     public function setIsTaxableAttribute($value)
     {
-        $this->attributes['is_taxable'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['is_taxable'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     // Every product is stock-tracked, so orders can never exceed what is in stock.
@@ -182,12 +182,12 @@ class Product extends Model
 
     public function setHasPackagingAttribute($value)
     {
-        $this->attributes['has_packaging'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['has_packaging'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     public function setHasVariationsAttribute($value)
     {
-        $this->attributes['has_variations'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['has_variations'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     public function scopeForCompany($query, $companyId)

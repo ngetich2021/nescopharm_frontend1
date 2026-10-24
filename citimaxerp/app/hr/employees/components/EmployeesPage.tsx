@@ -75,12 +75,14 @@ export function EmployeesPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [rowsPerPage, setRowsPerPage] = useState(10)
+  // Former staff (past their leaving date) are kept for records but hidden unless asked for.
+  const [staffFilter, setStaffFilter] = useState<"current" | "former" | "all">("current")
   const { toast } = useToast()
 
   useEffect(() => {
     fetchEmployees()
     fetchEmployeeStatistics()
-  }, [currentPage, searchTerm, rowsPerPage])
+  }, [currentPage, searchTerm, rowsPerPage, staffFilter])
 
   const fetchEmployees = async () => {
     try {
@@ -88,8 +90,9 @@ export function EmployeesPage() {
       const params: any = {
         page: currentPage,
         per_page: rowsPerPage,
+        staff: staffFilter,
       }
-      
+
       if (searchTerm) {
         params.search = searchTerm
       }
@@ -326,6 +329,18 @@ export function EmployeesPage() {
             <p className="text-xs text-muted-foreground">Job roles</p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-sm text-muted-foreground">Show</span>
+        <Select value={staffFilter} onValueChange={(v) => { setStaffFilter(v as typeof staffFilter); setCurrentPage(1) }}>
+          <SelectTrigger className="w-[190px] h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="current">Current staff</SelectItem>
+            <SelectItem value="former">Former staff (terminated)</SelectItem>
+            <SelectItem value="all">All staff</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Employees Table */}

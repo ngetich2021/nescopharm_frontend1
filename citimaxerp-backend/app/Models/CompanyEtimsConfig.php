@@ -79,7 +79,7 @@ class CompanyEtimsConfig extends Model
      */
     public function setEnabledAttribute($value): void
     {
-        $this->attributes['enabled'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $this->attributes['enabled'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : false;
     }
 
     protected static function booted(): void

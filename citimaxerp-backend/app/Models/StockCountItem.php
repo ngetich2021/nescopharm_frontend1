@@ -68,12 +68,12 @@ class StockCountItem extends Model
     // Boolean mutators for PostgreSQL compatibility
     public function setIsCountedAttribute($value)
     {
-        $this->attributes['is_counted'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['is_counted'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
     public function setRequiresRecountAttribute($value)
     {
-        $this->attributes['requires_recount'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? 'true' : 'false';
+        $this->attributes['requires_recount'] = ($value === true || $value === 'true' || $value === 1 || $value === '1') ? true : false;
     }
 
 }
