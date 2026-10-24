@@ -43,7 +43,8 @@ export default function CustomerReportPage() {
     { accessorKey: "new_customers", header: "New Customers" },
   ]
 
-  const totalNewCustomers = data.reduce((sum, item) => sum + item.new_customers, 0)
+  // Counts can arrive as strings; add them as numbers.
+  const totalNewCustomers = data.reduce((sum, item) => sum + Number(item.new_customers || 0), 0)
 
   return (
     <PermissionGuard permissions={["can_view_reports_menu", "can_manage_system", "can_manage_company"]}>

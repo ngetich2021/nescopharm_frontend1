@@ -716,35 +716,90 @@ class ReportService
      * 3. LOGISTICS REPORTS
      */
 
+    // Dispatches raised in the period (by when they were created).
+    private function dispatchesInPeriod(array $filters)
+    {
+        return OrderDispatch::query()
+            ->where('order_dispatches.company_id', $this->companyId)
+            ->when(!empty($filters['date_from']), fn ($q) => $q->where('order_dispatches.created_at', '>=', $filters['date_from']))
+            ->when(!empty($filters['date_to']), fn ($q) => $q->where('order_dispatches.created_at', '<', \Carbon\Carbon::parse($filters['date_to'])->addDay()->toDateString()));
+    }
+
+    /**
+     * How quickly each dispatch moved: raised -> approved -> delivered, in hours. (It used to
+     * compare the planned dispatch date with the approval time, which gave negative hours and
+     * left out every dispatch missing either.)
+     */
     public function getDispatchEfficiencyReport(array $filters = []): array
     {
-        $query = OrderDispatch::where('company_id', $this->companyId)
-            ->whereNotNull('dispatch_date')
-            ->whereNotNull('final_approved_at');
+        $rows = $this->dispatchesInPeriod($filters)
+            ->leftJoin('orders', 'orders.id', '=', 'order_dispatches.order_id')
+            ->leftJoin('customers', 'customers.id', '=', 'orders.customer_id')
+            ->orderByDesc('order_dispatches.created_at')
+            ->get([
+                'order_dispatches.id', 'order_dispatches.dispatch_number', 'order_dispatches.status', 'order_dispatches.approval_status',
+                'order_dispatches.created_at', 'order_dispatches.final_approved_at', 'order_dispatches.actual_delivery_date',
+                'orders.order_number', DB::raw("COALESCE(NULLIF(TRIM(customers.business_name), ''), customers.name) as customer"),
+                'customers.county', 'customers.region',
+            ]);
 
-        if (isset($filters['date_from'])) {
-            $query->where('dispatch_date', '>=', $filters['date_from']);
-        }
+        // A past sale brought across from the old system was delivered before its dispatch record
+        // existed, so a negative span means "not measurable", not a negative time.
+        $hours = function ($from, $to) {
+            if (!$from || !$to) {
+                return null;
+            }
+            $h = round(\Carbon\Carbon::parse($from)->diffInMinutes(\Carbon\Carbon::parse($to), false) / 60, 1);
+            return $h >= 0 ? $h : null;
+        };
+        $data = $rows->map(fn ($d) => [
+            'id' => $d->id,
+            'dispatch_number' => $d->dispatch_number,
+            'order_number' => $d->order_number,
+            'customer' => $d->customer,
+            'county' => $d->county,
+            'region' => $d->region,
+            'status' => $d->status,
+            'approval_status' => $d->approval_status,
+            'raised_at' => $d->created_at ? \Carbon\Carbon::parse($d->created_at)->toDateTimeString() : null,
+            'approved_at' => $d->final_approved_at ? \Carbon\Carbon::parse($d->final_approved_at)->toDateTimeString() : null,
+            'delivered_at' => $d->actual_delivery_date ? \Carbon\Carbon::parse($d->actual_delivery_date)->toDateTimeString() : null,
+            'hours_to_approve' => $hours($d->created_at, $d->final_approved_at),
+            'hours_to_deliver' => $hours($d->final_approved_at ?? $d->created_at, $d->actual_delivery_date),
+        ])->values();
 
-        return $query->select(
-            'id',
-            'dispatch_number',
-            'order_id',
-            'final_approved_at',
-            'dispatch_date',
-            DB::raw('EXTRACT(EPOCH FROM (dispatch_date - final_approved_at))/3600 as hours_to_dispatch')
-        )->get()->toArray();
+        $avg = fn (string $key) => ($v = $data->pluck($key)->filter(fn ($x) => $x !== null && $x >= 0))->isNotEmpty() ? round($v->avg(), 1) : null;
+
+        return [
+            'data' => $data->all(),
+            'summary' => [
+                'dispatches' => $data->count(),
+                'avg_hours_to_approve' => $avg('hours_to_approve'),
+                'avg_hours_to_deliver' => $avg('hours_to_deliver'),
+            ],
+        ];
     }
 
     public function getDeliverySuccessRate(array $filters = []): array
     {
-        $query = OrderDispatch::where('company_id', $this->companyId);
+        // Each count starts from a fresh query (they used to narrow one shared query in turn).
+        $count = fn (?array $statuses = null) => $this->dispatchesInPeriod($filters)
+            ->when($statuses, fn ($q) => $q->whereIn('order_dispatches.status', $statuses))->count();
+
+        $total = $count();
+        $delivered = $count(['delivered']);
+        $cancelled = $count(['cancelled', 'rejected']);
 
         return [
-            'total_dispatches' => $query->count(),
-            'delivered' => $query->where('status', 'delivered')->count(),
-            'failed_or_returned' => $query->whereIn('status', ['returned', 'failed'])->count(),
-            'pending' => $query->whereIn('status', ['pending', 'in_transit'])->count()
+            'total_dispatches' => $total,
+            'delivered' => $delivered,
+            'in_transit' => $count(['in_transit']),
+            'awaiting_dispatch' => $count(['approved']),
+            'pending' => $count(['pending', 'draft']),
+            'failed_or_returned' => $count(['returned', 'failed']),
+            'cancelled' => $cancelled,
+            // Of the dispatches that went ahead (not cancelled / rejected), how many arrived.
+            'delivery_rate' => ($total - $cancelled) > 0 ? round($delivered / ($total - $cancelled) * 100, 1) : 0,
         ];
     }
 

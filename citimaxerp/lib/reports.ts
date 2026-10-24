@@ -192,9 +192,11 @@ export async function getSalesReport(params: {
 /**
  * Fetches logistics report data.
  */
-export async function getLogisticsReport(type: 'efficiency' | 'success_rate'): Promise<any> {
+export async function getLogisticsReport(type: 'efficiency' | 'success_rate', dateFrom?: string): Promise<any> {
   try {
-    const data = await apiCall<any>(`/reports/logistics?type=${type}`, "GET");
+    const params = new URLSearchParams({ type })
+    if (dateFrom) params.append('date_from', dateFrom)
+    const data = await apiCall<any>(`/reports/logistics?${params.toString()}`, "GET");
     return data;
   } catch (error) {
     console.error("Error fetching logistics report:", error);
