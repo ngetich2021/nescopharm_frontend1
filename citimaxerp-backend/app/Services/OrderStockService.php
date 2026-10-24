@@ -41,10 +41,16 @@ class OrderStockService
         }
     }
 
+    // Flagged as brought across from the old system, or simply dated before go-live.
+    private function isPastSale(Order $order): bool
+    {
+        return (bool) $order->is_historical || Order::isHistoricalDate($order->order_date);
+    }
+
     public function deduct(Order $order): void
     {
         // A sale imported from the previous system left stock before the opening balances were taken.
-        if ($order->stock_deducted_at || $order->status === 'cancelled' || $order->is_historical) {
+        if ($order->stock_deducted_at || $order->status === 'cancelled' || $this->isPastSale($order)) {
             return;
         }
 
@@ -83,7 +89,8 @@ class OrderStockService
 
     public function restore(Order $order, string $note): void
     {
-        if (!$order->stock_deducted_at || $order->is_historical) {
+        // Past sales never move stock either way: editing or deleting one returns nothing.
+        if (!$order->stock_deducted_at || $this->isPastSale($order)) {
             return;
         }
 

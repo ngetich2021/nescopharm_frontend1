@@ -105,12 +105,33 @@ export async function fetchProductPriceHistory(productId: string): Promise<Produ
   return res.data
 }
 
+// One import's rows: the saved row-by-row result, or for older imports only the prices it changed.
+export interface PriceListImportChange {
+  row: number
+  code: string
+  description: string | null
+  status: "created" | "matched" | "error" | "added" | "updated"
+  old_price?: number | null
+  price?: number | null
+  unit_of_measure?: string | null
+  message?: string | null
+}
+
+export async function fetchPriceListImportChanges(importId: string): Promise<{ complete: boolean; data: PriceListImportChange[] }> {
+  return apiCall<{ complete: boolean; data: PriceListImportChange[] }>(`/price-lists/history/${importId}/changes`, "GET")
+}
+
 export async function downloadImportFile(importId: string, fileName: string): Promise<void> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/price-lists/history/${importId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
-  if (!res.ok) throw new Error("Download failed")
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.error || body?.message || `Download failed (${res.status})`)
+  }
+  // When the original file is gone the server rebuilds it, and says so in the file name.
+  fileName = res.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/)?.[1] ?? fileName
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")

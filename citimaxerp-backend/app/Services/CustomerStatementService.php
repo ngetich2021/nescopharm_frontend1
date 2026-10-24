@@ -7,8 +7,10 @@ use App\Models\Company;
 use App\Models\CreditNote;
 use App\Models\Customer;
 use App\Models\Invoice;
+use App\Models\Order;
 use App\Models\Payment;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class CustomerStatementService
 {
@@ -27,10 +29,32 @@ class CustomerStatementService
     {
         $customer = Customer::with('account')->where('company_id', $companyId)->findOrFail($customerId);
 
-        $invoices = Invoice::where('customer_id', $customerId)
+        $invoices = Invoice::with('order:id,order_number')
+            ->where('customer_id', $customerId)
             ->whereBetween('invoice_date', [$from, $to])
             ->orderBy('invoice_date')
-            ->get(['id', 'invoice_number', 'invoice_date', 'total_amount', 'balance_amount']);
+            ->get(['id', 'order_id', 'invoice_number', 'invoice_date', 'total_amount', 'balance_amount']);
+
+        // Every order dated in the period, invoiced or not, so the customer's full trading
+        // history (past sales brought across from the old system included) is on the statement.
+        $orders = Order::with('invoice:id,order_id,invoice_number')
+            ->where('customer_id', $customerId)
+            ->whereBetween(DB::raw('COALESCE(order_date, created_at)'), [$from, $to])
+            ->orderByRaw('COALESCE(order_date, created_at)')
+            ->get(['id', 'order_number', 'order_date', 'created_at', 'status', 'payment_status', 'final_amount', 'amount_paid', 'is_historical'])
+            ->map(fn ($o) => [
+                'id' => $o->id,
+                'order_number' => $o->order_number,
+                'order_date' => Carbon::parse($o->order_date ?? $o->created_at)->toDateString(),
+                'status' => $o->status,
+                'payment_status' => $o->payment_status,
+                'invoice_number' => $o->invoice?->invoice_number,
+                'total' => round((float) $o->final_amount, 2),
+                'paid' => round((float) $o->amount_paid, 2),
+                'is_historical' => (bool) $o->is_historical,
+            ])
+            ->values();
+        $countedOrders = $orders->where('status', '!=', 'cancelled');
 
         $payments = Payment::with('invoice:id,invoice_number')
             ->where('customer_id', $customerId)
@@ -132,11 +156,14 @@ class CustomerStatementService
             'transactions' => $transactions,
             'ageing' => $ageing,
             'invoices' => $invoices,
+            'orders' => $orders,
             'payments' => $payments,
             'credit_notes' => $creditNotes,
             'pd_cheques' => $pdCheques,
             'pending_bills' => $pendingBills,
             'summary' => [
+                'orders_count' => $countedOrders->count(),
+                'orders_total' => round((float) $countedOrders->sum('total'), 2),
                 'invoices_count' => $invoices->count(),
                 'invoices_total' => round($invoicesTotal, 2),
                 'payments_count' => $payments->count(),
@@ -163,7 +190,7 @@ class CustomerStatementService
                 'order' => 0,
                 'type' => 'invoice',
                 'reference' => $inv->invoice_number,
-                'description' => 'Invoice',
+                'description' => 'Invoice' . ($inv->order?->order_number ? " - Order {$inv->order->order_number}" : ''),
                 'debit' => (float) $inv->total_amount,
                 'credit' => 0.0,
             ]);
@@ -289,6 +316,7 @@ class CustomerStatementService
             'ACCOUNT STATEMENT - ' . $statement['period']['label'],
             '',
             'Opening balance: KES ' . number_format((float) $statement['opening_balance'], 2),
+            "Orders: {$summary['orders_count']} (KES " . number_format($summary['orders_total'], 2) . ')',
             "Invoices issued: {$summary['invoices_count']} (KES " . number_format($summary['invoices_total'], 2) . ')',
             "Payments received: {$summary['payments_count']} (KES " . number_format($summary['payments_total'], 2) . ')',
             "Credit notes issued: {$summary['credit_notes_count']} (KES " . number_format($summary['credit_notes_total'], 2) . ')',
@@ -296,6 +324,17 @@ class CustomerStatementService
             '',
             'Closing balance: KES ' . number_format((float) $statement['closing_balance'], 2),
         ];
+
+        if (count($statement['orders'] ?? []) > 0) {
+            $lines[] = '';
+            $lines[] = 'Orders this period:';
+            foreach ($statement['orders'] as $o) {
+                $lines[] = '- ' . Carbon::parse($o['order_date'])->format('d/m/Y') . "  {$o['order_number']}"
+                    . ($o['invoice_number'] ? " (Inv {$o['invoice_number']})" : '')
+                    . '  KES ' . number_format($o['total'], 2)
+                    . "  {$o['status']}, {$o['payment_status']}";
+            }
+        }
 
         return implode("\n", $lines);
     }

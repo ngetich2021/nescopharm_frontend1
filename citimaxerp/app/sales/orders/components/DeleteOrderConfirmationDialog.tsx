@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { deleteOrder } from "@/lib/orders";
+import { deleteOrder, isPastSaleDate } from "@/lib/orders";
 import { Order } from "@/lib/orders";
 
 interface DeleteOrderConfirmationDialogProps {
@@ -95,7 +95,11 @@ export function DeleteOrderConfirmationDialog({
           <AlertDialogDescription>
             Are you sure you want to delete order{" "}
             <span className="font-semibold">{order?.order_number || `ORD-${order?.id.substring(0, 8).toUpperCase()}`}</span>?
-            This action cannot be undone.
+            Its invoice, the payments recorded for it and its dispatch are deleted too.{" "}
+            {order && (order.is_historical || isPastSaleDate(order.order_date))
+              ? "This is a past sale, so stock is not touched."
+              : "Any stock it took goes back."}{" "}
+            This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

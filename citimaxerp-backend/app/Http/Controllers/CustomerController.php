@@ -600,6 +600,18 @@ class CustomerController extends Controller
             ? Carbon::parse($request->input('date_to'))->endOfDay()
             : Carbon::now()->endOfMonth();
 
+        // The whole account: from the customer's first sale, invoice or payment (old-system
+        // records included) up to today.
+        if ($request->input('period') === 'all') {
+            $first = collect([
+                Invoice::where('customer_id', $customerId)->min('invoice_date'),
+                Order::where('customer_id', $customerId)->selectRaw('MIN(COALESCE(order_date, created_at)) as first_date')->value('first_date'),
+                \App\Models\Payment::where('customer_id', $customerId)->where('status', 'completed')->min('payment_date'),
+            ])->filter()->map(fn ($d) => Carbon::parse($d))->min();
+            $from = ($first ?? Carbon::now())->copy()->startOfDay();
+            $to = Carbon::now()->endOfDay();
+        }
+
         try {
             $statement = $statementService->generate($customer->company_id, $customerId, $from, $to);
 

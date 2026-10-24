@@ -23,8 +23,8 @@ class Order extends Model
     public function getItemCountAttribute(): int
     {
         // Use loaded orderItems if available, otherwise query
-        $items = $this->relationLoaded('orderItems') ? $this->orderItems : $this->orderItems()->get();
-        return $items->sum('quantity');
+        // Number of lines. Summing quantities mixed packs and pieces (one order read "22000 items").
+        return $this->relationLoaded('orderItems') ? $this->orderItems->count() : $this->orderItems()->count();
     }
 
     protected $dates = ['deleted_at'];

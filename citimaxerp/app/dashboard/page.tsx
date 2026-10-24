@@ -59,6 +59,7 @@ function SparkMetric({
   icon: Icon,
   accent,
   sparkData,
+  hint,
 }: {
   label: string;
   value: string | number;
@@ -67,6 +68,8 @@ function SparkMetric({
   icon: any;
   accent: string;
   sparkData?: number[];
+  // One line saying what the number is made of.
+  hint?: string;
 }) {
   const isUp = (change ?? 0) >= 0;
   const data = useMemo(
@@ -128,6 +131,7 @@ function SparkMetric({
           {prefix && <span className="text-base font-semibold text-muted-foreground mr-1">{prefix}</span>}
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
+        {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
 
         {/* Sparkline */}
         {data.length > 1 && (
@@ -211,7 +215,8 @@ export default function DashboardPage() {
     async function loadData() {
       setLoading(true);
       try {
-        const overviewData = await fetchDashboardOverview();
+        // The headline cards follow the period picker like everything else on the page.
+        const overviewData = await fetchDashboardOverview(period);
         if (cancelled) return;
         setOverview(overviewData);
 
@@ -266,7 +271,7 @@ export default function DashboardPage() {
     [salesAnalytics]
   );
   const orderSparkData = useMemo(
-    () => (salesAnalytics?.revenue_trend || []).map((d: any) => d.order_count || d.orders || Math.floor(Math.random() * 10 + 5)),
+    () => (salesAnalytics?.revenue_trend || []).map((d: any) => d.order_count || d.orders || 0),
     [salesAnalytics]
   );
 
@@ -281,7 +286,11 @@ export default function DashboardPage() {
                 {greeting()}, {user?.first_name || "there"}
               </h1>
               <p className="text-muted-foreground text-sm mt-0.5">
-                {canViewFullDashboard ? "Your business at a glance" : "Welcome to CitiMax ERP"}
+                {canViewFullDashboard
+                  ? overview?.period
+                    ? `Showing ${overview.period.label}: ${new Date(overview.period.from).toLocaleDateString("en-GB")} – ${new Date(overview.period.to).toLocaleDateString("en-GB")}`
+                    : "Your business at a glance"
+                  : "Welcome to CitiMax ERP"}
               </p>
             </div>
             {canViewFullDashboard && (
@@ -327,36 +336,39 @@ export default function DashboardPage() {
               {/* ── Row 1: Spark Metric Cards ── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <SparkMetric
-                  label="Total Revenue"
+                  label="Sales"
                   value={overview?.sales_metrics?.total_revenue?.current?.toLocaleString() || "0"}
                   prefix="KES"
                   change={overview?.sales_metrics?.total_revenue?.change_percent}
                   icon={CircleDollarSign}
                   accent="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400"
                   sparkData={revenueSparkData}
+                  hint="Order totals incl. VAT, by order date, excl. cancelled"
                 />
                 <SparkMetric
-                  label="Total Orders"
+                  label="Orders"
                   value={overview?.sales_metrics?.total_orders?.current?.toLocaleString() || "0"}
                   change={overview?.sales_metrics?.total_orders?.change_percent}
                   icon={ShoppingCart}
                   accent="bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400"
                   sparkData={orderSparkData}
+                  hint="Dated in this period, excl. cancelled"
                 />
                 <SparkMetric
                   label="Customers"
                   value={overview?.customer_metrics?.total_customers?.toLocaleString() || "0"}
-                  change={overview?.customer_metrics?.new_customers?.change_percent}
                   icon={Users}
                   accent="bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+                  hint={`All customers · ${overview?.customer_metrics?.new_customers?.current ?? 0} added this period`}
                 />
                 <SparkMetric
-                  label="Net Profit"
+                  label="Net Cash"
                   value={overview?.financial_metrics?.net_profit?.current?.toLocaleString() || "0"}
                   prefix="KES"
                   change={overview?.financial_metrics?.net_profit?.change_percent}
                   icon={TrendingUp}
                   accent="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                  hint="Payments received − approved/paid expenses"
                 />
               </div>
 
@@ -366,8 +378,8 @@ export default function DashboardPage() {
                   <div className="lg:col-span-3">
                     {Array.isArray(salesAnalytics?.revenue_trend) && salesAnalytics.revenue_trend.length > 0 && (
                       <InteractiveChartCard
-                        title="Revenue Overview"
-                        description="Daily revenue trend"
+                        title="Sales Trend"
+                        description="Daily order totals by order date"
                         data={salesAnalytics.revenue_trend.map((item: any) => {
                           let dateLabel = "";
                           try {
@@ -413,7 +425,7 @@ export default function DashboardPage() {
                   icon={DollarSign}
                 />
                 <KPIPill
-                  label="Conversion Rate"
+                  label="Orders Fully Paid"
                   value={`${overview?.sales_metrics?.conversion_rate || 0}%`}
                   icon={ArrowUpRight}
                   variant="success"
@@ -469,7 +481,7 @@ export default function DashboardPage() {
                 >
                   <div className="p-5 pb-3">
                     <h3 className="text-base font-semibold">Financial Snapshot</h3>
-                    <p className="text-xs text-muted-foreground">Cash flow & expenses</p>
+                    <p className="text-xs text-muted-foreground">Cash in and out this period; outstanding is all unpaid invoices to date</p>
                   </div>
                   <div className="px-5 pb-5 space-y-4">
                     {[
@@ -499,7 +511,7 @@ export default function DashboardPage() {
                     })}
                     <div className="pt-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Net Profit</span>
+                        <span className="text-sm font-medium">Net Cash</span>
                         <span
                           className={cn(
                             "text-sm font-bold px-3 py-1 rounded-full",

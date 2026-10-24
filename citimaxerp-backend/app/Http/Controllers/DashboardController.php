@@ -215,7 +215,7 @@ class DashboardController extends Controller
                 'stock_alerts' => $this->getStockAlerts($companyId),
                 'inventory_turnover' => $this->getInventoryTurnover($companyId),
                 'dead_stock' => $this->getDeadStock($companyId),
-                'product_performance' => $this->getProductPerformance($companyId),
+                'product_performance' => $this->getProductPerformance($companyId, $this->parseDateRange($request)),
             ];
             return response()->json([
                 'status' => 'success',
@@ -417,14 +417,71 @@ class DashboardController extends Controller
         return $labels[$period] ?? 'Custom Range';
     }
 
+    // The day a sale belongs to: its order date (a past sale carries the old system's date),
+    // falling back to when it was keyed in.
+    private const ORDER_DAY = 'COALESCE(orders.order_date, orders.created_at)';
+
+    /**
+     * Sales the dashboard counts: the company's orders that weren't cancelled, optionally
+     * limited to those dated within the period.
+     */
+    private function salesOrders($companyId, $dateRange = null)
+    {
+        $query = Order::where('orders.company_id', $companyId)
+            ->where('orders.status', '!=', 'cancelled');
+        if ($dateRange) {
+            $query->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
+        }
+        return $query;
+    }
+
+    // Same rule for raw order_items joins.
+    private function salesLines($companyId, $from, $to = null)
+    {
+        return DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->where('orders.company_id', $companyId)
+            ->where('orders.status', '!=', 'cancelled')
+            ->whereNull('orders.deleted_at')
+            ->where(DB::raw(self::ORDER_DAY), '>=', $from)
+            ->when($to, fn ($q) => $q->where(DB::raw(self::ORDER_DAY), '<=', $to));
+    }
+
+    // Money actually received: completed receipts only.
+    private function receipts($companyId, $dateRange)
+    {
+        return Payment::where('company_id', $companyId)
+            ->where('status', 'completed')
+            ->whereBetween('payment_date', [$dateRange['from'], $dateRange['to']]);
+    }
+
+    // Spending that stands: approved or paid, not pending or rejected.
+    private function spending($companyId, $dateRange)
+    {
+        return Expense::where('company_id', $companyId)
+            ->whereIn('status', ['approved', 'paid'])
+            ->whereBetween('expense_date', [$dateRange['from'], $dateRange['to']]);
+    }
+
+    // Postgres bucket for a trend grouped by day, week (its Monday) or month.
+    private function periodBucket(string $groupBy): ?string
+    {
+        $day = self::ORDER_DAY;
+        return match ($groupBy) {
+            'day' => "to_char({$day}, 'YYYY-MM-DD')",
+            'week' => "to_char(date_trunc('week', {$day}), 'YYYY-MM-DD')",
+            'month' => "to_char({$day}, 'YYYY-MM')",
+            default => null,
+        };
+    }
+
     /**
      * Get sales metrics.
      */
     private function getSalesMetrics($companyId, $dateRange, $previousDateRange)
     {
         // Current period metrics
-        $currentOrders = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$dateRange['from'], $dateRange['to']])
+        $currentOrders = $this->salesOrders($companyId, $dateRange)
             ->selectRaw("
                 COUNT(*) as total_orders,
                 SUM(final_amount) as total_revenue,
@@ -435,8 +492,7 @@ class DashboardController extends Controller
             ->first();
 
         // Previous period metrics for comparison
-        $previousOrders = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$previousDateRange['from'], $previousDateRange['to']])
+        $previousOrders = $this->salesOrders($companyId, $previousDateRange)
             ->selectRaw('
                 COUNT(*) as total_orders,
                 SUM(final_amount) as total_revenue,
@@ -483,8 +539,7 @@ class DashboardController extends Controller
     private function getFinancialMetrics($companyId, $dateRange, $previousDateRange)
     {
         // Current period payments
-        $currentPayments = Payment::where('company_id', $companyId)
-            ->whereBetween('payment_date', [$dateRange['from'], $dateRange['to']])
+        $currentPayments = $this->receipts($companyId, $dateRange)
             ->selectRaw('
                 SUM(amount_paid) as total_payments,
                 COUNT(*) as payment_count,
@@ -493,21 +548,17 @@ class DashboardController extends Controller
             ->first();
 
         // Current period expenses
-        $currentExpenses = Expense::where('company_id', $companyId)
-            ->whereBetween('expense_date', [$dateRange['from'], $dateRange['to']])
-            ->sum('amount');
+        $currentExpenses = $this->spending($companyId, $dateRange)->sum('amount');
 
         // Previous period for comparison
-        $previousPayments = Payment::where('company_id', $companyId)
-            ->whereBetween('payment_date', [$previousDateRange['from'], $previousDateRange['to']])
-            ->sum('amount_paid');
+        $previousPayments = $this->receipts($companyId, $previousDateRange)->sum('amount_paid');
 
-        $previousExpenses = Expense::where('company_id', $companyId)
-            ->whereBetween('expense_date', [$previousDateRange['from'], $previousDateRange['to']])
-            ->sum('amount');
+        $previousExpenses = $this->spending($companyId, $previousDateRange)->sum('amount');
 
-        // Outstanding invoices
+        // Outstanding invoices: what customers still owe on live sales invoices, from any date.
         $outstandingInvoices = Invoice::where('company_id', $companyId)
+            ->where('type', '!=', 'credit_note')
+            ->whereNotIn('status', ['draft', 'cancelled'])
             ->where('balance_amount', '>', 0)
             ->selectRaw('
                 COUNT(*) as count,
@@ -560,7 +611,8 @@ class DashboardController extends Controller
         // Repeat customers (customers with more than one order)
         $repeatCustomers = Customer::where('company_id', $companyId)
             ->whereHas('orders', function ($query) use ($dateRange) {
-                $query->whereBetween('created_at', [$dateRange['from'], $dateRange['to']]);
+                $query->where('orders.status', '!=', 'cancelled')
+                    ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
             }, '>', 1)
             ->count();
 
@@ -669,31 +721,14 @@ class DashboardController extends Controller
      */
     private function getRevenueTrend($companyId, $dateRange, $groupBy)
     {
-        $query = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$dateRange['from'], $dateRange['to']]);
-
-        switch ($groupBy) {
-            case 'day':
-                $trend = $query->selectRaw('DATE(created_at) as period, SUM(final_amount) as revenue, COUNT(*) as orders')
-                    ->groupBy(DB::raw('DATE(created_at)'))
-                    ->orderBy('period')
-                    ->get();
-                break;
-            case 'week':
-                $trend = $query->selectRaw('YEARWEEK(created_at) as period, SUM(final_amount) as revenue, COUNT(*) as orders')
-                    ->groupBy(DB::raw('YEARWEEK(created_at)'))
-                    ->orderBy('period')
-                    ->get();
-                break;
-            case 'month':
-                $trend = $query->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as period, SUM(final_amount) as revenue, COUNT(*) as orders')
-                    ->groupBy(DB::raw('DATE_FORMAT(created_at, "%Y-%m")'))
-                    ->orderBy('period')
-                    ->get();
-                break;
-            default:
-                $trend = collect();
-        }
+        $bucket = $this->periodBucket($groupBy);
+        $trend = $bucket
+            ? $this->salesOrders($companyId, $dateRange)
+                ->selectRaw("{$bucket} as period, SUM(final_amount) as revenue, COUNT(*) as orders")
+                ->groupBy(DB::raw($bucket))
+                ->orderBy('period')
+                ->get()
+            : collect();
 
         return $trend->map(function ($item) {
             return [
@@ -709,11 +744,8 @@ class DashboardController extends Controller
      */
     private function getSalesByProduct($companyId, $dateRange)
     {
-        return DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        return $this->salesLines($companyId, $dateRange['from'], $dateRange['to'])
             ->join('products', 'order_items.product_id', '=', 'products.id')
-            ->where('orders.company_id', $companyId)
-            ->whereBetween('orders.created_at', [$dateRange['from'], $dateRange['to']])
             ->selectRaw('
                 products.id,
                 products.name,
@@ -741,18 +773,17 @@ class DashboardController extends Controller
      */
     private function getSalesByCategory($companyId, $dateRange)
     {
-        return DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        // Products are filed under a category record; the old free-text column is the fallback.
+        return $this->salesLines($companyId, $dateRange['from'], $dateRange['to'])
             ->join('products', 'order_items.product_id', '=', 'products.id')
-            ->where('orders.company_id', $companyId)
-            ->whereBetween('orders.created_at', [$dateRange['from'], $dateRange['to']])
+            ->leftJoin('product_categories', 'products.category_id', '=', 'product_categories.id')
             ->selectRaw('
-                products.category,
+                COALESCE(product_categories.name, products.category) as category,
                 SUM(order_items.quantity) as total_quantity,
                 SUM(order_items.quantity * order_items.unit_price) as total_revenue,
                 COUNT(DISTINCT orders.id) as order_count
             ')
-            ->groupBy('products.category')
+            ->groupBy(DB::raw('COALESCE(product_categories.name, products.category)'))
             ->orderBy('total_revenue', 'desc')
             ->get()
             ->map(function ($item) {
@@ -770,8 +801,7 @@ class DashboardController extends Controller
      */
     private function getPaymentMethodBreakdown($companyId, $dateRange)
     {
-        return Payment::where('company_id', $companyId)
-            ->whereBetween('payment_date', [$dateRange['from'], $dateRange['to']])
+        return $this->receipts($companyId, $dateRange)
             ->selectRaw('
                 payment_method,
                 COUNT(*) as transaction_count,
@@ -794,8 +824,9 @@ class DashboardController extends Controller
      */
     private function getOrderStatusBreakdown($companyId, $dateRange)
     {
+        // Cancelled orders included here on purpose - this is the breakdown by status.
         return Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$dateRange['from'], $dateRange['to']])
+            ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']])
             ->selectRaw('
                 status,
                 COUNT(*) as order_count,
@@ -817,31 +848,14 @@ class DashboardController extends Controller
      */
     private function getAverageOrderValue($companyId, $dateRange, $groupBy)
     {
-        $query = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$dateRange['from'], $dateRange['to']]);
-
-        switch ($groupBy) {
-            case 'day':
-                $trend = $query->selectRaw('DATE(created_at) as period, AVG(final_amount) as avg_order_value')
-                    ->groupBy(DB::raw('DATE(created_at)'))
-                    ->orderBy('period')
-                    ->get();
-                break;
-            case 'week':
-                $trend = $query->selectRaw('YEARWEEK(created_at) as period, AVG(final_amount) as avg_order_value')
-                    ->groupBy(DB::raw('YEARWEEK(created_at)'))
-                    ->orderBy('period')
-                    ->get();
-                break;
-            case 'month':
-                $trend = $query->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as period, AVG(final_amount) as avg_order_value')
-                    ->groupBy(DB::raw('DATE_FORMAT(created_at, "%Y-%m")'))
-                    ->orderBy('period')
-                    ->get();
-                break;
-            default:
-                $trend = collect();
-        }
+        $bucket = $this->periodBucket($groupBy);
+        $trend = $bucket
+            ? $this->salesOrders($companyId, $dateRange)
+                ->selectRaw("{$bucket} as period, AVG(final_amount) as avg_order_value")
+                ->groupBy(DB::raw($bucket))
+                ->orderBy('period')
+                ->get()
+            : collect();
 
         return $trend->map(function ($item) {
             return [
@@ -955,22 +969,16 @@ class DashboardController extends Controller
      */
     private function getProfitLossAnalysis($companyId, $dateRange)
     {
-        $revenue = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$dateRange['from'], $dateRange['to']])
+        $revenue = $this->salesOrders($companyId, $dateRange)
             ->where('payment_status', 'paid')
             ->sum('final_amount');
 
-        $expenses = Expense::where('company_id', $companyId)
-            ->whereBetween('expense_date', [$dateRange['from'], $dateRange['to']])
-            ->sum('amount');
+        $expenses = $this->spending($companyId, $dateRange)->sum('amount');
 
         // Cost of goods sold (simplified - using product costs from order items)
-        $cogs = DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        $cogs = $this->salesLines($companyId, $dateRange['from'], $dateRange['to'])
             ->join('products', 'order_items.product_id', '=', 'products.id')
-            ->where('orders.company_id', $companyId)
             ->where('orders.payment_status', 'paid')
-            ->whereBetween('orders.created_at', [$dateRange['from'], $dateRange['to']])
             ->selectRaw('SUM(order_items.quantity * products.unit_cost) as total_cogs')
             ->value('total_cogs') ?? 0;
 
@@ -1121,13 +1129,15 @@ class DashboardController extends Controller
         // Customers who made repeat purchases
         $repeatCustomers = Customer::where('company_id', $companyId)
             ->whereHas('orders', function ($query) use ($dateRange) {
-                $query->whereBetween('created_at', [$dateRange['from'], $dateRange['to']]);
+                $query->where('orders.status', '!=', 'cancelled')
+                    ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
             }, '>', 1)
             ->count();
 
         $totalCustomersWithOrders = Customer::where('company_id', $companyId)
             ->whereHas('orders', function ($query) use ($dateRange) {
-                $query->whereBetween('created_at', [$dateRange['from'], $dateRange['to']]);
+                $query->where('orders.status', '!=', 'cancelled')
+                    ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']]);
             })
             ->count();
 
@@ -1206,7 +1216,9 @@ class DashboardController extends Controller
         return DB::table('customers')
             ->join('orders', 'customers.id', '=', 'orders.customer_id')
             ->where('customers.company_id', $companyId)
-            ->whereBetween('orders.created_at', [$dateRange['from'], $dateRange['to']])
+            ->where('orders.status', '!=', 'cancelled')
+            ->whereNull('orders.deleted_at')
+            ->whereBetween(DB::raw(self::ORDER_DAY), [$dateRange['from'], $dateRange['to']])
             ->selectRaw('
                 customers.id,
                 CASE
@@ -1342,7 +1354,8 @@ class DashboardController extends Controller
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->join('products', 'order_items.product_id', '=', 'products.id')
             ->where('orders.company_id', $companyId)
-            ->where('orders.created_at', '>=', $last12Months)
+            ->where('orders.status', '!=', 'cancelled')
+            ->where(DB::raw(self::ORDER_DAY), '>=', $last12Months)
             ->selectRaw('
                 products.id,
                 products.name,
@@ -1386,7 +1399,8 @@ class DashboardController extends Controller
                     ->from('order_items')
                     ->join('orders', 'order_items.order_id', '=', 'orders.id')
                     ->where('orders.company_id', $companyId)
-                    ->where('orders.created_at', '>=', $deadStockThreshold);
+                    ->where('orders.status', '!=', 'cancelled')
+                    ->where(DB::raw(self::ORDER_DAY), '>=', $deadStockThreshold);
             })
             ->selectRaw('
                 id, name, sku, stock_quantity, unit_cost,
@@ -1407,15 +1421,13 @@ class DashboardController extends Controller
     /**
      * Get product performance analysis.
      */
-    private function getProductPerformance($companyId)
+    private function getProductPerformance($companyId, $dateRange = null)
     {
         $last30Days = Carbon::now()->subDays(30);
-        
-        $topPerformers = DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+
+        // Top sellers follow the dashboard's period; slow movers stay a rolling 30 days.
+        $topPerformers = $this->salesLines($companyId, $dateRange['from'] ?? $last30Days, $dateRange['to'] ?? null)
             ->join('products', 'order_items.product_id', '=', 'products.id')
-            ->where('orders.company_id', $companyId)
-            ->where('orders.created_at', '>=', $last30Days)
             ->selectRaw('
                 products.id,
                 products.name,

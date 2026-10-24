@@ -22,10 +22,15 @@ class PriceListImport extends Model
         'prices_added',
         'prices_updated',
         'errors_count',
+        'rows',
         'uploaded_by',
     ];
 
+    // Row-by-row results are only sent when one import is opened, not with the list.
+    protected $hidden = ['rows'];
+
     protected $casts = [
+        'rows' => 'array',
         'version' => 'integer',
         'rows_count' => 'integer',
         'products_created' => 'integer',

@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Download, History, Loader2 } from "lucide-re
 import apiCall from "@/lib/api"
 
 type Change = { field: string; from: unknown; to: unknown }
-type ChangedRow = { ref: string; item: string; size: string | null; action: "created" | "updated" | "deactivated" | "merged"; changes: Change[] }
+type ChangedRow = { ref: string; item: string; size: string | null; action: "created" | "updated" | "deactivated" | "merged" | "unchanged" | "error"; changes: Change[] }
 type ImportLog = {
   id: string
   created_at: string
@@ -72,7 +72,10 @@ async function downloadFile(id: string, fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-export function ImportHistoryDialog({ kind }: { kind: "products" | "batches" }) {
+// Product / batch imports, plus the Data Import hub's steps.
+export type ImportHistoryKind = "products" | "batches" | "suppliers" | "customers" | "opening_stock" | "past_invoices"
+
+export function ImportHistoryDialog({ kind, title }: { kind: ImportHistoryKind; title?: string }) {
   const [open, setOpen] = useState(false)
   const [logs, setLogs] = useState<ImportLog[] | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -99,7 +102,7 @@ export function ImportHistoryDialog({ kind }: { kind: "products" | "batches" }) 
       </DialogTrigger>
       <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle>{kind === "products" ? "Product" : "Batch"} Import History</DialogTitle>
+          <DialogTitle>{title ?? (kind === "products" ? "Product" : "Batch")} Import History</DialogTitle>
           <DialogDescription>Who imported which file, when, and every value it changed. Click a row to see the changes.</DialogDescription>
         </DialogHeader>
 
@@ -170,8 +173,8 @@ export function ImportHistoryDialog({ kind }: { kind: "products" | "batches" }) 
                                 <thead className="bg-gray-50 text-xs text-gray-600">
                                   <tr>
                                     <th className="px-3 py-2 text-left font-medium">S/No</th>
-                                    <th className="px-3 py-2 text-left font-medium">{kind === "products" ? "Item No." : "Batch"}</th>
-                                    <th className="px-3 py-2 text-left font-medium">Item</th>
+                                    <th className="px-3 py-2 text-left font-medium">{kind === "products" ? "Item No." : kind === "batches" ? "Batch" : "Reference"}</th>
+                                    <th className="px-3 py-2 text-left font-medium">{kind === "past_invoices" || kind === "customers" || kind === "suppliers" ? "Name" : "Item"}</th>
                                     <th className="px-3 py-2 text-left font-medium">Action</th>
                                     <th className="px-3 py-2 text-left font-medium">Changes</th>
                                   </tr>
@@ -187,6 +190,8 @@ export function ImportHistoryDialog({ kind }: { kind: "products" | "batches" }) 
                                           row.action === "created" ? "bg-emerald-50 text-emerald-700"
                                             : row.action === "deactivated" ? "bg-orange-50 text-orange-700"
                                             : row.action === "merged" ? "bg-purple-50 text-purple-700"
+                                            : row.action === "error" ? "bg-red-50 text-red-700"
+                                            : row.action === "unchanged" ? "bg-gray-50 text-gray-600"
                                             : "bg-blue-50 text-blue-700"
                                         }>
                                           {row.action}

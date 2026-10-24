@@ -30,7 +30,7 @@ import { CreateOrderModal } from "@/components/modals/create-order-modal"
 import { EditOrderModal } from "@/components/modals/edit-order-modal"
 import { DeleteOrderConfirmationDialog } from "./components/DeleteOrderConfirmationDialog"
 import { toast } from "@/components/ui/use-toast"
-import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder } from "@/lib/orders"
+import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate } from "@/lib/orders"
 import { PermissionGuard } from "@/components/PermissionGuard"
 
 interface OrdersTableProps {
@@ -554,9 +554,9 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
               <TableHead className="font-semibold">Order #</TableHead>
               <TableHead className="font-semibold">Customer</TableHead>
               <TableHead className="font-semibold">Total Amount</TableHead>
-              <TableHead className="font-semibold">Items</TableHead>
+              <TableHead className="font-semibold">Lines</TableHead>
               <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold">Created On</TableHead>
+              <TableHead className="font-semibold">Order Date</TableHead>
               <TableHead className="text-right font-semibold">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -648,18 +648,26 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                       }
 
                       return (
-                        <Badge variant="outline" className={cn(badgeClass)}>
-                          {formattedStatus}
-                        </Badge>
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge variant="outline" className={cn(badgeClass)}>
+                            {formattedStatus}
+                          </Badge>
+                          {(order.is_historical || isPastSaleDate(order.order_date)) && (
+                            <span className="text-[11px] text-muted-foreground">Past sale · no stock</span>
+                          )}
+                        </div>
                       )
                     })()}
                   </TableCell>
                   <TableCell>
+                    {/* The sale's own date; when it was keyed in is shown under it if that's a different day. */}
                     <div className="text-sm">
-                      {new Date(order.order_date || order.created_at).toLocaleDateString()}
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
+                      {new Date(order.order_date || order.created_at).toLocaleDateString("en-GB")}
+                      {order.order_date && order.order_date.slice(0, 10) !== order.created_at?.slice(0, 10) && (
+                        <div className="text-xs text-muted-foreground">
+                          entered {new Date(order.created_at).toLocaleDateString("en-GB")}
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

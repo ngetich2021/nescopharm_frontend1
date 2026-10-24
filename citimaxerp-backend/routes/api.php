@@ -505,6 +505,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/price-lists/export', [ProductController::class, 'exportPriceList'])->name('price-lists.export');
     Route::get('/price-lists/history', [ProductController::class, 'priceListHistory'])->name('price-lists.history');
     Route::get('/price-lists/history/{id}/download', [ProductController::class, 'downloadImportFile'])->name('price-lists.history.download');
+    Route::get('/price-lists/history/{id}/changes', [ProductController::class, 'priceListImportChanges'])->name('price-lists.history.changes');
     Route::get('/products/{id}/price-history', [ProductController::class, 'productPriceHistory'])->name('products.price-history');
     Route::match(['patch', 'put'], '/products/{id}', [ProductController::class, 'update'])->name('products.update');
     Route::patch('/products/{id}/quick-edit', [ProductController::class, 'quickEdit'])->name('products.quick-edit');

@@ -92,8 +92,25 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     }
   }
 
+  // The whole account, from the customer's first record (old-system sales included) to today.
+  // The server works out the start date; the pickers then show the range it used.
+  const loadAllTime = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await fetchCustomerStatement(id, { period: "all" })
+      setStatement(data)
+      setDateFrom(data.period.from)
+      setDateTo(data.period.to)
+    } catch (err: any) {
+      setError(err.message || "Failed to load statement")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   useEffect(() => {
-    loadStatement()
+    loadAllTime()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -136,6 +153,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const pendingBills = statement.pending_bills ?? []
   const pendingTotal = pendingBills.reduce((sum, bill) => sum + toNumber(bill.pending_amount), 0)
   const pdCheques = statement.pd_cheques ?? []
+  const orders = statement.orders ?? []
+  const liveOrders = orders.filter((o) => o.status !== "cancelled")
+  const ordersTotal = liveOrders.reduce((s, o) => s + toNumber(o.total), 0)
+  const ordersPaid = liveOrders.reduce((s, o) => s + toNumber(o.paid), 0)
   const account = statement.account
   const paymentDetails = statement.company?.payment_details
   const hasPaymentDetails = !!paymentDetails && Object.values(paymentDetails).some((v) => !!v)
@@ -186,6 +207,16 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
         rows.push([formatDate(b.invoice_date), b.invoice_number, toNumber(b.opening_amount).toFixed(2), toNumber(b.pending_amount).toFixed(2), formatDate(b.due_date), b.overdue_days])
       }
       rows.push(["", "Total", "", pendingTotal.toFixed(2)])
+      rows.push([])
+    }
+
+    if (orders.length > 0) {
+      rows.push(["ORDERS IN THIS PERIOD"])
+      rows.push(["S/No", "Order Date", "Order No.", "Invoice No.", "Status", "Payment", "Total (KES)", "Paid (KES)"])
+      orders.forEach((o, i) => {
+        rows.push([i + 1, formatDate(o.order_date), o.order_number, o.invoice_number ?? "", o.status, o.payment_status, toNumber(o.total).toFixed(2), toNumber(o.paid).toFixed(2)])
+      })
+      rows.push(["", "", "", "", "", "Total (excl. cancelled)", ordersTotal.toFixed(2), ordersPaid.toFixed(2)])
       rows.push([])
     }
 
@@ -296,6 +327,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                 View
               </Button>
               <div className="flex flex-wrap gap-1">
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" disabled={isLoading} onClick={loadAllTime}>
+                  All Time
+                </Button>
                 {PERIOD_PRESETS.map((p) => (
                   <Button key={p.label} variant="ghost" size="sm" className="h-8 px-2 text-xs" disabled={isLoading} onClick={() => applyPreset(p.range())}>
                     {p.label}
@@ -536,6 +570,54 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                       <td colSpan={3} className="px-2 py-2 border-t-2 border-gray-800 text-right">Total</td>
                       <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(pendingTotal)}</td>
                       <td colSpan={2} className="px-2 py-2 border-t-2 border-gray-800"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* Orders - every order dated in the period, invoiced or not, past sales included */}
+          {orders.length > 0 && (
+            <section className="mb-8 border-t border-gray-200 pt-6">
+              <h2 className="text-base font-bold mb-1">Orders in this Period</h2>
+              <p className="text-xs text-gray-500 mb-2">
+                {orders.length} order{orders.length === 1 ? "" : "s"}, by order date. Cancelled orders are listed but not totalled.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse tabular-nums">
+                  <thead>
+                    <tr>
+                      <th className={`${TH} w-10`}>S/No</th>
+                      <th className={`${TH} w-24`}>Order Date</th>
+                      <th className={TH}>Order No.</th>
+                      <th className={TH}>Invoice No.</th>
+                      <th className={TH}>Status</th>
+                      <th className={`${TH} text-right w-28`}>Total (KES)</th>
+                      <th className={`${TH} text-right w-28`}>Paid (KES)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o, i) => (
+                      <tr key={o.id} className={o.status === "cancelled" ? "text-gray-400 line-through" : ""}>
+                        <td className={TD}>{i + 1}</td>
+                        <td className={TD}>{formatDate(o.order_date)}</td>
+                        <td className={TD}>
+                          {o.order_number}
+                          {o.is_historical && <span className="ml-1 text-[10px] text-gray-500 no-underline">(past sale)</span>}
+                        </td>
+                        <td className={TD}>{o.invoice_number ?? "—"}</td>
+                        <td className={`${TD} capitalize`}>{o.status}, {o.payment_status}</td>
+                        <td className={`${TD} text-right`}>{formatAmount(o.total)}</td>
+                        <td className={`${TD} text-right`}>{formatAmount(o.paid)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-semibold">
+                      <td colSpan={5} className="px-2 py-2 border-t-2 border-gray-800 text-right">Total</td>
+                      <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(ordersTotal)}</td>
+                      <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(ordersPaid)}</td>
                     </tr>
                   </tfoot>
                 </table>

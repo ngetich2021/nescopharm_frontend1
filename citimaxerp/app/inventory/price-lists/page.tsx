@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { Fragment, useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,13 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft, Clock, Download, Eye, FileSpreadsheet, Loader2, Upload } from "lucide-react"
+import { ArrowLeft, ChevronDown, ChevronRight, Clock, Download, Eye, FileSpreadsheet, Loader2, Upload } from "lucide-react"
 import { PRICE_LIST_CODES } from "@/lib/price-codes"
 import {
   downloadImportFile,
   fetchPriceList,
   fetchPriceListHistory,
+  fetchPriceListImportChanges,
   importPriceList,
+  type PriceListImportChange,
   PRICE_LIST_TEMPLATE_HEADERS,
   type PriceListImportRecord,
   type PriceListImportResult,
@@ -48,6 +50,17 @@ const statusBadge = (status: string) => {
   return <Badge variant="destructive">Error</Badge>
 }
 
+const money = (v: number | string) => Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// Result of one row of an import, as shown when its history row is expanded.
+const changeBadge = (status: string, priceChanged: boolean) => {
+  if (status === "error") return <Badge variant="destructive">Error</Badge>
+  if (status === "created") return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">New product</Badge>
+  if (status === "added") return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Price added</Badge>
+  if (priceChanged || status === "updated") return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Price changed</Badge>
+  return <Badge variant="outline" className="text-gray-600">Unchanged</Badge>
+}
+
 export default function PriceListsPage() {
   const { toast } = useToast()
   const [listChoice, setListChoice] = useState<string>("NSPH")
@@ -57,6 +70,22 @@ export default function PriceListsPage() {
   const [result, setResult] = useState<PriceListImportResult | null>(null)
   const [history, setHistory] = useState<PriceListImportRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [changes, setChanges] = useState<Record<string, { complete: boolean; data: PriceListImportChange[] }>>({})
+
+  // Open/close a history row, loading its rows the first time.
+  const toggleImport = async (id: string) => {
+    if (expanded === id) { setExpanded(null); return }
+    setExpanded(id)
+    if (changes[id]) return
+    try {
+      const res = await fetchPriceListImportChanges(id)
+      setChanges((prev) => ({ ...prev, [id]: res }))
+    } catch (err: any) {
+      setChanges((prev) => ({ ...prev, [id]: { complete: false, data: [] } }))
+      toast({ title: "Could not load the changes", description: err.message, variant: "destructive" })
+    }
+  }
 
   const listName = (listChoice === OTHER ? customList : listChoice).trim().toUpperCase()
 
@@ -196,6 +225,7 @@ export default function PriceListsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8"></TableHead>
                       <TableHead>Version</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>File</TableHead>
@@ -213,22 +243,31 @@ export default function PriceListsPage() {
                       const d = new Date(h.created_at)
                       const dateStr = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
                       const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                      const isOpen = expanded === h.id
+                      const detail = changes[h.id]
                       return (
-                        <TableRow key={h.id}>
+                        <Fragment key={h.id}>
+                        <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => toggleImport(h.id)}>
+                          <TableCell>
+                            {isOpen ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                          </TableCell>
                           <TableCell className="font-semibold">{h.list_name}{h.version}</TableCell>
                           <TableCell className="whitespace-nowrap text-sm">
                             {dateStr} at {timeStr}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                            {h.file_path ? (
-                              <button
-                                type="button"
-                                className="inline-flex items-center gap-1 text-blue-600 hover:underline cursor-pointer"
-                                onClick={() => downloadImportFile(h.id, h.file_name || `${h.list_name}${h.version}`)}
-                              >
-                                <Download className="h-3 w-3" />{h.file_name || "-"}
-                              </button>
-                            ) : (h.file_name || "-")}
+                            {/* Always offered: if the uploaded file is gone the server rebuilds the sheet. */}
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:underline cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                downloadImportFile(h.id, h.file_name || `${h.list_name}${h.version}.xlsx`).catch((err) =>
+                                  toast({ title: "Download failed", description: err.message, variant: "destructive" }))
+                              }}
+                            >
+                              <Download className="h-3 w-3" />{h.file_name || `${h.list_name}${h.version}.xlsx`}
+                            </button>
                           </TableCell>
                           <TableCell className="text-right">{h.rows_count}</TableCell>
                           <TableCell className="text-right">{h.products_matched}</TableCell>
@@ -242,6 +281,63 @@ export default function PriceListsPage() {
                           </TableCell>
                           <TableCell className="text-sm">{h.uploader?.name || "-"}</TableCell>
                         </TableRow>
+                        {isOpen && (
+                          <TableRow className="bg-gray-50/50 hover:bg-gray-50/50">
+                            <TableCell colSpan={11} className="p-3">
+                              {!detail ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="h-4 w-4 animate-spin" /> Loading changes...
+                                </div>
+                              ) : detail.data.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No price changes were recorded for this import.</p>
+                              ) : (
+                                <>
+                                  {!detail.complete && (
+                                    <p className="mb-2 text-xs text-muted-foreground">
+                                      This import is from before full results were kept, so only the prices it added or changed are shown.
+                                    </p>
+                                  )}
+                                  <div className="max-h-[420px] overflow-auto rounded border bg-white">
+                                    <table className="w-full text-sm">
+                                      <thead className="sticky top-0 bg-gray-50 text-xs text-gray-600">
+                                        <tr>
+                                          <th className="px-3 py-2 text-left font-medium">S/No</th>
+                                          <th className="px-3 py-2 text-left font-medium">Item Code</th>
+                                          <th className="px-3 py-2 text-left font-medium">Item Description</th>
+                                          <th className="px-3 py-2 text-left font-medium">Result</th>
+                                          <th className="px-3 py-2 text-right font-medium">Old Price</th>
+                                          <th className="px-3 py-2 text-right font-medium">New Price</th>
+                                          <th className="px-3 py-2 text-left font-medium">Unit</th>
+                                          <th className="px-3 py-2 text-left font-medium">Note</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {detail.data.map((r, ri) => {
+                                          const changed = r.old_price != null && r.price != null && Number(r.old_price) !== Number(r.price)
+                                          return (
+                                            <tr key={ri} className="border-t align-top">
+                                              <td className="px-3 py-1.5 text-gray-500">{ri + 1}</td>
+                                              <td className="px-3 py-1.5 font-mono text-xs">{r.code || "-"}</td>
+                                              <td className="px-3 py-1.5">{r.description || "-"}</td>
+                                              <td className="px-3 py-1.5">{changeBadge(r.status, changed)}</td>
+                                              <td className="px-3 py-1.5 text-right text-gray-500">
+                                                {r.old_price != null ? <span className={changed ? "line-through" : ""}>{money(r.old_price)}</span> : "-"}
+                                              </td>
+                                              <td className={`px-3 py-1.5 text-right ${changed ? "font-semibold" : ""}`}>{r.price != null ? money(r.price) : "-"}</td>
+                                              <td className="px-3 py-1.5">{r.unit_of_measure || "-"}</td>
+                                              <td className="px-3 py-1.5 text-xs text-gray-600">{r.message || ""}</td>
+                                            </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </Fragment>
                       )
                     })}
                   </TableBody>

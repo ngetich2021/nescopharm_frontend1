@@ -85,6 +85,69 @@ class OrderController extends Controller
     }
 
     /**
+     * An invoiced order that's corrected (e.g. VAT added to a past sale) takes its invoice
+     * with it: same lines, discount and VAT, keeping what's already been paid against it.
+     * Built the way InvoiceController::createFromOrder builds an invoice from an order.
+     */
+    protected function syncInvoiceWithOrder(Order $order, \App\Models\Invoice $invoice): void
+    {
+        $order->load('orderItems.product', 'orderItems.variant');
+        $previous = $invoice->lineItems()->get()->keyBy(fn ($l) => $l->product_id . '|' . $l->variant_id);
+        $subtotal = (float) $order->orderItems->sum(fn ($i) => (float) $i->quantity * (float) $i->unit_price);
+        $discountRatio = $subtotal > 0 ? min(1, (float) ($order->discount ?? 0) / $subtotal) : 0;
+
+        $invoice->lineItems()->delete();
+        foreach ($order->orderItems as $item) {
+            // A 0% line keeps the product's own exempt / zero-rated classification.
+            $rate = (float) ($item->tax_rate ?? 0);
+            $code = EtimsTaxType::fromInput(null, $rate);
+            if ($rate == 0.0 && $item->product) {
+                $productCode = EtimsTaxType::forProduct($item->product);
+                $code = in_array($productCode, ['A', 'C', 'D'], true) ? $productCode : 'D';
+            }
+            // Batch / expiry details carry over from the line it replaces.
+            $old = $previous->get($item->product_id . '|' . $item->variant_id);
+            \App\Models\InvoiceLineItem::create([
+                'invoice_id' => $invoice->id,
+                'product_id' => $item->product_id,
+                'variant_id' => $item->variant_id,
+                'description' => $item->product
+                    ? ProductVariant::sizedName($item->product->name, $item->variant?->name)
+                    : ($old?->description ?? 'Item'),
+                'quantity' => $item->quantity,
+                'unit' => $item->price_unit ?: ($old?->unit ?? 'pcs'),
+                'batch_number' => $old?->batch_number,
+                'expiry_date' => $old?->expiry_date,
+                'unit_price' => $item->unit_price,
+                'discount_amount' => round((float) $item->quantity * (float) $item->unit_price * $discountRatio, 2),
+                'tax_rate' => EtimsTaxType::rate($code),
+                'metadata' => array_merge($old?->metadata ?? [], ['etims_tax_type_code' => $code, 'price_label' => $item->price_label]),
+            ]);
+        }
+
+        $invoice->customer_id = $order->customer_id;
+        $invoice->amount_paid = (float) $invoice->getTotalAllocatedAmount();
+        $invoice->load('lineItems');
+        $invoice->calculateTotals();
+
+        $paid = (float) $invoice->amount_paid;
+        $total = (float) $invoice->total_amount;
+        if (!in_array($invoice->status, ['draft', 'cancelled'], true)) {
+            $invoice->update([
+                'status' => $paid >= $total - 0.01 ? 'paid'
+                    : ($invoice->due_date && now()->startOfDay()->isAfter($invoice->due_date) ? 'overdue'
+                    : ($paid > 0 ? 'partially_paid' : 'sent')),
+            ]);
+        }
+
+        // The order form resends the payment fields it loaded; the invoice is what was actually paid.
+        $order->update([
+            'amount_paid' => $paid,
+            'payment_status' => $paid >= $total - 0.01 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
+        ]);
+    }
+
+    /**
      * Generate a unique order number for the company.
      *
      * @param string $companyId
@@ -236,6 +299,7 @@ class OrderController extends Controller
                         $query->select('id', 'order_id', 'delivery_status', 'estimated_delivery_date', 'created_at', 'updated_at');
                     },
                     'invoiceApprover:id,first_name,last_name,email',
+                    'invoice:id,order_id,invoice_number,status,etims_status',
                 ]);
 
             if (!$this->hasPermission($request, 'can_manage_all_quotes')) {
@@ -747,6 +811,9 @@ class OrderController extends Controller
 
                 // Handle updating items if provided
                 $approvalReset = false;
+                $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
+                $invoiceNeedsSync = $invoice && $request->has('discount')
+                    && round((float) $request->input('discount'), 2) !== round((float) $order->discount, 2);
                 if ($request->has('items')) {
                     $orderStock = app(\App\Services\OrderStockService::class);
                     $wasDeducted = (bool) $order->stock_deducted_at;
@@ -760,7 +827,10 @@ class OrderController extends Controller
                     $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '', round((float) ($l['tax_rate'] ?? 0), 2)]);
                     $before = $order->orderItems()->get()->map(fn ($i) => $lineKey($i->toArray()))->sort()->values()->all();
                     $after = collect($items)->map($lineKey)->sort()->values()->all();
-                    if ($before !== $after && $order->isInvoiceApproved() && !\App\Models\Invoice::where('order_id', $order->id)->exists()) {
+                    if ($before !== $after && $invoice) {
+                        $invoiceNeedsSync = true;
+                    }
+                    if ($before !== $after && $order->isInvoiceApproved() && !$invoice) {
                         $order->fill([
                             'invoice_approved_by' => null,
                             'invoice_approved_at' => null,
@@ -770,6 +840,10 @@ class OrderController extends Controller
                     }
 
                     $orderStock->restore($order, "Order {$order->order_number} edited");
+                    // A past sale (flagged, or dated before go-live - as saved or as now entered) never
+                    // touches stock, so there's nothing to check it against.
+                    $isPastSale = $order->is_historical
+                        || Order::isHistoricalDate($request->input('order_date', $order->order_date));
 
                     // Delete old items
                     $order->orderItems()->delete();
@@ -807,7 +881,7 @@ class OrderController extends Controller
                             $belowMinimumPrice = true;
                         }
                         $piecesNeeded = PackagingCalculatorService::piecesFor($item['quantity'], $item['price_unit'] ?? null);
-                        if ($product->track_inventory && !$order->is_historical && $piecesNeeded > $stockQuantity) {
+                        if ($product->track_inventory && !$isPastSale && $piecesNeeded > $stockQuantity) {
                             return response()->json([
                                 'status' => 'failed',
                                 'message' => PackagingCalculatorService::packStockMessage($index, $product->name, $item['quantity'], $item['price_unit'] ?? null, $piecesNeeded, (int) $stockQuantity),
@@ -899,6 +973,11 @@ class OrderController extends Controller
                     'order_date',
                 ]));
 
+                if ($invoice && ($invoiceNeedsSync || $invoice->customer_id !== $order->customer_id)) {
+                    // The invoice is what statements and balances read, so it follows the corrected order.
+                    $this->syncInvoiceWithOrder($order, $invoice);
+                }
+
                 if ($toHistorical === true && $order->status !== 'cancelled' && $order->status !== 'completed') {
                     // A past sale already happened (the form resends whatever status it loaded).
                     $order->update(['status' => 'completed']);
@@ -915,6 +994,7 @@ class OrderController extends Controller
                     app(\App\Services\NotificationService::class)->orderAwaitingInvoiceApproval($order, $request->user()->id);
                 }
 
+
                 Log::info('Order updated', [
                     'user_id' => $request->user()->id,
                     'order_id' => $order->id,
@@ -922,7 +1002,8 @@ class OrderController extends Controller
                 ]);
                 return response()->json([
                     'status' => 'success',
-                    'message' => $approvalReset ? 'Order updated. It needs to be approved again.' : 'Order updated successfully.',
+                    'message' => $approvalReset ? 'Order updated. It needs to be approved again.'
+                        : ($invoice && $invoiceNeedsSync ? "Order updated. Invoice {$invoice->invoice_number} was updated to match." : 'Order updated successfully.'),
                     'order' => $order->load(['customer', 'deliveryLocation', 'orderItems.product.store', 'orderItems.variant']),
                 ], 200);
             });
@@ -961,10 +1042,13 @@ class OrderController extends Controller
             ], 403);
         }
 
-        if ($order->payments()->exists()) {
+        // Deleting takes the order's invoice, receipts and dispatch with it (old-system orders are
+        // cleared this way so both systems match). Only a credit note against the invoice stops it.
+        $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
+        if ($invoice && ($creditNotes = \App\Models\CreditNote::where('invoice_id', $invoice->id)->pluck('credit_note_number'))->isNotEmpty()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Cannot delete order with associated payments.',
+                'message' => "Invoice {$invoice->invoice_number} has credit note(s) " . $creditNotes->filter()->implode(', ') . '. Delete those first.',
             ], 400);
         }
 
@@ -973,13 +1057,47 @@ class OrderController extends Controller
                 'user_id' => $request->user()->id,
                 'order_id' => $id,
             ]);
-            return DB::transaction(function () use ($order, $request) {
-                app(\App\Services\OrderStockService::class)->restore($order, "Order {$order->order_number} deleted");
+            return DB::transaction(function () use ($order, $invoice, $request) {
+                // Receipts: one taken for this order alone goes with it. A receipt that also pays
+                // other invoices (or was mapped here from elsewhere) stays, just no longer applied here.
+                $allocations = $invoice ? \App\Models\PaymentAllocation::where('invoice_id', $invoice->id)->get() : collect();
+                $paymentIds = $allocations->pluck('payment_id')
+                    ->merge(\App\Models\Payment::where('order_id', $order->id)->pluck('id'))
+                    ->merge($invoice ? \App\Models\Payment::where('invoice_id', $invoice->id)->pluck('id') : [])
+                    ->unique();
+                $allocations->each->delete();
+                foreach (\App\Models\Payment::whereIn('id', $paymentIds)->get() as $payment) {
+                    $ownReceipt = $payment->order_id === $order->id || ($invoice && $payment->invoice_id === $invoice->id);
+                    if ($ownReceipt && !$payment->allocations()->exists()) {
+                        $payment->delete();
+                    } else {
+                        $payment->update([
+                            'order_id' => $payment->order_id === $order->id ? null : $payment->order_id,
+                            'invoice_id' => $invoice && $payment->invoice_id === $invoice->id ? null : $payment->invoice_id,
+                        ]);
+                    }
+                }
 
-                // Delete related records
+                if ($invoice) {
+                    $invoice->lineItems()->delete();
+                    $invoice->delete();
+                }
+
+                // Dispatch items, delivery notes and logistics rows cascade from the dispatch.
+                \App\Models\OrderDispatch::where('order_id', $order->id)->get()->each->delete();
+                // Older side tables, not on every database (the AccountsReceivable model's own table name is off).
+                foreach (['accounts_receivable', 'debts'] as $table) {
+                    if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
+                        DB::table($table)->where('order_id', $order->id)->delete();
+                    }
+                }
+
+                app(\App\Services\OrderStockService::class)->restore($order->fresh(), "Order {$order->order_number} deleted");
+
+                // Delete related records. Gone for good, so a re-import can reuse its number.
                 $order->orderItems()->delete();
                 $order->deliveryDetails()->delete();
-                $order->delete();
+                $order->forceDelete();
 
                 Log::info('Order deleted', [
                     'user_id' => $request->user()->id,

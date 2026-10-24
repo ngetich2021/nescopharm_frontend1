@@ -427,10 +427,10 @@ export async function fetchDashboardWidgets(): Promise<DashboardWidget[]> {
 }
 
 // Fetch dashboard summary/overview
-export async function fetchDashboardOverview(): Promise<DashboardOverview | null> {
+export async function fetchDashboardOverview(period = "last_30_days"): Promise<DashboardOverview | null> {
   try {
     const response = await apiCall<{ status: string; data: DashboardOverview; message?: any }>(
-      "/dashboard/overview",
+      `/dashboard/overview?${new URLSearchParams({ period }).toString()}`,
       "GET",
       undefined,
       true

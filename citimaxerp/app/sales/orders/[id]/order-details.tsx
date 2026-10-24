@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Mail, MoreHorizontal, Phone, Printer, MapPin, ChevronRight, HelpCircle, Truck, FileText, Plus, Eye, Download, CreditCard, History, Edit, Wallet } from "lucide-react"
+import { ArrowLeft, Mail, MoreHorizontal, Phone, Printer, MapPin, ChevronRight, HelpCircle, Truck, FileText, Plus, Eye, Download, CreditCard, History, Edit, Wallet, Trash2 } from "lucide-react"
+import { PermissionGuard } from "@/components/PermissionGuard"
+import { DeleteOrderConfirmationDialog } from "../components/DeleteOrderConfirmationDialog"
 import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
 import { coversOverage } from "@/lib/credit-overage"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -154,6 +156,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   const [isPaymentHistoryModalOpen, setIsPaymentHistoryModalOpen] = useState(false)
   const [isMapPaymentModalOpen, setIsMapPaymentModalOpen] = useState(false)
   const [isEditOrderModalOpen, setIsEditOrderModalOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false)
   const [showCompletionDialog, setShowCompletionDialog] = useState(false)
   const [showPaymentMethodDialog, setShowPaymentMethodDialog] = useState(false)
@@ -703,17 +706,29 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
             <Printer className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
             Print
           </Button>
-          {order.status?.toLowerCase() !== "completed" && (
-            <Button 
-              variant="outline" 
-              onClick={() => setIsEditOrderModalOpen(true)} 
-              size="sm" 
+          {/* Completed orders stay editable, e.g. to add VAT to sales made before tax was set up. */}
+          <PermissionGuard permissions={["can_update_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditOrderModalOpen(true)}
+              size="sm"
               className="text-xs sm:text-sm h-8 sm:h-9"
             >
               <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
               Edit
             </Button>
-          )}
+          </PermissionGuard>
+          <PermissionGuard permissions={["can_delete_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              size="sm"
+              className="text-xs sm:text-sm h-8 sm:h-9 text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              Delete
+            </Button>
+          </PermissionGuard>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
@@ -1576,6 +1591,13 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
             description: "Dispatch created successfully. You can now submit it for approval.",
           })
         }}
+      />
+
+      <DeleteOrderConfirmationDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onSuccess={() => router.push("/sales/orders")}
+        order={order}
       />
 
       {/* Edit Order Modal */}

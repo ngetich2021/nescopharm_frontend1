@@ -114,6 +114,10 @@ class DataImportController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'The import stopped and nothing was saved: ' . $e->getMessage()], 500);
         }
 
+        if (!$dryRun) {
+            $this->recordImport($entity, $schema['label'], $request, $user, $summary, $results);
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => $dryRun ? 'Preview only - nothing was saved.' : "{$schema['label']} imported.",
@@ -121,6 +125,30 @@ class DataImportController extends Controller
             'entity' => $entity,
             'summary' => $summary,
             'rows' => $results,
+        ]);
+    }
+
+    /**
+     * One history entry per saved import - who, when, the totals, each row's outcome and the uploaded
+     * file - in the same shape as the product / batch import history (ProductController::recordImport).
+     */
+    private function recordImport(string $entity, string $label, Request $request, $user, array $summary, array $results): void
+    {
+        $file = $request->file('file');
+        $path = \App\Services\ImportFileStore::store($file, "imports/{$user->company_id}", "{$entity}_" . now()->format('Ymd_His') . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension());
+
+        \App\Models\ActivityLog::logActivity("{$entity}_import", "{$label} imported from " . $file->getClientOriginalName(), $user, [
+            'kind' => $entity,
+            'file_name' => $file->getClientOriginalName(),
+            'file_path' => $path,
+            'summary' => $summary,
+            'changes' => array_map(fn ($r) => [
+                'ref' => (string) ($r['key'] ?? $r['row'] ?? ''),
+                'item' => (string) ($r['name'] ?? ''),
+                'size' => null,
+                'action' => $r['status'] ?? 'created',
+                'changes' => !empty($r['message']) ? [['field' => 'result', 'from' => null, 'to' => $r['message']]] : [],
+            ], $results),
         ]);
     }
 

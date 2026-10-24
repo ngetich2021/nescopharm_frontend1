@@ -26,7 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts, getProductById } from "@/lib/products"
 import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
-import { OrderDetail } from "@/lib/orders"
+import { OrderDetail, HISTORICAL_CUTOFF } from "@/lib/orders"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
 import { OrderVatSelect } from "@/components/order-vat-select"
 
@@ -69,8 +69,6 @@ type OrderItem = {
 
 type Company = { id: string; name: string }
 
-// Go-live date; matches Order::HISTORICAL_CUTOFF on the backend.
-const HISTORICAL_CUTOFF = "2026-10-17"
 
 // Local (not UTC) date, so late-evening orders don't land on tomorrow.
 const todayIso = () => {
@@ -102,6 +100,10 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   // Moving the date before go-live turns the order into a past sale: sales and accounts
   // only, no stock. Moving it back on or after go-live makes it a normal sale again.
   const isPastSale = orderDate < HISTORICAL_CUTOFF
+  // A past or invoiced sale is already settled through its invoice: correcting it (say, adding
+  // VAT) mustn't demand credit headroom or a fresh payment. Payments go on the invoice.
+  const isInvoiced = !!order?.invoice
+  const paymentChecks = !isPastSale && !isInvoiced
   const [searchQuery, setSearchQuery] = useState("")
   const [productSearchQuery, setProductSearchQuery] = useState("")
   const [openProductDropdown, setOpenProductDropdown] = useState(false)
@@ -477,13 +479,13 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   // A past sale's goods left before the opening stock was taken, so there is nothing to check.
   const shortLines = isPastSale ? [] : orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
 
-  const creditOverage = paymentOption === 'credit' && creditTerms?.credit_days
+  const creditOverage = paymentChecks && paymentOption === 'credit' && creditTerms?.credit_days
     ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
     : 0
 
   // Only the newly-added portion needs a payment method - money already
   // recorded on this order before the modal opened doesn't need re-justifying.
-  const newInstantPaymentAmount = paymentOption === 'instant'
+  const newInstantPaymentAmount = paymentChecks && paymentOption === 'instant'
     ? Math.max(0, amountPaid - initialAmountPaid)
     : 0
 
@@ -499,7 +501,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       return
     }
 
-    if (paymentOption === 'credit' && !creditTerms?.credit_days) {
+    if (paymentChecks && paymentOption === 'credit' && !creditTerms?.credit_days) {
       toast.error("This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.")
       return
     }
@@ -509,7 +511,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       return
     }
 
-    if (paymentOption === 'instant' && amountPaid < calculateTotal()) {
+    if (paymentChecks && paymentOption === 'instant' && amountPaid < calculateTotal()) {
       toast.error("An instant sale needs to be paid in full - enter the full amount paid.")
       return
     }
@@ -1005,7 +1007,15 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
               </button>
             </div>
 
-            {paymentOption === 'credit' && (
+            {!paymentChecks && (
+              <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                {isInvoiced
+                  ? `Invoiced as ${order?.invoice?.invoice_number}. Saving updates the invoice to match; payments are recorded on the invoice.`
+                  : "Past sale: payments are recorded on its invoice, so no payment is taken here."}
+              </p>
+            )}
+
+            {paymentChecks && paymentOption === 'credit' && (
               isLoadingCreditTerms ? (
                 <p className="text-sm text-muted-foreground">Loading customer's credit terms...</p>
               ) : !selectedCustomer ? (
@@ -1040,7 +1050,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                 onDownPaymentTransactionRefChange={setDownPaymentTransactionRef}
               />
             )}
-            {paymentOption === 'instant' && (
+            {paymentChecks && paymentOption === 'instant' && (
               <InstantPaymentPrompt
                 total={calculateTotal()}
                 amountPaid={amountPaid}
@@ -1161,9 +1171,9 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
               disabled={
                 loading ||
                 shortLines.length > 0 ||
-                (paymentOption === 'credit' && !creditTerms?.credit_days) ||
+                (paymentChecks && paymentOption === 'credit' && !creditTerms?.credit_days) ||
                 (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) ||
-                (paymentOption === 'instant' && amountPaid < calculateTotal()) ||
+                (paymentChecks && paymentOption === 'instant' && amountPaid < calculateTotal()) ||
                 (newInstantPaymentAmount > 0 && !instantPaymentMethod)
               }
             >

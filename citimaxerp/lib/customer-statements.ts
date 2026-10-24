@@ -63,6 +63,19 @@ export interface StatementTransaction {
   balance: number
 }
 
+export interface StatementOrder {
+  id: string
+  order_number: string
+  order_date: string
+  status: string
+  payment_status: string
+  invoice_number: string | null
+  total: number
+  paid: number
+  // Brought across from the old system.
+  is_historical: boolean
+}
+
 export interface StatementAgeing {
   as_at: string
   buckets: { label: string; amount: number }[]
@@ -111,11 +124,15 @@ export interface CustomerStatement {
   transactions: StatementTransaction[]
   ageing: StatementAgeing
   invoices: StatementInvoice[]
+  // Every order dated in the period, invoiced or not (cancelled ones included, flagged by status).
+  orders?: StatementOrder[]
   payments: StatementPayment[]
   credit_notes: StatementCreditNote[]
   pd_cheques: StatementCheque[]
   pending_bills: PendingBill[]
   summary: {
+    orders_count?: number
+    orders_total?: number
     invoices_count: number
     invoices_total: number
     payments_count: number
@@ -129,9 +146,10 @@ export interface CustomerStatement {
 
 export async function fetchCustomerStatement(
   customerId: string,
-  filters?: { date_from?: string; date_to?: string }
+  filters?: { date_from?: string; date_to?: string; period?: "all" }
 ): Promise<CustomerStatement> {
   const params = new URLSearchParams()
+  if (filters?.period) params.append("period", filters.period)
   if (filters?.date_from) params.append("date_from", filters.date_from)
   if (filters?.date_to) params.append("date_to", filters.date_to)
   const query = params.toString() ? `?${params.toString()}` : ""

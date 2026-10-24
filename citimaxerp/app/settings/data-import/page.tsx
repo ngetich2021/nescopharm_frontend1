@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Download, ExternalLink, Info, Loader2, Upload } from "lucide-react"
 import { ImportSchema, describeType, downloadTemplate, fetchImportSchemas } from "@/lib/data-import"
 import { ImportDialog } from "./components/import-dialog"
+import { ImportHistoryDialog, ImportHistoryKind } from "@/components/import-history-dialog"
 
 // Products already has its own importer on the products page, but the migration only makes sense as
 // one ordered list, so it appears here in sequence as a link rather than being rebuilt.
@@ -90,6 +91,7 @@ export default function DataImportPage() {
                           <Download className="mr-2 h-4 w-4" />
                           Template
                         </Button>
+                        <ImportHistoryDialog kind={step.key as ImportHistoryKind} title={step.label} />
                         <PermissionGuard permissions={[step.permission, "can_manage_system", "can_manage_company"]} hideOnDenied>
                           <Button size="sm" onClick={() => setActive(step)}>
                             <Upload className="mr-2 h-4 w-4" />

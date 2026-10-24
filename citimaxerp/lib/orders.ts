@@ -40,7 +40,14 @@ export interface Order {
   invoice_approver?: { id: string; first_name: string; last_name: string } | null
   // Whether the logged-in user may approve this order (set by the order details endpoint).
   can_approve_invoice?: boolean
+  // The order's invoice, if raised (order details endpoint). Editing the order updates it.
+  invoice?: { id: string; invoice_number: string; status: string; etims_status?: string | null } | null
 }
+
+// Go-live date; matches Order::HISTORICAL_CUTOFF on the backend. Orders dated before it are
+// past sales: they count in sales and balances but never move stock.
+export const HISTORICAL_CUTOFF = "2026-10-17"
+export const isPastSaleDate = (date?: string | null) => !!date && date.slice(0, 10) < HISTORICAL_CUTOFF
 
 // Define the detailed order type with all related data
 export interface OrderDetail extends Order {

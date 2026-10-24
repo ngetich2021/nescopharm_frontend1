@@ -422,6 +422,7 @@ class ProductController extends Controller
                     ? ProductPriceTier::where('company_id', $companyId)->where('tier_name', $listName)->where('item_code', $itemCode)->get()
                     : collect();
                 if ($sharedTiers->count() > 1) {
+                    $sharedOldPrice = (float) $sharedTiers->first()->price;
                     foreach ($sharedTiers as $tier) {
                         if (!$dryRun && (float) $tier->price !== $price) {
                             $priceHistoryRecords[] = ['product_id' => $tier->product_id, 'old_value' => (float) $tier->price, 'new_value' => $price];
@@ -432,6 +433,7 @@ class ProductController extends Controller
                     $summary['prices_updated'] += $sharedTiers->count();
                     $results[] = $result + [
                         'status' => 'matched',
+                        'old_price' => $sharedOldPrice,
                         'price' => $price,
                         'unit_of_measure' => $uom,
                         'message' => "{$code} covers {$sharedTiers->count()} sizes - all repriced.",
@@ -461,6 +463,7 @@ class ProductController extends Controller
 
                 $product = $matches->first();
                 $notes = [];
+                $oldPrice = null;
                 if (!$product) {
                     $product = Product::create([
                         'id' => (string) Str::uuid(),
@@ -541,6 +544,7 @@ class ProductController extends Controller
                 $results[] = $result + [
                     'status' => $status,
                     'item_number' => $product->item_number,
+                    'old_price' => $oldPrice,
                     'price' => $price,
                     'unit_of_measure' => $uom,
                     'message' => implode(' ', $notes) ?: null,
@@ -555,10 +559,10 @@ class ProductController extends Controller
                     ->max('version') ?? 0) + 1;
 
                 $uploadedFile = $request->file('file');
-                $storedPath = $uploadedFile->storeAs(
+                $storedPath = \App\Services\ImportFileStore::store(
+                    $uploadedFile,
                     "price-lists/{$companyId}",
-                    "{$listName}_{$nextVersion}_" . time() . '.' . $uploadedFile->getClientOriginalExtension(),
-                    'local'
+                    "{$listName}_{$nextVersion}_" . time() . '.' . $uploadedFile->getClientOriginalExtension()
                 );
 
                 $importRecord = PriceListImport::create([
@@ -574,6 +578,7 @@ class ProductController extends Controller
                     'prices_added' => $summary['prices_added'],
                     'prices_updated' => $summary['prices_updated'],
                     'errors_count' => $summary['errors'],
+                    'rows' => $results,
                     'uploaded_by' => $user->id,
                 ]);
 
@@ -1572,7 +1577,7 @@ class ProductController extends Controller
     private function recordImport(string $kind, Request $request, $user, array $summary, array $changes): ActivityLog
     {
         $file = $request->file('file');
-        $path = $file->storeAs("imports/{$user->company_id}", "{$kind}_" . now()->format('Ymd_His') . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension(), 'local');
+        $path = \App\Services\ImportFileStore::store($file, "imports/{$user->company_id}", "{$kind}_" . now()->format('Ymd_His') . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension());
 
         return ActivityLog::logActivity("{$kind}_import", ucfirst($kind) . ' imported from ' . $file->getClientOriginalName(), $user, [
             'kind' => $kind,
@@ -1583,11 +1588,14 @@ class ProductController extends Controller
         ]);
     }
 
+    // Product / batch imports here, plus the Data Import hub's (DataImportController::recordImport).
+    private const IMPORT_HISTORY_KINDS = ['products', 'batches', 'suppliers', 'customers', 'opening_stock', 'past_invoices'];
+
     public function importHistory(Request $request)
     {
         $kind = $request->input('kind');
-        if (!in_array($kind, ['products', 'batches'], true)) {
-            return response()->json(['status' => 'failed', 'message' => 'kind must be products or batches.'], 400);
+        if (!in_array($kind, self::IMPORT_HISTORY_KINDS, true)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unknown import kind.'], 400);
         }
 
         $logs = ActivityLog::with('user:id,first_name,last_name,email')
@@ -1612,14 +1620,12 @@ class ProductController extends Controller
     {
         $log = ActivityLog::where('id', $id)
             ->where('company_id', $request->user()->company_id)
-            ->whereIn('action', ['products_import', 'batches_import'])
+            ->whereIn('action', array_map(fn ($k) => "{$k}_import", self::IMPORT_HISTORY_KINDS))
             ->first();
         $path = $log?->properties['file_path'] ?? null;
 
-        if (!$path || !Storage::disk('local')->exists($path)) {
-            return response()->json(['error' => 'File not found'], 404);
-        }
-        return Storage::disk('local')->download($path, $log->properties['file_name'] ?? basename($path));
+        return \App\Services\ImportFileStore::download($path, $log->properties['file_name'] ?? basename((string) $path))
+            ?? response()->json(['error' => 'The uploaded file is no longer on the server (files from before it moved to cloud storage were lost on deploy).'], 404);
     }
 
     public function priceListHistory(Request $request)
@@ -1655,11 +1661,79 @@ class ProductController extends Controller
             ->where('company_id', $user->company_id)
             ->first();
 
-        if (!$import || !$import->file_path || !Storage::disk('local')->exists($import->file_path)) {
-            return response()->json(['error' => 'File not found'], 404);
+        if (!$import) {
+            return response()->json(['error' => 'Import not found'], 404);
+        }
+        if ($download = \App\Services\ImportFileStore::download($import->file_path, $import->file_name ?: "{$import->label}.xlsx")) {
+            return $download;
         }
 
-        return Storage::disk('local')->download($import->file_path, $import->file_name);
+        // The uploaded file is gone (older imports were kept on the server, which deploys wipe), so
+        // hand back the same columns rebuilt from what this import recorded.
+        $rows = $this->priceListImportRows($import);
+        $sheet = [['Item Code', 'Item Description', 'Price', 'Unit of Measure', 'Result']];
+        foreach ($rows as $r) {
+            $sheet[] = [str_replace(' ', '', $r['code'] ?? ''), $r['description'] ?? '', $r['price'] ?? '', $r['unit_of_measure'] ?? '', $r['message'] ?? $r['status']];
+        }
+        $book = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $book->getActiveSheet()->setTitle($import->label)->fromArray($sheet, null, 'A1', true);
+        foreach (range('A', 'E') as $col) {
+            $book->getActiveSheet()->getColumnDimension($col)->setAutoSize(true);
+        }
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book);
+        $name = pathinfo($import->file_name ?: $import->label, PATHINFO_FILENAME) . ' (rebuilt).xlsx';
+
+        return response()->streamDownload(fn () => $writer->save('php://output'), $name, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /** One price list import's rows, for the expanded history row. */
+    public function priceListImportChanges(Request $request, string $id)
+    {
+        $import = PriceListImport::where('id', $id)->where('company_id', $request->user()->company_id)->first();
+        if (!$import) {
+            return response()->json(['status' => 'failed', 'message' => 'Import not found.'], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            // Imports from before rows were saved only have their price changes to show.
+            'complete' => is_array($import->rows),
+            'data' => $this->priceListImportRows($import),
+        ]);
+    }
+
+    // Saved row-by-row results, or for older imports the price changes recorded under this version.
+    private function priceListImportRows(PriceListImport $import): array
+    {
+        if (is_array($import->rows)) {
+            return $import->rows;
+        }
+
+        $tiers = ProductPriceTier::where('company_id', $import->company_id)
+            ->where('tier_name', $import->list_name)
+            ->get(['product_id', 'item_code', 'unit_of_measure'])
+            ->keyBy('product_id');
+
+        return ProductPriceHistory::with('product:id,name')
+            ->where('company_id', $import->company_id)
+            ->where('price_type', $import->list_name)
+            ->where('source_reference', $import->label)
+            ->orderBy('created_at')
+            ->get()
+            ->values()
+            ->map(fn ($h, $i) => [
+                'row' => $i + 1,
+                'code' => trim($import->list_name . ' ' . ($tiers->get($h->product_id)?->item_code ?? '')),
+                'description' => $h->product?->name,
+                'status' => $h->old_value === null ? 'added' : 'updated',
+                'old_price' => $h->old_value !== null ? (float) $h->old_value : null,
+                'price' => (float) $h->new_value,
+                'unit_of_measure' => $tiers->get($h->product_id)?->unit_of_measure,
+                'message' => null,
+            ])
+            ->all();
     }
 
     public function productPriceHistory(Request $request, string $productId)

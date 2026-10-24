@@ -31,6 +31,7 @@ import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
+import { HISTORICAL_CUTOFF } from "@/lib/orders"
 
 type Customer = LibCustomer
 
@@ -53,9 +54,6 @@ type OrderItem = {
 type Company = { id: string; name: string }
 
 type ProductWithVariants = Product & { variants?: ProductVariant[] }
-
-// Go-live date; matches Order::HISTORICAL_CUTOFF on the backend.
-const HISTORICAL_CUTOFF = "2026-10-17"
 
 // Local (not UTC) date, so late-evening orders don't land on tomorrow.
 const todayIso = () => {
