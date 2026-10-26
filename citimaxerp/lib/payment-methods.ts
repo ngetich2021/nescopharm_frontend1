@@ -1,15 +1,18 @@
-// Customer receipts are taken by cash, M-Pesa paybill or bank transfer only. M-Pesa keeps the
+// Customer receipts are taken by cash, M-Pesa paybill, bank transfer or cheque. M-Pesa keeps the
 // value "mpesa", the one the paybill integration (PaymentController) records.
 export const PAYMENT_METHODS = [
   { value: "cash", label: "Cash" },
   { value: "mpesa", label: "M-Pesa Paybill" },
   { value: "bank_transfer", label: "Bank Transfer" },
+  { value: "cheque", label: "Cheque" },
 ] as const
 
 export type PaymentMethodValue = typeof PAYMENT_METHODS[number]["value"]
 
-// All three settle on the spot, so any of them can be an instant or down payment.
-export const INSTANT_PAYMENT_METHODS = PAYMENT_METHODS
+// For any flow that marks a payment as settled immediately (an instant or down payment).
+// Cheques can bounce, so they go through their own pending -> approved workflow
+// (ChequeController / RecordPaymentModal + lib/cheques.ts) and are kept out of these lists.
+export const INSTANT_PAYMENT_METHODS = PAYMENT_METHODS.filter((m) => m.value !== "cheque")
 
 // How a stored method reads on screen ("mpesa" -> "M-Pesa Paybill"); older values are tidied.
 export function paymentMethodLabel(value?: string | null): string {

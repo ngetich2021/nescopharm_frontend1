@@ -248,12 +248,12 @@ class InvoiceController extends Controller
             'customer_id' => 'required|exists:customers,id',
             'sales_rep_id' => 'nullable|uuid|exists:users,id',
             'payment_option' => 'sometimes|in:instant,credit',
-            'payment_method' => ['required_if:payment_option,instant', 'nullable', 'in:' . implode(',', \App\Models\Payment::METHODS)],
+            'payment_method' => ['required_if:payment_option,instant', 'nullable', 'in:' . implode(',', \App\Models\Payment::INSTANT_METHODS)],
             'transaction_id' => 'nullable|string',
             // Optional down payment on an otherwise-credit invoice, e.g. to cover the
             // portion that would exceed the customer's available credit.
             'down_payment_amount' => 'nullable|numeric|min:0.01',
-            'down_payment_method' => ['required_with:down_payment_amount', 'nullable', 'in:' . implode(',', \App\Models\Payment::METHODS)],
+            'down_payment_method' => ['required_with:down_payment_amount', 'nullable', 'in:' . implode(',', \App\Models\Payment::INSTANT_METHODS)],
             'down_payment_transaction_id' => 'nullable|string',
             'type' => 'sometimes|in:sales,service,recurring',
             'invoice_date' => 'required|date',
@@ -668,10 +668,10 @@ class InvoiceController extends Controller
             // Not required_if here - whether a method is actually needed depends on
             // how much of the order's total the order already has paid (checked below,
             // after the order is loaded), which can be enough to leave nothing to collect.
-            'payment_method' => ['nullable', 'in:' . implode(',', \App\Models\Payment::METHODS)],
+            'payment_method' => ['nullable', 'in:' . implode(',', \App\Models\Payment::INSTANT_METHODS)],
             'transaction_id' => 'nullable|string',
             'down_payment_amount' => 'nullable|numeric|min:0.01',
-            'down_payment_method' => ['required_with:down_payment_amount', 'nullable', 'in:' . implode(',', \App\Models\Payment::METHODS)],
+            'down_payment_method' => ['required_with:down_payment_amount', 'nullable', 'in:' . implode(',', \App\Models\Payment::INSTANT_METHODS)],
             'down_payment_transaction_id' => 'nullable|string',
         ]);
 
@@ -1098,6 +1098,12 @@ class InvoiceController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
+        }
+
+        if ($request->payment_method === 'cheque') {
+            return response()->json([
+                'message' => 'Cheque payments must be recorded via POST /cheques so they can be tracked as pending until they mature and are approved.',
+            ], 422);
         }
 
         try {

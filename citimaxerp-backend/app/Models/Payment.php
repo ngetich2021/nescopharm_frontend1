@@ -7,9 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class Payment extends Model
 {
-    // Customer receipts: cash, M-Pesa paybill or bank transfer. (An approved cheque's receipt is
-    // written as 'cheque' by ChequeController, not entered through these forms.)
-    public const METHODS = ['cash', 'mpesa', 'bank_transfer'];
+    // Customer receipts: cash, M-Pesa paybill, bank transfer or cheque. A cheque is recorded as
+    // pending through ChequeController and becomes a receipt once approved, so it is never an
+    // instant or down payment.
+    public const METHODS = ['cash', 'mpesa', 'bank_transfer', 'cheque'];
+    public const INSTANT_METHODS = ['cash', 'mpesa', 'bank_transfer'];
 
     use HasFactory;
 

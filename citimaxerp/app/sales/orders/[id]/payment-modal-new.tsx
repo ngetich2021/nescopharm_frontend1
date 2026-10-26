@@ -1,6 +1,6 @@
 "use client"
 
-import { PAYMENT_METHODS } from "@/lib/payment-methods"
+import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -185,7 +185,7 @@ export function PaymentModal({ orderId, onClose }: PaymentModalProps) {
               <SelectValue placeholder="Select a payment method" />
             </SelectTrigger>
             <SelectContent>
-              {PAYMENT_METHODS.map((m) => (
+              {INSTANT_PAYMENT_METHODS.map((m) => (
                 <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
               ))}
             </SelectContent>

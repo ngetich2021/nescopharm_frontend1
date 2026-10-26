@@ -14,7 +14,7 @@ import { fetchInvoices, recordInvoicePayment, type Invoice } from "@/lib/invoice
 import { getCustomers, Customer, getCustomerDisplayName } from "@/lib/customers"
 import { formatCurrency } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
-import { PAYMENT_METHODS } from "@/lib/payment-methods"
+import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 
 interface CreatePaymentSheetProps {
   isOpen: boolean
@@ -334,7 +334,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                 <SelectValue placeholder="Select method" />
               </SelectTrigger>
               <SelectContent>
-                {PAYMENT_METHODS.map((m) => (
+                {INSTANT_PAYMENT_METHODS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                 ))}
                 <SelectItem value="Credit Card">Credit Card</SelectItem>
