@@ -257,7 +257,8 @@ class Quote extends Model
 
     public function quoteItems()
     {
-        return $this->hasMany(QuoteItem::class, 'quote_id');
+        // line_seq: the order the lines were entered in.
+        return $this->hasMany(QuoteItem::class, 'quote_id')->orderBy('line_seq');
     }
 
     public function company()

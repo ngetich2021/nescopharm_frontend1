@@ -315,7 +315,8 @@ class OrderDispatch extends Model
 
     public function items()
     {
-        return $this->hasMany(OrderDispatchItem::class, 'order_dispatch_id');
+        // line_seq: the order the lines were entered in.
+        return $this->hasMany(OrderDispatchItem::class, 'order_dispatch_id')->orderBy('line_seq');
     }
 
     public function createdBy()

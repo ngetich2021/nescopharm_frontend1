@@ -198,7 +198,8 @@ class Invoice extends Model
 
     public function lineItems()
     {
-        return $this->hasMany(InvoiceLineItem::class);
+        // line_seq: the order the lines were entered in.
+        return $this->hasMany(InvoiceLineItem::class)->orderBy('line_seq');
     }
 
     public function payments()

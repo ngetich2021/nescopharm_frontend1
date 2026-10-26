@@ -202,7 +202,8 @@ class Order extends Model
 
     public function orderItems()
     {
-        return $this->hasMany(OrderItem::class, 'order_id');
+        // line_seq: the order the lines were entered in.
+        return $this->hasMany(OrderItem::class, 'order_id')->orderBy('line_seq');
     }
 
     public function deliveryLocation()
