@@ -38,8 +38,8 @@ class MergeUnitlessDuplicateProducts extends Command
         $groups = $products
             ->groupBy(fn ($p) => $p->company_id . '|' . $this->key($p->name))
             ->filter(fn (Collection $g) => $g->count() > 1)
-            // Only real unit differences: same key but different written names.
-            ->filter(fn (Collection $g) => $g->pluck('name')->map(fn ($n) => mb_strtolower(trim($n)))->unique()->count() > 1);
+            // Only unit differences ("5 x 4.5" vs "5cm x 4.5cm"), not spelling or spacing ones.
+            ->filter(fn (Collection $g) => $g->pluck('name')->map(fn ($n) => preg_replace('/[^a-z0-9.]+/u', '', mb_strtolower($n)))->unique()->count() > 1);
 
         if ($groups->isEmpty()) {
             $this->info('No unit-only duplicates found.');

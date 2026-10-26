@@ -66,6 +66,9 @@ type OrderItem = {
   // a customer-facing order document.
   price_label?: string | null
   price_unit?: string | null
+  // The line's product has since been removed from the catalogue (old entries made under a
+  // general name like "Bandage"); the line should be pointed at the real product.
+  product_removed?: boolean
 }
 
 type Company = { id: string; name: string }
@@ -248,6 +251,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
         id: item.id,
         product_id: item.product_id,
         product_name: item.product ? sizedName(item.product.name, (item as any).variant?.name || item.variant_name) : "Unknown Product",
+        product_removed: !item.product || !!(item.product as any).deleted_at,
         quantity: item.quantity,
         unit_price: parseFloat(item.unit_price),
         total_price: parseFloat(item.total_price),
@@ -405,11 +409,35 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
     setOrderItems((items) =>
       items.map((item, idx) =>
         idx === index
-          ? { ...item, product_id: product.id, product_name: product.name, variant_id: undefined, variant_name: undefined, tax_rate: vatRateForProduct(product) }
+          ? { ...item, product_id: product.id, product_name: product.name, variant_id: undefined, variant_name: undefined, tax_rate: vatRateForProduct(product), product_removed: false }
           : item
       )
     )
   }
+
+  // Point a line at another product (an old entry captured under the wrong item); quantity and price stay.
+  const [repointIndex, setRepointIndex] = useState<number | null>(null)
+  const [repointQuery, setRepointQuery] = useState("")
+  const [repointMatches, setRepointMatches] = useState<ProductWithVariants[]>([])
+  useEffect(() => {
+    let cancelled = false
+    const q = repointQuery.trim()
+    const timer = setTimeout(async () => {
+      if (q.length < 2) {
+        setRepointMatches([])
+        return
+      }
+      try {
+        // Searches the whole catalog; removed products never come back.
+        const { data } = await getProducts(1, 30, { search: q })
+        if (!cancelled) setRepointMatches(Array.isArray(data) ? data.map(withVariants) : [])
+      } catch {
+        if (!cancelled) setRepointMatches([])
+      }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repointQuery])
 
   const handleUpdateQuantity = (index: number, quantity: number) => {
     if (quantity < 1) return
@@ -874,6 +902,34 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                                   <SameCodeSizeSelect code={item.price_label} productId={item.product_id} onPick={(p) => handleSwapSize(index, p)} />
                                 </>
                               )}
+                              {item.product_removed && (
+                                <div className="text-xs font-medium text-red-600">No longer a product - pick the real one</div>
+                              )}
+                              <Popover
+                                open={repointIndex === index}
+                                onOpenChange={(isOpen) => { setRepointIndex(isOpen ? index : null); setRepointQuery("") }}
+                              >
+                                <PopoverTrigger asChild>
+                                  <button type="button" className={`text-xs underline ${item.product_removed ? "text-red-600" : "text-blue-600"}`}>
+                                    Change product
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 p-0" align="start">
+                                  <Command shouldFilter={false}>
+                                    <CommandInput placeholder="Type a product name or code..." value={repointQuery} onValueChange={setRepointQuery} />
+                                    <CommandList>
+                                      <CommandEmpty>{repointQuery.trim().length < 2 ? "Type at least 2 letters" : "No product found"}</CommandEmpty>
+                                      <CommandGroup>
+                                        {repointMatches.map((p) => (
+                                          <CommandItem key={p.id} value={String(p.id)} onSelect={() => { handleSwapSize(index, p); setRepointIndex(null) }}>
+                                            {(p as any).name}
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
                               <div className="text-xs text-gray-500">{[item.price_label, item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
