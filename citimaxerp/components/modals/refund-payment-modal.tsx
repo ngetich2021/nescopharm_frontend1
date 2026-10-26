@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/use-toast"
 import { refundPaymentOverpayment } from "@/lib/invoices"
 import { formatCurrency } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 
 interface RefundPaymentModalProps {
   isOpen: boolean
@@ -147,11 +148,9 @@ export function RefundPaymentModal({
                 <SelectValue placeholder="Select method" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                <SelectItem value="cheque">Cheque</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {PAYMENT_METHODS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

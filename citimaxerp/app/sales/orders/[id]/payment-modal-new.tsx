@@ -1,5 +1,6 @@
 "use client"
 
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -184,11 +185,9 @@ export function PaymentModal({ orderId, onClose }: PaymentModalProps) {
               <SelectValue placeholder="Select a payment method" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="cash">Cash</SelectItem>
-              <SelectItem value="mpesa">M-Pesa</SelectItem>
-              <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-              <SelectItem value="card">Card</SelectItem>
-              <SelectItem value="cheque">Cheque</SelectItem>
+              {PAYMENT_METHODS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

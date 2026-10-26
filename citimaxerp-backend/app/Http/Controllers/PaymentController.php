@@ -184,7 +184,7 @@ class PaymentController extends Controller
 
         $validator = Validator::make($request->all(), [
             'order_id' => 'nullable|uuid|exists:orders,id',
-            'payment_method' => 'required|string',
+            'payment_method' => ['required', 'in:' . implode(',', \App\Models\Payment::METHODS)],
             'amount_paid' => 'required|numeric|min:0.01',
             'transaction_id' => 'nullable|string|max:255',
             'payment_date' => 'nullable|date',
@@ -327,7 +327,7 @@ class PaymentController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'payment_method' => 'sometimes|string',
+            'payment_method' => ['sometimes', 'in:' . implode(',', \App\Models\Payment::METHODS)],
             'transaction_id' => 'nullable|string|max:255',
             'amount_paid' => 'sometimes|numeric|min:0.01',
             'status' => 'sometimes|string|in:pending,completed,failed,refunded',

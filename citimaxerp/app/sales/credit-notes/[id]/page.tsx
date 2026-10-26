@@ -1,5 +1,6 @@
 "use client"
 
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -1121,11 +1122,9 @@ export default function CreditNoteDetailPage() {
                         <SelectValue placeholder="Select method" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                        <SelectItem value="card_reversal">Card Reversal</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
+                        {PAYMENT_METHODS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1198,11 +1197,9 @@ export default function CreditNoteDetailPage() {
                   <SelectValue placeholder="Select method" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                  <SelectItem value="card_reversal">Card Reversal</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  {PAYMENT_METHODS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -17,6 +17,7 @@ import { CalendarIcon, CreditCard, User, Phone, Mail, FileText, CalendarIcon as 
 import type { Debt, DebtPayment } from "@/types/debts"
 import { getDebtPayments, recordPayment } from "@/lib/debts"
 import { toast } from "sonner"
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 
 interface DebtDetailsSheetProps {
   debt: Debt | null
@@ -376,11 +377,9 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
                         <SelectValue placeholder="Select payment method" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="card">Card</SelectItem>
-                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="mpesa">M-Pesa</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
+                        {PAYMENT_METHODS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

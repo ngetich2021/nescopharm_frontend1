@@ -23,6 +23,7 @@ import {
   fetchInvoices
 } from "@/lib/invoices"
 import { Payment } from "@/lib/payments"
+import { paymentMethodLabel } from "@/lib/payment-methods"
 
 interface PaymentAllocationModalProps {
   payment: Payment
@@ -298,7 +299,7 @@ export function PaymentAllocationModal({
                 </div>
                 <div>
                   <Label className="text-sm text-muted-foreground">Payment Method</Label>
-                  <p>{payment.payment_method}</p>
+                  <p>{paymentMethodLabel(payment.payment_method)}</p>
                 </div>
               </div>
             </CardContent>

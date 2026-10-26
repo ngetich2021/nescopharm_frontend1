@@ -43,6 +43,7 @@ import { PaymentsTableSkeleton } from "./payments-table-skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { formatCurrency } from "@/lib/utils"
+import { paymentMethodLabel } from "@/lib/payment-methods"
 
 function getPaymentCustomerDisplayName(payment: Payment) {
   const customer = payment.customer
@@ -425,7 +426,7 @@ export function PaymentsTable() {
                     <TableCell>{getPaymentCustomerDisplayName(payment)}</TableCell>
                     <TableCell>{payment.order?.order_number || "N/A"}</TableCell>
                     <TableCell>{formatCurrency(payment.amount_paid || "0")}</TableCell>
-                    <TableCell>{payment.payment_method || "N/A"}</TableCell>
+                    <TableCell>{paymentMethodLabel(payment.payment_method)}</TableCell>
                     <TableCell>{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : new Date(payment.created_at).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <Badge className={getStatusBadgeClass(payment.status)}>{payment.status}</Badge>

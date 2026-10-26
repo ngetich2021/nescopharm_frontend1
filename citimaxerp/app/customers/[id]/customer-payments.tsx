@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { paymentMethodLabel } from "@/lib/payment-methods"
 // Removed apiCall import as data is now passed via props
 
 // Define the Payment type based on your API response
@@ -161,7 +162,7 @@ export function CustomerPayments({ customerId, initialPayments }: CustomerPaymen
                     <TableRow key={payment.id} className="hover:bg-gray-50">
                       <TableCell className="font-medium">{payment.id.slice(0, 8)}</TableCell>
                       <TableCell>{new Date(payment.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>{payment.payment_method}</TableCell>
+                      <TableCell>{paymentMethodLabel(payment.payment_method)}</TableCell>
                       <TableCell>KES {Number.parseFloat(payment.amount_paid).toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge

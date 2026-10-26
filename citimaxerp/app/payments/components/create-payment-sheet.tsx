@@ -14,6 +14,7 @@ import { fetchInvoices, recordInvoicePayment, type Invoice } from "@/lib/invoice
 import { getCustomers, Customer, getCustomerDisplayName } from "@/lib/customers"
 import { formatCurrency } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 
 interface CreatePaymentSheetProps {
   isOpen: boolean
@@ -29,7 +30,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
     invoice_id: "",
     amount_paid: "",
     payment_date: new Date().toISOString().split("T")[0],
-    payment_method: "M-Pesa",
+    payment_method: "mpesa",
     transaction_id: "",
     status: "completed",
   })
@@ -169,7 +170,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
         invoice_id: "",
         amount_paid: "",
         payment_date: new Date().toISOString().split("T")[0],
-        payment_method: "M-Pesa",
+        payment_method: "mpesa",
         transaction_id: "",
         status: "completed",
       })
@@ -333,9 +334,9 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                 <SelectValue placeholder="Select method" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="M-Pesa">M-Pesa</SelectItem>
-                <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                <SelectItem value="Cash">Cash</SelectItem>
+                {PAYMENT_METHODS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
                 <SelectItem value="Credit Card">Credit Card</SelectItem>
               </SelectContent>
             </Select>

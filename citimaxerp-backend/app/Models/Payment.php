@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class Payment extends Model
 {
+    // Customer receipts: cash, M-Pesa paybill or bank transfer. (An approved cheque's receipt is
+    // written as 'cheque' by ChequeController, not entered through these forms.)
+    public const METHODS = ['cash', 'mpesa', 'bank_transfer'];
+
     use HasFactory;
 
     protected $primaryKey = 'id';

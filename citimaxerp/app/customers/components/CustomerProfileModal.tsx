@@ -47,6 +47,7 @@ import { format } from "date-fns";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { ApplicationStatusSection } from "@/app/customers/[id]/application-status-section";
 import { FileLink } from "@/components/file-preview"
+import { paymentMethodLabel } from "@/lib/payment-methods"
 
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
   pharmacy: "Pharmacy",
@@ -539,7 +540,7 @@ export function CustomerProfileModal({
                                   <div className="font-medium">KES {parseFloat(payment.amount_paid).toLocaleString()}</div>
                                   <div className="flex gap-2">
                                     <Badge variant="outline" className="text-xs">
-                                      {payment.payment_method}
+                                      {paymentMethodLabel(payment.payment_method)}
                                     </Badge>
                                     <Badge variant="outline" className={`text-xs ${
                                       payment.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'

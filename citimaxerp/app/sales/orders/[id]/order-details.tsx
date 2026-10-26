@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
+import { INSTANT_PAYMENT_METHODS, paymentMethodLabel } from "@/lib/payment-methods"
 import { PaymentModal } from "./payment-modal"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { DeliveryLocationModal } from "./delivery-location-modal"
@@ -1150,7 +1150,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                       <div key={payment.id} className="flex justify-between items-start">
                         <div>
                           <div className="font-medium text-xs">Payment #{payment.id.substring(0, 7)}</div>
-                          <div className="text-xs text-muted-foreground">{payment.payment_method}</div>
+                          <div className="text-xs text-muted-foreground">{paymentMethodLabel(payment.payment_method)}</div>
                         </div>
                         <div className="text-right">
                           <div className="font-medium text-xs">KES {formatAmount(payment.amount_paid)}</div>
