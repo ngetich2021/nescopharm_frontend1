@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Cheque;
 use App\Models\CreditNote;
 use App\Models\Invoice;
 use App\Models\Order;
@@ -12,19 +13,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Deletes an order for good together with its invoice, receipts and dispatch (stock goes back
- * unless it's a past sale). Used by the Delete action and by the clean-up of rejected and
- * cancelled orders (`orders:purge-declined`).
+ * Deletes an order for good together with its invoice, credit notes, receipts, cheques and
+ * dispatch (stock goes back unless it's a past sale). Used by the Delete action and by the
+ * clean-up of rejected and cancelled orders (`orders:purge-declined`).
  */
 class OrderDeletionService
 {
-    // Why the order can't be deleted, or null when it can.
+    // Why the order can't be deleted, or null when it can. Nothing stops it any more: its credit
+    // notes, receipts, cheques and dispatch all go with it (old-system data is being re-entered).
     public function blocker(Order $order): ?string
     {
-        $invoice = Invoice::where('order_id', $order->id)->first();
-        if ($invoice && ($notes = CreditNote::where('invoice_id', $invoice->id)->pluck('credit_note_number'))->isNotEmpty()) {
-            return "Invoice {$invoice->invoice_number} has credit note(s) " . $notes->filter()->implode(', ') . '. Delete those first.';
-        }
         return null;
     }
 
@@ -33,6 +31,14 @@ class OrderDeletionService
         $invoice = Invoice::where('order_id', $order->id)->first();
 
         DB::transaction(function () use ($order, $invoice) {
+            if ($invoice) {
+                // Credit notes raised on this invoice go; credit other notes applied here goes back to them.
+                $creditNotes = app(CreditNoteService::class);
+                CreditNote::where('invoice_id', $invoice->id)->get()->each(fn ($note) => $creditNotes->delete($note));
+                $creditNotes->releaseInvoice($invoice);
+                Cheque::where('invoice_id', $invoice->id)->delete();
+            }
+
             // Receipts: one taken for this order alone goes with it. A receipt that also pays
             // other invoices (or was mapped here from elsewhere) stays, just no longer applied here.
             $allocations = $invoice ? PaymentAllocation::where('invoice_id', $invoice->id)->get() : collect();
@@ -41,6 +47,11 @@ class OrderDeletionService
                 ->merge($invoice ? Payment::where('invoice_id', $invoice->id)->pluck('id') : [])
                 ->unique();
             $allocations->each->delete();
+            Cheque::whereIn('payment_id', $paymentIds)->delete();
+            if (Schema::hasTable('mpesa_transactions')) {
+                // The M-Pesa record itself is the bank's; it just stops pointing at the deleted receipt.
+                DB::table('mpesa_transactions')->whereIn('payment_id', $paymentIds)->update(['payment_id' => null]);
+            }
             foreach (Payment::whereIn('id', $paymentIds)->get() as $payment) {
                 $ownReceipt = $payment->order_id === $order->id || ($invoice && $payment->invoice_id === $invoice->id);
                 if ($ownReceipt && !$payment->allocations()->exists()) {

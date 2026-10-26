@@ -95,7 +95,7 @@ export function DeleteOrderConfirmationDialog({
           <AlertDialogDescription>
             Are you sure you want to delete order{" "}
             <span className="font-semibold">{order?.order_number || `ORD-${order?.id.substring(0, 8).toUpperCase()}`}</span>?
-            Its invoice, the payments recorded for it and its dispatch are deleted too.{" "}
+            Its invoice, credit notes, the payments and cheques recorded for it and its dispatch are deleted too.{" "}
             {order && (order.is_historical || isPastSaleDate(order.order_date))
               ? "This is a past sale, so stock is not touched."
               : "Any stock it took goes back."}{" "}

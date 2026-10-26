@@ -70,18 +70,19 @@ class InvoiceOrderService
 
         $paid = (float) $invoice->amount_paid;
         $total = (float) $invoice->total_amount;
+        $settled = $paid + (float) $invoice->amount_credited;
         if (!in_array($invoice->status, ['draft', 'cancelled'], true)) {
             $invoice->update([
-                'status' => $paid >= $total - 0.01 ? 'paid'
+                'status' => $settled >= $total - 0.01 ? ($paid >= $total - 0.01 ? 'paid' : 'credited')
                     : ($invoice->due_date && now()->startOfDay()->isAfter($invoice->due_date) ? 'overdue'
-                    : ($paid > 0 ? 'partially_paid' : 'sent')),
+                    : ($settled > 0 ? 'partially_paid' : 'sent')),
             ]);
         }
 
         // The order form resends the payment fields it loaded; the invoice is what was actually paid.
         $order->update([
             'amount_paid' => $paid,
-            'payment_status' => $paid >= $total - 0.01 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
+            'payment_status' => $settled >= $total - 0.01 ? 'paid' : ($settled > 0 ? 'partial' : 'unpaid'),
         ]);
     }
 

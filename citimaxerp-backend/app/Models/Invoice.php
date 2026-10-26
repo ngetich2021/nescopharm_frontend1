@@ -50,6 +50,7 @@ class Invoice extends Model
         'discount_amount',
         'total_amount',
         'amount_paid',
+        'amount_credited',
         'balance_amount',
         'currency',
         'exchange_rate',
@@ -100,6 +101,7 @@ class Invoice extends Model
         'discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'amount_paid' => 'decimal:2',
+        'amount_credited' => 'decimal:2',
         'balance_amount' => 'decimal:2',
         'exchange_rate' => 'decimal:4',
         'credit_terms_days' => 'integer',
@@ -142,27 +144,44 @@ class Invoice extends Model
             }
 
             // Set balance amount
-            $model->balance_amount = $model->total_amount - $model->amount_paid;
+            $model->balance_amount = $model->outstanding();
         });
 
         static::updating(function ($model) {
-            // Auto-update balance when paid amount changes
-            if ($model->isDirty('amount_paid') || $model->isDirty('total_amount')) {
-                $model->balance_amount = $model->total_amount - $model->amount_paid;
+            // Callers pass their own balance and status (often from amount_paid alone), so both are
+            // always re-derived here, with credit counted apart from money received.
+            if (!$model->isDirty(['amount_paid', 'amount_credited', 'total_amount', 'balance_amount', 'status'])) {
+                return;
+            }
+            $model->balance_amount = $model->outstanding();
+            if (in_array($model->status, ['cancelled', 'void'], true)) {
+                return;
+            }
 
-                // Update status based on payment
-                if ($model->balance_amount <= 0) {
-                    $model->status = 'paid';
-                    if (!$model->paid_at) {
-                        $model->paid_at = now();
-                    }
-                } elseif ($model->amount_paid > 0) {
-                    $model->status = $model->isOverdue() ? 'overdue' : 'partially_paid';
-                } else {
-                    $model->status = $model->isOverdue() ? 'overdue' : $model->status;
+            $paid = (float) $model->amount_paid;
+            $credited = (float) $model->amount_credited;
+            if ($model->balance_amount <= 0.005) {
+                // Cleared at least partly by a credit note: "Credited", not "Paid".
+                $model->status = $credited > 0.005 && $paid < (float) $model->total_amount - 0.005 ? 'credited' : 'paid';
+                if (!$model->paid_at) {
+                    $model->paid_at = now();
                 }
+            } elseif ($paid + $credited > 0.005) {
+                $model->status = $model->isOverdue() ? 'overdue' : 'partially_paid';
+            } elseif (in_array($model->status, ['paid', 'partially_paid', 'credited'], true)) {
+                // Its receipts or credit were removed: it is owed again.
+                $model->status = $model->isOverdue() ? 'overdue' : 'sent';
+                $model->paid_at = null;
+            } else {
+                $model->status = $model->isOverdue() ? 'overdue' : $model->status;
             }
         });
+    }
+
+    /** What is still owed: the total less money received and credit notes applied. */
+    public function outstanding(): float
+    {
+        return round((float) $this->total_amount - (float) $this->amount_paid - (float) $this->amount_credited, 2);
     }
 
     // Relationships
@@ -335,7 +354,7 @@ class Invoice extends Model
         $this->discount_amount = $lineItemsDiscounts; // Sum of all line item discounts
         $this->tax_amount = $lineItemsTax; // Sum of all line item tax (calculated after discounts)
         $this->total_amount = $this->subtotal - $this->discount_amount + $this->tax_amount;
-        $this->balance_amount = $this->total_amount - $this->amount_paid;
+        $this->balance_amount = $this->outstanding();
         $this->save();
     }
 

@@ -96,7 +96,10 @@ class CustomerStatementService
                 ];
             });
 
-        $currentBalance = (float) Invoice::where('customer_id', $customerId)->sum('balance_amount');
+        // Credit not yet used on an invoice (say, credited after the invoice was paid in money)
+        // is the customer's: it brings the balance down, below zero if nothing is owed.
+        $currentBalance = (float) Invoice::where('customer_id', $customerId)->sum('balance_amount')
+            - (float) CreditNote::where('customer_id', $customerId)->where('status', 'issued')->sum('balance_amount');
 
         $invoicesAfter = (float) Invoice::where('customer_id', $customerId)
             ->where('invoice_date', '>', $to)->sum('total_amount');

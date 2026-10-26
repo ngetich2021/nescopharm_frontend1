@@ -709,6 +709,12 @@ export default function InvoiceDetailPage() {
                     <span className="font-medium text-green-600">{formatCurrency(invoice.amount_paid)}</span>
                   </div>
                 )}
+                {parseFloat(String(invoice.amount_credited ?? 0)) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Credited (credit notes):</span>
+                    <span className="font-medium text-teal-700">{formatCurrency(invoice.amount_credited ?? 0)}</span>
+                  </div>
+                )}
                 {parseFloat(invoice.balance_amount.toString()) > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Balance Due:</span>

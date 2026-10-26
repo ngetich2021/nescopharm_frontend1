@@ -704,19 +704,12 @@ class OrderController extends Controller
         }
 
         // Re-dating an order across go-live moves it between a past sale (no stock, no approvals)
-        // and a normal one. Its invoice was raised under the old rules, so that has to go first.
+        // and a normal one. An invoice, receipts or credit don't stop it (old sales are being
+        // entered and corrected): the invoice moves to the new date below.
         $toHistorical = null;
         if ($request->filled('order_date')) {
             $willBeHistorical = Order::isHistoricalDate($request->input('order_date'));
             if ($willBeHistorical !== (bool) $order->is_historical) {
-                if (\App\Models\Invoice::where('order_id', $order->id)->exists()) {
-                    return response()->json([
-                        'status' => 'failed',
-                        'message' => 'This order is already invoiced, so its date cannot be moved '
-                            . ($willBeHistorical ? 'before' : 'on or after') . ' go-live ('
-                            . \Carbon\Carbon::parse(Order::HISTORICAL_CUTOFF)->format('d-m-Y') . '). Cancel the invoice first.',
-                    ], 400);
-                }
                 $toHistorical = $willBeHistorical;
             }
         }
@@ -1055,8 +1048,8 @@ class OrderController extends Controller
             ], 403);
         }
 
-        // Deleting takes the order's invoice, receipts and dispatch with it (old-system orders are
-        // cleared this way so both systems match). Only a credit note against the invoice stops it.
+        // Deleting takes the order's invoice, credit notes, receipts, cheques and dispatch with it
+        // (old-system orders are cleared this way so both systems match).
         $deletion = app(\App\Services\OrderDeletionService::class);
         if ($blocker = $deletion->blocker($order)) {
             return response()->json(['status' => 'failed', 'message' => $blocker], 400);

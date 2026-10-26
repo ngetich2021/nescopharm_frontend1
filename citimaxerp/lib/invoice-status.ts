@@ -6,6 +6,9 @@ export function getInvoiceStatusLabel(status: string): string {
       return 'Partial'
     case 'paid':
       return 'Paid'
+    case 'credited':
+      // Cleared by a credit note (not money received).
+      return 'Credited'
     case 'sent':
       return 'Sent'
     case 'viewed':
@@ -29,6 +32,8 @@ export function getInvoiceStatusColor(status: string): string {
       return 'bg-purple-100 text-purple-800'
     case 'paid':
       return 'bg-green-100 text-green-800'
+    case 'credited':
+      return 'bg-teal-100 text-teal-800'
     case 'partially_paid':
       return 'bg-yellow-100 text-yellow-800'
     case 'overdue':

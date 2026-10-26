@@ -52,9 +52,9 @@ class InvoicePaymentApplicationService
     ): array {
         $currentAmountPaid = $invoice->getTotalAllocatedAmount();
         $newAmountPaid = $currentAmountPaid + $amount;
-        $newBalance = $invoice->total_amount - $newAmountPaid;
+        $newBalance = $invoice->total_amount - $newAmountPaid - (float) $invoice->amount_credited;
 
-        if ($newAmountPaid > $invoice->total_amount) {
+        if ($newBalance < -0.005) {
             throw new RuntimeException('Payment amount exceeds invoice balance');
         }
 
@@ -89,6 +89,7 @@ class InvoicePaymentApplicationService
                 'balance_amount' => $newBalance,
                 'status' => $newStatus,
             ]);
+            $this->syncOrderPaid($invoice);
 
             DB::commit();
 
@@ -101,5 +102,21 @@ class InvoicePaymentApplicationService
             DB::rollBack();
             throw $e;
         }
+    }
+
+    /** The invoice's order shows the same money received (orders list, statements). */
+    public function syncOrderPaid(Invoice $invoice): void
+    {
+        $order = $invoice->order_id ? \App\Models\Order::find($invoice->order_id) : null;
+        if (!$order) {
+            return;
+        }
+        $paid = (float) $invoice->amount_paid;
+        $settled = $paid + (float) $invoice->amount_credited;
+        $total = (float) $invoice->total_amount;
+        $order->forceFill([
+            'amount_paid' => $paid,
+            'payment_status' => $settled >= $total - 0.01 && $total > 0 ? 'paid' : ($settled > 0 ? 'partial' : 'unpaid'),
+        ])->saveQuietly();
     }
 }

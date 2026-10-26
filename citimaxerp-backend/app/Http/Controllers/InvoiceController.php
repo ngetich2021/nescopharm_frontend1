@@ -1142,7 +1142,7 @@ class InvoiceController extends Controller
                 'message' => $e->getMessage(),
                 'invoice_total' => $invoice->total_amount ?? null,
                 'amount_paid' => $invoice?->getTotalAllocatedAmount(),
-                'balance_due' => $invoice ? $invoice->total_amount - $invoice->getTotalAllocatedAmount() : null,
+                'balance_due' => $invoice?->outstanding(),
                 'attempted_payment' => $request->amount,
             ], 400);
         } catch (\Exception $e) {
@@ -1378,7 +1378,7 @@ class InvoiceController extends Controller
 
             // Calculate current invoice balance
             $currentAmountPaid = $invoice->getTotalAllocatedAmount();
-            $invoiceBalance = $invoice->total_amount - $currentAmountPaid;
+            $invoiceBalance = $invoice->total_amount - $currentAmountPaid - (float) $invoice->amount_credited;
 
             // Determine amount to apply
             $applyAmount = $request->apply_amount ?? min($availableAmount, $invoiceBalance);

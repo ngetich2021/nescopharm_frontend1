@@ -81,6 +81,7 @@ export interface CreditNote {
     customer_id: string
     company_id?: string
     status: CreditNoteStatus
+    etims_status?: string | null
     credit_note_date: string
     expiry_date?: string | null
     reason?: string | null

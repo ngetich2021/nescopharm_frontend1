@@ -98,6 +98,8 @@ function getLineItemTotal(lineItem: CreditNoteLineItem) {
 
 function formatStatusLabel(status?: string | null) {
   const value = status || "unknown"
+  // Fully used against the invoice: the customer was credited, nothing was paid.
+  if (value === "applied") return "Credited"
   return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ")
 }
 
@@ -174,7 +176,8 @@ export default function CreditNoteDetailPage() {
   const canApply = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canRefund = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canVoid = (creditNote?.status === "draft" || creditNote?.status === "issued") && consumedAmount <= 0
-  const canDelete = creditNote?.status === "draft"
+  // Any credit note not yet on eTIMS can be deleted (the server unwinds an issued one).
+  const canDelete = !!creditNote && !["submitted", "completed"].includes(creditNote.etims_status ?? "")
   const canEdit = creditNote?.status === "draft"
 
   const resetApplyRecoveryState = () => {
@@ -332,7 +335,9 @@ export default function CreditNoteDetailPage() {
       return
     }
 
-    if (!window.confirm("Delete this draft credit note?")) {
+    if (!window.confirm(creditNote.status === "draft"
+      ? "Delete this draft credit note?"
+      : "Delete this credit note? Its credit comes off the invoice and any stock it returned goes back out.")) {
       return
     }
 

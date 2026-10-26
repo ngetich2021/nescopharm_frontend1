@@ -181,7 +181,7 @@ class ChequeController extends Controller
             return response()->json(['message' => $pdLimitError, 'errors' => ['maturity_date' => [$pdLimitError]]], 422);
         }
 
-        $balance = $invoice->total_amount - $invoice->getTotalAllocatedAmount();
+        $balance = $invoice->total_amount - $invoice->getTotalAllocatedAmount() - (float) $invoice->amount_credited;
         if ($request->amount > $balance) {
             return response()->json([
                 'message' => 'Cheque amount exceeds invoice balance',

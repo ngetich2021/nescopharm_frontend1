@@ -69,6 +69,8 @@ function getCustomerDisplayName(creditNote: CreditNote) {
 
 function formatStatus(status?: string | null) {
   const value = status || "unknown"
+  // Fully used against the invoice: the customer was credited, nothing was paid.
+  if (value === "applied") return "Credited"
   return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ")
 }
 
@@ -147,16 +149,10 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
   }
 
   const handleDeleteCreditNote = async (creditNote: CreditNote) => {
-    if (creditNote.status !== "draft") {
-      toast({
-        title: "Cannot Delete",
-        description: "Only draft credit notes can be deleted.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!window.confirm(`Delete ${creditNote.credit_note_number}?`)) {
+    const confirmText = creditNote.status === "draft"
+      ? `Delete ${creditNote.credit_note_number}?`
+      : `Delete ${creditNote.credit_note_number}? Its credit comes off the invoice and any stock it returned goes back out.`
+    if (!window.confirm(confirmText)) {
       return
     }
 
@@ -344,6 +340,12 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Credit Note
               </DropdownMenuItem>
+            </>
+          )}
+
+          {/* Any credit note not yet on eTIMS can be deleted (the server unwinds an issued one). */}
+          {!["submitted", "completed"].includes(creditNote.etims_status ?? "") && (
+            <>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-primary" onClick={(event) => {
                 event.stopPropagation()
@@ -384,7 +386,7 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="issued">Issued</SelectItem>
-              <SelectItem value="applied">Applied</SelectItem>
+              <SelectItem value="applied">Credited</SelectItem>
               <SelectItem value="refunded">Refunded</SelectItem>
               <SelectItem value="void">Void</SelectItem>
             </SelectContent>

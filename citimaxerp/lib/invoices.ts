@@ -14,7 +14,7 @@ export interface Invoice {
   order_id: string | null;
   payment_id: string | null;
   type: 'sales' | 'service' | 'recurring';
-  status: 'draft' | 'sent' | 'viewed' | 'paid' | 'partially_paid' | 'overdue' | 'cancelled';
+  status: 'draft' | 'sent' | 'viewed' | 'paid' | 'credited' | 'partially_paid' | 'overdue' | 'cancelled';
   invoice_date: string;
   due_date: string;
   subtotal: number | string;
@@ -22,6 +22,8 @@ export interface Invoice {
   discount_amount: number | string;
   total_amount: number | string;
   amount_paid: number | string;
+  // Taken off by credit notes; balance = total - amount_paid - amount_credited.
+  amount_credited?: number | string;
   balance_amount: number | string;
   currency: string;
   exchange_rate?: number;

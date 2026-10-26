@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Traits\HandlesDatabaseErrors;
+use App\Services\CreditNoteService;
 use App\Services\PackagingCalculatorService;
 use App\Services\TaxCompliance\EtimsCreditNoteService;
 use App\Services\TaxCompliance\EtimsTaxType;
@@ -25,8 +26,10 @@ class CreditNoteController extends Controller
 {
     use HandlesDatabaseErrors;
 
-    public function __construct(private readonly EtimsCreditNoteService $etimsCreditNoteService)
-    {
+    public function __construct(
+        private readonly EtimsCreditNoteService $etimsCreditNoteService,
+        private readonly CreditNoteService $creditNotes,
+    ) {
         $this->middleware('auth:sanctum');
     }
 
@@ -329,7 +332,8 @@ class CreditNoteController extends Controller
     }
 
     /**
-     * Delete a draft credit note.
+     * Delete a credit note. An issued or applied one is unwound first (credit off its invoices,
+     * returned stock back out), so it can be entered afresh. Only one KRA has signed stays.
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -342,22 +346,18 @@ class CreditNoteController extends Controller
 
         $creditNote = CreditNote::where('company_id', $companyId)->findOrFail($id);
 
-        if (!$creditNote->isDraft()) {
+        if (in_array($creditNote->etims_status, ['submitted', 'completed'], true)) {
             return response()->json([
-                'message' => 'Only draft credit notes can be deleted. Current status: ' . $creditNote->status,
+                'message' => 'This credit note is on eTIMS, so it cannot be deleted. Void it instead.',
             ], 400);
         }
 
         try {
-            DB::beginTransaction();
-            $creditNote->lineItems()->delete();
-            $creditNote->delete();
-            DB::commit();
+            $this->creditNotes->delete($creditNote);
 
             return response()->json(['message' => 'Credit note deleted successfully']);
 
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Failed to delete credit note', ['error' => $e->getMessage()]);
             return response()->json(['message' => 'Failed to delete credit note', 'error' => $e->getMessage()], 500);
         }
@@ -435,8 +435,15 @@ class CreditNoteController extends Controller
 
             $creditNote->loadMissing('lineItems');
 
-            foreach ($creditNote->lineItems as $lineItem) {
-                $this->restoreInventoryForCreditNoteLineItem($creditNote, $lineItem, $user->id);
+            // A past sale (before go-live) never moved stock, so crediting it puts none back.
+            $pastSale = $original && (
+                ($original->order_id && \App\Models\Order::where('id', $original->order_id)->whereRaw('is_historical = true')->exists())
+                || \App\Models\Order::isHistoricalDate($original->invoice_date)
+            );
+            if (!$pastSale) {
+                foreach ($creditNote->lineItems as $lineItem) {
+                    $this->restoreInventoryForCreditNoteLineItem($creditNote, $lineItem, $user->id);
+                }
             }
 
             $creditNote->update([
@@ -444,10 +451,16 @@ class CreditNoteController extends Controller
                 'issued_at' => now(),
             ]);
 
+            // The credit comes off what its invoice still owes. Whatever is left (say the invoice
+            // was already paid in money) stays with the customer as credit to use or refund.
+            $applied = $original ? $this->creditNotes->apply($creditNote, $original) : 0;
+
             DB::commit();
 
             return response()->json([
-                'message' => 'Credit note issued successfully',
+                'message' => $applied > 0
+                    ? 'Credit note issued and ' . number_format($applied, 2) . " credited to invoice {$original->invoice_number}"
+                    : 'Credit note issued successfully',
                 'data' => $creditNote->fresh(['customer', 'invoice', 'lineItems', 'refunds']),
             ]);
 
@@ -509,46 +522,12 @@ class CreditNoteController extends Controller
             ], 400);
         }
 
-        // Determine amount to apply
-        $requestedAmount = $request->get('amount', $creditNote->balance_amount);
-        $applyAmount = min(
-            (float) $requestedAmount,
-            (float) $creditNote->balance_amount,
-            (float) $invoice->balance_amount
-        );
-
-        if ($applyAmount <= 0) {
-            return response()->json(['message' => 'Nothing to apply'], 400);
-        }
-
         try {
-            DB::beginTransaction();
-
-            // Update Invoice
-            $newInvoiceAmountPaid = (float) $invoice->amount_paid + $applyAmount;
-            $newInvoiceBalance = (float) $invoice->total_amount - $newInvoiceAmountPaid;
-            $newInvoiceStatus = $newInvoiceBalance <= 0 ? 'paid' : $invoice->status;
-
-            $invoice->update([
-                'amount_paid' => $newInvoiceAmountPaid,
-                'balance_amount' => max(0, $newInvoiceBalance),
-                'status' => $newInvoiceStatus,
-                'paid_at' => $newInvoiceStatus === 'paid' ? ($invoice->paid_at ?? now()) : $invoice->paid_at,
-            ]);
-
-            // Update Credit Note
-            $newCreditAmountApplied = (float) $creditNote->amount_applied + $applyAmount;
-            $newCreditBalance = (float) $creditNote->total_amount - $newCreditAmountApplied - (float) $creditNote->amount_refunded;
-            $newCreditStatus = $newCreditBalance <= 0 ? 'applied' : 'issued';
-
-            $creditNote->update([
-                'amount_applied' => $newCreditAmountApplied,
-                'balance_amount' => max(0, $newCreditBalance),
-                'status' => $newCreditStatus,
-                'applied_at' => $newCreditStatus === 'applied' ? now() : $creditNote->applied_at,
-            ]);
-
-            DB::commit();
+            // Credit, not money: it goes to the invoice's amount_credited, so it shows "Credited".
+            $applyAmount = $this->creditNotes->apply($creditNote, $invoice, (float) $request->get('amount', $creditNote->balance_amount));
+            if ($applyAmount <= 0) {
+                return response()->json(['message' => 'Nothing to apply'], 400);
+            }
 
             return response()->json([
                 'message' => 'Credit note applied successfully',
@@ -559,7 +538,6 @@ class CreditNoteController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Failed to apply credit note', ['error' => $e->getMessage()]);
             return response()->json(['message' => 'Failed to apply credit note', 'error' => $e->getMessage()], 500);
         }
