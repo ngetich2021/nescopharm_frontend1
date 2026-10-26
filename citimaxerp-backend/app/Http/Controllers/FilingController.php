@@ -16,6 +16,9 @@ use Illuminate\Support\Facades\Validator;
  */
 class FilingController extends Controller
 {
+    /** File numbers run from 1 to this, or to the number of invoices if there are more. */
+    const FILE_NUMBER_LIMIT = 1000;
+
     public function __construct(private InvoiceOrderService $invoiceOrders)
     {
     }
@@ -107,7 +110,7 @@ class FilingController extends Controller
             'summary' => [
                 'invoices' => $invoices->count(),
                 // File numbers run from 1 to this.
-                'max_file_number' => $invoices->count(),
+                'max_file_number' => max(self::FILE_NUMBER_LIMIT, $invoices->count()),
                 'filed' => $invoices->filter(fn ($i) => filled($i['file_number']))->count(),
                 'new_unfiled' => $invoices->filter(fn ($i) => $i['is_new'] && blank($i['file_number']))->count(),
                 'customers' => $invoices->pluck('customer_id')->unique()->count(),
@@ -145,7 +148,7 @@ class FilingController extends Controller
     /**
      * File numbers from an Excel sheet: [{invoice_number, file_number}]. Without apply=true it only
      * reports what would change, so the user sees it before anything is saved. Each number must be
-     * 1..(number of invoices) and used once; numbers may move between invoices within one sheet.
+     * 1..FILE_NUMBER_LIMIT and used once; numbers may move between invoices within one sheet.
      */
     public function import(Request $request): JsonResponse
     {
@@ -166,7 +169,7 @@ class FilingController extends Controller
 
         // Matched on the number as printed (INV-0074) or as stored (INV-9b267ea3-0074).
         $all = DB::table('invoices')->where('company_id', $user->company_id)->get(['id', 'invoice_number', 'file_number'])->keyBy('id');
-        $max = $all->count();
+        $max = max(self::FILE_NUMBER_LIMIT, $all->count());
         $byNumber = collect();
         foreach ($all as $i) {
             $byNumber[strtoupper($i->invoice_number)] = $i;
@@ -263,10 +266,10 @@ class FilingController extends Controller
         ]);
     }
 
-    /** File numbers run from 1 to the number of invoices. */
+    /** File numbers run from 1 to FILE_NUMBER_LIMIT, or to the number of invoices if there are more. */
     protected function maxFileNumber(string $companyId): int
     {
-        return DB::table('invoices')->where('company_id', $companyId)->count();
+        return max(self::FILE_NUMBER_LIMIT, DB::table('invoices')->where('company_id', $companyId)->count());
     }
 
     /**
@@ -285,7 +288,7 @@ class FilingController extends Controller
         }
         $n = (int) $raw;
         if ($n < 1 || $n > $max) {
-            return [null, "File No must be from 1 to {$max} (there are {$max} invoices)"];
+            return [null, "File No must be from 1 to {$max}"];
         }
         return [(string) $n, null];
     }

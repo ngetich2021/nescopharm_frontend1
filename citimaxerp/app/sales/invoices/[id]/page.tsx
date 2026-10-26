@@ -1170,7 +1170,7 @@ function InvoiceFileNumber({ invoice, onSaved }: { invoice: Invoice; onSaved: (v
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           inputMode="numeric"
           placeholder="Not filed"
-          title="A whole number from 1 to the number of invoices, not used by another invoice"
+          title="A whole number from 1 to 1000, not used by another invoice"
           className="h-8 w-28 font-semibold"
           disabled={saving}
         />

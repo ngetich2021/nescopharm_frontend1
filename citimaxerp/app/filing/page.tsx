@@ -49,7 +49,7 @@ function FileNumberInput({ invoice, max, onSaved }: { invoice: FilingInvoice; ma
   const save = async () => {
     const next = value.trim()
     if (next === (invoice.file_number ?? "")) return
-    // Same rule as the server: a whole number from 1 to the number of invoices, used once.
+    // Same rule as the server: a whole number from 1 to max (1000), used once.
     if (next && (!/^\d+$/.test(next) || Number(next) < 1 || Number(next) > max)) {
       setValue(invoice.file_number ?? "")
       toast({ title: "Invalid file number", description: `File No must be a whole number from 1 to ${max}.`, variant: "destructive" })
