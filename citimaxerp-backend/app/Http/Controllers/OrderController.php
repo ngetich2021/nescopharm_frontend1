@@ -729,7 +729,7 @@ class OrderController extends Controller
         // Each incoming line's VAT is resolved up front so a tax change counts as a change too.
         $items = $request->has('items')
             ? collect($request->input('items'))
-                ->map(fn ($item) => ['tax_rate' => $this->lineTaxRate($item, Product::find($item['product_id']))] + $item)
+                ->map(fn ($item) => ['tax_rate' => $this->lineTaxRate($item, Product::withTrashed()->find($item['product_id']))] + $item)
                 ->all()
             : null;
         $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '', round((float) ($l['tax_rate'] ?? 0), 2)]);
@@ -830,7 +830,8 @@ class OrderController extends Controller
                     $totalAmount = 0;
                     $belowMinimumPrice = false;
                     foreach ($items as $index => $item) {
-                        $product = Product::with('store')->find($item['product_id']);
+                        // An old line can be for a product since removed from the catalogue.
+                        $product = Product::withTrashed()->with('store')->find($item['product_id']);
                         if ($product->company_id !== $order->company_id && !$this->hasPermission($request, 'can_manage_all_quotes')) {
                             return response()->json([
                                 'status' => 'failed',
@@ -892,7 +893,7 @@ class OrderController extends Controller
                     $order->save();
                     // Create new items and update stock
                     foreach ($items as $item) {
-                        $product = Product::find($item['product_id']);
+                        $product = Product::withTrashed()->find($item['product_id']);
                         $variant = !empty($item['variant_id']) ? ProductVariant::find($item['variant_id']) : null;
 
                         $batchAllocations = null;
