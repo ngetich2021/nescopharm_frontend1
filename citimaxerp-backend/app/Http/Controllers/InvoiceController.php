@@ -220,7 +220,12 @@ class InvoiceController extends Controller
                     });
                 }
                 // ...existing code...
-                $invoices = $query->orderBy('created_at', 'desc')->paginate($request->get('per_page', 15));
+                // Newest sale first, by the order's date (past sales are being entered now, so the
+                // invoice's own created_at says nothing about when the sale happened).
+                $invoices = $query
+                    ->orderByRaw('COALESCE((SELECT o.order_date FROM orders o WHERE o.id = invoices.order_id), invoices.invoice_date) DESC NULLS LAST')
+                    ->orderBy('created_at', 'desc')
+                    ->paginate($request->get('per_page', 15));
                 return response()->json($invoices);
             });
         } catch (\Exception $e) {
