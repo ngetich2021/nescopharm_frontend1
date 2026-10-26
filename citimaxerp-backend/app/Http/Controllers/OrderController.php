@@ -720,13 +720,52 @@ class OrderController extends Controller
             }
         }
 
+        // The invoice date follows the order date, except on an invoice already signed by eTIMS.
+        $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
+        $newDate = $request->filled('order_date') ? \Carbon\Carbon::parse($request->input('order_date'))->startOfDay() : null;
+        $invoiceDateMoves = $invoice && $newDate && $invoice->invoice_date && !$invoice->invoice_date->isSameDay($newDate);
+        if ($invoiceDateMoves && $invoice->etims_submitted_at) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => "Invoice {$invoice->invoice_number} is already on eTIMS with date "
+                    . $invoice->invoice_date->format('d-m-Y') . ', so the order date cannot be changed.',
+            ], 400);
+        }
+
+        // Each incoming line's VAT is resolved up front so a tax change counts as a change too.
+        $items = $request->has('items')
+            ? collect($request->input('items'))
+                ->map(fn ($item) => ['tax_rate' => $this->lineTaxRate($item, Product::find($item['product_id']))] + $item)
+                ->all()
+            : null;
+        $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '', round((float) ($l['tax_rate'] ?? 0), 2)]);
+        $linesChanged = $items !== null
+            && $order->orderItems()->get()->map(fn ($i) => $lineKey($i->toArray()))->sort()->values()->all()
+                !== collect($items)->map($lineKey)->sort()->values()->all();
+
+        // A dispatched current sale ships what its dispatch lists, so its lines can't change under it.
+        // (A past sale's dispatch is rewritten to match instead.)
+        $isPastSale = $order->is_historical || Order::isHistoricalDate($request->input('order_date', $order->order_date));
+        if ($linesChanged && !$isPastSale) {
+            $dispatch = \App\Models\OrderDispatch::where('order_id', $order->id)
+                ->where('status', '!=', 'cancelled')
+                ->where('approval_status', '!=', 'rejected')
+                ->first();
+            if ($dispatch) {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => "This order is on dispatch {$dispatch->dispatch_number}. Cancel the dispatch first, then change the items.",
+                ], 400);
+            }
+        }
+
         try {
             Log::info('Order update attempt', [
                 'user_id' => $request->user()->id,
                 'order_id' => $id,
                 'request' => $request->all(),
             ]);
-            return DB::transaction(function () use ($request, $order, $toHistorical) {
+            return DB::transaction(function () use ($request, $order, $toHistorical, $invoice, $invoiceDateMoves, $newDate, $items, $linesChanged, $isPastSale) {
                 if ($toHistorical === true) {
                     // Put back any stock it took while flagged as a current sale, then mark it past.
                     // Booleans bind as integers here, which Postgres rejects for a boolean column.
@@ -767,7 +806,6 @@ class OrderController extends Controller
 
                 // Handle updating items if provided
                 $approvalReset = false;
-                $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
                 $invoiceNeedsSync = $invoice && $request->has('discount')
                     && round((float) $request->input('discount'), 2) !== round((float) $order->discount, 2);
                 if ($request->has('items')) {
@@ -776,17 +814,10 @@ class OrderController extends Controller
 
                     // Changed lines need a fresh sign-off before they can be invoiced. The edit form
                     // always resends every line, so compare them - a notes-only save keeps the approval.
-                    // Each incoming line's VAT is resolved up front so a tax change counts as a change too.
-                    $items = collect($request->input('items'))
-                        ->map(fn ($item) => ['tax_rate' => $this->lineTaxRate($item, Product::find($item['product_id']))] + $item)
-                        ->all();
-                    $lineKey = fn ($l) => implode('|', [$l['product_id'] ?? '', $l['variant_id'] ?? '', (float) ($l['quantity'] ?? 0), round((float) ($l['unit_price'] ?? 0), 2), $l['price_label'] ?? '', $l['price_unit'] ?? '', round((float) ($l['tax_rate'] ?? 0), 2)]);
-                    $before = $order->orderItems()->get()->map(fn ($i) => $lineKey($i->toArray()))->sort()->values()->all();
-                    $after = collect($items)->map($lineKey)->sort()->values()->all();
-                    if ($before !== $after && $invoice) {
+                    if ($linesChanged && $invoice) {
                         $invoiceNeedsSync = true;
                     }
-                    if ($before !== $after && $order->isInvoiceApproved() && !$invoice) {
+                    if ($linesChanged && $order->isInvoiceApproved() && !$invoice) {
                         $order->fill([
                             'invoice_approved_by' => null,
                             'invoice_approved_at' => null,
@@ -797,9 +828,7 @@ class OrderController extends Controller
 
                     $orderStock->restore($order, "Order {$order->order_number} edited");
                     // A past sale (flagged, or dated before go-live - as saved or as now entered) never
-                    // touches stock, so there's nothing to check it against.
-                    $isPastSale = $order->is_historical
-                        || Order::isHistoricalDate($request->input('order_date', $order->order_date));
+                    // touches stock, so there's nothing to check it against ($isPastSale).
 
                     // Delete old items
                     $order->orderItems()->delete();
@@ -933,6 +962,15 @@ class OrderController extends Controller
                 if ($invoice && ($invoiceNeedsSync || $invoice->customer_id !== $order->customer_id)) {
                     // The invoice is what statements and balances read, so it follows the corrected order.
                     app(\App\Services\InvoiceOrderService::class)->syncWithOrder($order, $invoice);
+                }
+                if ($invoiceDateMoves) {
+                    // The due date keeps its distance from the invoice date (the credit terms).
+                    $invoice->refresh();
+                    $shift = $invoice->invoice_date->diffInDays($newDate, false);
+                    $invoice->update([
+                        'invoice_date' => $newDate->toDateString(),
+                        'due_date' => $invoice->due_date ? $invoice->due_date->copy()->addDays($shift)->toDateString() : null,
+                    ]);
                 }
 
                 if ($toHistorical === true && $order->status !== 'cancelled' && $order->status !== 'completed') {
