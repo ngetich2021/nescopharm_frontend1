@@ -13,7 +13,7 @@ import { useForm, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { createInvoiceFromOrder, CreateInvoiceFromOrderRequest, fetchSalesReps, SalesRep } from "@/lib/invoices"
-import { fetchOrders, fetchOrderById, Order, OrderDetail } from "@/lib/orders"
+import { fetchOrders, fetchOrderById, Order, OrderDetail, isPastSaleDate } from "@/lib/orders"
 import { fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 import { useToast } from "@/hooks/use-toast"
@@ -165,6 +165,9 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
   // credit exposure, so re-running the overage gate here would just demand
   // the customer pay the same overage a second time.
   const creditOverage = 0
+  // A past sale goes in on credit whatever the customer's terms: no approved terms needed.
+  const isPastSale = !!selectedOrder && (!!selectedOrder.is_historical || isPastSaleDate(selectedOrder.order_date))
+  const needsCreditTerms = paymentOption === 'credit' && !isPastSale && !creditTerms?.credit_days
 
   const onSubmit: SubmitHandler<InvoiceFromOrderFormData> = async (data) => {
     // Prevent submission if no valid order is selected
@@ -207,7 +210,7 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
       return
     }
 
-    if (paymentOption === 'credit' && !creditTerms?.credit_days) {
+    if (needsCreditTerms) {
       toast({
         title: "Error",
         description: "This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.",
@@ -486,6 +489,10 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
                   <p className="text-sm text-muted-foreground">Loading customer's credit terms...</p>
                 ) : !selectedOrder ? (
                   <p className="text-sm text-muted-foreground">Select an order to see the customer's credit terms.</p>
+                ) : isPastSale ? (
+                  <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    Past sale: credit terms and the credit limit are not checked.
+                  </p>
                 ) : creditTerms?.credit_days ? (
                   <div className="rounded-md bg-purple-50 border border-purple-200 p-3 text-sm">
                     <p className="font-medium text-purple-900">
@@ -553,7 +560,7 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
               disabled={
                 isLoading ||
                 !selectedOrder ||
-                (paymentOption === 'credit' && !creditTerms?.credit_days) ||
+                needsCreditTerms ||
                 (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod))
               }
             >

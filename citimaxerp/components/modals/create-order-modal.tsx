@@ -393,7 +393,10 @@ export function CreateOrderModal({
   }
   const shortLines = isPastSale ? [] : orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
 
-  const creditOverage = paymentOption === 'credit' && creditTerms?.credit_days
+  // A past sale is already settled history: it goes in on credit whatever the customer's
+  // terms or limit, so no approved terms or overage payment is asked for.
+  const creditChecks = !isPastSale && paymentOption === 'credit'
+  const creditOverage = creditChecks && creditTerms?.credit_days
     ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
     : 0
 
@@ -409,7 +412,7 @@ export function CreateOrderModal({
       return
     }
 
-    if (paymentOption === 'credit' && !creditTerms?.credit_days) {
+    if (creditChecks && !creditTerms?.credit_days) {
       toast.error("This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.")
       return
     }
@@ -968,7 +971,12 @@ export function CreateOrderModal({
               </button>
             </div>
 
-            {paymentOption === 'credit' && (
+            {isPastSale && paymentOption === 'credit' && (
+              <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                Past sale: credit terms and the credit limit are not checked.
+              </p>
+            )}
+            {creditChecks && (
               isLoadingCreditTerms ? (
                 <p className="text-sm text-muted-foreground">Loading customer's credit terms...</p>
               ) : !selectedCustomer ? (
@@ -1142,7 +1150,7 @@ export function CreateOrderModal({
               disabled={
                 loading ||
                 shortLines.length > 0 ||
-                (paymentOption === 'credit' && !creditTerms?.credit_days) ||
+                (creditChecks && !creditTerms?.credit_days) ||
                 (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) ||
                 (paymentOption === 'instant' && (amountPaid < calculateTotal() || !instantPaymentMethod))
               }

@@ -29,7 +29,7 @@ import { fetchInvoices, fetchInvoiceByOrderId, Invoice, createInvoiceFromOrder }
 import { fetchCustomerCreditTerms, CustomerCreditTerms } from "@/lib/customers"
 import { getInvoiceStatusColor, getInvoiceStatusLabel } from "@/lib/invoice-status"
 import { getLogistics, createLogistics, CreateLogisticsData, Logistics as ApiLogistics } from "@/lib/logistics"
-import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, declinedDeletesAt } from "@/lib/orders"
+import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, declinedDeletesAt, isPastSaleDate } from "@/lib/orders"
 import { useAuth } from "@/lib/auth-context"
 import { Textarea } from "@/components/ui/textarea"
 import { DeliveryLocation as ApiDeliveryLocation } from "@/lib/delivery-locations"
@@ -337,6 +337,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   // credit exposure, so re-running the overage gate here would just demand
   // the customer pay the same overage a second time.
   const invoiceCreditOverage = 0
+  // A past sale goes in on credit whatever the customer's terms: no approved terms needed.
+  const isPastSale = !!order.is_historical || isPastSaleDate(order.order_date)
 
   // Function to create invoice directly from current order
   const handleCreateInvoice = async () => {
@@ -396,7 +398,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
       return
     }
 
-    if (invoicePaymentOption === 'credit' && !invoiceCreditTerms?.credit_days) {
+    if (invoicePaymentOption === 'credit' && !isPastSale && !invoiceCreditTerms?.credit_days) {
       toast({
         title: "Error",
         description: "This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.",
@@ -1618,6 +1620,10 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
               <div className="pt-1">
                 {isLoadingInvoiceCreditTerms ? (
                   <p className="text-sm text-muted-foreground">Loading customer's credit terms...</p>
+                ) : isPastSale ? (
+                  <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    Past sale: credit terms and the credit limit are not checked.
+                  </p>
                 ) : invoiceCreditTerms?.credit_days ? (
                   <div className="rounded-md bg-purple-50 border border-purple-200 p-3 text-sm">
                     <p className="font-medium text-purple-900">
@@ -1662,7 +1668,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
               onClick={createInvoiceFromCompletedOrder}
               disabled={
                 isCreatingInvoice ||
-                (!isOrderFullySettled && invoicePaymentOption === 'credit' && !invoiceCreditTerms?.credit_days) ||
+                (!isOrderFullySettled && invoicePaymentOption === 'credit' && !isPastSale && !invoiceCreditTerms?.credit_days) ||
                 (!isOrderFullySettled && invoiceCreditOverage > 0 && (!coversOverage(invoiceDownPaymentAmount, invoiceCreditOverage) || !invoiceDownPaymentMethod))
               }
             >
