@@ -552,7 +552,9 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
               <TableHead>Amount</TableHead>
               <TableHead>Items</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Date</TableHead>
+              {/* The list is sorted by order date, newest first; the invoice may be dated later. */}
+              <TableHead>Order Date</TableHead>
+              <TableHead>Invoice Date</TableHead>
               <TableHead
                 className="cursor-pointer select-none"
                 onClick={() => toggleSort('due_date')}
@@ -589,7 +591,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
               ))
             ) : paginatedInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8">
+                <TableCell colSpan={11} className="text-center py-8">
                   No invoices found
                 </TableCell>
               </TableRow>
@@ -618,6 +620,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
                       {getInvoiceStatusLabel(invoice.status)}
                     </Badge>
                   </TableCell>
+                  <TableCell>{invoice.order?.order_date ? formatDate(invoice.order.order_date) : "-"}</TableCell>
                   <TableCell>{formatDate(invoice.invoice_date)}</TableCell>
                   <TableCell>{formatDate(invoice.due_date)}</TableCell>
                   <TableCell>{getDaysRemainingBadge(invoice)}</TableCell>
