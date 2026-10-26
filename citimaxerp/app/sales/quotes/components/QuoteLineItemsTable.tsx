@@ -53,7 +53,8 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    // Lines scroll inside a screen-high box so the sideways scrollbar is always in view.
+    <div className="overflow-auto max-h-[55vh]">
       <datalist id={listId}>
         {allCodes.map(({ product, option }) => (
           <option key={`${product.id}-${option.code}`} value={option.code}>
@@ -62,7 +63,7 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
         ))}
       </datalist>
       <table className="w-full min-w-[960px] text-sm border-collapse">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b text-xs font-semibold text-gray-700 uppercase tracking-wide">
             <th className="text-left py-2 pr-2 w-12">S/No</th>
             <th className="text-left py-2 pr-2 w-36">Code No.</th>

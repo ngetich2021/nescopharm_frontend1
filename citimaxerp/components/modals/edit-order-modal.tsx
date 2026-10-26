@@ -817,9 +817,10 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="border rounded-md overflow-x-auto">
+                {/* Lines scroll inside a screen-high box so the sideways scrollbar is always in view. */}
+                <div className="border rounded-md overflow-auto max-h-[55vh]">
                   <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                           S/No
