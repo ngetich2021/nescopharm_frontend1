@@ -16,14 +16,24 @@ use Carbon\Carbon;
  */
 class CustomerCreditTermsResolver
 {
+    /**
+     * $chosenCredit: staff picked credit for this sale (a past sale can go on credit
+     * without the customer being registered for it), so it is a credit sale anyway.
+     */
     public function resolve(
         Customer $customer,
         string $referenceDate,
         ?string $explicitDueDate = null,
         ?string $explicitPaymentTerms = null,
+        bool $chosenCredit = false,
     ): array {
-        $isCredit = $customer->payment_method === 'credit';
-        $creditDays = $isCredit ? $customer->account?->credit_days : null;
+        $isCredit = $chosenCredit || $customer->payment_method === 'credit';
+        // Same fallback as invoices: the Credit Appraisal Form's period (e.g. "60") when
+        // credit_days was never set, so the order and its invoice carry the same days.
+        $account = $customer->account;
+        $creditDays = $isCredit && $account
+            ? ($account->credit_days ?? (is_numeric($account->credit_period_required) ? (int) $account->credit_period_required : null))
+            : null;
 
         if ($isCredit) {
             $days = $creditDays ?? 30;

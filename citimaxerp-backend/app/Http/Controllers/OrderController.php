@@ -373,6 +373,7 @@ class OrderController extends Controller
                     $request->input('order_date', now()->toDateString()),
                     $request->input('due_date'),
                     $request->input('payment_terms'),
+                    $paymentOption === 'credit',
                 );
             }
 

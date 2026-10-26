@@ -93,14 +93,17 @@ class InvoiceController extends Controller
      * Work out payment_type/credit_terms_days/due_date/payment_terms for a new invoice
      * from the customer's registered payment method and credit terms, unless the
      * caller explicitly supplied a due_date/payment_terms to override it.
+     * $chosenCredit: staff picked credit for this sale (a past sale can go on credit
+     * without the customer being registered for it), so it is a credit invoice anyway.
      */
     private function resolveInvoiceCredit(
         \App\Models\Customer $customer,
         string $invoiceDate,
         ?string $explicitDueDate = null,
         ?string $explicitPaymentTerms = null,
+        bool $chosenCredit = false,
     ): array {
-        $isCredit = $customer->payment_method === 'credit';
+        $isCredit = $chosenCredit || $customer->payment_method === 'credit';
         // Fall back to the string `credit_period_required` captured on the
         // Credit Appraisal Form when the integer `credit_days` was never set
         // explicitly (rep applications only save the string value, so without
@@ -295,6 +298,7 @@ class InvoiceController extends Controller
                     $request->invoice_date,
                     $request->due_date,
                     $request->payment_terms,
+                    $paymentOption === 'credit',
                 );
             }
 
@@ -719,6 +723,7 @@ class InvoiceController extends Controller
                     $invoiceDate,
                     $request->due_date,
                     $request->payment_terms,
+                    $paymentOption === 'credit',
                 );
             }
             $invoiceStatus = $this->calculateInvoiceStatus($amountPaid, $totalAmount, $credit['due_date']);
