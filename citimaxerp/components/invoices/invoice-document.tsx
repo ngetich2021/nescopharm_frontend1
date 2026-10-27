@@ -101,7 +101,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
               // An individual with no PIN of their own falls back to a
               // director's, which only the account carries.
               const pin = buyer.kraPin || customerAccount?.directors?.find((d) => d.pin?.trim())?.pin
-              // The contact person and their phone/email are printed as the reference
+              // The contact person and their phone/email are printed as Other References
               // in the box alongside, so the buyer block carries only the business.
               return (
                 <div className="text-gray-900">
@@ -121,13 +121,14 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
               without an overly tall document. */}
           <div className="divide-y divide-gray-300">
             {(() => {
-              // Few customers have the dedicated contact-person fields filled; for the rest
-              // the customer's own name, phone and email are the person to reach.
+              // Other References is the contact person. Few customers have the dedicated
+              // contact-person fields filled; for the rest the customer's own name, phone and
+              // email are the person to reach.
               const cust: any = customerDetails || invoice.customer || {}
               const contactName = cust.contact_person_name?.trim() || cust.name?.trim()
               const contactPhone = cust.contact_person_phone?.trim() || cust.phone?.trim()
               const contactEmail = cust.contact_person_email?.trim() || cust.email?.trim()
-              const contactValue = [contactName, contactPhone, contactEmail].filter(Boolean).join(" · ") || "N/A"
+              const contactValue = [contactName, contactPhone, contactEmail].filter(Boolean).join(" · ") || invoice.other_references || "N/A"
 
               const cells = [
                 { label: "Invoice No.", value: invoice.invoice_number },
@@ -144,7 +145,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                     ? `${invoice.reference_number}${invoice.reference_date ? ` dt. ${new Date(invoice.reference_date).toLocaleDateString()}` : ""}`
                     : "N/A",
                 },
-                { label: "Other References", value: invoice.other_references || "N/A" },
+                { label: "Other References", value: contactValue },
                 {
                   label: "Buyer's Order No.",
                   value: invoice.buyers_order_no
@@ -154,7 +155,6 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                 { label: "Dispatch Doc No.", value: invoice.dispatch_doc_no || "N/A" },
                 { label: "Dispatched Through", value: invoice.dispatched_through || "N/A" },
                 { label: "Destination", value: invoice.destination || "N/A" },
-                { label: "Contact Person", value: contactValue },
               ]
 
               const rows: (typeof cells)[] = []

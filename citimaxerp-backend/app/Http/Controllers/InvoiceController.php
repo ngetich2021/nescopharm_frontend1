@@ -622,13 +622,21 @@ class InvoiceController extends Controller
         ];
     }
 
-    // "Other References" on the printed invoice: the customer's first director (name - phone).
+    // "Other References" on the printed invoice: the contact person (name · phone · email). Few
+    // customers have the dedicated contact-person fields filled; for the rest the customer's own
+    // name, phone and email are the person to reach.
     private function customerPrimaryContact(?Customer $customer): ?string
     {
-        $director = $customer?->account?->directors?->first();
-        return $director
-            ? trim($director->name . ($director->phone_number ? ' - ' . $director->phone_number : ''))
-            : null;
+        if (!$customer) {
+            return null;
+        }
+        $value = collect([
+            trim((string) $customer->contact_person_name) ?: trim((string) $customer->name),
+            trim((string) $customer->contact_person_phone) ?: trim((string) $customer->phone),
+            trim((string) $customer->contact_person_email) ?: trim((string) $customer->email),
+        ])->filter()->implode(' · ');
+
+        return $value ?: null;
     }
 
     // Reference/dispatch fields are system-generated only. Re-derived whenever the invoice is
