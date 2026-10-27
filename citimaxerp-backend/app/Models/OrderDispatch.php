@@ -212,18 +212,26 @@ class OrderDispatch extends Model
     /**
      * Reject dispatch
      */
-    public function reject(User $user, $reason)
+    public function reject(User $user, $reason, bool $override = false)
     {
-        if (!$this->canBeApprovedBy($user)) {
+        $isCurrent = $this->canBeApprovedBy($user);
+        if (!$isCurrent && !$override) {
             throw new \Exception('You are not the current approver for this dispatch.');
         }
 
-        // Update the approver's status
-        $approvers = collect($this->approvers)->map(function ($approver) use ($user, $reason) {
-            if ($approver['user_id'] === $user->id && $approver['status'] === 'pending') {
+        // The current approver's step is marked rejected. A company admin overriding the chain
+        // closes the current step in their name, so the record shows who actually stopped it.
+        $current = $this->getCurrentApprover();
+        $stepClosed = false;
+        $approvers = collect($this->approvers)->map(function ($approver) use ($user, $reason, $isCurrent, $current, &$stepClosed) {
+            if (!$stepClosed && $approver['status'] === 'pending'
+                && ($isCurrent ? $approver['user_id'] === $user->id : $approver['user_id'] === $current?->id)) {
                 $approver['status'] = 'rejected';
                 $approver['approved_at'] = now()->toDateTimeString();
-                $approver['comments'] = $reason;
+                $approver['comments'] = $isCurrent
+                    ? $reason
+                    : "Rejected by {$user->first_name} {$user->last_name} (override): {$reason}";
+                $stepClosed = true;
             }
             return $approver;
         })->toArray();
