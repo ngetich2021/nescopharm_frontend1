@@ -21,6 +21,7 @@ import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/docum
 export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [profileTab, setProfileTab] = useState("orders");
   const [selectedAccount, setSelectedAccount] = useState<CustomerAccountWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -169,6 +170,14 @@ export function CustomersPage() {
 
   // Event handlers
   const handleViewCustomer = (customer: Customer) => {
+    setProfileTab("orders");
+    setSelectedCustomer(customer);
+    setViewModalOpen(true);
+  };
+
+  // The customer's running balance: the Account tab of their profile.
+  const handleViewBalance = (customer: Customer) => {
+    setProfileTab("account");
     setSelectedCustomer(customer);
     setViewModalOpen(true);
   };
@@ -280,6 +289,7 @@ export function CustomersPage() {
           onEditCustomer={handleEditCustomer}
           onDeleteCustomer={handleDeleteCustomer}
           onViewAccount={handleViewAccount}
+          onViewBalance={handleViewBalance}
           search={search}
           onSearchChange={(value) => {
             setSearch(value);
@@ -311,6 +321,7 @@ export function CustomersPage() {
           onRefresh={handleRefresh}
           onEdit={handleEditCustomer}
           onViewAccount={handleViewAccount}
+          initialTab={profileTab}
         />
 
         {/* Create Modal - Only show if user has create permission */}

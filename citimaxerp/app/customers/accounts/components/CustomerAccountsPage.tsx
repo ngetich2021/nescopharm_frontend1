@@ -15,10 +15,13 @@ import { getCustomerAccounts, type CustomerAccountWithDetails } from "@/lib/cust
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/rbac";
 import { Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CustomerAccount } from "@/app/customers/[id]/customer-account";
 
 export function CustomerAccountsPage() {
   const [accounts, setAccounts] = useState<CustomerAccountWithDetails[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<CustomerAccountWithDetails | null>(null);
+  const [balanceAccount, setBalanceAccount] = useState<CustomerAccountWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,8 +136,10 @@ export function CustomerAccountsPage() {
     return (
       account.account_number?.toLowerCase().includes(searchLower) ||
       customerName.toLowerCase().includes(searchLower) ||
+      account.customer?.name?.toLowerCase().includes(searchLower) ||
       account.customer?.business_name?.toLowerCase().includes(searchLower) ||
-      account.customer?.email?.toLowerCase().includes(searchLower)
+      account.customer?.email?.toLowerCase().includes(searchLower) ||
+      (account.customer as { customer_number?: string } | undefined)?.customer_number?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -244,19 +249,26 @@ export function CustomerAccountsPage() {
       <CustomerAccountsSummary accounts={accounts} loading={loading} />
       
             <CustomerAccountsTable
-        accounts={accounts}
+        accounts={paginatedAccounts}
         loading={loading}
-        search=""
-        onSearchChange={() => {}}
-        currentPage={1}
-        totalPages={1}
-        rowsPerPage={10}
-        onPageChange={() => {}}
-        onRowsPerPageChange={() => {}}
-        totalItems={accounts.length}
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setCurrentPage(1);
+        }}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        rowsPerPage={rowsPerPage}
+        onPageChange={setCurrentPage}
+        onRowsPerPageChange={(value) => {
+          setRowsPerPage(value);
+          setCurrentPage(1);
+        }}
+        totalItems={filteredAccounts.length}
         onRefresh={handleRefresh}
         onCreateNew={() => setCreateModalOpen(true)}
         onViewAccount={handleViewAccount}
+        onViewBalance={setBalanceAccount}
         onEditAccount={handleEditAccount}
         onDeleteAccount={handleDeleteAccount}
         onApproveAccount={handleApproveAccount}
@@ -265,6 +277,23 @@ export function CustomerAccountsPage() {
         onApproveCreditLimit={handleApproveCreditLimit}
         onRejectCreditLimit={handleRejectCreditLimit}
       />
+
+      {/* Running balance: invoices, credit, receive payment, refunds */}
+      <Dialog open={!!balanceAccount} onOpenChange={(o) => !o && setBalanceAccount(null)}>
+        <DialogContent className="sm:max-w-3xl lg:max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {balanceAccount?.customer?.business_name || balanceAccount?.customer?.name || "Customer"} - Account Balance
+            </DialogTitle>
+          </DialogHeader>
+          {balanceAccount?.customer_id && (
+            <CustomerAccount
+              customerId={balanceAccount.customer_id}
+              customerName={balanceAccount.customer?.business_name || balanceAccount.customer?.name || ""}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View Account Modal */}
       <ViewAccountModal 

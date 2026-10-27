@@ -35,7 +35,8 @@ import {
   RefreshCw,
   Users,
   Download,
-  CreditCard
+  CreditCard,
+  Wallet
 } from "lucide-react";
 import { type Customer, getCustomerDisplayName } from "@/lib/customers";
 import { STATUS_META as APPROVAL_STATUS_META } from "@/app/customers/[id]/application-status-section";
@@ -48,6 +49,7 @@ interface CustomersTableProps {
   onEditCustomer: (customer: Customer) => void;
   onDeleteCustomer: (customer: Customer) => void;
   onViewAccount: (customer: Customer) => void;
+  onViewBalance?: (customer: Customer) => void;
   search: string;
   onSearchChange: (search: string) => void;
   statusFilter: string;
@@ -70,6 +72,7 @@ export function CustomersTable({
   onEditCustomer,
   onDeleteCustomer,
   onViewAccount,
+  onViewBalance,
   search,
   onSearchChange,
   statusFilter,
@@ -285,6 +288,7 @@ export function CustomersTable({
                       onEdit={() => onEditCustomer(customer)}
                       onDelete={() => onDeleteCustomer(customer)}
                       onViewAccount={onViewAccount}
+                      onViewBalance={onViewBalance}
                       canEdit={canEdit(customer)}
                       canDelete={canDelete(customer)}
                     />
@@ -356,6 +360,7 @@ interface CustomerActionsDropdownProps {
   onEdit: () => void;
   onDelete: () => void;
   onViewAccount: (customer: Customer) => void;
+  onViewBalance?: (customer: Customer) => void;
   canEdit: boolean;
   canDelete: boolean;
 }
@@ -366,6 +371,7 @@ function CustomerActionsDropdown({
   onEdit,
   onDelete,
   onViewAccount,
+  onViewBalance,
   canEdit,
   canDelete,
 }: CustomerActionsDropdownProps) {
@@ -388,6 +394,11 @@ function CustomerActionsDropdown({
         {customer.account_id && (
           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewAccount(customer); }}>
             <CreditCard className="h-4 w-4 mr-2" /> View Account
+          </DropdownMenuItem>
+        )}
+        {onViewBalance && (
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewBalance(customer); }}>
+            <Wallet className="h-4 w-4 mr-2" /> Account Balance
           </DropdownMenuItem>
         )}
         <PermissionGuard permissions={["can_update_customers", "can_manage_system", "can_manage_company"]} hideOnDenied>

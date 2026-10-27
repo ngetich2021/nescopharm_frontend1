@@ -19,6 +19,7 @@ import {
 import {
   MoreHorizontal,
   Eye,
+  Wallet,
   Edit,
   Trash2,
   Search,
@@ -51,6 +52,7 @@ interface CustomerAccountsTableProps {
   onRefresh: () => void;
   onCreateNew: () => void;
   onViewAccount: (account: CustomerAccountWithDetails) => void;
+  onViewBalance?: (account: CustomerAccountWithDetails) => void;
   onEditAccount: (account: CustomerAccountWithDetails) => void;
   onDeleteAccount: (account: CustomerAccountWithDetails) => void;
   onApproveAccount: (account: CustomerAccountWithDetails) => void;
@@ -74,6 +76,7 @@ export function CustomerAccountsTable({
   onRefresh,
   onCreateNew,
   onViewAccount,
+  onViewBalance,
   onEditAccount,
   onDeleteAccount,
   onApproveAccount,
@@ -274,6 +277,7 @@ export function CustomerAccountsTable({
                       <ActionsDropdown
                         account={account}
                         onView={() => onViewAccount(account)}
+                        onViewBalance={onViewBalance ? () => onViewBalance(account) : undefined}
                         onEdit={() => onEditAccount(account)}
                         onDelete={() => onDeleteAccount(account)}
                         onApprove={() => onApproveAccount(account)}
@@ -345,6 +349,7 @@ export function CustomerAccountsTable({
 function ActionsDropdown({ 
   account,
   onView,
+  onViewBalance,
   onEdit,
   onDelete,
   onApprove,
@@ -355,6 +360,7 @@ function ActionsDropdown({
 }: { 
   account: CustomerAccountWithDetails;
   onView: () => void;
+  onViewBalance?: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onApprove: () => void;
@@ -386,6 +392,11 @@ function ActionsDropdown({
         <DropdownMenuItem onClick={onView}>
           <Eye className="h-4 w-4 mr-2" /> View Details
         </DropdownMenuItem>
+        {onViewBalance && (
+          <DropdownMenuItem onClick={onViewBalance}>
+            <Wallet className="h-4 w-4 mr-2" /> Account Balance
+          </DropdownMenuItem>
+        )}
         {canEdit && (
           <DropdownMenuItem onClick={onEdit}>
             <Edit className="h-4 w-4 mr-2" /> Edit Account

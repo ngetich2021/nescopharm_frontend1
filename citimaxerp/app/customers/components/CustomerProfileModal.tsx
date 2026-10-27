@@ -37,7 +37,9 @@ import {
   Plus,
   Landmark,
   Paperclip,
+  Wallet,
 } from "lucide-react";
+import { CustomerAccount } from "@/app/customers/[id]/customer-account";
 import { getDocuments, type Document as CustomerDocument } from "@/lib/documents";
 import { type Customer, getCustomerProfile, createCustomerNote, type CustomerProfileData } from "@/lib/customers";
 import { type Payment } from "@/lib/customers";
@@ -130,6 +132,8 @@ interface CustomerProfileModalProps {
   onRefresh: () => void;
   onEdit?: (customer: Customer) => void;
   onViewAccount?: (customer: Customer) => void;
+  // Tab shown when the modal opens ("account" from the Account Balance action).
+  initialTab?: string;
 }
 
 export function CustomerProfileModal({
@@ -140,7 +144,12 @@ export function CustomerProfileModal({
   onRefresh,
   onEdit,
   onViewAccount,
+  initialTab = "orders",
 }: CustomerProfileModalProps) {
+  const [activeTab, setActiveTab] = useState(initialTab);
+  useEffect(() => {
+    if (open) setActiveTab(initialTab);
+  }, [open, initialTab]);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfileData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +233,7 @@ export function CustomerProfileModal({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl flex flex-col h-full">
+      <SheetContent className="sm:max-w-lg md:max-w-xl lg:max-w-3xl xl:max-w-4xl flex flex-col h-full">
         <SheetHeader className="border-b border-gray-200 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <User className="h-5 w-5 text-blue-600" />
@@ -450,11 +459,15 @@ export function CustomerProfileModal({
               />
 
               {/* Tabs for detailed information */}
-              <Tabs defaultValue="orders" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="orders" className="flex items-center gap-2">
                     <ShoppingCart className="h-4 w-4" />
                     Orders
+                  </TabsTrigger>
+                  <TabsTrigger value="account" className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Account
                   </TabsTrigger>
                   <TabsTrigger value="payments" className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4" />
@@ -469,6 +482,10 @@ export function CustomerProfileModal({
                     Activities
                   </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="account" className="[&>div]:p-0">
+                  <CustomerAccount customerId={currentCustomer.id} customerName={currentCustomer.name || ""} />
+                </TabsContent>
 
                 <TabsContent value="orders" className="space-y-4">
                   <Card>
