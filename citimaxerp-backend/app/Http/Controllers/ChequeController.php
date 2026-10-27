@@ -555,12 +555,41 @@ class ChequeController extends Controller
     }
 
     /**
-     * Mark a pending cheque as bounced (dishonoured). Since it was never applied
-     * to the invoice, no reversal of payments/accounting entries is needed.
+     * Mark a cheque as bounced (dishonoured). A customer's cheque may already be approved: its
+     * money comes back off the invoices it paid, and the customer is invoiced the bounced
+     * cheque charge (ChequeBounceService). A supplier cheque can only bounce while pending.
      */
     public function bounce(Request $request, string $id): JsonResponse
     {
-        return $this->transitionPendingOnly($request, $id, 'bounced');
+        $user = $request->user();
+        $cheque = Cheque::where('company_id', $user->company_id)->findOrFail($id);
+        if ($cheque->direction !== 'received') {
+            return $this->transitionPendingOnly($request, $id, 'bounced');
+        }
+        if (!$this->hasPermission($request, 'can_update_invoices', $user->company_id)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $result = app(\App\Services\ChequeBounceService::class)->bounceReceived($cheque, $user);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
+        } catch (\Exception $e) {
+            Log::error('Failed to bounce cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'Failed to mark cheque as bounced', 'error' => $e->getMessage()], 500);
+        }
+
+        $reversed = collect($result['reversed'])->map(fn ($r) => number_format($r['amount'], 2) . ' back on ' . $r['invoice_number'])->implode(', ');
+        $charge = $result['charge_invoice'];
+
+        return response()->json([
+            'message' => "Cheque {$cheque->cheque_number} marked as bounced"
+                . ($reversed ? "; {$reversed}" : '')
+                . ($charge ? "; charge invoice {$charge->invoice_number} of " . number_format((float) $charge->total_amount, 2) . ' raised' : ''),
+            'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number']),
+            'reversed' => $result['reversed'],
+            'charge_invoice' => $charge ? ['id' => $charge->id, 'invoice_number' => $charge->invoice_number, 'total_amount' => $charge->total_amount] : null,
+        ]);
     }
 
     /**

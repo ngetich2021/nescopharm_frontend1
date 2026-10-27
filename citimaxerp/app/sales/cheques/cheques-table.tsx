@@ -138,7 +138,39 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
     }
   }
 
+  // A customer's cheque raises a bounced cheque charge invoice; an approved one also comes back
+  // off the invoices it paid (ChequeBounceService).
+  const bounceConfirm = (cheque: Cheque) =>
+    cheque.direction === "received"
+      ? `Mark cheque ${cheque.cheque_number} as bounced?` +
+        (cheque.status === "approved" ? " Its money will be taken back off the invoices it paid." : "") +
+        " The customer will be invoiced KES 2,000 bounced cheque charges."
+      : `Mark cheque ${cheque.cheque_number} as bounced?`
+
   const ActionsDropdown = ({ cheque }: { cheque: Cheque }) => {
+    if (cheque.status === "approved" && cheque.direction === "received") {
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0" disabled={actioningId === cheque.id}>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() =>
+                handleAction(cheque, bounceCheque, `Cheque ${cheque.cheque_number} marked as bounced.`, bounceConfirm(cheque))
+              }
+            >
+              <XCircle className="h-4 w-4 mr-2 text-red-600" />
+              Mark Bounced
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
+    }
+
     if (cheque.status !== "pending") {
       return null
     }
@@ -173,7 +205,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
                 cheque,
                 bounceCheque,
                 `Cheque ${cheque.cheque_number} marked as bounced.`,
-                `Mark cheque ${cheque.cheque_number} as bounced?`
+                bounceConfirm(cheque)
               )
             }
           >

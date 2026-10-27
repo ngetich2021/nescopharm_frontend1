@@ -138,10 +138,11 @@ export async function approveCheque(id: string): Promise<Cheque & { message?: st
   return { ...response.data, message: response.message }
 }
 
-export async function bounceCheque(id: string): Promise<Cheque> {
+// The message names any invoices it was taken back off and the bounced cheque charge invoice.
+export async function bounceCheque(id: string): Promise<Cheque & { message?: string }> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/bounce`, "POST", undefined, true)
   await invalidateChequesCache()
-  return response.data
+  return { ...response.data, message: response.message }
 }
 
 export async function cancelCheque(id: string): Promise<Cheque> {

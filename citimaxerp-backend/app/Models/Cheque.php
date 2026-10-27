@@ -25,6 +25,7 @@ class Cheque extends Model
         'allocation_plan',
         'purchase_order_id',
         'payment_id',
+        'bounce_charge_invoice_id',
         'supplier_payment_id',
         'cheque_number',
         'bank_name',
