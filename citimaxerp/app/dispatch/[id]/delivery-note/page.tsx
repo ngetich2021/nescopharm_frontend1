@@ -136,7 +136,8 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
   const buyer = buildBuyerBlock(
     mergeCustomerSources(customerDetails, dispatch.order?.customer as CustomerAddressSource | null),
   )
-  const destination = dispatch.delivery_location?.landmark || dispatch.logistic?.delivery_location || "N/A"
+  // Same order as the invoice: the logistics entry, then what was chosen when the dispatch was raised.
+  const destination = dispatch.logistic?.delivery_location || dispatch.destination || dispatch.delivery_location?.landmark || "N/A"
   const customerPin = customerDetails?.pin_number || (dispatch.order?.customer as any)?.pin_number || 'N/A'
   const companySlug = company?.name?.toLowerCase().trim().split(/\s+/)[0]
   // The company's current letterhead (the one invoices print) first; the bundled
@@ -159,7 +160,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
     { label: "Other References", value: dispatch.logistic?.tracking_number || "N/A" },
     { label: "Dispatch Doc No.", value: dispatch.dispatch_number },
     { label: "Dated", value: dateStr },
-    { label: "Dispatched through", value: dispatch.logistic?.logistics_provider || dispatch.logistic?.delivery_method || "N/A" },
+    { label: "Dispatched through", value: dispatch.logistic?.logistics_provider || dispatch.dispatched_through || dispatch.logistic?.delivery_method || "N/A" },
     { label: "Destination", value: destination },
   ]
   // Lines are sold in packs (e.g. "Per pack of 100's"); the note counts pieces handed over.

@@ -22,6 +22,8 @@ class OrderDispatch extends Model
         'company_id',
         'from_store_id',
         'delivery_location_id',
+        'dispatched_through',
+        'destination',
         'approvers',
         'approval_status',
         'logistic_id',

@@ -493,9 +493,14 @@ export function DeliveryRatesTab() {
               <Input
                 id="transporter_name"
                 placeholder="e.g. FedEx, DHL"
+                list="transporter_name_options"
                 value={form.transporter_name}
                 onChange={(e) => setForm({ ...form, transporter_name: e.target.value })}
               />
+              {/* "Local Riders" is always offered as Dispatch Through; its rates are added here. */}
+              <datalist id="transporter_name_options">
+                <option value="Local Riders" />
+              </datalist>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="zone">Zone</Label>

@@ -28,6 +28,8 @@ export interface Order {
     business_name?: string
     contact_person_name?: string | null
     contact_person_phone?: string | null
+    city?: string | null
+    county?: string | null
   } | null
   // GM / Director sign-off required before the order can be invoiced.
   invoice_approved_by?: string | null

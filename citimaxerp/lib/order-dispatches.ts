@@ -97,6 +97,9 @@ export interface OrderDispatch {
 
   notes?: string | null;
   special_instructions?: string | null;
+  // Chosen when the dispatch is raised; carried onto the invoice and the logistics entry.
+  dispatched_through?: string | null;
+  destination?: string | null;
 
   created_by: User;
   final_approved_at?: string | null;
@@ -216,6 +219,8 @@ export interface CreateOrderDispatchRequest {
   notes?: string;
   estimated_delivery_date?: string;
   special_instructions?: string;
+  dispatched_through?: string;
+  destination?: string;
   items?: Array<{
     order_item_id: string;
     product_id: string;

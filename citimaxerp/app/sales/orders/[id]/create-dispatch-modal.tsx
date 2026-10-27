@@ -26,6 +26,8 @@ import {
 
 import { createOrderDispatch, submitDispatchForApproval, type CreateOrderDispatchRequest } from "@/lib/order-dispatches"
 import { getUsers, type UserData } from "@/lib/users"
+import { getDeliveryRates } from "@/lib/delivery-rates"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { OrderDetail } from "@/lib/orders"
 import {
   Table,
@@ -35,6 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+
+const LOCAL_RIDERS = "Local Riders"
 
 interface CreateDispatchModalProps {
   open: boolean
@@ -63,6 +67,28 @@ export function CreateDispatchModal({
   const [selectedApprovers, setSelectedApprovers] = useState<string[]>([])
   const [loadingApprovers, setLoadingApprovers] = useState(false)
   const [openApprovers, setOpenApprovers] = useState(false)
+
+  // Transporter (from approved delivery rates) and destination: they fill the invoice's dispatch
+  // fields straight away and are handed on to whoever records the delivery.
+  const [transporters, setTransporters] = useState<string[]>([])
+  const [dispatchedThrough, setDispatchedThrough] = useState("")
+  const [destination, setDestination] = useState("")
+  const customerTown = order.delivery_location?.city || order.customer?.city || order.customer?.county || ""
+
+  useEffect(() => {
+    if (!open) return
+    getDeliveryRates({ active_only: true })
+      .then((rates) => {
+        const names = Array.from(new Set(rates.filter((r) => r.status === "approved").map((r) => r.transporter_name.trim())))
+          .filter((n) => n.toLowerCase() !== LOCAL_RIDERS.toLowerCase())
+        // Local riders are always offered; the warehouse manager adds their rates.
+        setTransporters([...names.sort(), LOCAL_RIDERS])
+      })
+      .catch((error) => {
+        console.error("Failed to load transporters:", error)
+        setTransporters([LOCAL_RIDERS])
+      })
+  }, [open])
 
   // Fetch approvers on mount
   useEffect(() => {
@@ -102,6 +128,8 @@ export function CreateDispatchModal({
       setEstimatedDeliveryDate("")
       setSpecialInstructions("")
       setSelectedApprovers([])
+      setDispatchedThrough("")
+      setDestination(order.delivery_location?.city || order.customer?.city || order.customer?.county || "")
     }
   }, [open, order])
 
@@ -138,6 +166,11 @@ export function CreateDispatchModal({
         return
       }
 
+      if (!isPastSale && !dispatchedThrough) {
+        toast.error("Please choose who the order is dispatched through")
+        return
+      }
+
       setLoading(true)
 
       const payload: CreateOrderDispatchRequest = {
@@ -147,6 +180,8 @@ export function CreateDispatchModal({
         notes,
         estimated_delivery_date: estimatedDeliveryDate || undefined,
         special_instructions: specialInstructions || undefined,
+        dispatched_through: dispatchedThrough || undefined,
+        destination: destination.trim() || undefined,
         items: validItems.map((item) => ({
           order_item_id: item.order_item_id,
           product_id: item.product_id,
@@ -273,6 +308,37 @@ export function CreateDispatchModal({
                 value={estimatedDeliveryDate}
                 onChange={(e) => setEstimatedDeliveryDate(e.target.value)}
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="dispatched_through">Dispatch Through{isPastSale ? " (Optional)" : " *"}</Label>
+              <Select value={dispatchedThrough} onValueChange={setDispatchedThrough}>
+                <SelectTrigger id="dispatched_through">
+                  <SelectValue placeholder="Select transporter" />
+                </SelectTrigger>
+                <SelectContent>
+                  {transporters.map((name) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">From the approved delivery rates, or local riders.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="destination">Destination</Label>
+              <Input
+                id="destination"
+                placeholder="Customer's town"
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {customerTown && destination.trim() !== customerTown
+                  ? `Customer's town is ${customerTown}.`
+                  : "The customer's town; change it if the goods go elsewhere."}
+              </p>
             </div>
           </div>
 

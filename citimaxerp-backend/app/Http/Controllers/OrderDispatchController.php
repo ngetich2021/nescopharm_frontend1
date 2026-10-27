@@ -239,6 +239,8 @@ class OrderDispatchController extends Controller
             'notes' => 'nullable|string|max:1000',
             'estimated_delivery_date' => 'nullable|date|after_or_equal:today',
             'special_instructions' => 'nullable|string|max:1000',
+            'dispatched_through' => 'nullable|string|max:255',
+            'destination' => 'nullable|string|max:255',
             'approvers' => 'nullable|array|min:1',
             'approvers.*' => 'required|uuid|exists:users,id',
         ]);
@@ -300,6 +302,10 @@ class OrderDispatchController extends Controller
             $dispatch->notes = $request->notes;
             $dispatch->estimated_delivery_date = $request->estimated_delivery_date;
             $dispatch->special_instructions = $request->special_instructions;
+            $dispatch->dispatched_through = $request->dispatched_through ?: null;
+            // The customer's town unless the person raising the dispatch typed another.
+            $dispatch->destination = $request->destination
+                ?: ($order->deliveryLocation?->city ?: ($order->customer?->city ?: $order->customer?->county));
             $dispatch->created_by = $user->id;
 
             // A past (pre-go-live) sale was delivered long ago: record it as approved and
@@ -437,6 +443,8 @@ class OrderDispatchController extends Controller
 
         $validator = Validator::make($request->all(), [
             'notes' => 'nullable|string|max:1000',
+            'dispatched_through' => 'nullable|string|max:255',
+            'destination' => 'nullable|string|max:255',
             'approvers' => 'nullable|array|min:1',
             'approvers.*' => 'required|uuid|exists:users,id',
         ]);
@@ -452,6 +460,12 @@ class OrderDispatchController extends Controller
         try {
             if ($request->has('notes')) {
                 $dispatch->notes = $request->notes;
+            }
+            if ($request->has('dispatched_through')) {
+                $dispatch->dispatched_through = $request->dispatched_through ?: null;
+            }
+            if ($request->has('destination')) {
+                $dispatch->destination = $request->destination ?: null;
             }
 
             // Update approvers if provided

@@ -603,9 +603,10 @@ class InvoiceController extends Controller
         $deliveryNote = $dispatch
             ? DeliveryNote::where('order_dispatch_id', $dispatch->id)->latest()->first()
             : null;
+        // Chosen when the dispatch was raised, so the invoice is complete before logistics exist.
         $destination = collect([$logistic?->delivery_location, $logistic?->state])
             ->filter()
-            ->implode(', ') ?: ($order->deliveryLocation?->estate ?: $order->deliveryLocation?->city);
+            ->implode(', ') ?: ($dispatch?->destination ?: ($order->deliveryLocation?->estate ?: $order->deliveryLocation?->city));
 
         return [
             // A dispatch's delivery note and dispatch doc are the same physical document here.
@@ -615,7 +616,8 @@ class InvoiceController extends Controller
                 ?? $dispatch?->dispatch_date?->toDateString()
                 ?? $dispatch?->created_at?->toDateString(),
             'dispatched_through' => $logistic?->logistics_provider
-                ?: ($logistic?->delivery_method ?: $order->deliveryDetails->first()?->delivery_method),
+                ?: ($dispatch?->dispatched_through
+                    ?: ($logistic?->delivery_method ?: $order->deliveryDetails->first()?->delivery_method)),
             'destination' => $destination ?: null,
         ];
     }

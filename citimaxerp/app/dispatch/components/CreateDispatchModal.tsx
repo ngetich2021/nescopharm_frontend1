@@ -134,7 +134,9 @@ export function CreateLogisticsModal({
         recipient_phone: customer?.phone || "",
         // Delivery address: prefer the dispatch's delivery_location, fall back to the customer's address
         delivery_address: assembledAddress,
-        delivery_location: location?.estate || location?.landmark || "",
+        // Destination and transporter were chosen when the dispatch was raised.
+        delivery_location: dispatch.destination || location?.estate || location?.landmark || "",
+        logistics_provider: dispatch.dispatched_through || "",
         city: location?.city || customer?.city || "",
         state: customer?.county || customer?.state || "",
         region: customer?.region || "",
@@ -171,6 +173,11 @@ export function CreateLogisticsModal({
   };
 
   const ratesForZone = deliveryRates.filter((r) => r.zone === selectedZone);
+  const plannedTransporter = (dispatch.dispatched_through || "").trim().toLowerCase();
+  const plannedRate = (zone: DeliveryZone | "") =>
+    plannedTransporter
+      ? deliveryRates.find((r) => r.zone === zone && r.transporter_name.trim().toLowerCase() === plannedTransporter)
+      : undefined;
   const selectedRate = deliveryRates.find((r) => r.id === selectedRateId);
   const cartons = Number(formData.number_of_cartons) || 0;
   const calculatedTotal = selectedRate ? Number(selectedRate.rate_per_carton) * cartons : 0;
@@ -607,6 +614,16 @@ export function CreateLogisticsModal({
                     <span className="text-xs text-gray-400 font-normal">(auto-calculated)</span>
                   </h5>
                   <div className="grid gap-4">
+                    {dispatch.dispatched_through && (
+                      <p className="text-xs text-gray-600">
+                        Dispatch through <strong>{dispatch.dispatched_through}</strong>
+                        {dispatch.destination ? <> to <strong>{dispatch.destination}</strong></> : null}.
+                        Choose the charge: Nairobi or Upcountry.
+                        {selectedZone && !plannedRate(selectedZone) && (
+                          <span className="text-amber-700"> {dispatch.dispatched_through} has no approved {selectedZone === "nairobi" ? "Nairobi" : "Upcountry"} rate; pick another transporter or add the rate.</span>
+                        )}
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="zone">Zone</Label>
@@ -614,7 +631,10 @@ export function CreateLogisticsModal({
                           value={selectedZone}
                           onValueChange={(value) => {
                             setSelectedZone(value as DeliveryZone);
-                            setSelectedRateId("");
+                            // The transporter chosen on the dispatch: its charge for this zone.
+                            const rate = plannedRate(value as DeliveryZone);
+                            setSelectedRateId(rate?.id || "");
+                            handleChange("delivery_rate_id", rate?.id || "");
                           }}
                         >
                           <SelectTrigger id="zone">
