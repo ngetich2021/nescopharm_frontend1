@@ -41,8 +41,7 @@ class CustomerAccountService
             ->where(function ($q) {
                 $q->whereNull('type')->orWhere('type', '!=', 'proforma');
             })
-            ->orderBy('invoice_date')
-            ->orderBy('created_at')
+            ->tap(fn ($q) => $this->inPaymentOrder($q))
             ->get(['id', 'order_id', 'invoice_number', 'invoice_date', 'due_date', 'total_amount', 'amount_paid', 'amount_credited', 'balance_amount', 'status']);
 
         $open = $invoices->filter(fn (Invoice $i) => $i->outstanding() > 0.005)->values();
@@ -369,8 +368,7 @@ class CustomerAccountService
                 ->where('customer_id', $customerId)
                 ->whereNotIn('status', ['cancelled', 'void', 'voided'])
                 ->where(fn ($q) => $q->whereNull('type')->orWhere('type', '!=', 'proforma'))
-                ->orderBy('invoice_date')
-                ->orderBy('created_at')
+                ->tap(fn ($q) => $this->inPaymentOrder($q))
                 ->lockForUpdate()
                 ->get()
                 ->values();
@@ -461,6 +459,19 @@ class CustomerAccountService
         return $lines;
     }
 
+    /**
+     * The order invoices are paid in: by the date of the order they bill (the Invoices list's
+     * order), the invoice date when there is no order, then the invoice date, then when raised.
+     * An invoice raised months after its order still takes that order's place in the queue.
+     */
+    protected function inPaymentOrder($query)
+    {
+        return $query
+            ->orderByRaw('COALESCE((SELECT o.order_date::date FROM orders o WHERE o.id = invoices.order_id), invoices.invoice_date::date)')
+            ->orderBy('invoices.invoice_date')
+            ->orderBy('invoices.created_at');
+    }
+
     /** Open invoices oldest first; when $orderId is given, that order's invoice leads. */
     protected function oldestFirst(string $companyId, string $customerId, ?string $orderId = null): Collection
     {
@@ -471,8 +482,7 @@ class CustomerAccountService
                 $q->whereNull('type')->orWhere('type', '!=', 'proforma');
             })
             ->when($orderId, fn ($q) => $q->orderByRaw('CASE WHEN order_id = ? THEN 0 ELSE 1 END', [$orderId]))
-            ->orderBy('invoice_date')
-            ->orderBy('created_at')
+            ->tap(fn ($q) => $this->inPaymentOrder($q))
             ->get()
             ->filter(fn (Invoice $i) => $i->outstanding() > 0.005)
             ->values();
