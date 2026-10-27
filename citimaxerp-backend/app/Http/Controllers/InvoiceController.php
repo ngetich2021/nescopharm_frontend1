@@ -1368,27 +1368,26 @@ class InvoiceController extends Controller
                 ], 400);
             }
 
-            // Calculate available payment amount
-            $totalAllocated = $payment->allocations()->sum('amount_allocated') ?? 0;
-            $availableAmount = $payment->amount_paid - $totalAllocated;
+            if ($payment->customer_id && $invoice->customer_id && $payment->customer_id !== $invoice->customer_id) {
+                return response()->json(['message' => 'This payment belongs to a different customer'], 400);
+            }
+
+            // What the payment still has: not on an invoice and not refunded or being refunded.
+            $accounts = app(\App\Services\CustomerAccountService::class);
+            $availableAmount = $accounts->paymentAvailable($payment);
 
             if ($availableAmount <= 0) {
                 return response()->json([
                     'message' => 'Payment is already fully allocated',
                     'payment_amount' => $payment->amount_paid,
-                    'total_allocated' => $totalAllocated,
                     'available_amount' => $availableAmount
                 ], 400);
             }
 
-            // Calculate current invoice balance
-            $currentAmountPaid = $invoice->getTotalAllocatedAmount();
-            $invoiceBalance = $invoice->total_amount - $currentAmountPaid - (float) $invoice->amount_credited;
+            $invoiceBalance = $invoice->outstanding();
+            $applyAmount = (float) ($request->apply_amount ?? min($availableAmount, $invoiceBalance));
 
-            // Determine amount to apply
-            $applyAmount = $request->apply_amount ?? min($availableAmount, $invoiceBalance);
-
-            if ($applyAmount > $availableAmount) {
+            if ($applyAmount > $availableAmount + 0.005) {
                 return response()->json([
                     'message' => 'Apply amount exceeds available payment amount',
                     'available_amount' => $availableAmount,
@@ -1396,7 +1395,7 @@ class InvoiceController extends Controller
                 ], 400);
             }
 
-            if ($applyAmount > $invoiceBalance) {
+            if ($applyAmount > $invoiceBalance + 0.005) {
                 return response()->json([
                     'message' => 'Apply amount exceeds invoice balance',
                     'invoice_balance' => $invoiceBalance,
@@ -1404,29 +1403,8 @@ class InvoiceController extends Controller
                 ], 400);
             }
 
-            DB::beginTransaction();
-
-            // Create payment allocation
-            $allocation = PaymentAllocation::create([
-                'payment_id' => $payment->id,
-                'invoice_id' => $invoice->id,
-                'amount_allocated' => $applyAmount,
-                'allocated_date' => now(),
-                'notes' => $request->notes,
-            ]);
-
-            // Update invoice amounts and status
-            $newAmountPaid = $currentAmountPaid + $applyAmount;
-            $newBalance = $invoice->total_amount - $newAmountPaid;
-            $newStatus = $this->calculateInvoiceStatus($newAmountPaid, $invoice->total_amount, $invoice->due_date);
-
-            $invoice->update([
-                'amount_paid' => $newAmountPaid,
-                'balance_amount' => $newBalance,
-                'status' => $newStatus
-            ]);
-
-            DB::commit();
+            $accounts->allocate($payment, [['invoice_id' => $invoice->id, 'amount' => $applyAmount]], $request->notes);
+            $allocation = PaymentAllocation::where('payment_id', $payment->id)->where('invoice_id', $invoice->id)->latest()->first();
 
             return response()->json([
                 'message' => 'Payment mapped to invoice successfully',
@@ -1434,24 +1412,23 @@ class InvoiceController extends Controller
                     'invoice' => $invoice->fresh(),
                     'payment_mapping' => [
                         'payment_id' => $payment->id,
-                        'allocation_id' => $allocation->id,
+                        'allocation_id' => $allocation?->id,
                         'amount_allocated' => $applyAmount,
                         'payment_date' => $payment->payment_date,
                         'payment_method' => $payment->payment_method,
                         'transaction_id' => $payment->transaction_id,
-                        'allocated_date' => $allocation->allocated_date,
-                        'notes' => $allocation->notes
+                        'allocated_date' => $allocation?->allocated_date,
+                        'notes' => $allocation?->notes
                     ],
                     'payment_summary' => [
                         'total_amount' => $payment->amount_paid,
-                        'total_allocated' => $totalAllocated + $applyAmount,
-                        'remaining_amount' => $availableAmount - $applyAmount
+                        'total_allocated' => (float) $payment->allocations()->sum('amount_allocated'),
+                        'remaining_amount' => $accounts->paymentAvailable($payment->fresh())
                     ]
                 ]
             ]);
 
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Failed to map payment to invoice', [
                 'invoice_id' => $id,
                 'payment_id' => $request->payment_id,
@@ -1585,6 +1562,100 @@ class InvoiceController extends Controller
             ]);
             return response()->json(['message' => 'Failed to get payment history', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Spread one payment over several invoices of its customer (Payments > Allocate).
+     */
+    public function allocatePaymentToInvoices(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_update_invoices', $user->company_id)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'payment_id' => 'required|uuid',
+            'allocations' => 'required|array|min:1',
+            'allocations.*.invoice_id' => 'required|uuid',
+            'allocations.*.amount' => 'required|numeric|min:0.01',
+            'allocations.*.notes' => 'nullable|string',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $payment = Payment::where('company_id', $user->company_id)->findOrFail($request->payment_id);
+        $accounts = app(\App\Services\CustomerAccountService::class);
+        $before = $accounts->paymentAvailable($payment);
+        $requested = round(array_sum(array_column($request->allocations, 'amount')), 2);
+
+        if ($requested > $before + 0.005) {
+            return response()->json([
+                'message' => 'The allocations (' . number_format($requested, 2) . ') are more than this payment has available (' . number_format($before, 2) . ')',
+                'available_amount' => $before,
+            ], 422);
+        }
+
+        $invoices = Invoice::where('company_id', $user->company_id)
+            ->whereIn('id', collect($request->allocations)->pluck('invoice_id'))
+            ->get()
+            ->keyBy('id');
+        foreach ($request->allocations as $line) {
+            $invoice = $invoices->get($line['invoice_id']);
+            if (!$invoice || ($payment->customer_id && $invoice->customer_id !== $payment->customer_id)) {
+                return response()->json(['message' => 'Every invoice must belong to the payment\'s customer'], 422);
+            }
+            if ((float) $line['amount'] > $invoice->outstanding() + 0.005) {
+                return response()->json([
+                    'message' => "Invoice {$invoice->invoice_number} only owes " . number_format($invoice->outstanding(), 2),
+                ], 422);
+            }
+        }
+
+        try {
+            $done = $accounts->allocate($payment, $request->allocations, 'Allocated from payment');
+        } catch (\Throwable $e) {
+            Log::error('Failed to allocate payment to invoices', ['payment_id' => $payment->id, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'Failed to allocate payment', 'error' => $e->getMessage()], 500);
+        }
+
+        $newly = round(array_sum(array_column($done, 'amount')), 2);
+
+        return response()->json([
+            'message' => 'Payment allocated to ' . count($done) . ' invoice(s)',
+            'data' => [
+                'payment' => [
+                    'id' => $payment->id,
+                    'total_amount' => (string) $payment->amount_paid,
+                    'previously_allocated' => (string) round((float) $payment->amount_paid - $before, 2),
+                    'newly_allocated' => (string) $newly,
+                    'remaining_amount' => (string) $accounts->paymentAvailable($payment->fresh()),
+                ],
+                'allocations' => array_map(fn ($row) => [
+                    'invoice_id' => $row['invoice_id'],
+                    'invoice_number' => $row['invoice_number'],
+                    'allocated_amount' => $row['amount'],
+                    'new_balance' => (string) $row['balance'],
+                    'new_status' => $row['status'],
+                ], $done),
+            ],
+        ]);
+    }
+
+    public function getPaymentAllocations(Request $request, string $paymentId): JsonResponse
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_invoices', $user->company_id)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $payment = Payment::where('company_id', $user->company_id)->findOrFail($paymentId);
+
+        return response()->json([
+            'data' => $payment->allocations()->with('invoice:id,invoice_number,total_amount,balance_amount,status')->get(),
+            'available_amount' => app(\App\Services\CustomerAccountService::class)->paymentAvailable($payment),
+        ]);
     }
 
     /**
@@ -1798,6 +1869,7 @@ class InvoiceController extends Controller
 
             // Delete the allocation
             $allocation->delete();
+            $this->paymentApplication->syncOrderPaid($invoice->fresh());
 
             DB::commit();
 

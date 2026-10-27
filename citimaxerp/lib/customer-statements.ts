@@ -55,7 +55,7 @@ export interface CompanyPaymentDetails {
 
 export interface StatementTransaction {
   date: string
-  type: "opening" | "invoice" | "payment" | "credit_note"
+  type: "opening" | "invoice" | "payment" | "credit_note" | "refund"
   reference: string
   description: string
   debit: number | null

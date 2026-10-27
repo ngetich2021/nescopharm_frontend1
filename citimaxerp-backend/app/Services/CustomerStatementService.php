@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\Cheque;
 use App\Models\Company;
 use App\Models\CreditNote;
+use App\Models\CreditNoteRefund;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PaymentRefund;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -96,10 +98,16 @@ class CustomerStatementService
                 ];
             });
 
-        // Credit not yet used on an invoice (say, credited after the invoice was paid in money)
-        // is the customer's: it brings the balance down, below zero if nothing is owed.
+        // Money handed back to the customer: overpayment refunds and credit-note refunds.
+        $refunds = $this->refunds($customerId);
+        $periodRefunds = $refunds->filter(fn ($r) => $r['date'] >= $from->toDateString() && $r['date'] <= $to->toDateString())->values();
+
+        // Credit not yet used on an invoice (a credit note after the invoice was paid in money,
+        // or a receipt bigger than what it paid) is the customer's: it brings the balance down,
+        // below zero if nothing is owed.
         $currentBalance = (float) Invoice::where('customer_id', $customerId)->sum('balance_amount')
-            - (float) CreditNote::where('customer_id', $customerId)->where('status', 'issued')->sum('balance_amount');
+            - (float) CreditNote::where('customer_id', $customerId)->where('status', 'issued')->sum('balance_amount')
+            - (float) app(CustomerAccountService::class)->unappliedPayments($companyId, $customerId, false)->sum('available');
 
         $invoicesAfter = (float) Invoice::where('customer_id', $customerId)
             ->where('invoice_date', '>', $to)->sum('total_amount');
@@ -108,18 +116,20 @@ class CustomerStatementService
         $creditNotesAfter = (float) CreditNote::where('customer_id', $customerId)
             ->whereIn('status', ['issued', 'applied', 'refunded'])
             ->where('credit_note_date', '>', $to)->sum('total_amount');
+        $refundsAfter = (float) $refunds->filter(fn ($r) => $r['date'] > $to->toDateString())->sum('amount');
 
         // Roll the current balance back to what it was at the period end,
         // then back again to what it was at the period start.
-        $closingBalance = $currentBalance - $invoicesAfter + $paymentsAfter + $creditNotesAfter;
+        $closingBalance = $currentBalance - $invoicesAfter + $paymentsAfter + $creditNotesAfter - $refundsAfter;
 
         $invoicesTotal = (float) $invoices->sum('total_amount');
         $paymentsTotal = (float) $payments->sum('amount_paid');
         $creditNotesTotal = (float) $creditNotes->sum('total_amount');
+        $refundsTotal = (float) $periodRefunds->sum('amount');
 
-        $openingBalance = $closingBalance - $invoicesTotal + $paymentsTotal + $creditNotesTotal;
+        $openingBalance = $closingBalance - $invoicesTotal + $paymentsTotal + $creditNotesTotal - $refundsTotal;
 
-        $transactions = $this->buildTransactions($from, $openingBalance, $invoices, $payments, $creditNotes);
+        $transactions = $this->buildTransactions($from, $openingBalance, $invoices, $payments, $creditNotes, $periodRefunds);
         $ageing = $this->buildAgeing($customerId, $to, $closingBalance);
 
         $account = $customer->account;
@@ -175,17 +185,58 @@ class CustomerStatementService
                 'credit_notes_total' => round($creditNotesTotal, 2),
                 'pd_cheques_count' => $pdCheques->count(),
                 'pd_cheques_total' => round((float) $pdCheques->sum('amount'), 2),
+                'refunds_count' => $periodRefunds->count(),
+                'refunds_total' => round($refundsTotal, 2),
             ],
         ];
+    }
+
+    /** Completed refunds paid to the customer, each with its date (Y-m-d), amount and reference. */
+    private function refunds(string $customerId)
+    {
+        $paymentRefunds = PaymentRefund::where('customer_id', $customerId)
+            ->where('status', 'completed')
+            ->get(['id', 'refund_date', 'created_at', 'amount', 'reference', 'refund_method'])
+            ->map(fn ($r) => [
+                'date' => Carbon::parse($r->refund_date ?? $r->created_at)->toDateString(),
+                'amount' => (float) $r->amount,
+                'reference' => $r->reference ?: 'RFD-' . strtoupper(substr($r->id, 0, 8)),
+                'description' => 'Refund of overpayment' . ($r->refund_method ? ' - ' . ucwords(str_replace('_', ' ', $r->refund_method)) : ''),
+            ]);
+
+        $creditNoteRefunds = CreditNoteRefund::with('creditNote:id,credit_note_number')
+            ->where('customer_id', $customerId)
+            ->get(['id', 'credit_note_id', 'refund_date', 'created_at', 'amount', 'reference', 'refund_method'])
+            ->map(fn ($r) => [
+                'date' => Carbon::parse($r->refund_date ?? $r->created_at)->toDateString(),
+                'amount' => (float) $r->amount,
+                'reference' => $r->reference ?: ($r->creditNote?->credit_note_number ?? 'RFD-' . strtoupper(substr($r->id, 0, 8))),
+                'description' => 'Credit note refund' . ($r->creditNote?->credit_note_number ? " ({$r->creditNote->credit_note_number})" : '')
+                    . ($r->refund_method ? ' - ' . ucwords(str_replace('_', ' ', $r->refund_method)) : ''),
+            ]);
+
+        return $paymentRefunds->concat($creditNoteRefunds)->values();
     }
 
     /**
      * Chronological ledger: opening balance, then every invoice (debit),
      * credit note and payment (credit) with a running balance.
      */
-    private function buildTransactions(Carbon $from, float $openingBalance, $invoices, $payments, $creditNotes): array
+    private function buildTransactions(Carbon $from, float $openingBalance, $invoices, $payments, $creditNotes, $refunds): array
     {
         $entries = collect();
+
+        foreach ($refunds as $r) {
+            $entries->push([
+                'date' => $r['date'],
+                'order' => 3,
+                'type' => 'refund',
+                'reference' => $r['reference'],
+                'description' => $r['description'],
+                'debit' => $r['amount'],
+                'credit' => 0.0,
+            ]);
+        }
 
         foreach ($invoices as $inv) {
             $entries->push([

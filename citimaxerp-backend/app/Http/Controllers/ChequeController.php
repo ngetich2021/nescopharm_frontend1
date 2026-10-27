@@ -160,7 +160,12 @@ class ChequeController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'invoice_id' => 'required|uuid',
+            // Against one invoice, or on the customer's account (spread over their invoices).
+            'invoice_id' => 'required_without:customer_id|nullable|uuid',
+            'customer_id' => 'required_without:invoice_id|nullable|uuid',
+            'allocations' => 'nullable|array',
+            'allocations.*.invoice_id' => 'required_with:allocations|uuid',
+            'allocations.*.amount' => 'required_with:allocations|numeric|min:0.01',
             'cheque_number' => 'required|string|max:100',
             'bank_name' => 'required|string|max:150',
             'amount' => 'required|numeric|min:0.01',
@@ -172,6 +177,10 @@ class ChequeController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
+        }
+
+        if (!$request->filled('invoice_id')) {
+            return $this->storeReceivedOnAccount($request);
         }
 
         $invoice = Invoice::where('company_id', $user->company_id)->findOrFail($request->invoice_id);
@@ -213,6 +222,79 @@ class ChequeController extends Controller
 
         return response()->json([
             'message' => 'Cheque recorded as pending. It will be applied to the invoice once approved.',
+            'data' => $cheque,
+        ], 201);
+    }
+
+    /**
+     * One cheque covering several of a customer's invoices (or more than they owe). It is kept
+     * with its split - chosen, or oldest invoice first - and touches no balance until approved.
+     * Each invoice in the split is held to the customer's PD-cheque credit period.
+     */
+    protected function storeReceivedOnAccount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $customer = Customer::where('company_id', $user->company_id)->findOrFail($request->customer_id);
+        $amount = (float) $request->amount;
+
+        if ($request->filled('allocations')) {
+            $invoices = Invoice::where('company_id', $user->company_id)
+                ->where('customer_id', $customer->id)
+                ->whereIn('id', collect($request->allocations)->pluck('invoice_id'))
+                ->get()
+                ->keyBy('id');
+            $plan = [];
+            foreach ($request->allocations as $line) {
+                $invoice = $invoices->get($line['invoice_id']);
+                if (!$invoice) {
+                    return response()->json(['message' => 'One of the invoices in the split does not belong to this customer'], 422);
+                }
+                if ((float) $line['amount'] > $invoice->outstanding() + 0.01) {
+                    return response()->json([
+                        'message' => "The split puts " . number_format((float) $line['amount'], 2) . " on invoice {$invoice->invoice_number}, which only owes " . number_format($invoice->outstanding(), 2) . '.',
+                    ], 422);
+                }
+                $plan[] = ['invoice_id' => $invoice->id, 'invoice_number' => $invoice->invoice_number, 'amount' => round((float) $line['amount'], 2)];
+            }
+            if (array_sum(array_column($plan, 'amount')) > $amount + 0.01) {
+                return response()->json(['message' => 'The split adds up to more than the cheque amount'], 422);
+            }
+        } else {
+            $plan = app(\App\Services\CustomerAccountService::class)->suggestSplit($user->company_id, $customer->id, $amount);
+        }
+
+        foreach ($plan as $line) {
+            $error = $this->pdChequePeriodViolation(Invoice::find($line['invoice_id']), $request->maturity_date);
+            if ($error) {
+                return response()->json(['message' => "Invoice {$line['invoice_number']}: {$error}", 'errors' => ['maturity_date' => [$error]]], 422);
+            }
+        }
+
+        $attachmentPath = $request->hasFile('attachment') ? $request->file('attachment')->store('cheques', 's3') : null;
+
+        $cheque = Cheque::create([
+            'id' => Str::uuid(),
+            'company_id' => $user->company_id,
+            'direction' => 'received',
+            'customer_id' => $customer->id,
+            'invoice_id' => null,
+            'allocation_plan' => $plan,
+            'cheque_number' => $request->cheque_number,
+            'bank_name' => $request->bank_name,
+            'amount' => $amount,
+            'issue_date' => $request->issue_date,
+            'maturity_date' => $request->maturity_date,
+            'status' => 'pending',
+            'notes' => $request->notes,
+            'attachment_path' => $attachmentPath,
+            'created_by' => $user->id,
+        ]);
+
+        $leftOver = round($amount - array_sum(array_column($plan, 'amount')), 2);
+
+        return response()->json([
+            'message' => 'Cheque recorded as pending. Nothing is applied until it matures and is approved'
+                . ($leftOver > 0.005 ? '; ' . number_format($leftOver, 2) . ' will then stay with the customer as credit.' : '.'),
             'data' => $cheque,
         ], 201);
     }
@@ -384,6 +466,40 @@ class ChequeController extends Controller
                 'message' => 'Cheque marked as cleared',
                 'data' => $cheque->fresh(['supplier:id,name', 'purchaseOrder:id,order_number']),
             ]);
+        }
+
+        if (!$cheque->invoice_id) {
+            try {
+                $customer = Customer::where('company_id', $user->company_id)->findOrFail($cheque->customer_id);
+                $result = app(\App\Services\CustomerAccountService::class)->receive(
+                    $customer,
+                    $user,
+                    (float) $cheque->amount,
+                    'cheque',
+                    $cheque->maturity_date->toDateString(),
+                    $cheque->cheque_number,
+                    "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
+                    $cheque->allocation_plan ?? [],
+                );
+                $cheque->update([
+                    'status' => 'approved',
+                    'payment_id' => $result['payment']->id,
+                    'approved_by' => $user->id,
+                    'approved_at' => now(),
+                ]);
+
+                return response()->json([
+                    'message' => 'Cheque approved: ' . number_format($result['allocated'], 2) . ' applied to invoices'
+                        . ($result['left_as_credit'] > 0.005 ? ', ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
+                    'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number']),
+                    'allocations' => $result['allocations'],
+                ]);
+            } catch (\RuntimeException $e) {
+                return response()->json(['message' => $e->getMessage()], 400);
+            } catch (\Exception $e) {
+                Log::error('Failed to approve cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
+                return response()->json(['message' => 'Failed to approve cheque', 'error' => $e->getMessage()], 500);
+            }
         }
 
         try {

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { CustomerOrders } from "./customer-orders"
 import { CustomerPayments } from "./customer-payments"
 import { CustomerCredit } from "./customer-credit"
+import { CustomerAccount } from "./customer-account"
 import { CustomerCheques } from "./customer-cheques"
 import { fetchCheques, Cheque } from "@/lib/cheques"
 import { ApplicationStatusSection } from "./application-status-section"
@@ -38,6 +39,7 @@ import {
   CreditCard,
   History,
   Landmark,
+  Wallet,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -914,6 +916,13 @@ export function CustomerProfile({ customerId, isOpen, onClose }: CustomerProfile
                     <span>Payments</span>
                   </TabsTrigger>
                   <TabsTrigger
+                    value="account"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-2 py-4 h-full bg-transparent flex items-center gap-2 transition-all font-medium"
+                  >
+                    <Wallet className="h-5 w-5" />
+                    <span>Account</span>
+                  </TabsTrigger>
+                  <TabsTrigger
                     value="credit"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-2 py-4 h-full bg-transparent flex items-center gap-2 transition-all font-medium"
                   >
@@ -1234,6 +1243,10 @@ export function CustomerProfile({ customerId, isOpen, onClose }: CustomerProfile
                 {/* Pass customerPayments directly to CustomerPayments component */}
                 <CustomerPayments customerId={customerId} initialPayments={customerPayments} />
               </div>
+            </TabsContent>
+
+            <TabsContent value="account" className="p-0 m-0">
+              <CustomerAccount customerId={customerId} customerName={customer?.name || ""} />
             </TabsContent>
 
             <TabsContent value="credit" className="p-0 m-0">

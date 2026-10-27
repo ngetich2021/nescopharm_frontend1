@@ -22,6 +22,7 @@ class Cheque extends Model
         'supplier_id',
         'payee_name',
         'invoice_id',
+        'allocation_plan',
         'purchase_order_id',
         'payment_id',
         'supplier_payment_id',
@@ -41,6 +42,7 @@ class Cheque extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'allocation_plan' => 'array',
         'issue_date' => 'date',
         'maturity_date' => 'date',
         'approved_at' => 'datetime',

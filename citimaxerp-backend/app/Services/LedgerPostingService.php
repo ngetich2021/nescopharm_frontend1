@@ -212,12 +212,20 @@ class LedgerPostingService
                 'description' => "Customer refund {$ref}",
                 'lines' => [
                     ['key' => $this->isCashBasis($settings) ? 'sales_revenue' : 'accounts_receivable', 'debit' => $amount, 'contact' => [$refund->customer_id, Customer::class], 'description' => "Refund {$ref}"],
-                    ['method' => $refund->refund_method, 'credit' => $amount, 'description' => "Refund paid {$ref}"],
+                    ['method' => $this->refundMethod($refund->refund_method), 'credit' => $amount, 'description' => "Refund paid {$ref}"],
                 ],
             ];
         }
 
         return $this->syncEntry($refund, 'customer_refund', $desired);
+    }
+
+    // Refund forms say "mobile_money"; receipts and the method mappings call M-Pesa "mpesa".
+    protected function refundMethod(?string $method): string
+    {
+        $method = $method ? str_replace([' ', '-'], '_', strtolower(trim($method))) : 'cash';
+
+        return in_array($method, ['mobile_money', 'm_pesa'], true) ? 'mpesa' : $method;
     }
 
     /**
@@ -249,6 +257,9 @@ class LedgerPostingService
         $refunded = $this->money($note->amount_refunded);
         $refundDesired = null;
         if ($issued && $refunded > 0) {
+            // Paid back the way the refunds were made (M-Pesa, bank...); mixed or unstated is cash.
+            $methods = $note->refunds()->pluck('refund_method')->map(fn ($m) => $this->refundMethod($m))->unique();
+            $refundMethod = $methods->count() === 1 ? $methods->first() : 'cash';
             $refundDesired = [
                 'date' => $note->refunded_at ?? $note->updated_at,
                 'prefix' => 'RFD',
@@ -256,7 +267,7 @@ class LedgerPostingService
                 'description' => "Credit note refund {$note->credit_note_number}",
                 'lines' => [
                     ['key' => 'accounts_receivable', 'debit' => $refunded, 'contact' => [$note->customer_id, Customer::class], 'description' => "Credit refunded - {$note->credit_note_number}"],
-                    ['method' => 'cash', 'credit' => $refunded, 'description' => "Refund paid - {$note->credit_note_number}"],
+                    ['method' => $refundMethod, 'credit' => $refunded, 'description' => "Refund paid - {$note->credit_note_number}"],
                 ],
             ];
         }
