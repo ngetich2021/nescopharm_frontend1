@@ -25,7 +25,7 @@ class ChequeBounceService
     {
     }
 
-    /** @return array{reversed: array<int, array{invoice_number: string, amount: float}>, charge_invoice: ?Invoice} */
+    /** @return array{reversed: array<int, array{invoice_number: string, amount: float}>, moved: array<int, array{from: string, to: string, amount: float}>, charge_invoice: ?Invoice} */
     public function bounceReceived(Cheque $cheque, User $user): array
     {
         if ($cheque->direction !== 'received') {
@@ -62,13 +62,19 @@ class ChequeBounceService
 
             $cheque->update(['status' => 'bounced']);
 
+            // The oldest invoices stay paid: money on newer invoices moves back to cover them,
+            // so the shortfall from the bounce lands on the newest ones.
+            $moved = $reversed && $cheque->customer_id
+                ? app(CustomerAccountService::class)->rebalanceOldestFirst($cheque->company_id, $cheque->customer_id)
+                : [];
+
             $charge = $cheque->bounce_charge_invoice_id ? Invoice::find($cheque->bounce_charge_invoice_id) : null;
             if (!$charge && $cheque->customer_id) {
                 $charge = $this->raiseCharge($cheque, $user);
                 $cheque->update(['bounce_charge_invoice_id' => $charge->id]);
             }
 
-            return ['reversed' => $reversed, 'charge_invoice' => $charge];
+            return ['reversed' => $reversed, 'moved' => $moved, 'charge_invoice' => $charge];
         });
     }
 

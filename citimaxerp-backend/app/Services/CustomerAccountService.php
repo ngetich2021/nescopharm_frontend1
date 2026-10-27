@@ -354,6 +354,78 @@ class CustomerAccountService
         });
     }
 
+    /**
+     * Keep the customer's money on their oldest invoices: while an older invoice still owes and a
+     * newer one holds receipt money, that money moves to the older invoice. Used after a bounced
+     * cheque takes money off an old invoice, so the shortfall ends up on the newest invoices.
+     * Only which invoice a receipt sits on changes, never how much was received.
+     *
+     * @return array<int, array{from: string, to: string, amount: float}>
+     */
+    public function rebalanceOldestFirst(string $companyId, string $customerId): array
+    {
+        return DB::transaction(function () use ($companyId, $customerId) {
+            $invoices = Invoice::where('company_id', $companyId)
+                ->where('customer_id', $customerId)
+                ->whereNotIn('status', ['cancelled', 'void', 'voided'])
+                ->where(fn ($q) => $q->whereNull('type')->orWhere('type', '!=', 'proforma'))
+                ->orderBy('invoice_date')
+                ->orderBy('created_at')
+                ->lockForUpdate()
+                ->get()
+                ->values();
+
+            $moves = [];
+            $touched = [];
+            for ($o = 0; $o < $invoices->count(); $o++) {
+                $older = $invoices[$o];
+                for ($n = $invoices->count() - 1; $n > $o && $older->outstanding() > 0.005; $n--) {
+                    $newer = $invoices[$n];
+                    $allocations = PaymentAllocation::where('invoice_id', $newer->id)
+                        ->orderByDesc('created_at')
+                        ->lockForUpdate()
+                        ->get();
+                    foreach ($allocations as $allocation) {
+                        $need = $older->outstanding();
+                        if ($need <= 0.005) {
+                            break;
+                        }
+                        $take = round(min($need, (float) $allocation->amount_allocated), 2);
+                        if ($take <= 0.005) {
+                            continue;
+                        }
+
+                        $left = round((float) $allocation->amount_allocated - $take, 2);
+                        $left > 0.005 ? $allocation->update(['amount_allocated' => $left]) : $allocation->delete();
+
+                        $onOlder = PaymentAllocation::where('payment_id', $allocation->payment_id)->where('invoice_id', $older->id)->first();
+                        $onOlder
+                            ? $onOlder->update(['amount_allocated' => round((float) $onOlder->amount_allocated + $take, 2)])
+                            : PaymentAllocation::create([
+                                'payment_id' => $allocation->payment_id,
+                                'invoice_id' => $older->id,
+                                'amount_allocated' => $take,
+                                'allocated_date' => now(),
+                                'notes' => "Moved from {$newer->invoice_number}: oldest invoice paid first",
+                            ]);
+
+                        $newer->update(['amount_paid' => max(0, round((float) $newer->amount_paid - $take, 2))]);
+                        $older->update(['amount_paid' => round((float) $older->amount_paid + $take, 2)]);
+                        $touched[$newer->id] = $newer;
+                        $touched[$older->id] = $older;
+                        $moves[] = ['from' => $newer->invoice_number, 'to' => $older->invoice_number, 'amount' => $take];
+                    }
+                }
+            }
+
+            foreach ($touched as $invoice) {
+                $this->payments->syncOrderPaid($invoice->fresh());
+            }
+
+            return $moves;
+        });
+    }
+
     /** What a receipt still has to give: not on an invoice and not refunded (or being refunded). */
     public function paymentAvailable(Payment $payment): float
     {

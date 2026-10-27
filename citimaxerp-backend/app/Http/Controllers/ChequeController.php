@@ -580,11 +580,13 @@ class ChequeController extends Controller
         }
 
         $reversed = collect($result['reversed'])->map(fn ($r) => number_format($r['amount'], 2) . ' back on ' . $r['invoice_number'])->implode(', ');
+        $moved = collect($result['moved'])->map(fn ($m) => number_format($m['amount'], 2) . " moved from {$m['from']} to {$m['to']}")->implode(', ');
         $charge = $result['charge_invoice'];
 
         return response()->json([
             'message' => "Cheque {$cheque->cheque_number} marked as bounced"
                 . ($reversed ? "; {$reversed}" : '')
+                . ($moved ? "; oldest invoices paid first: {$moved}" : '')
                 . ($charge ? "; charge invoice {$charge->invoice_number} of " . number_format((float) $charge->total_amount, 2) . ' raised' : ''),
             'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number']),
             'reversed' => $result['reversed'],
