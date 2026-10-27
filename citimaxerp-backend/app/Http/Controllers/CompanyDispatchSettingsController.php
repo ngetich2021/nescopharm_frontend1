@@ -189,8 +189,10 @@ class CompanyDispatchSettingsController extends Controller
 
         $user = $request->user();
         
+        // Only Directors, the GM and the Warehouse Manager approve dispatches.
         $users = User::where('company_id', $user->company_id)
             ->where('is_active', true)
+            ->whereHas('role', fn ($q) => $q->whereRaw('LOWER(name) IN (?, ?, ?, ?)', ['director', 'directors', 'gm', 'warehouse manager']))
             ->select('id', 'first_name', 'last_name', 'email', 'role_id')
             ->with('role:id,name')
             ->orderBy('first_name')

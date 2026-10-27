@@ -69,7 +69,8 @@ export function CreateDispatchModal({
     const fetchApprovers = async () => {
       setLoadingApprovers(true)
       try {
-        const users = await getUsers({ role_scope: "exclude_sales_rep" })
+        // Only Directors, the GM and the Warehouse Manager approve dispatches.
+        const users = await getUsers({ role_scope: "dispatch_approver" })
         if (Array.isArray(users)) {
           setPotentialApprovers(users)
         }
