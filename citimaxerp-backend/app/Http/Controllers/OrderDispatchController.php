@@ -764,10 +764,12 @@ class OrderDispatchController extends Controller
         }
 
         try {
-            // Company admins (Super Admin, Directors, GM) may stop a dispatch that is waiting on
-            // someone else, e.g. to have it raised again with Dispatch Through and Destination.
+            // Super Admin, Directors, the GM and the Warehouse Manager may stop a dispatch that is
+            // waiting on someone else, e.g. to have it raised again with Dispatch Through and Destination.
             $override = $user->role
-                && ($user->role->hasPermission('can_manage_system') || $user->role->hasPermission('can_manage_company'));
+                && ($user->role->hasPermission('can_manage_system')
+                    || $user->role->hasPermission('can_manage_company')
+                    || strtolower(trim($user->role->name)) === 'warehouse manager');
             $dispatch->reject($user, $request->reason, $override);
 
             // Back to the orders it goes: the order is ready for a new dispatch (its stock was

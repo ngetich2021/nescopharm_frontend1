@@ -15,6 +15,7 @@ import {
   type RejectDispatchRequest
 } from "@/lib/order-dispatches";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useAuth } from "@/lib/auth-context";
 import { getCustomerDisplayName } from "@/lib/customers";
 import { CreateLogisticsModal } from "./CreateDispatchModal";
 import { MarkDeliveredModal } from "./MarkDeliveredModal";
@@ -102,7 +103,9 @@ export function DispatchDetailsSheet({
   const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
   const [markDeliveredModalOpen, setMarkDeliveredModalOpen] = useState(false);
 
-  const { isSystemAdmin, isCompanyAdmin, hasPermission } = usePermissions();
+  const { isSystemAdmin, isCompanyAdmin } = usePermissions();
+  const { userProfile } = useAuth();
+  const roleName = ((userProfile as any)?.role?.name || "").toLowerCase().trim();
   
   const [localDispatch, setLocalDispatch] = useState<OrderDispatch | null>(dispatch);
   const [deliveryNote, setDeliveryNote] = useState<DeliveryNote | null>(null);
@@ -277,9 +280,12 @@ export function DispatchDetailsSheet({
   // Determine if the current user can approve using centralized logic
   const isApprover = currentUserId ? canApproveDispatch(localDispatch, currentUserId) : false;
   
-  // Admins or users with specific permission can also approve if status is pending/in_progress
-  const hasAdminPrivileges = isSystemAdmin() || isCompanyAdmin() || hasPermission('can_approve_dispatch');
-  const canApprove = (isApprover || hasAdminPrivileges) && (localDispatch.approval_status === 'pending' || localDispatch.approval_status === 'in_progress');
+  // Only the current approver approves. Super Admin, Directors, the GM and the Warehouse
+  // Manager may also reject one waiting on someone else (mirrors OrderDispatchController::reject).
+  const awaitingApproval = localDispatch.approval_status === 'pending' || localDispatch.approval_status === 'in_progress';
+  const canOverrideReject = isSystemAdmin() || isCompanyAdmin() || roleName === 'warehouse manager';
+  const canApprove = isApprover && awaitingApproval;
+  const canReject = (isApprover || canOverrideReject) && awaitingApproval;
 
   // Can submit if draft and has items/approvers
   const canSubmit = canSubmitDispatch(localDispatch);
@@ -369,7 +375,7 @@ export function DispatchDetailsSheet({
             )}
 
             {/* Action Bar for Pending Approval */}
-            {canApprove && (
+            {canReject && (
               <div className="bg-white border border-yellow-200 shadow-sm rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-yellow-400"></div>
                 <div className="flex items-start gap-4">
@@ -378,7 +384,11 @@ export function DispatchDetailsSheet({
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Approval Required</h3>
-                    <p className="text-gray-500">You are assigned to review this dispatch.</p>
+                    <p className="text-gray-500">
+                      {canApprove
+                        ? "You are assigned to review this dispatch."
+                        : "Waiting on another approver. You can reject it so the order can be dispatched again."}
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-3 w-full sm:w-auto">
@@ -390,13 +400,15 @@ export function DispatchDetailsSheet({
                     <Ban className="h-4 w-4 mr-2" />
                     Reject
                   </Button>
-                  <Button 
+                  {canApprove && (
+                  <Button
                     className="bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-200 min-w-[120px]"
                     onClick={() => setApproveDialogOpen(true)}
                   >
                     <ShieldCheck className="h-4 w-4 mr-2" />
                     Approve
                   </Button>
+                  )}
                 </div>
               </div>
             )}

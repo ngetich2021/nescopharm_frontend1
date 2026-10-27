@@ -15,12 +15,19 @@ import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, RETURN_POLICY_PDF } from "@/components/invoices/invoice-document"
 import { FileLink } from "@/components/file-preview"
+import { listOrderDispatches } from "@/lib/order-dispatches"
+import { DeliveryNoteDocument } from "@/components/dispatch/delivery-note-document"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
   const invoiceRef = useRef<HTMLDivElement>(null)
+  // The invoice goes out with its order's delivery note (the current, not rejected, dispatch).
+  const deliveryNoteRef = useRef<HTMLDivElement>(null)
+  // undefined while still looking; null when the order has no live dispatch.
+  const [dispatchId, setDispatchId] = useState<string | null | undefined>(undefined)
+  const [deliveryNoteReady, setDeliveryNoteReady] = useState(false)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
   const [customerDetails, setCustomerDetails] = useState<CustomerProfileData | null>(null)
@@ -46,6 +53,25 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       .finally(() => setIsLoading(false))
   }, [id])
 
+  useEffect(() => {
+    if (!invoice) return
+    if (!invoice.order_id) {
+      setDispatchId(null)
+      return
+    }
+    listOrderDispatches({ order_id: invoice.order_id, per_page: 20 })
+      .then((res) => {
+        const live = (res.data || [])
+          .filter((d) => !["cancelled", "rejected"].includes(d.status) && d.approval_status !== "rejected")
+          .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+        setDispatchId(live[0]?.id ?? null)
+      })
+      .catch(() => setDispatchId(null))
+  }, [invoice])
+
+  // Both documents are on the page (or there is no delivery note to wait for).
+  const documentsReady = !!invoice && dispatchId !== undefined && (dispatchId === null || deliveryNoteReady)
+
   const fileBase = () =>
     invoice
       ? documentFileName([
@@ -61,7 +87,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
 
   // Allow linking straight to a print or download dialog
   useEffect(() => {
-    if (!isLoading && invoice && typeof window !== 'undefined') {
+    if (!isLoading && documentsReady && typeof window !== 'undefined') {
       if (window.location.search.includes('autoprint=1')) {
         const timer = setTimeout(() => printWithFileName(fileBase()), 300)
         return () => clearTimeout(timer)
@@ -70,7 +96,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
         return () => clearTimeout(timer)
       }
     }
-  }, [isLoading, invoice])
+  }, [isLoading, documentsReady])
 
   const handleDownloadPDF = async () => {
     if (!invoiceRef.current || !invoice) return
@@ -111,6 +137,27 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       const imgY = 10
       
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
+
+      // Then the order's delivery note, on its own page.
+      if (deliveryNoteRef.current && deliveryNoteReady) {
+        const noteCanvas = await html2canvas(deliveryNoteRef.current, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+        })
+        const noteRatio = Math.min(pdfWidth / noteCanvas.width, pdfHeight / noteCanvas.height)
+        pdf.addPage()
+        pdf.addImage(
+          noteCanvas.toDataURL('image/png'),
+          'PNG',
+          (pdfWidth - noteCanvas.width * noteRatio) / 2,
+          10,
+          noteCanvas.width * noteRatio,
+          noteCanvas.height * noteRatio,
+        )
+      }
 
       // The return policy always goes out with the invoice, as its last page.
       const policy = await fetch(RETURN_POLICY_IMAGE).then((r) => r.blob()).then((blob) => new Promise<string>((resolve, reject) => {
@@ -218,6 +265,16 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
           customerDetails={customerDetails}
           customerAccount={customerAccount}
           companyPin={companyPin}
+          enclosures={dispatchId && (
+            <div className="mt-6 print:mt-0 print:break-before-page">
+              <DeliveryNoteDocument
+                ref={deliveryNoteRef}
+                dispatchId={dispatchId}
+                onLoaded={() => setDeliveryNoteReady(true)}
+                onError={() => setDispatchId(null)}
+              />
+            </div>
+          )}
         />
       </div>
     </div>

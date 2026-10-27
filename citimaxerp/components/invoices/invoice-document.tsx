@@ -53,11 +53,16 @@ const formatAmount = (amount: string | number): string => {
 const formatBatchDate = (date: string): string =>
   new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }).replace(/ /g, "-")
 
-type Props = InvoiceDocumentData & { companyPin: string | null; withPolicy?: boolean }
+type Props = InvoiceDocumentData & {
+  companyPin: string | null
+  withPolicy?: boolean
+  // Pages sent with the invoice, printed after it and before the return policy (e.g. the delivery note).
+  enclosures?: React.ReactNode
+}
 
-/** The printed invoice followed by the enclosed return policy page. */
+/** The printed invoice, any enclosures, then the enclosed return policy page. */
 export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function InvoiceDocument(
-  { invoice, company, customerDetails, customerAccount, companyPin, withPolicy = true },
+  { invoice, company, customerDetails, customerAccount, companyPin, withPolicy = true, enclosures },
   invoiceRef,
 ) {
   return (
@@ -371,6 +376,8 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           <p>This is a Computer Generated Invoice</p>
         </div>
       </Card>
+
+      {enclosures}
 
       {/* Enclosed stock return policy - printed as the invoice's last page */}
       {withPolicy && <Card className="max-w-4xl mx-auto mt-6 bg-white shadow-lg overflow-hidden print:shadow-none print:max-w-none print:m-0 print:border-0 print:break-before-page">
