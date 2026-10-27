@@ -498,8 +498,9 @@ class ChequeController extends Controller
         }
 
         // A cheque against one invoice pays what that invoice still owes; one on the customer's
-        // account follows its split. Whatever the invoices can't take (another receipt may have
-        // paid them since the cheque was recorded) stays with the customer as credit.
+        // account follows its split. Whatever those invoices can't take (another receipt may have
+        // paid them since the cheque was recorded) goes on to the customer's oldest unpaid
+        // invoices, and only what is left after every invoice is paid stays as their credit.
         $split = $cheque->invoice_id
             ? [['invoice_id' => $cheque->invoice_id, 'amount' => (float) $cheque->amount]]
             : ($cheque->allocation_plan ?? []);
@@ -507,7 +508,8 @@ class ChequeController extends Controller
         try {
             $customer = Customer::where('company_id', $user->company_id)->findOrFail($cheque->customer_id);
             $result = DB::transaction(function () use ($cheque, $customer, $user, $split) {
-                $result = app(\App\Services\CustomerAccountService::class)->receive(
+                $accounts = app(\App\Services\CustomerAccountService::class);
+                $result = $accounts->receive(
                     $customer,
                     $user,
                     (float) $cheque->amount,
@@ -517,6 +519,12 @@ class ChequeController extends Controller
                     "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
                     $split,
                 );
+                if ($result['left_as_credit'] > 0.005) {
+                    $more = $accounts->allocate($result['payment'], null, "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), remainder applied to the next unpaid invoices");
+                    $result['allocations'] = array_merge($result['allocations'], $more);
+                    $result['allocated'] = round(array_sum(array_column($result['allocations'], 'amount')), 2);
+                    $result['left_as_credit'] = round((float) $cheque->amount - $result['allocated'], 2);
+                }
                 $cheque->update([
                     'status' => 'approved',
                     'payment_id' => $result['payment']->id,

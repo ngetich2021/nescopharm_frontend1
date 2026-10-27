@@ -318,11 +318,12 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
   }
 
   const handleDownloadCSV = (invoice: Invoice) => {
-    const headers = ['Invoice #', 'Customer', 'Amount', 'Status', 'Date', 'Due Date']
+    const headers = ['Invoice #', 'Customer', 'Amount', 'Balance', 'Status', 'Date', 'Due Date']
     const values = [
       invoice.invoice_number,
       (invoice.customer as any)?.business_name || invoice.customer?.name || 'N/A',
       formatCurrency(parseInvoiceAmount(invoice.total_amount)),
+      formatCurrency(getInvoiceBalance(invoice)),
       invoice.status,
       formatDate(invoice.invoice_date),
       formatDate(invoice.due_date),
@@ -365,6 +366,16 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
   }, 0)
   const paidInvoices = invoices.filter(inv => inv.status === 'paid').length
   const overdueInvoices = invoices.filter(inv => inv.status === 'overdue').length
+
+  // What the customer still owes: payments and credit notes taken off the total.
+  const getInvoiceBalance = (invoice: Invoice): number => {
+    if (invoice.balance_amount !== undefined && invoice.balance_amount !== null) {
+      return parseInvoiceAmount(invoice.balance_amount)
+    }
+    return parseInvoiceAmount(invoice.total_amount)
+      - parseInvoiceAmount((invoice as any).amount_paid ?? 0)
+      - parseInvoiceAmount((invoice as any).amount_credited ?? 0)
+  }
 
   // Calculate item count for each invoice
   const getInvoiceItemCount = (invoice: Invoice): number => {
@@ -550,6 +561,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
               <TableHead>Customer</TableHead>
               <TableHead>Sales Rep</TableHead>
               <TableHead>Amount</TableHead>
+              <TableHead>Balance</TableHead>
               <TableHead>Items</TableHead>
               <TableHead>Status</TableHead>
               {/* The list is sorted by order date, newest first; the invoice may be dated later. */}
@@ -591,7 +603,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
               ))
             ) : paginatedInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-8">
+                <TableCell colSpan={12} className="text-center py-8">
                   No invoices found
                 </TableCell>
               </TableRow>
@@ -614,6 +626,21 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
                       : <span className="text-xs text-muted-foreground">Unassigned</span>}
                   </TableCell>
                   <TableCell>{formatCurrency(parseInvoiceAmount(invoice.total_amount))}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const balance = getInvoiceBalance(invoice)
+                      const total = parseInvoiceAmount(invoice.total_amount)
+                      if (balance <= 0.005) return <span className="text-green-700">Nil</span>
+                      return (
+                        <div>
+                          <div className="font-medium">{formatCurrency(balance)}</div>
+                          {balance < total - 0.005 && (
+                            <div className="text-xs text-muted-foreground">Paid {formatCurrency(total - balance)}</div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </TableCell>
                   <TableCell>{getInvoiceItemCount(invoice)}</TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(invoice.status)}>
