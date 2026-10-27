@@ -34,6 +34,8 @@ export interface Cheque {
   updated_at: string
   customer?: { id: string; name: string; business_name?: string | null; customer_type?: "individual" | "company" | null }
   invoice?: { id: string; invoice_number: string }
+  // Every invoice the cheque pays: where it was applied once approved, its planned split while pending.
+  invoice_numbers?: string[]
   supplier?: { id: string; name: string }
   purchase_order?: { id: string; order_number: string }
 }
@@ -129,10 +131,11 @@ export async function createIssuedCheque(data: CreateIssuedChequeRequest): Promi
   return response.data
 }
 
-export async function approveCheque(id: string): Promise<Cheque> {
+// The message says where the money went (which invoices, and any part kept as customer credit).
+export async function approveCheque(id: string): Promise<Cheque & { message?: string }> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/approve`, "POST", undefined, true)
   await invalidateChequesCache()
-  return response.data
+  return { ...response.data, message: response.message }
 }
 
 export async function bounceCheque(id: string): Promise<Cheque> {

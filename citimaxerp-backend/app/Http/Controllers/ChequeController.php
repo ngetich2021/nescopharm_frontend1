@@ -8,6 +8,7 @@ use App\Models\CustomerAccount;
 use App\Models\Invoice;
 use Carbon\Carbon;
 use App\Models\Payment;
+use App\Models\PaymentAllocation;
 use App\Models\PaymentRefund;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
@@ -84,8 +85,34 @@ class ChequeController extends Controller
         }
 
         $cheques = $query->orderByDesc('created_at')->get();
+        $this->attachInvoiceNumbers($cheques);
 
         return response()->json(['data' => $cheques]);
+    }
+
+    /**
+     * Every invoice a received cheque pays: once approved, the invoices its payment was actually
+     * allocated to; while pending, the invoices its split plans to pay (or its single invoice).
+     */
+    protected function attachInvoiceNumbers($cheques): void
+    {
+        $allocated = PaymentAllocation::with('invoice:id,invoice_number')
+            ->whereIn('payment_id', $cheques->pluck('payment_id')->filter()->unique()->values())
+            ->get(['payment_id', 'invoice_id'])
+            ->groupBy('payment_id');
+
+        foreach ($cheques as $cheque) {
+            $numbers = $cheque->payment_id
+                ? $allocated->get($cheque->payment_id, collect())->map(fn ($a) => $a->invoice?->invoice_number)->filter()->sort()->values()
+                : collect();
+            if ($numbers->isEmpty() && !empty($cheque->allocation_plan)) {
+                $numbers = collect($cheque->allocation_plan)->pluck('invoice_number')->filter();
+            }
+            if ($numbers->isEmpty() && $cheque->invoice) {
+                $numbers = collect([$cheque->invoice->invoice_number]);
+            }
+            $cheque->setAttribute('invoice_numbers', $numbers->unique()->values()->all());
+        }
     }
 
     public function show(Request $request, string $id): JsonResponse
@@ -101,6 +128,7 @@ class ChequeController extends Controller
         $cheque = Cheque::with(['customer:id,name', 'invoice:id,invoice_number', 'supplier:id,name', 'purchaseOrder:id,order_number'])
             ->where('company_id', $user->company_id)
             ->findOrFail($id);
+        $this->attachInvoiceNumbers(collect([$cheque]));
 
         return response()->json(['data' => $cheque]);
     }
@@ -380,8 +408,9 @@ class ChequeController extends Controller
     /**
      * Approve a matured cheque.
      *
-     * Received: applies it as a real payment against its invoice (creating
-     * the Payment/allocation and accounting entry) - it is now a receivable.
+     * Received: applies it as a real payment against its invoice or split (creating
+     * the Payment/allocations and accounting entry) - it is now a receivable. Any part
+     * the invoices no longer owe stays with the customer as credit.
      *
      * Issued: just marks it cleared/honoured by the bank. Deliberately does
      * NOT create a SupplierPayment or touch purchase order balances - that
@@ -468,9 +497,16 @@ class ChequeController extends Controller
             ]);
         }
 
-        if (!$cheque->invoice_id) {
-            try {
-                $customer = Customer::where('company_id', $user->company_id)->findOrFail($cheque->customer_id);
+        // A cheque against one invoice pays what that invoice still owes; one on the customer's
+        // account follows its split. Whatever the invoices can't take (another receipt may have
+        // paid them since the cheque was recorded) stays with the customer as credit.
+        $split = $cheque->invoice_id
+            ? [['invoice_id' => $cheque->invoice_id, 'amount' => (float) $cheque->amount]]
+            : ($cheque->allocation_plan ?? []);
+
+        try {
+            $customer = Customer::where('company_id', $user->company_id)->findOrFail($cheque->customer_id);
+            $result = DB::transaction(function () use ($cheque, $customer, $user, $split) {
                 $result = app(\App\Services\CustomerAccountService::class)->receive(
                     $customer,
                     $user,
@@ -479,7 +515,7 @@ class ChequeController extends Controller
                     $cheque->maturity_date->toDateString(),
                     $cheque->cheque_number,
                     "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
-                    $cheque->allocation_plan ?? [],
+                    $split,
                 );
                 $cheque->update([
                     'status' => 'approved',
@@ -488,43 +524,19 @@ class ChequeController extends Controller
                     'approved_at' => now(),
                 ]);
 
-                return response()->json([
-                    'message' => 'Cheque approved: ' . number_format($result['allocated'], 2) . ' applied to invoices'
-                        . ($result['left_as_credit'] > 0.005 ? ', ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
-                    'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number']),
-                    'allocations' => $result['allocations'],
-                ]);
-            } catch (\RuntimeException $e) {
-                return response()->json(['message' => $e->getMessage()], 400);
-            } catch (\Exception $e) {
-                Log::error('Failed to approve cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
-                return response()->json(['message' => 'Failed to approve cheque', 'error' => $e->getMessage()], 500);
-            }
-        }
+                return $result;
+            });
 
-        try {
-            $invoice = Invoice::where('company_id', $user->company_id)->findOrFail($cheque->invoice_id);
-
-            $result = $this->paymentApplication->applyPayment(
-                $invoice,
-                $user,
-                (float) $cheque->amount,
-                'cheque',
-                $cheque->cheque_number,
-                "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
-                $cheque->maturity_date->toDateString(),
-            );
-
-            $cheque->update([
-                'status' => 'approved',
-                'payment_id' => $result['payment']->id,
-                'approved_by' => $user->id,
-                'approved_at' => now(),
-            ]);
+            $applied = collect($result['allocations'])
+                ->map(fn ($a) => number_format($a['amount'], 2) . ' to ' . $a['invoice_number'])
+                ->implode(', ');
 
             return response()->json([
-                'message' => 'Cheque approved and applied to invoice',
+                'message' => 'Cheque approved: ' . ($applied ?: 'nothing applied to invoices')
+                    . ($result['left_as_credit'] > 0.005 ? '; ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
                 'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number']),
+                'allocations' => $result['allocations'],
+                'left_as_credit' => $result['left_as_credit'],
             ]);
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 400);

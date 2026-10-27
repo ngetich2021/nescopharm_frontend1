@@ -1458,9 +1458,14 @@ class InvoiceController extends Controller
             // allocation (created when it cleared) and is keyed here by that payment_id so it can
             // be annotated rather than duplicated; a pending/bounced/cancelled one never touched
             // the balance and has no Payment at all, so it needs its own row to be visible here.
+            // A cheque on the customer's account (split over several invoices) has no invoice_id,
+            // so its approved payment is matched through this invoice's allocations instead.
+            $allocatedPaymentIds = PaymentAllocation::where('invoice_id', $id)->pluck('payment_id');
             $chequesForInvoice = Cheque::where('company_id', $user->company_id)
-                ->where('invoice_id', $id)
                 ->where('direction', 'received')
+                ->where(fn ($q) => $q->where('invoice_id', $id)
+                    ->orWhereIn('payment_id', $allocatedPaymentIds)
+                    ->orWhereRaw('allocation_plan::text LIKE ?', ['%' . $id . '%']))
                 ->get();
             $chequesByPaymentId = $chequesForInvoice->whereNotNull('payment_id')->keyBy('payment_id');
             $standaloneCheques = $chequesForInvoice->whereNull('payment_id');
@@ -1513,7 +1518,11 @@ class InvoiceController extends Controller
             // invoice balance yet, so it must never be counted into what's "paid".
             $totalAllocated = $payments->sum('amount_applied');
 
-            $pendingChequeRows = $standaloneCheques->map(function (Cheque $cheque) {
+            $pendingChequeRows = $standaloneCheques->map(function (Cheque $cheque) use ($id) {
+                // A split cheque shows only the share planned for this invoice.
+                $planned = $cheque->invoice_id
+                    ? (float) $cheque->amount
+                    : (float) collect($cheque->allocation_plan)->where('invoice_id', $id)->sum('amount');
                 return [
                     'id' => 'cheque-' . $cheque->id,
                     'order_id' => null,
@@ -1523,7 +1532,7 @@ class InvoiceController extends Controller
                     'payment_method' => 'cheque',
                     'transaction_id' => $cheque->cheque_number,
                     'amount_paid' => $cheque->amount,
-                    'amount_applied' => $cheque->amount,
+                    'amount_applied' => $planned,
                     'available_to_refund' => 0,
                     'status' => $cheque->status,
                     'payment_date' => $cheque->issue_date,

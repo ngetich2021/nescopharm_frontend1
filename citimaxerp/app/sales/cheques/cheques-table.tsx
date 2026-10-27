@@ -104,7 +104,8 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         cheque.cheque_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         cheque.bank_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         cheque.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cheque.invoice?.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase())
+        cheque.invoice?.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        cheque.invoice_numbers?.some((n) => n.toLowerCase().includes(searchQuery.toLowerCase()))
 
       const matchesStatus = statusFilter === "all" || cheque.status === statusFilter
       const matchesDirection = directionFilter === "all" || cheque.direction === directionFilter
@@ -115,7 +116,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
 
   const handleAction = async (
     cheque: Cheque,
-    action: (id: string) => Promise<Cheque>,
+    action: (id: string) => Promise<Cheque & { message?: string }>,
     successMessage: string,
     confirmMessage?: string
   ) => {
@@ -123,8 +124,8 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
 
     setActioningId(cheque.id)
     try {
-      await action(cheque.id)
-      toast({ title: "Success", description: successMessage })
+      const result = await action(cheque.id)
+      toast({ title: "Success", description: result?.message || successMessage })
       await refreshCheques()
     } catch (error: any) {
       toast({
@@ -331,7 +332,17 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
                         ? getCustomerDisplayName(cheque.customer)
                         : "-"}
                   </TableCell>
-                  <TableCell>{cheque.invoice?.invoice_number || cheque.purchase_order?.order_number || "-"}</TableCell>
+                  <TableCell>
+                    {cheque.invoice_numbers?.length ? (
+                      <div className="flex flex-col">
+                        {cheque.invoice_numbers.map((n) => (
+                          <span key={n}>{n}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      cheque.invoice?.invoice_number || cheque.purchase_order?.order_number || "-"
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">{formatCurrency(cheque.amount)}</TableCell>
                   <TableCell>{formatDate(cheque.issue_date)}</TableCell>
                   <TableCell>
