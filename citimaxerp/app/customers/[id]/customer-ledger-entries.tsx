@@ -13,6 +13,11 @@ import { BookOpen, RefreshCw } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { CustomerLedger, fetchCustomerLedger } from "@/lib/customer-balance"
 
+// Compact cells for the profile sheet: amounts without the currency (it's in the column header)
+// and dd/mm/yy dates.
+const money = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const shortDate = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })
+
 /**
  * The customer's double entries: each journal entry touching them with every line (debit and
  * credit sides), and their receivable balance after each entry. Laid out as stacked blocks so it
@@ -53,11 +58,15 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
     const own = entry.lines.filter((l) => l.is_customer_line && receivableIds.has(l.account_id))
     const debit = own.reduce((s, l) => s + l.debit, 0)
     const credit = own.reduce((s, l) => s + l.credit, 0)
-    const others = entry.lines
-      .filter((l) => !own.includes(l))
-      .map((l) => `${l.debit > 0 ? "Dr" : "Cr"} ${l.account_code ?? ""} ${l.account_name ?? ""} ${formatCurrency(l.debit || l.credit)}`.replace(/\s+/g, " "))
+    // Kept short to fit the profile sheet: amounts only when the other side is split (e.g. Sales + VAT).
+    const otherLines = entry.lines.filter((l) => !own.includes(l))
+    const others = otherLines
+      .map((l) => `${l.debit > 0 ? "Dr" : "Cr"} ${l.account_code ?? ""} ${l.account_name ?? ""}${otherLines.length > 1 ? ` ${money(l.debit || l.credit)}` : ""}`.replace(/\s+/g, " "))
       .join(" · ")
-    return { entry, debit, credit, others }
+    // The reference has its own column, so drop it from the description.
+    const ref = entry.reference || entry.entry_number
+    const description = (entry.description ?? "").replace(ref, "").replace(/\s{2,}/g, " ").replace(/\s+[-:·]?\s*$/, "").trim() || entry.description
+    return { entry, debit, credit, others, ref, description }
   })
   const totalDebit = rows.reduce((s, r) => s + r.debit, 0)
   const totalCredit = rows.reduce((s, r) => s + r.credit, 0)
@@ -123,50 +132,50 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
             </div>
 
             <div className="rounded-md border overflow-x-auto">
-              <Table className="min-w-[640px]">
+              <Table className="text-xs">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">S/No</TableHead>
-                    <TableHead className="whitespace-nowrap">Date</TableHead>
+                  <TableRow className="[&>th]:h-8 [&>th]:px-2">
+                    <TableHead className="w-8">S/No</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>Reference</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Debit</TableHead>
-                    <TableHead className="text-right">Credit</TableHead>
-                    <TableHead className="text-right whitespace-nowrap">Running Balance</TableHead>
+                    <TableHead className="text-right">Debit (Ksh)</TableHead>
+                    <TableHead className="text-right">Credit (Ksh)</TableHead>
+                    <TableHead className="text-right">Balance (Ksh)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map(({ entry, debit, credit, others }, idx) => (
-                    <TableRow key={entry.id} className={entry.status === "reversed" ? "text-muted-foreground" : ""}>
+                  {rows.map(({ entry, debit, credit, others, ref, description }, idx) => (
+                    <TableRow key={entry.id} className={`[&>td]:px-2 [&>td]:py-1.5 ${entry.status === "reversed" ? "text-muted-foreground" : ""}`}>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                      <TableCell className="whitespace-nowrap">{entry.date ? formatDate(entry.date) : "—"}</TableCell>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{entry.reference || entry.entry_number}</TableCell>
-                      <TableCell>
-                        <span className="break-words">{entry.description}</span>
-                        {entry.status === "reversed" && <Badge variant="secondary" className="ml-2 text-[10px]">Reversed</Badge>}
-                        {others && <p className="text-[11px] text-muted-foreground">{others}</p>}
+                      <TableCell className="whitespace-nowrap">{entry.date ? shortDate(entry.date) : "—"}</TableCell>
+                      <TableCell className="whitespace-nowrap font-medium">{ref}</TableCell>
+                      <TableCell className="min-w-[140px]">
+                        <span>{description}</span>
+                        {entry.status === "reversed" && <Badge variant="secondary" className="ml-1 px-1 py-0 text-[9px]">Reversed</Badge>}
+                        {others && <p className="text-[10px] leading-tight text-muted-foreground">{others}</p>}
                       </TableCell>
-                      <TableCell className="text-right font-mono whitespace-nowrap">{debit > 0.005 ? formatCurrency(debit) : "-"}</TableCell>
-                      <TableCell className="text-right font-mono whitespace-nowrap">{credit > 0.005 ? formatCurrency(credit) : "-"}</TableCell>
-                      <TableCell className="text-right font-mono font-medium whitespace-nowrap">{formatCurrency(entry.balance)}</TableCell>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap">{debit > 0.005 ? money(debit) : "-"}</TableCell>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap">{credit > 0.005 ? money(credit) : "-"}</TableCell>
+                      <TableCell className="text-right tabular-nums font-medium whitespace-nowrap">{money(entry.balance)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 border-t pt-3 text-sm text-center">
+            <div className="grid grid-cols-3 gap-4 border-t pt-2 text-xs text-center">
               <div>
                 <p className="font-medium">Total Debits</p>
-                <p className="font-mono">{formatCurrency(totalDebit)}</p>
+                <p className="tabular-nums">{formatCurrency(totalDebit)}</p>
               </div>
               <div>
                 <p className="font-medium">Total Credits</p>
-                <p className="font-mono">{formatCurrency(totalCredit)}</p>
+                <p className="tabular-nums">{formatCurrency(totalCredit)}</p>
               </div>
               <div>
                 <p className="font-medium">Net Change</p>
-                <p className="font-mono">{formatCurrency(totalDebit - totalCredit)}</p>
+                <p className="tabular-nums">{formatCurrency(totalDebit - totalCredit)}</p>
               </div>
             </div>
 
