@@ -53,7 +53,13 @@ class CustomerBalanceController extends Controller
         $companyId = $request->user()->company_id;
         Customer::where('company_id', $companyId)->findOrFail($customerId);
 
-        return response()->json(['data' => $ledger->ledger($companyId, $customerId, $request->query('date_from'), $request->query('date_to'))]);
+        return response()->json(['data' => $ledger->ledger(
+            $companyId,
+            $customerId,
+            $request->query('date_from'),
+            $request->query('date_to'),
+            $request->boolean('hide_corrections'),
+        )]);
     }
 
     // Oldest-first split of an amount, to prefill the Receive Payment form.

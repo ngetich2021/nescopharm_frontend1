@@ -33,7 +33,7 @@ class CustomerLedgerService
             ->where('contact_type', Customer::class);
     }
 
-    public function ledger(string $companyId, string $customerId, ?string $dateFrom, ?string $dateTo): array
+    public function ledger(string $companyId, string $customerId, ?string $dateFrom, ?string $dateTo, bool $hideCorrections = false): array
     {
         $receivableIds = $this->receivableAccountIds($companyId);
         $entryIds = $this->entryIdsQuery($companyId, $customerId);
@@ -41,6 +41,11 @@ class CustomerLedgerService
         $base = JournalEntry::where('company_id', $companyId)
             ->whereIn('status', JournalEntry::LEDGER_STATUSES)
             ->whereIn('id', $entryIds);
+
+        $hidden = $hideCorrections ? $this->correctionIds($customerId, clone $base) : [];
+        if ($hidden) {
+            $base->whereNotIn('id', $hidden);
+        }
 
         // What the customer owed before the period: their receivable lines in earlier entries.
         $opening = 0.0;
@@ -114,6 +119,7 @@ class CustomerLedgerService
                 ->map(fn ($a) => ['id' => $a->id, 'code' => $a->account_code, 'name' => $a->account_name])
                 ->values(),
             'period' => ['from' => $dateFrom, 'to' => $dateTo],
+            'hidden_corrections' => count($hidden),
             'opening_balance' => round($opening, 2),
             'entries' => $rows,
             'totals' => [
@@ -122,6 +128,34 @@ class CustomerLedgerService
                 'closing_balance' => $balance,
             ],
         ];
+    }
+
+    /**
+     * Entries replaced when their document was edited: each reversed entry and the reversal that
+     * cancels it. Together they net to nothing, so hiding both leaves every balance as it is. A
+     * bounced cheque's receipt and its reversal stay: the bounce is part of the account.
+     */
+    protected function correctionIds(string $customerId, $base): array
+    {
+        $bouncedPayments = Cheque::where('customer_id', $customerId)
+            ->where('direction', 'received')
+            ->where('status', 'bounced')
+            ->whereNotNull('payment_id')
+            ->pluck('payment_id')
+            ->all();
+
+        $hiddenOriginals = (clone $base)->where('status', 'reversed')
+            ->get(['id', 'source_type', 'source_id'])
+            ->reject(fn ($e) => $e->source_type === Payment::class && in_array($e->source_id, $bouncedPayments, true))
+            ->pluck('id')
+            ->all();
+
+        $hiddenReversals = (clone $base)->where('source_type', JournalEntry::class)
+            ->whereIn('source_id', $hiddenOriginals)
+            ->pluck('id')
+            ->all();
+
+        return array_merge($hiddenOriginals, $hiddenReversals);
     }
 
     /**

@@ -144,13 +144,19 @@ export interface CustomerLedgerEntry {
 export interface CustomerLedger {
   receivable_accounts: { id: string; code: string; name: string }[]
   period: { from: string | null; to: string | null }
+  hidden_corrections: number
   opening_balance: number
   entries: CustomerLedgerEntry[]
   totals: { debit: number; credit: number; closing_balance: number }
 }
 
-export async function fetchCustomerLedger(customerId: string, params: { date_from?: string; date_to?: string } = {}): Promise<CustomerLedger> {
-  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]).toString()
+export async function fetchCustomerLedger(
+  customerId: string,
+  params: { date_from?: string; date_to?: string; hide_corrections?: boolean } = {},
+): Promise<CustomerLedger> {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => !!v).map(([k, v]) => [k, v === true ? "1" : String(v)]),
+  ).toString()
   const response = await apiCall<{ data: CustomerLedger }>(
     `/customers/${customerId}/account-balance/ledger${query ? `?${query}` : ""}`,
     "GET",
