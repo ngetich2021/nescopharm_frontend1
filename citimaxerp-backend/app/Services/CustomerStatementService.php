@@ -63,6 +63,9 @@ class CustomerStatementService
         $bounced = $this->bouncedCheques($customerId);
         $bouncedPaymentIds = $bounced->pluck('payment_id')->filter()->values()->all();
         $periodBounces = $bounced->filter(fn ($b) => $b['date'] >= $from->toDateString() && $b['date'] <= $to->toDateString())->values();
+        // Receipts shown for cheques that bounced before approval (never in the account's balance).
+        $chequeReceipts = $bounced->filter(fn ($b) => $b['receipt_date']);
+        $periodReceipts = $chequeReceipts->filter(fn ($b) => $b['receipt_date'] >= $from->toDateString() && $b['receipt_date'] <= $to->toDateString())->values();
 
         $payments = Payment::with('invoice:id,invoice_number')
             ->where('customer_id', $customerId)
@@ -121,6 +124,7 @@ class CustomerStatementService
             ->where(fn ($q) => $q->where('status', 'completed')->orWhereIn('id', $bouncedPaymentIds))
             ->where('payment_date', '>', $to)->sum('amount_paid');
         $bouncesAfter = (float) $bounced->filter(fn ($b) => $b['date'] > $to->toDateString())->sum('amount');
+        $receiptsAfter = (float) $chequeReceipts->filter(fn ($b) => $b['receipt_date'] > $to->toDateString())->sum('receipt_amount');
         $creditNotesAfter = (float) CreditNote::where('customer_id', $customerId)
             ->whereIn('status', ['issued', 'applied', 'refunded'])
             ->where('credit_note_date', '>', $to)->sum('total_amount');
@@ -128,17 +132,17 @@ class CustomerStatementService
 
         // Roll the current balance back to what it was at the period end,
         // then back again to what it was at the period start.
-        $closingBalance = $currentBalance - $invoicesAfter + $paymentsAfter + $creditNotesAfter - $refundsAfter - $bouncesAfter;
+        $closingBalance = $currentBalance - $invoicesAfter + $paymentsAfter + $receiptsAfter + $creditNotesAfter - $refundsAfter - $bouncesAfter;
 
         $invoicesTotal = (float) $invoices->sum('total_amount');
-        $paymentsTotal = (float) $payments->sum('amount_paid');
+        $paymentsTotal = (float) $payments->sum('amount_paid') + (float) $periodReceipts->sum('receipt_amount');
         $creditNotesTotal = (float) $creditNotes->sum('total_amount');
         $refundsTotal = (float) $periodRefunds->sum('amount');
         $bouncesTotal = (float) $periodBounces->sum('amount');
 
         $openingBalance = $closingBalance - $invoicesTotal + $paymentsTotal + $creditNotesTotal - $refundsTotal - $bouncesTotal;
 
-        $transactions = $this->buildTransactions($from, $openingBalance, $invoices, $payments, $creditNotes, $periodRefunds, $periodBounces, $bounced);
+        $transactions = $this->buildTransactions($from, $openingBalance, $invoices, $payments, $creditNotes, $periodRefunds, $periodBounces, $bounced, $periodReceipts);
         $ageing = $this->buildAgeing($customerId, $to, $closingBalance);
 
         $account = $customer->account;
@@ -188,7 +192,7 @@ class CustomerStatementService
                 'orders_total' => round((float) $countedOrders->sum('total'), 2),
                 'invoices_count' => $invoices->count(),
                 'invoices_total' => round($invoicesTotal, 2),
-                'payments_count' => $payments->count(),
+                'payments_count' => $payments->count() + $periodReceipts->count(),
                 'payments_total' => round($paymentsTotal, 2),
                 'credit_notes_count' => $creditNotes->count(),
                 'credit_notes_total' => round($creditNotesTotal, 2),
@@ -231,8 +235,9 @@ class CustomerStatementService
 
     /**
      * The customer's bounced cheques, each dated with its bounced cheque charges invoice. The
-     * amount is what comes back onto the account: the receipt of an approved cheque. A cheque that
-     * bounced before approval never counted as paid, so it is listed for the record at 0.
+     * amount is what comes back onto the account. A cheque that bounced before approval has no
+     * receipt, so the statement shows one for it on its maturity date (receipt_*), as for an
+     * approved cheque: received, then bounced, then charged. The two cancel out.
      */
     private function bouncedCheques(string $customerId)
     {
@@ -250,11 +255,11 @@ class CustomerStatementService
                     'date' => $c->bounceChargeInvoice?->invoice_date
                         ? Carbon::parse($c->bounceChargeInvoice->invoice_date)->toDateString()
                         : $c->bounceDate(),
-                    'amount' => $paid ? round((float) $c->payment->amount_paid, 2) : 0.0,
+                    'amount' => round($paid ? (float) $c->payment->amount_paid : (float) $c->amount, 2),
                     'reference' => $c->cheque_number,
-                    'description' => $paid
-                        ? 'Cheque bounced' . ($c->bank_name ? " - {$c->bank_name}" : '')
-                        : 'Cheque bounced, not paid (KES ' . number_format((float) $c->amount, 2) . ')',
+                    'description' => 'Cheque bounced - ' . $c->cheque_number,
+                    'receipt_date' => $paid ? null : ($c->maturity_date ?? $c->issue_date ?? $c->created_at)->toDateString(),
+                    'receipt_amount' => $paid ? 0.0 : round((float) $c->amount, 2),
                 ];
             })
             ->values();
@@ -265,7 +270,7 @@ class CustomerStatementService
      * credit note and payment (credit) with a running balance. A bounced
      * cheque is followed straight away by its bounced cheque charges.
      */
-    private function buildTransactions(Carbon $from, float $openingBalance, $invoices, $payments, $creditNotes, $refunds, $bounces, $allBounces): array
+    private function buildTransactions(Carbon $from, float $openingBalance, $invoices, $payments, $creditNotes, $refunds, $bounces, $allBounces, $chequeReceipts): array
     {
         $entries = collect();
         // Bounced cheques and their charges sort last on their date, each charge right after its cheque.
@@ -344,6 +349,18 @@ class CustomerStatementService
                 'description' => $description,
                 'debit' => 0.0,
                 'credit' => (float) $p->amount_paid,
+            ]);
+        }
+
+        foreach ($chequeReceipts as $b) {
+            $entries->push([
+                'date' => $b['receipt_date'],
+                'order' => 2,
+                'type' => 'payment',
+                'reference' => $b['reference'],
+                'description' => 'Payment - Cheque - bounced',
+                'debit' => 0.0,
+                'credit' => $b['receipt_amount'],
             ]);
         }
 
