@@ -188,6 +188,7 @@ class AssetController extends Controller
 
         $results = [];
         $created = 0;
+        $unchanged = 0;
         $errors = 0;
         $toInsert = [];
 
@@ -207,6 +208,18 @@ class AssetController extends Controller
             }
             $cost = $row['purchase_cost'] ?? 0;
             $cost = is_numeric($cost) ? (float) $cost : (float) preg_replace('/[^0-9.]/', '', (string) $cost);
+
+            // The same asset already registered (e.g. the template's sample row, which is a real asset) is not added again.
+            $serial = trim((string) ($row['serial_number'] ?? '')) ?: null;
+            $location = trim((string) ($row['location'] ?? '')) ?: null;
+            $existing = Asset::where('company_id', $user->company_id)->whereRaw('lower(trim(name)) = ?', [mb_strtolower($name)])
+                ->where('serial_number', $serial)->where('location', $location)->where('quantity', $quantity)
+                ->whereRaw('round(purchase_cost::numeric, 2) = ?', [round($cost, 2)])->exists();
+            if ($existing) {
+                $unchanged++;
+                $results[] = ['row' => $rowNo, 'name' => $name, 'status' => 'unchanged', 'message' => 'Already in the register - skipped.'];
+                continue;
+            }
 
             $created++;
             $results[] = ['row' => $rowNo, 'name' => $name, 'status' => 'created', 'message' => null];
@@ -248,7 +261,7 @@ class AssetController extends Controller
                 'rows' => count($rows),
                 'created' => $created,
                 'updated' => 0,
-                'unchanged' => 0,
+                'unchanged' => $unchanged,
                 'errors' => $errors,
             ],
             'rows' => $results,

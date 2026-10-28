@@ -45,9 +45,15 @@ class DataImportController extends Controller
     }
 
     /** The column layout of every sheet, so the page can build templates and show the format. */
-    public function schemas()
+    public function schemas(Request $request)
     {
-        return response()->json(['status' => 'success', 'schemas' => array_values(ImportSchemas::all())]);
+        // Each template's first row is filled from the company's own records (see ImportSamples).
+        $companyId = $request->user()->company_id;
+        $schemas = array_map(
+            fn ($schema) => $schema + ['sample' => $companyId ? \App\Services\DataImport\ImportSamples::for($schema['key'], $companyId) : null],
+            array_values(ImportSchemas::all())
+        );
+        return response()->json(['status' => 'success', 'schemas' => $schemas]);
     }
 
     public function import(Request $request, string $entity)
@@ -100,8 +106,12 @@ class DataImportController extends Controller
             set_time_limit(600);
         }
 
-        $body = array_slice($rows, $headingRow + 1);
         $cells = $this->rowReader($columns);
+        // A template's example row (not copied from a real record) is skipped if it was left in.
+        $body = array_map(
+            fn ($row) => str_starts_with($cells($row)('notes') ?: $cells($row)('comments'), \App\Services\DataImport\ImportSamples::EXAMPLE_MARK) ? [] : $row,
+            array_slice($rows, $headingRow + 1)
+        );
 
         DB::beginTransaction();
         try {
@@ -340,6 +350,10 @@ class DataImportController extends Controller
 
             $supplier = $existing->get(mb_strtolower($name));
             if ($supplier) {
+                // Cells are read with line breaks folded to spaces; a value differing only in spacing (a
+                // two-line address) is the same value, not a change.
+                $fields = array_filter($fields, fn ($v, $f) => !is_string($v)
+                    || preg_replace('/\s+/', ' ', trim((string) $supplier->getOriginal($f))) !== $v, ARRAY_FILTER_USE_BOTH);
                 $supplier->fill($fields);
                 if ($supplier->isDirty()) {
                     // What changed, field by field, for the import history.
@@ -654,7 +668,9 @@ class DataImportController extends Controller
         $summary = $this->blankSummary();
         $results = [];
         $all = Customer::where('company_id', $companyId)->get();
-        $byNumber = $all->whereNotNull('customer_number')->keyBy(fn ($c) => mb_strtolower(trim($c->customer_number)));
+        // A customer number matches as shown (CUST-0089) or as stored (CUST-9b267ea3-0089).
+        $byNumber = $all->whereNotNull('customer_number')->keyBy(fn ($c) => mb_strtolower(trim($c->customer_number)))
+            ->union($all->filter(fn ($c) => $c->getRawOriginal('customer_number'))->keyBy(fn ($c) => mb_strtolower(trim($c->getRawOriginal('customer_number')))));
         $byName = $all->keyBy(fn ($c) => mb_strtolower(trim($c->name)));
 
         $textFields = ['business_name', 'customer_type', 'email', 'phone', 'telephone', 'pin_number', 'address',
@@ -686,6 +702,9 @@ class DataImportController extends Controller
 
             $customer = $number !== '' ? $byNumber->get(mb_strtolower($number)) : $byName->get(mb_strtolower($name));
             if ($customer) {
+                // As for suppliers: a value differing only in spacing or line breaks is not a change.
+                $fields = array_filter($fields, fn ($v, $f) => preg_replace('/\s+/', ' ', mb_strtolower(trim((string) $customer->getOriginal($f))))
+                    !== mb_strtolower((string) $v), ARRAY_FILTER_USE_BOTH);
                 $customer->fill($fields);
                 if ($customer->isDirty()) {
                     $customer->save();

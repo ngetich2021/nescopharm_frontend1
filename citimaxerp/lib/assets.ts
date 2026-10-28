@@ -162,16 +162,27 @@ export async function exportAssets(): Promise<void> {
   XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Assets Register", todayFileDate()], "xlsx"))
 }
 
-export function downloadAssetTemplate(): void {
+// The first row is a real asset from the register (importing it again skips it as already there).
+export async function downloadAssetTemplate(): Promise<void> {
   const headers = Object.keys(EXPORT_HEADERS).filter((h) => h !== "S/No")
-  const example = {
-    "Asset Name/Description": "HP Pro 290 Desktop",
-    "Category": "Computers",
-    "Serial/Model Number": "4CE502BSF3",
-    "Location/Department": "Accounts",
-    "Qty (Pcs)": 1,
-    "Purchase Cost (Ksh)": 125000,
-  }
+  const sample = (await getAssets().catch(() => [] as Asset[]))[0]
+  const example = sample
+    ? {
+        "Asset Name/Description": sample.name,
+        "Category": sample.category || "",
+        "Serial/Model Number": sample.serial_number || "",
+        "Location/Department": sample.location || "",
+        "Qty (Pcs)": sample.quantity,
+        "Purchase Cost (Ksh)": Number(sample.purchase_cost) || 0,
+      }
+    : {
+        "Asset Name/Description": "HP Pro 290 Desktop",
+        "Category": "Computers",
+        "Serial/Model Number": "4CE502BSF3",
+        "Location/Department": "Accounts",
+        "Qty (Pcs)": 1,
+        "Purchase Cost (Ksh)": 125000,
+      }
   const sheet = XLSX.utils.json_to_sheet([example])
   sheet["!cols"] = headers.map((k) => ({ wch: Math.max(k.length + 2, 18) }))
   const book = XLSX.utils.book_new()

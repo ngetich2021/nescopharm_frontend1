@@ -29,19 +29,26 @@ import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/docum
 
 const OTHER = "__other__"
 
-function downloadTemplate(listName: string) {
-  const code = listName || "NSPH"
-  const example = [
-    [`${code}001`, "Syringe 5ml", "29.00", "Box of 100", "VAT 16%"],
-    [`${code}002`, "Gloves Latex Large", "850.00", "Box of 50", "Exempt"],
-  ]
-  const csv = [PRICE_LIST_TEMPLATE_HEADERS, ...example].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n")
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }))
-  const link = document.createElement("a")
-  link.href = url
-  link.download = `${listName || "price-list"}_template.csv`
-  link.click()
-  URL.revokeObjectURL(url)
+// The first row is the list's own first item (code, description, price) - uploading it unchanged changes
+// nothing. A new list with no items yet borrows the first NSPV item, under the new list's code.
+async function downloadTemplate(listName: string) {
+  const code = listName || "NSPV"
+  let row: (string | number)[] = []
+  try {
+    const own = (await fetchPriceList(code)).rows[0]
+    const borrowed = own ? null : (await fetchPriceList("NSPV")).rows[0]
+    const r = own ?? borrowed
+    if (r) {
+      row = [own ? r.sheet_code : `${code}001`, r.description ?? "", r.price, r.unit_of_measure ?? "", r.tax_status]
+    }
+  } catch {
+    // No sample available - the template still has its headings.
+  }
+  const sheet = XLSX.utils.aoa_to_sheet(row.length ? [PRICE_LIST_TEMPLATE_HEADERS, row] : [PRICE_LIST_TEMPLATE_HEADERS])
+  sheet["!cols"] = [{ wch: 12 }, { wch: 55 }, { wch: 12 }, { wch: 18 }, { wch: 14 }]
+  const book = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(book, sheet, code)
+  XLSX.writeFile(book, `${code} Price List Template.xlsx`)
 }
 
 const statusBadge = (status: string) => {

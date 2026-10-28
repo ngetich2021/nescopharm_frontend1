@@ -21,6 +21,8 @@ export interface ImportSchema {
   matching: string
   permission: string
   columns: ImportColumn[]
+  /** First template row, taken from the company's own records (keyed by column key); null when there are none. */
+  sample?: Record<string, string | number | null> | null
 }
 
 export interface ParsedPurchaseOrderLine {
@@ -138,11 +140,12 @@ export function describeType(column: ImportColumn): string {
 }
 
 /**
- * Build the workbook for one import. The first sheet is the one the importer reads back, so it
- * carries the heading row and nothing else unless `rows` are supplied - a sample row left in it
- * would come back as real data. The example and the per-column rules live on a second sheet.
+ * Build the workbook for one import. The first sheet is the one the importer reads back; its first
+ * row is filled from the system (`schema.sample`). That row is either a copy of a real record, which
+ * imports as unchanged, or an example built from real names and marked "EXAMPLE ROW" in its notes,
+ * which the importer skips - so leaving it in does no harm. The per-column rules live on a second sheet.
  *
- * `rows` pre-fills that sheet from records the system already holds, keyed by column key, so a
+ * `rows` pre-fills the sheet instead, from records the system already holds, keyed by column key, so a
  * delivery against a purchase order can be edited rather than typed out from nothing.
  */
 export function downloadTemplate(
@@ -152,7 +155,8 @@ export function downloadTemplate(
   const book = XLSX.utils.book_new()
 
   const headings = schema.columns.map((c) => (c.required ? `${c.label} *` : c.label))
-  const body = (options?.rows ?? []).map((row) => schema.columns.map((c) => row[c.key] ?? ""))
+  const sampleRows = options?.rows?.length ? options.rows : schema.sample ? [schema.sample] : []
+  const body = sampleRows.map((row) => schema.columns.map((c) => row[c.key] ?? ""))
   const data = XLSX.utils.aoa_to_sheet([headings, ...body])
   data["!cols"] = schema.columns.map((c) => ({ wch: Math.max(16, c.label.length + 4) }))
   XLSX.utils.book_append_sheet(book, data, "Data")
@@ -162,9 +166,11 @@ export function downloadTemplate(
     [schema.description],
     [schema.matching],
     [],
-    body.length
+    options?.rows?.length
       ? ["The 'Data' sheet is already filled in for you. Edit the figures to match what arrived, and delete any row that didn't."]
-      : ["Enter your data on the 'Data' sheet, under the headings already there."],
+      : body.length
+        ? ["Row 2 of the 'Data' sheet is a sample taken from your system, to show the format. Overwrite it or add your rows under it; left as it is, it changes nothing."]
+        : ["Enter your data on the 'Data' sheet, under the headings already there."],
     ["Columns marked * are required. Leave anything you don't have blank."],
     ["Don't rename, reorder or delete the heading row."],
     [],
