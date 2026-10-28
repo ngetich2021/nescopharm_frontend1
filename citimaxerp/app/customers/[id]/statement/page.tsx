@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { fetchCustomerStatement, CustomerStatement } from "@/lib/customer-statements"
 import { getCustomerDisplayName } from "@/lib/customers"
 import { buildBuyerBlock } from "@/lib/customer-address"
@@ -74,6 +75,8 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
   const [dateFrom, setDateFrom] = useState(firstOfMonthString())
   const [dateTo, setDateTo] = useState(lastOfMonthString())
+  // Optional sections: left off the statement (screen, print, PDF and CSV) unless ticked.
+  const [include, setInclude] = useState({ outstanding: false, orders: false, pdCheques: false })
 
   const loadStatement = async (from = dateFrom, to = dateTo) => {
     if (from && to && from > to) {
@@ -150,10 +153,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const totalCredits = transactions.reduce((s, t) => s + toNumber(t.credit), 0)
   const ageing = statement.ageing
   const ageingBase = ageing ? ageing.buckets.reduce((s, b) => s + b.amount, 0) : 0
-  const pendingBills = statement.pending_bills ?? []
+  const pendingBills = include.outstanding ? statement.pending_bills ?? [] : []
   const pendingTotal = pendingBills.reduce((sum, bill) => sum + toNumber(bill.pending_amount), 0)
-  const pdCheques = statement.pd_cheques ?? []
-  const orders = statement.orders ?? []
+  const pdCheques = include.pdCheques ? statement.pd_cheques ?? [] : []
+  const orders = include.orders ? statement.orders ?? [] : []
   const liveOrders = orders.filter((o) => o.status !== "cancelled")
   const ordersTotal = liveOrders.reduce((s, o) => s + toNumber(o.total), 0)
   const ordersPaid = liveOrders.reduce((s, o) => s + toNumber(o.paid), 0)
@@ -338,6 +341,23 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="text-xs text-muted-foreground">Include:</span>
+              {([
+                ["outstanding", "Outstanding Invoices"],
+                ["orders", "Orders in this Period"],
+                ["pdCheques", "Post-Dated Cheques Held"],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-1.5 cursor-pointer">
+                  <Checkbox
+                    checked={include[key]}
+                    onCheckedChange={(v) => setInclude((s) => ({ ...s, [key]: v === true }))}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -374,7 +394,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           )}
 
           {/* Title */}
-          <div className="flex flex-wrap items-end justify-between gap-2 border-b-2 border-gray-800 pb-3 mb-5">
+          <div className="flex flex-wrap print:flex-nowrap items-end justify-between gap-2 border-b-2 border-gray-800 pb-3 mb-5">
             <div>
               <h1 className="text-2xl font-bold tracking-wide">STATEMENT OF ACCOUNT</h1>
               <p className="text-sm text-gray-600 mt-1">For the period {statement.period.label}</p>
@@ -388,7 +408,8 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           </div>
 
           {/* Customer + Account */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* Side by side on paper too: an A4 page is narrower than the md breakpoint. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 mb-6 break-inside-avoid">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Statement To</p>
               <p className="font-semibold text-base">{buyer.name}</p>
@@ -660,7 +681,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           )}
 
           {/* Payment Details + Remittance */}
-          <section className="border-t-2 border-gray-800 pt-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <section className="border-t-2 border-gray-800 pt-5 grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 break-inside-avoid">
             {hasPaymentDetails && paymentDetails ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Payment Details</p>
