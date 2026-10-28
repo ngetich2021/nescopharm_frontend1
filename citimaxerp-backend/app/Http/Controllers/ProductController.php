@@ -3195,6 +3195,20 @@ class ProductController extends Controller
                 $query->where('quantity_available', '>', 0);
             }
 
+            // Search across every page: batch/lot/serial number, product, size or supplier name.
+            if ($request->filled('search')) {
+                $term = '%' . trim($request->search) . '%';
+                $query->where(function ($q) use ($term) {
+                    $q->where('batch_number', 'ilike', $term)
+                        ->orWhere('lot_number', 'ilike', $term)
+                        ->orWhere('serial_number', 'ilike', $term)
+                        ->orWhere('supplier', 'ilike', $term)
+                        ->orWhereHas('product', fn ($p) => $p->where('name', 'ilike', $term))
+                        ->orWhereHas('variant', fn ($v) => $v->where('name', 'ilike', $term))
+                        ->orWhereHas('supplier', fn ($s) => $s->where('name', 'ilike', $term));
+                });
+            }
+
             // Sorting
             $sortBy = $request->get('sort_by', 'created_at');
             $sortOrder = $request->get('sort_order', 'desc');

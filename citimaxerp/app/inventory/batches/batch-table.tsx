@@ -43,10 +43,18 @@ function RemainingCell({ available, received }: { available: number; received: n
 function ExpiryCell({ date }: { date?: string }) {
   if (!date) return <span className="text-gray-400">-</span>
   const days = Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000)
-  const label = new Date(date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
-  if (days < 0) return <div><div className="font-medium text-red-600">{label}</div><div className="text-xs text-red-600">Expired</div></div>
+  const label = shortDate(date)
+  if (days < 0) return <div className="whitespace-nowrap"><div className="font-medium text-red-600">{label}</div><div className="text-xs text-red-600">Expired</div></div>
   const tone = days <= 90 ? "text-amber-600" : "text-gray-500"
-  return <div><div className={days <= 90 ? "font-medium text-amber-600" : "text-gray-900"}>{label}</div><div className={`text-xs ${tone}`}>{days} days left</div></div>
+  return <div className="whitespace-nowrap"><div className={days <= 90 ? "font-medium text-amber-600" : "text-gray-900"}>{label}</div><div className={`text-xs ${tone}`}>{days} days left</div></div>
+}
+
+// 12-Jul-26: short enough to stay on one line.
+function shortDate(date: string): string {
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return "-"
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]
+  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`
 }
 
 // Helper function to check if a batch matches search criteria
@@ -171,6 +179,9 @@ interface BatchTableProps {
   onItemsPerPageChange?: (itemsPerPage: number) => void
   currentPage?: number
   itemsPerPage?: number
+  // When given, search and status are applied by the server across all pages.
+  onSearchChange?: (term: string) => void
+  onStatusChange?: (status: string) => void
 }
 
 export function BatchTable({ 
@@ -184,7 +195,9 @@ export function BatchTable({
   onPageChange,
   onItemsPerPageChange,
   currentPage = 1,
-  itemsPerPage = 20
+  itemsPerPage = 20,
+  onSearchChange,
+  onStatusChange
 }: BatchTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -196,20 +209,33 @@ export function BatchTable({
   const { hasPermission } = usePermissions()
   const { toast } = useToast()
 
+  // Hand the search to the server once typing pauses.
+  useEffect(() => {
+    if (!onSearchChange) return
+    const t = setTimeout(() => onSearchChange(searchTerm.trim()), 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm])
+
+  useEffect(() => {
+    onStatusChange?.(statusFilter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter])
+
   // Filter and sort batches
   const filteredAndSortedBatches = useMemo(() => {
     let result = [...batches]
-    
-    
+
+
     // Apply search filter
-    if (searchTerm) {
-      result = result.filter(batch => 
+    if (searchTerm && !onSearchChange) {
+      result = result.filter(batch =>
         batchMatchesSearch(batch, searchTerm)
       )
     }
-    
+
     // Apply status filter
-    if (statusFilter !== "all") {
+    if (statusFilter !== "all" && !onStatusChange) {
       result = result.filter(batch => batch.status === statusFilter)
     }
     
@@ -239,7 +265,7 @@ export function BatchTable({
     })
     
     return result
-  }, [batches, searchTerm, statusFilter, sortBy, sortOrder])
+  }, [batches, searchTerm, statusFilter, sortBy, sortOrder, onSearchChange, onStatusChange])
 
   // Group batches by product so the parent row shows the product once and
   // expands to reveal each size (variant) with its own batches. Products
@@ -364,7 +390,8 @@ export function BatchTable({
     }
   }
 
-  if (isLoading) {
+  // Skeleton on the first load only: a search reloads under the search box, which keeps focus.
+  if (isLoading && batches.length === 0 && !searchTerm && statusFilter === "all") {
     return (
       <div className="rounded-md border bg-white">
         <Table>
@@ -518,7 +545,7 @@ export function BatchTable({
         <div className="rounded-md border bg-white">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="[&>th]:whitespace-nowrap">
                 {viewMode === "flat" ? (
                   <>
                     <TableHead className="w-14 text-center font-semibold">S/No.</TableHead>
@@ -554,16 +581,16 @@ export function BatchTable({
                   <TableRow>
                     <TableCell colSpan={12} className="h-24 text-center">
                       <div className="text-gray-500">
-                        <p className="font-semibold">No batches found</p>
-                        <p className="text-sm">Try adjusting your search or filter criteria</p>
+                        <p className="font-semibold">{isLoading ? "Loading batches..." : "No batches found"}</p>
+                        {!isLoading && <p className="text-sm">Try adjusting your search or filter criteria</p>}
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredAndSortedBatches.map((batch, index) => (
-                    <TableRow key={batch.id} className="hover:bg-gray-50">
+                    <TableRow key={batch.id} className="hover:bg-gray-50 [&>td]:whitespace-nowrap">
                       <TableCell className="text-center text-gray-700">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
-                      <TableCell className="font-medium">{batch.product?.name || "-"}</TableCell>
+                      <TableCell className="font-medium !whitespace-normal min-w-[180px]">{batch.product?.name || "-"}</TableCell>
                       <TableCell>{batch.variant?.name || "-"}</TableCell>
                       <TableCell className="font-medium">{batch.batch_number}</TableCell>
                       <TableCell>{batch.lot_number || "-"}</TableCell>
@@ -571,7 +598,7 @@ export function BatchTable({
                         <RemainingCell available={batch.quantity_available} received={batch.quantity_received} />
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{Number(batch.quantity_sold || 0).toLocaleString()}</TableCell>
-                      <TableCell>{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{batch.manufacture_date ? shortDate(batch.manufacture_date) : "-"}</TableCell>
                       <TableCell>
                         <ExpiryCell date={batch.expiry_date} />
                       </TableCell>
@@ -616,8 +643,8 @@ export function BatchTable({
                   <TableRow>
                     <TableCell colSpan={8} className="h-24 text-center">
                       <div className="text-gray-500">
-                        <p className="font-semibold">No batches found</p>
-                        <p className="text-sm">Try adjusting your search or filter criteria</p>
+                        <p className="font-semibold">{isLoading ? "Loading batches..." : "No batches found"}</p>
+                        {!isLoading && <p className="text-sm">Try adjusting your search or filter criteria</p>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -703,7 +730,7 @@ export function BatchTable({
                                                 <RemainingCell available={batch.quantity_available} received={batch.quantity_received} />
                                               </td>
                                               <td className="px-3 py-2 text-right tabular-nums">{Number(batch.quantity_sold || 0).toLocaleString()}</td>
-                                              <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "N/A"}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap">{batch.manufacture_date ? shortDate(batch.manufacture_date) : "N/A"}</td>
                                               <td className="px-3 py-2">
                                                 <ExpiryCell date={batch.expiry_date} />
                                               </td>

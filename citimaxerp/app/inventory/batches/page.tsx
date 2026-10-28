@@ -14,17 +14,26 @@ import type { Batch, InventorySummary } from "@/types/batches"
 export default function BatchesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
-  
+  // Search and status filter on the server, so they cover every page, not just the one shown.
+  const [search, setSearch] = useState("")
+  const [status, setStatus] = useState("all")
+
   // Use the data cache hook for batches with pagination
-  const { 
+  const {
     data: batchesData,
     isLoading: isLoadingBatches,
     refetch: refreshBatches,
     error,
     invalidateCache
   } = useDataCache<{data: Batch[], total: number, current_page: number, per_page: number, last_page?: number}>(
-    `batches_in_stock_page_${currentPage}_${itemsPerPage}`,
-    () => getBatches({ page: currentPage, per_page: itemsPerPage, in_stock: true }),
+    `batches_in_stock_page_${currentPage}_${itemsPerPage}_${search}_${status}`,
+    () => getBatches({
+      page: currentPage,
+      per_page: itemsPerPage,
+      in_stock: true,
+      search: search || undefined,
+      status: status === "all" ? undefined : status,
+    }),
     {
       expirationMs: 5 * 60 * 1000 // 5 minutes cache
     }
@@ -206,6 +215,8 @@ export default function BatchesPage() {
           onItemsPerPageChange={handleItemsPerPageChange}
           currentPage={currentPage}
           itemsPerPage={itemsPerPage}
+          onSearchChange={(term) => { setSearch(term); setCurrentPage(1) }}
+          onStatusChange={(value) => { setStatus(value); setCurrentPage(1) }}
         />
       </div>
     </PermissionGuard>
