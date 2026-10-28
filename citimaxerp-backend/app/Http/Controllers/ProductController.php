@@ -1589,7 +1589,7 @@ class ProductController extends Controller
     }
 
     // Product / batch imports here, plus the Data Import hub's (DataImportController::recordImport).
-    private const IMPORT_HISTORY_KINDS = ['products', 'batches', 'suppliers', 'customers', 'opening_stock', 'past_invoices'];
+    private const IMPORT_HISTORY_KINDS = ['products', 'batches', 'suppliers', 'supplier_payments', 'customers', 'opening_stock', 'past_invoices'];
 
     public function importHistory(Request $request)
     {

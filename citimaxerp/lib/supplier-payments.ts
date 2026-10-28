@@ -1,4 +1,58 @@
 import apiCall from "./api";
+import * as XLSX from "xlsx";
+import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names";
+
+const METHOD_LABELS: Record<string, string> = { bank_transfer: "Bank Transfer", cash: "Cash", mpesa: "M-Pesa", cheque: "Cheque" };
+
+// dd/mm/yyyy - the day-first format the import reads back.
+const sheetDate = (value: string) => {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value ?? "";
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+};
+
+/**
+ * Supplier payments as Excel, in the same columns as the import template (plus S/No.), so the file can
+ * be edited and uploaded back: a row keeps its Payment No. and updates that payment.
+ */
+export function exportSupplierPayments(payments: SupplierPayment[]): void {
+    const rows = payments.map((p, i) => ({
+        "S/No.": i + 1,
+        "Payment No.": p.payment_number ?? "",
+        "Supplier Name": p.supplier?.name ?? "",
+        "Payment Date": sheetDate(p.payment_date),
+        "Amount": Number(p.amount || 0),
+        "Payment Method": METHOD_LABELS[p.payment_method] ?? p.payment_method ?? "",
+        "Reference": p.transaction_reference ?? "",
+        "PO Number": p.purchase_order?.order_number ?? "",
+        "Status": p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : "",
+        "Notes": p.notes ?? "",
+    }));
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    sheet["!cols"] = Object.keys(rows[0] ?? { "S/No.": 1 }).map((k) =>
+        ({ wch: k === "S/No." ? 7 : k === "Supplier Name" || k === "Reference" ? 36 : Math.max(k.length + 2, 14) }));
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, "Supplier Payments");
+    XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Supplier Payments", todayFileDate()], "xlsx"));
+}
+
+/** Preview (dryRun) or save a supplier payments sheet. Saved payments post to the books. */
+export async function importSupplierPayments(file: File, dryRun: boolean = true): Promise<any> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("dry_run", dryRun ? "1" : "0");
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/data-import/supplier_payments`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(typeof body.message === "string" ? body.message : "Import failed");
+    }
+    return body;
+}
 
 // Supplier Payment types
 export interface SupplierPayment {
@@ -134,7 +188,8 @@ export async function getSupplierPayments(
             return [];
         }
 
-        const queryParams = new URLSearchParams();
+        // Every payment, not the API's first 20: the page's totals and pagination are worked out here.
+        const queryParams = new URLSearchParams({ per_page: "all" });
         if (filters.search) queryParams.append("search", filters.search);
         if (filters.status && filters.status !== "all")
             queryParams.append("status", filters.status);

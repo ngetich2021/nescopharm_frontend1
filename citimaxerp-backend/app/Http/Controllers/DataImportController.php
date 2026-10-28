@@ -6,7 +6,9 @@ use App\Models\Customer;
 use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\PurchaseOrder;
 use App\Models\Supplier;
+use App\Models\SupplierPayment;
 use App\Services\DataImport\ImportSchemas;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -104,6 +106,7 @@ class DataImportController extends Controller
         try {
             [$summary, $results] = match ($entity) {
                 'suppliers' => $this->importSuppliers($body, $cells, $user->company_id, $headingRow),
+                'supplier_payments' => $this->importSupplierPayments($body, $cells, $user->company_id, $headingRow),
                 'customers' => $this->importCustomers($body, $cells, $user, $headingRow),
                 'opening_stock' => $this->importOpeningStock($body, $cells, $user, $headingRow),
                 'past_invoices' => $this->importPastInvoices($body, $cells, $user, $headingRow),
@@ -360,6 +363,135 @@ class DataImportController extends Controller
             $existing->put(mb_strtolower($name), $supplier);
             $summary['created']++;
             $results[] = $result + ['status' => 'created'];
+        }
+
+        return [$summary, $results];
+    }
+
+    /**
+     * Payments to suppliers. Each saved payment posts to the books through LedgerSyncObserver (after the
+     * import commits, so a preview posts nothing), and a linked purchase order's paid amount is redone
+     * from its completed payments.
+     */
+    private function importSupplierPayments(array $body, \Closure $cells, string $companyId, int $headingRow): array
+    {
+        $summary = $this->blankSummary();
+        $results = [];
+        $suppliers = Supplier::where('company_id', $companyId)->get()->keyBy(fn ($s) => $this->nameKey($s->name));
+        $orders = PurchaseOrder::where('company_id', $companyId)->get(['id', 'order_number'])
+            ->keyBy(fn ($o) => mb_strtolower(trim((string) $o->order_number)));
+        $methods = ['banktransfer' => 'bank_transfer', 'bank' => 'bank_transfer', 'eft' => 'bank_transfer', 'rtgs' => 'bank_transfer',
+            'cash' => 'cash', 'mpesa' => 'mpesa', 'mobilemoney' => 'mpesa', 'cheque' => 'cheque', 'check' => 'cheque'];
+        $touchedOrders = [];
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $number = $cell('payment_number');
+            $supplierName = $cell('supplier');
+            $result = ['row' => $line, 'key' => $number ?: "Row {$line}", 'name' => $supplierName];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            $supplier = $supplierName !== '' ? $suppliers->get($this->nameKey($supplierName)) : null;
+            $date = $this->date($cell('payment_date'));
+            $amount = $this->number($cell('amount'));
+            $method = $methods[preg_replace('/[^a-z]/', '', strtolower($cell('payment_method')))] ?? null;
+            $statusText = strtolower($cell('status'));
+            $status = $statusText === '' ? 'completed' : (in_array($statusText, ['completed', 'pending', 'cancelled'], true) ? $statusText : null);
+            $poNumber = $cell('po_number');
+            $order = $poNumber !== '' ? $orders->get(mb_strtolower($poNumber)) : null;
+
+            if (!$supplier) {
+                $fail($supplierName === '' ? 'Supplier Name is required.' : "No supplier called \"{$supplierName}\" - add it in Suppliers first.");
+                continue;
+            }
+            if (!$date) {
+                $fail('Payment Date is missing or not a date (use 26/10/2026).');
+                continue;
+            }
+            if ($amount === null || $amount <= 0) {
+                $fail('Amount must be a number above 0.');
+                continue;
+            }
+            if (!$method) {
+                $fail('Payment Method must be Bank Transfer, Cash, M-Pesa or Cheque.');
+                continue;
+            }
+            if (!$status) {
+                $fail('Status must be Completed, Pending or Cancelled.');
+                continue;
+            }
+            if ($poNumber !== '' && !$order) {
+                $fail("No purchase order numbered \"{$poNumber}\".");
+                continue;
+            }
+
+            $fields = [
+                'supplier_id' => $supplier->id,
+                'payment_date' => $date,
+                'amount' => round($amount, 2),
+                'payment_method' => $method,
+                'transaction_reference' => $cell('reference') ?: null,
+                'purchase_order_id' => $order?->id,
+                'status' => $status,
+                'notes' => $cell('notes') ?: null,
+            ];
+
+            // Payment No. finds the payment to update; without one, the same payment already recorded is left alone.
+            $payment = $number !== ''
+                ? SupplierPayment::where('company_id', $companyId)->where('payment_number', $number)->first()
+                : SupplierPayment::where('company_id', $companyId)->where('supplier_id', $supplier->id)
+                    ->whereDate('payment_date', $date)->where('amount', round($amount, 2))
+                    ->where('transaction_reference', $fields['transaction_reference'])->first();
+
+            if ($payment) {
+                $before = $payment->purchase_order_id;
+                // A blank cell leaves that field as it is (Status too, when left blank).
+                $payment->fill(array_filter($fields, fn ($v) => $v !== null) + ($statusText === '' ? [] : ['status' => $status]));
+                if ($statusText === '') {
+                    $payment->status = $payment->getOriginal('status');
+                }
+                if (!$payment->isDirty()) {
+                    $summary['unchanged']++;
+                    $results[] = ['key' => $payment->payment_number, 'status' => 'unchanged',
+                        'message' => $number === '' ? "Already recorded as {$payment->payment_number}." : null] + $result;
+                    continue;
+                }
+                $changes = collect($payment->getDirty())->map(function ($to, $field) use ($payment) {
+                    $from = $payment->getOriginal($field);
+                    return ['field' => $field, 'from' => $from instanceof \DateTimeInterface ? $from->format('Y-m-d') : $from, 'to' => $to];
+                })->values()->all();
+                $payment->save();
+                array_push($touchedOrders, $before, $payment->purchase_order_id);
+                $summary['updated']++;
+                $results[] = ['key' => $payment->payment_number, 'status' => 'updated', 'changes' => $changes] + $result;
+                continue;
+            }
+
+            $payment = SupplierPayment::create($fields + array_filter([
+                'id' => (string) Str::uuid(),
+                'company_id' => $companyId,
+                'payment_number' => $number ?: null,
+            ]));
+            $touchedOrders[] = $payment->purchase_order_id;
+            $summary['created']++;
+            $results[] = ['key' => $payment->payment_number, 'status' => 'created'] + $result;
+        }
+
+        // A purchase order's paid amount is the sum of its completed payments.
+        foreach (PurchaseOrder::whereIn('id', array_filter(array_unique($touchedOrders)))->get() as $po) {
+            $paid = (float) SupplierPayment::where('purchase_order_id', $po->id)->where('status', 'completed')->sum('amount');
+            $po->update([
+                'amount_paid' => $paid,
+                'payment_status' => $paid >= (float) $po->total_amount && (float) $po->total_amount > 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
+            ]);
         }
 
         return [$summary, $results];

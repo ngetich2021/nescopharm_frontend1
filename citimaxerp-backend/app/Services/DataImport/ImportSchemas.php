@@ -14,6 +14,7 @@ class ImportSchemas
     {
         return [
             'suppliers' => self::suppliers(),
+            'supplier_payments' => self::supplierPayments(),
             'customers' => self::customers(),
             'opening_stock' => self::openingStock(),
             'purchase_order_items' => self::purchaseOrderItems(),
@@ -101,6 +102,29 @@ class ImportSchemas
                 ['key' => 'tax_information', 'label' => 'KRA PIN', 'type' => 'text', 'example' => 'P051234567X'],
                 ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => 'Preferred packaging supplier'],
                 ['key' => 'is_active', 'label' => 'Active', 'type' => 'yesno', 'example' => 'Yes', 'help' => 'Yes or No. Blank counts as Yes for a new supplier.'],
+            ],
+        ];
+    }
+
+    private static function supplierPayments(): array
+    {
+        return [
+            'key' => 'supplier_payments',
+            'label' => 'Supplier Payments',
+            'order' => 3,
+            'description' => 'Money paid to suppliers. Each payment reduces what you owe that supplier and posts to the books (Payables against Bank or Cash).',
+            'matching' => 'A row with a Payment No. already in the system updates that payment. A row without one is added as a new payment, unless the same supplier, date, amount and reference is already recorded.',
+            'permission' => 'can_create_payments',
+            'columns' => [
+                ['key' => 'payment_number', 'label' => 'Payment No.', 'type' => 'text', 'example' => 'PV-170', 'aliases' => ['paymentnumber', 'voucherno', 'voucher'], 'help' => 'Leave blank for a new payment; the system numbers it.'],
+                ['key' => 'supplier', 'label' => 'Supplier Name', 'type' => 'text', 'required' => true, 'example' => 'Victoria Healthcare Ltd', 'aliases' => ['supplier'], 'help' => 'Must match a supplier in Suppliers.'],
+                ['key' => 'payment_date', 'label' => 'Payment Date', 'type' => 'date', 'required' => true, 'example' => '26/10/2026', 'aliases' => ['date'], 'help' => 'Day first: 26/10/2026.'],
+                ['key' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'example' => '136000'],
+                ['key' => 'payment_method', 'label' => 'Payment Method', 'type' => 'choice', 'required' => true, 'choices' => ['Bank Transfer', 'Cash', 'M-Pesa', 'Cheque'], 'example' => 'Bank Transfer', 'aliases' => ['method']],
+                ['key' => 'reference', 'label' => 'Reference', 'type' => 'text', 'example' => 'Payment voucher 161 - Prime Bank', 'aliases' => ['transactionreference'], 'help' => 'Bank or M-Pesa reference, cheque number, voucher.'],
+                ['key' => 'po_number', 'label' => 'PO Number', 'type' => 'text', 'example' => '', 'aliases' => ['po', 'purchaseorder'], 'help' => 'Optional: the purchase order this pays.'],
+                ['key' => 'status', 'label' => 'Status', 'type' => 'choice', 'choices' => ['Completed', 'Pending', 'Cancelled'], 'example' => 'Completed', 'help' => 'Blank counts as Completed.'],
+                ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
             ],
         ];
     }

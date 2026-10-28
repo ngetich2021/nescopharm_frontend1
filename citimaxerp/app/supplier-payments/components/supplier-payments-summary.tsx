@@ -22,6 +22,10 @@ export function SupplierPaymentsSummary() {
     if (companyId) {
       fetchSummary()
     }
+    // The table fires this after an import, so the totals catch up.
+    const refresh = () => fetchSummary()
+    window.addEventListener("supplier-payments-updated", refresh)
+    return () => window.removeEventListener("supplier-payments-updated", refresh)
   }, [companyId])
 
   async function fetchSummary() {

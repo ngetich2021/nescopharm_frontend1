@@ -29,13 +29,18 @@ import {
   Trash2,
   CheckSquare,
   Eye,
+  Upload,
+  FileSpreadsheet,
+  Loader2,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
-import { getSupplierPayments, SupplierPayment } from "@/lib/supplier-payments"
+import { getSupplierPayments, SupplierPayment, exportSupplierPayments, importSupplierPayments } from "@/lib/supplier-payments"
+import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
+import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import CreateSupplierPaymentSheet from "./create-supplier-payment-sheet"
 import SupplierPaymentDetailsSheet from "./supplier-payment-details-sheet"
 
@@ -55,6 +60,9 @@ export function SupplierPaymentsTable() {
   const [isBulkActionOpen, setIsBulkActionOpen] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<SupplierPayment | null>(null)
   const [isPaymentDetailsOpen, setIsPaymentDetailsOpen] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importPreview, setImportPreview] = useState<any>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined' && companyId) {
@@ -144,8 +152,63 @@ export function SupplierPaymentsTable() {
   }
 
   const handleBulkAction = (action: string) => {
-    // Implement bulk actions here
+    if (action === "export") {
+      exportSupplierPayments(payments.filter((p) => selectedPayments.includes(p.id)))
+    }
     setIsBulkActionOpen(false)
+  }
+
+  // Exports what the table shows (search and status filter applied), every page.
+  const handleExport = () => {
+    if (filteredPayments.length === 0) {
+      toast({ title: "Nothing to export", description: "No payments match the current filters." })
+      return
+    }
+    exportSupplierPayments(filteredPayments)
+  }
+
+  const handleTemplate = async () => {
+    try {
+      downloadTemplate(await fetchImportSchema("supplier_payments"), { fileName: "Supplier Payments Import Template.xlsx" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to download the template", variant: "destructive" })
+    }
+  }
+
+  // Preview first: nothing is saved until the user confirms.
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setIsImporting(true)
+    try {
+      setImportPreview(await importSupplierPayments(file, true))
+      setImportFile(file)
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : "Could not read the file", variant: "destructive" })
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!importFile) return
+    setIsImporting(true)
+    try {
+      const result = await importSupplierPayments(importFile, false)
+      setImportPreview(null)
+      setImportFile(null)
+      await fetchPayments()
+      window.dispatchEvent(new Event("supplier-payments-updated"))
+      toast({
+        title: "Payments imported",
+        description: `${result.summary.created} added, ${result.summary.updated} updated, ${result.summary.unchanged} unchanged.`,
+      })
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : "Nothing was saved", variant: "destructive" })
+    } finally {
+      setIsImporting(false)
+    }
   }
 
   const getStatusBadgeClass = (status: string) => {
@@ -286,10 +349,31 @@ export function SupplierPaymentsTable() {
               <CreditCard className="mr-2 h-4 w-4" />
               Record Payment
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
+            <Button variant="outline" size="sm" onClick={handleTemplate}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Template
+            </Button>
+            <input
+              type="file"
+              id="import-supplier-payments-file"
+              className="hidden"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleImportFile}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isImporting}
+              onClick={() => document.getElementById("import-supplier-payments-file")?.click()}
+            >
+              {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              Import
+            </Button>
+            <ImportHistoryDialog kind="supplier_payments" title="Supplier Payment" />
           </div>
         </div>
         <div className="rounded-md border bg-white">
@@ -461,6 +545,86 @@ export function SupplierPaymentsTable() {
         onOpenChange={setIsPaymentDetailsOpen}
         payment={selectedPayment}
       />
+
+      {/* Import preview: what each row will do, before anything is saved */}
+      {importPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-h-[85vh] w-full max-w-3xl overflow-auto rounded-lg bg-white shadow-lg">
+            <div className="border-b p-6">
+              <h2 className="text-lg font-semibold">Import Preview - Supplier Payments</h2>
+              <p className="mt-1 text-sm text-gray-600">Nothing is saved yet. Saved payments post to the books (Payables against Bank or Cash).</p>
+            </div>
+            <div className="space-y-4 p-6">
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  ["New payments", importPreview.summary.created, "bg-blue-50 text-blue-600"],
+                  ["Updated", importPreview.summary.updated, "bg-green-50 text-green-600"],
+                  ["Unchanged", importPreview.summary.unchanged, "bg-yellow-50 text-yellow-600"],
+                  ["Errors", importPreview.summary.errors, "bg-red-50 text-red-600"],
+                ].map(([label, value, tone]) => (
+                  <div key={label as string} className={`rounded p-3 ${String(tone).split(" ")[0]}`}>
+                    <div className={`text-2xl font-bold ${String(tone).split(" ")[1]}`}>{value as number}</div>
+                    <div className="text-sm text-gray-600">{label as string}</div>
+                  </div>
+                ))}
+              </div>
+              {importPreview.summary.errors > 0 && (
+                <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  {importPreview.summary.errors} row(s) have problems and will be skipped; fix them in the sheet and import again.
+                </div>
+              )}
+              <div className="max-h-[340px] overflow-auto rounded border">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-100">
+                    <tr className="[&>th]:whitespace-nowrap [&>th]:px-3 [&>th]:py-2 [&>th]:text-left">
+                      <th>S/No.</th>
+                      <th>Row</th>
+                      <th>Payment No.</th>
+                      <th>Supplier</th>
+                      <th>Result</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(importPreview.rows ?? []).map((row: any, i: number) => (
+                      <tr key={i} className="border-t align-top [&>td]:px-3 [&>td]:py-2">
+                        <td className="text-gray-500">{i + 1}</td>
+                        <td>{row.row}</td>
+                        <td className="whitespace-nowrap">{row.key}</td>
+                        <td>{row.name}</td>
+                        <td>
+                          <span className={`rounded px-2 py-1 text-xs ${
+                            row.status === "created" ? "bg-blue-100 text-blue-800"
+                              : row.status === "updated" ? "bg-green-100 text-green-800"
+                              : row.status === "unchanged" ? "bg-gray-100 text-gray-800"
+                              : "bg-red-100 text-red-800"
+                          }`}>{row.status}</span>
+                        </td>
+                        <td className="text-gray-600">
+                          {row.message || (row.changes ?? []).map((c: any) => `${c.field}: ${c.from ?? "-"} → ${c.to ?? "-"}`).join("; ") || "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t p-6">
+              <Button variant="outline" disabled={isImporting} onClick={() => { setImportPreview(null); setImportFile(null) }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmImport}
+                disabled={isImporting || importPreview.summary.created + importPreview.summary.updated === 0}
+                className="bg-[#E30040] text-white hover:bg-[#E30040]/90"
+              >
+                {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Import {importPreview.summary.created + importPreview.summary.updated} payment(s)
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

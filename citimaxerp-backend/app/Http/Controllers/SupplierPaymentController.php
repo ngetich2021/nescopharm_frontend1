@@ -69,7 +69,9 @@ class SupplierPaymentController extends Controller
             $query->whereDate('payment_date', '<=', $request->input('date_to'));
         }
 
-        $payments = $query->orderBy('payment_date', 'desc')->paginate(20);
+        // The Supplier Payments page pages and totals on its own, so it asks for every payment (per_page=all).
+        $perPage = $request->input('per_page') === 'all' ? max($query->count(), 1) : (int) $request->input('per_page', 20);
+        $payments = $query->orderBy('payment_date', 'desc')->orderBy('payment_number', 'desc')->paginate(max(1, min($perPage, 10000)));
 
         return response()->json([
             'status' => 'success',
