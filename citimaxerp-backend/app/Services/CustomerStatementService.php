@@ -252,9 +252,9 @@ class CustomerStatementService
                         : $c->bounceDate(),
                     'amount' => $paid ? round((float) $c->payment->amount_paid, 2) : 0.0,
                     'reference' => $c->cheque_number,
-                    'description' => "Cheque {$c->cheque_number} bounced"
-                        . ($c->bank_name ? " - {$c->bank_name}" : '')
-                        . ($paid ? '' : ' (KES ' . number_format((float) $c->amount, 2) . ', never counted as paid)'),
+                    'description' => $paid
+                        ? 'Cheque bounced' . ($c->bank_name ? " - {$c->bank_name}" : '')
+                        : 'Cheque bounced, not paid (KES ' . number_format((float) $c->amount, 2) . ')',
                 ];
             })
             ->values();
@@ -306,9 +306,10 @@ class CustomerStatementService
                 'sub' => $chequeId ? 1 : 0,
                 'type' => 'invoice',
                 'reference' => $inv->invoice_number,
+                // Kept short so each statement line prints on one line.
                 'description' => $chequeId
-                    ? 'Bounced cheque charges - cheque ' . $allBounces->firstWhere('cheque_id', $chequeId)['reference']
-                    : 'Invoice' . ($inv->order?->order_number ? " - Order {$inv->order->order_number}" : ''),
+                    ? 'Bounced cheque charges - ' . $allBounces->firstWhere('cheque_id', $chequeId)['reference']
+                    : 'Invoice',
                 'debit' => (float) $inv->total_amount,
                 'credit' => 0.0,
             ]);

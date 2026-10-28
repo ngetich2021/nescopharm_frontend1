@@ -59,8 +59,10 @@ function csvCell(value: string | number | null | undefined): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-const TH = "text-left px-2 py-2 font-semibold text-gray-700 border-b-2 border-gray-800"
-const TD = "px-2 py-2 border-b border-gray-200 align-top"
+// On paper: tight rows and one line per cell, so the statement takes as few pages as possible.
+const TH = "text-left px-2 py-2 print:px-1 print:py-1 font-semibold text-gray-700 border-b-2 border-gray-800 print:whitespace-nowrap print:w-auto"
+const TD = "px-2 py-2 print:px-1 print:py-[2px] border-b border-gray-200 align-top print:whitespace-nowrap"
+const TABLE = "w-full text-xs print:text-[9px] print:leading-tight border-collapse tabular-nums"
 
 export default function CustomerStatementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -307,6 +309,8 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
   return (
     <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
+      {/* Narrower page margins than the app default, for fewer printed pages. */}
+      <style>{"@media print { @page { size: A4; margin: 8mm; } }"}</style>
       {/* Action Bar - hidden on print */}
       <div className="bg-white border-b print:hidden sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
@@ -380,13 +384,13 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
       <div className="container mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
         <Card
           ref={statementRef}
-          className="max-w-4xl mx-auto bg-white p-6 md:p-10 shadow-lg print:shadow-none print:max-w-none print:m-0 print:p-6 print:border-0 text-sm text-gray-900"
+          className="max-w-4xl mx-auto bg-white p-6 md:p-10 shadow-lg print:shadow-none print:max-w-none print:m-0 print:p-0 print:border-0 text-sm print:text-[10px] print:leading-snug text-gray-900"
         >
           {statement.company?.letterhead_url ? (
             <img
               src={statement.company.letterhead_url}
               alt={`${statement.company.name} letterhead`}
-              className="w-full h-auto mb-6"
+              className="w-full h-auto mb-6 print:mb-2"
               crossOrigin="anonymous"
             />
           ) : (
@@ -394,12 +398,12 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           )}
 
           {/* Title */}
-          <div className="flex flex-wrap print:flex-nowrap items-end justify-between gap-2 border-b-2 border-gray-800 pb-3 mb-5">
+          <div className="flex flex-wrap print:flex-nowrap items-end justify-between gap-2 border-b-2 border-gray-800 pb-3 mb-5 print:pb-1 print:mb-2">
             <div>
-              <h1 className="text-2xl font-bold tracking-wide">STATEMENT OF ACCOUNT</h1>
-              <p className="text-sm text-gray-600 mt-1">For the period {statement.period.label}</p>
+              <h1 className="text-2xl print:text-base font-bold tracking-wide">STATEMENT OF ACCOUNT</h1>
+              <p className="text-sm print:text-[10px] text-gray-600 mt-1 print:mt-0">For the period {statement.period.label}</p>
             </div>
-            <div className="text-right text-sm">
+            <div className="text-right text-sm print:text-[10px]">
               <p><span className="text-gray-500">Statement Date:</span> <span className="font-semibold">{statementDate}</span></p>
               {account?.account_number && (
                 <p><span className="text-gray-500">Account No.:</span> <span className="font-semibold">{account.account_number}</span></p>
@@ -409,10 +413,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
           {/* Customer + Account */}
           {/* Side by side on paper too: an A4 page is narrower than the md breakpoint. */}
-          <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 mb-6 break-inside-avoid">
+          <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 mb-6 print:gap-4 print:mb-2 break-inside-avoid">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Statement To</p>
-              <p className="font-semibold text-base">{buyer.name}</p>
+              <p className="font-semibold text-base print:text-[11px]">{buyer.name}</p>
               {buyer.careOf && <p className="text-gray-700">c/o {buyer.careOf}</p>}
               {buyer.addressLines.map((line) => (
                 <p key={line} className="text-gray-700">{line}</p>
@@ -423,7 +427,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Account Summary</p>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm print:text-[10px]">
                 <tbody>
                   <tr>
                     <td className="py-0.5 text-gray-600">Payment Terms</td>
@@ -457,7 +461,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                   </tr>
                   <tr className="border-t border-gray-300">
                     <td className="pt-1.5 font-semibold">Amount Due</td>
-                    <td className="pt-1.5 text-right text-base font-bold">KES {formatAmount(closing)}</td>
+                    <td className="pt-1.5 text-right text-base print:text-[11px] font-bold">KES {formatAmount(closing)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -465,10 +469,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           </div>
 
           {/* 1. Transaction Statement */}
-          <section className="mb-8">
-            <h2 className="text-base font-bold mb-2">1. Transaction Statement</h2>
+          <section className="mb-8 print:mb-3">
+            <h2 className="text-base print:text-[11px] font-bold mb-2 print:mb-1">1. Transaction Statement</h2>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse tabular-nums">
+              <table className={TABLE}>
                 <thead>
                   <tr>
                     <th className={`${TH} w-24`}>Date</th>
@@ -496,10 +500,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                 </tbody>
                 <tfoot>
                   <tr className="font-semibold">
-                    <td colSpan={3} className="px-2 py-2 border-t-2 border-gray-800 text-right">Period Totals</td>
-                    <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(totalDebits)}</td>
-                    <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(totalCredits)}</td>
-                    <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(closing)}</td>
+                    <td colSpan={3} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">Period Totals</td>
+                    <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(totalDebits)}</td>
+                    <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(totalCredits)}</td>
+                    <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(closing)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -507,16 +511,16 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             {transactions.length <= 1 && (
               <p className="text-xs text-gray-500 italic mt-2">No transactions recorded in this period.</p>
             )}
-            <p className="mt-4 text-base font-bold">Total Outstanding: KES {formatAmount(closing)}</p>
+            <p className="mt-4 print:mt-1 text-base print:text-[11px] font-bold">Total Outstanding: KES {formatAmount(closing)}</p>
           </section>
 
           {/* 2. Ageing */}
           {ageing && (
-            <section className="mb-8 border-t border-gray-200 pt-6">
-              <h2 className="text-base font-bold mb-1">2. Accounts Receivable Ageing Analysis</h2>
+            <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
+              <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
               <p className="text-xs text-gray-500 mb-2">As at {formatDate(ageing.as_at)}, by days past invoice due date</p>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse tabular-nums">
+                <table className={TABLE}>
                   <thead>
                     <tr>
                       <th className={TH}>Ageing Category</th>
@@ -546,9 +550,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                   </tbody>
                   <tfoot>
                     <tr className="font-bold">
-                      <td className="px-2 py-2 border-t-2 border-gray-800">Total Outstanding</td>
-                      <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(ageing.total)}</td>
-                      <td className="px-2 py-2 border-t-2 border-gray-800"></td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap">Total Outstanding</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(ageing.total)}</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -558,10 +562,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
           {/* 3. Outstanding Invoices */}
           {pendingBills.length > 0 && (
-            <section className="mb-8 border-t border-gray-200 pt-6">
-              <h2 className="text-base font-bold mb-2">3. Outstanding Invoices</h2>
+            <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
+              <h2 className="text-base print:text-[11px] font-bold mb-2 print:mb-1">3. Outstanding Invoices</h2>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse tabular-nums">
+                <table className={TABLE}>
                   <thead>
                     <tr>
                       <th className={`${TH} w-24`}>Invoice Date</th>
@@ -588,9 +592,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                   </tbody>
                   <tfoot>
                     <tr className="font-semibold">
-                      <td colSpan={3} className="px-2 py-2 border-t-2 border-gray-800 text-right">Total</td>
-                      <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(pendingTotal)}</td>
-                      <td colSpan={2} className="px-2 py-2 border-t-2 border-gray-800"></td>
+                      <td colSpan={3} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">Total</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(pendingTotal)}</td>
+                      <td colSpan={2} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -600,13 +604,13 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
           {/* Orders - every order dated in the period, invoiced or not, past sales included */}
           {orders.length > 0 && (
-            <section className="mb-8 border-t border-gray-200 pt-6">
-              <h2 className="text-base font-bold mb-1">Orders in this Period</h2>
+            <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
+              <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">Orders in this Period</h2>
               <p className="text-xs text-gray-500 mb-2">
                 {orders.length} order{orders.length === 1 ? "" : "s"}, by order date. Cancelled orders are listed but not totalled.
               </p>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse tabular-nums">
+                <table className={TABLE}>
                   <thead>
                     <tr>
                       <th className={`${TH} w-10`}>S/No</th>
@@ -636,9 +640,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                   </tbody>
                   <tfoot>
                     <tr className="font-semibold">
-                      <td colSpan={5} className="px-2 py-2 border-t-2 border-gray-800 text-right">Total</td>
-                      <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(ordersTotal)}</td>
-                      <td className="px-2 py-2 border-t-2 border-gray-800 text-right">{formatAmount(ordersPaid)}</td>
+                      <td colSpan={5} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">Total</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(ordersTotal)}</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(ordersPaid)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -648,11 +652,11 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
           {/* Post-dated cheques - held, not yet credited to the account */}
           {pdCheques.length > 0 && (
-            <section className="mb-8 border-t border-gray-200 pt-6">
-              <h2 className="text-base font-bold mb-1">Post-Dated Cheques Held</h2>
+            <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
+              <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">Post-Dated Cheques Held</h2>
               <p className="text-xs text-gray-500 mb-2">Credited to the account only once cleared.</p>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse tabular-nums">
+                <table className={TABLE}>
                   <thead>
                     <tr>
                       <th className={`${TH} w-24`}>Received</th>
@@ -681,7 +685,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           )}
 
           {/* Payment Details + Remittance */}
-          <section className="border-t-2 border-gray-800 pt-5 grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 break-inside-avoid">
+          <section className="border-t-2 border-gray-800 pt-5 print:pt-2 grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4 break-inside-avoid print:text-[9px]">
             {hasPaymentDetails && paymentDetails ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Payment Details</p>
