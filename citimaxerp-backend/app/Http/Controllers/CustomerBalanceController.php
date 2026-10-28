@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Payment;
 use App\Services\CustomerAccountService;
+use App\Services\CustomerLedgerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -40,6 +41,19 @@ class CustomerBalanceController extends Controller
         }
 
         return response()->json(['data' => $this->accounts->summary($request->user()->company_id, $customerId)]);
+    }
+
+    // The customer's double entries: each journal entry touching them, with all its lines.
+    public function ledger(Request $request, string $customerId, CustomerLedgerService $ledger): JsonResponse
+    {
+        if (!$this->hasPermission($request, 'can_view_invoices')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        $request->validate(['date_from' => 'nullable|date', 'date_to' => 'nullable|date']);
+        $companyId = $request->user()->company_id;
+        Customer::where('company_id', $companyId)->findOrFail($customerId);
+
+        return response()->json(['data' => $ledger->ledger($companyId, $customerId, $request->query('date_from'), $request->query('date_to'))]);
     }
 
     // Oldest-first split of an amount, to prefill the Receive Payment form.

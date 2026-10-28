@@ -286,7 +286,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/customers/{customer_id}/statement', [CustomerController::class, 'statement'])->name('customers.statement');
     Route::get('/customers/{customerId}/credit-terms', [CustomerController::class, 'creditTerms'])->name('customers.credit-terms');
     Route::get('/customers/{customerId}/account-balance', [\App\Http\Controllers\CustomerBalanceController::class, 'show']);
-    Route::get('/customers/{customerId}/account-balance/split', [\App\Http\Controllers\CustomerBalanceController::class, 'suggestSplit']);
+    Route::get('/customers/{customerId}/account-balance/ledger', [\App\Http\Controllers\CustomerBalanceController::class, 'ledger']);
+    Route::get('/customers/{customerId}/account-balance/split',[\App\Http\Controllers\CustomerBalanceController::class, 'suggestSplit']);
     Route::post('/customers/{customerId}/account-balance/receive', [\App\Http\Controllers\CustomerBalanceController::class, 'receive']);
     Route::post('/customers/{customerId}/account-balance/apply-credit', [\App\Http\Controllers\CustomerBalanceController::class, 'applyCredit']);
     Route::delete('/customers/{customerId}', [CustomerController::class, 'destroy'])->name('customers.destroy');

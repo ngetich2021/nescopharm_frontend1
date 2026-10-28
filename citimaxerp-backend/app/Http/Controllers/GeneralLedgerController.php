@@ -6,6 +6,7 @@ use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryItem;
 use App\Models\FinancialPeriod;
+use App\Services\CustomerLedgerService;
 use App\Services\FinancialStatementService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -58,7 +59,7 @@ class GeneralLedgerController extends Controller
         $user = $request->user();
         $companyId = $request->input('company_id', $user->company_id);
         
-        if (!$this->hasPermission($request, 'can_manage_system') && !$this->hasPermission($request, 'can_manage_company', $companyId)) {
+        if (!$this->hasPermission($request, 'can_view_general_ledger') || !$this->canManageCompany($request, $companyId)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to view general ledger.',
@@ -69,6 +70,11 @@ class GeneralLedgerController extends Controller
         $dateTo = $request->input('date_to');
         $accountId = $request->input('account_id');
         $accountType = $request->input('account_type');
+        $customerId = $request->input('customer_id');
+        // Only the journal entries touching this customer, with every side of each entry.
+        $customerEntryIds = $customerId
+            ? app(CustomerLedgerService::class)->entryIdsQuery($companyId, $customerId)
+            : null;
 
         try {
             // Build query for journal entry items
@@ -96,9 +102,12 @@ class GeneralLedgerController extends Controller
             if ($accountType) {
                 $query->whereHas('account', fn($q) => $q->where('account_type', $accountType));
             }
+            if ($customerEntryIds) {
+                $query->whereIn('journal_entry_id', $customerEntryIds);
+            }
 
             $items = $query->get()->sortBy(function ($item) {
-                return $item->journalEntry->entry_date . $item->account->account_code;
+                return $item->journalEntry->entry_date->toDateString() . $item->account->account_code;
             });
 
             // Group by account and calculate running balances
@@ -111,7 +120,7 @@ class GeneralLedgerController extends Controller
 
                 if (!isset($ledgerData[$accId])) {
                     // Calculate opening balance considering date filter
-                    $openingBalance = $this->calculateOpeningBalance($account, $dateFrom);
+                    $openingBalance = $this->calculateOpeningBalance($account, $dateFrom, $customerEntryIds);
                     
                     $ledgerData[$accId] = [
                         'account' => [
@@ -143,7 +152,7 @@ class GeneralLedgerController extends Controller
                 $ledgerData[$accId]['transactions'][] = [
                     'id' => $item->id,
                     'journal_entry_id' => $item->journal_entry_id,
-                    'date' => $item->journalEntry->entry_date,
+                    'date' => $item->journalEntry->entry_date->toDateString(),
                     'reference' => $item->journalEntry->reference,
                     'description' => $item->description ?: $item->journalEntry->description,
                     'entry_type' => $item->journalEntry->entry_type,
@@ -173,6 +182,7 @@ class GeneralLedgerController extends Controller
                         'date_to' => $dateTo,
                         'account_id' => $accountId,
                         'account_type' => $accountType,
+                        'customer_id' => $customerId,
                     ],
                     'summary' => [
                         'total_accounts' => count($ledgerData),
@@ -447,10 +457,11 @@ class GeneralLedgerController extends Controller
     /**
      * Calculate opening balance for an account as of a specific date
      */
-    private function calculateOpeningBalance(ChartOfAccount $account, ?string $beforeDate): float
+    private function calculateOpeningBalance(ChartOfAccount $account, ?string $beforeDate, $entryIds = null): float
     {
-        $opening = (float) ($account->opening_balance ?? 0);
-        
+        // Narrowed to a customer's entries, the account's own opening balance isn't theirs.
+        $opening = $entryIds ? 0.0 : (float) ($account->opening_balance ?? 0);
+
         if (!$beforeDate) {
             return $opening;
         }
@@ -462,6 +473,7 @@ class GeneralLedgerController extends Controller
                   ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
                   ->where('entry_date', '<', $beforeDate);
             })
+            ->when($entryIds, fn ($q) => $q->whereIn('journal_entry_id', $entryIds))
             ->selectRaw('COALESCE(SUM(debit_amount), 0) as total_debits, COALESCE(SUM(credit_amount), 0) as total_credits')
             ->first();
 

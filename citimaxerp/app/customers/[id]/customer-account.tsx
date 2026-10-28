@@ -16,6 +16,7 @@ import { refundPaymentOverpayment } from "@/lib/invoices"
 import { refundCreditNote } from "@/lib/credit-notes"
 import { applyCustomerCredit, CustomerAccountBalance, fetchCustomerAccountBalance } from "@/lib/customer-balance"
 import { ReceiveOnAccountModal } from "@/components/modals/receive-on-account-modal"
+import { CustomerLedgerEntries } from "./customer-ledger-entries"
 
 interface CustomerAccountProps {
   customerId: string
@@ -276,6 +277,8 @@ export function CustomerAccount({ customerId, customerName }: CustomerAccountPro
           </CardContent>
         </Card>
       )}
+
+      <CustomerLedgerEntries customerId={customerId} />
 
       <ReceiveOnAccountModal
         isOpen={receiveOpen}

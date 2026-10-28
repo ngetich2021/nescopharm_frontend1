@@ -114,6 +114,52 @@ export async function fetchCustomerAccountBalance(customerId: string): Promise<C
   return response.data
 }
 
+// The customer's double entries (CustomerLedgerService): every journal entry touching them,
+// with all its lines; balance is their receivable after each entry.
+export interface CustomerLedgerLine {
+  account_id: string
+  account_code: string | null
+  account_name: string | null
+  description: string | null
+  debit: number
+  credit: number
+  is_customer_line: boolean
+}
+
+export interface CustomerLedgerEntry {
+  id: string
+  entry_number: string
+  date: string | null
+  reference: string | null
+  description: string | null
+  status: string
+  transaction_type: string | null
+  lines: CustomerLedgerLine[]
+  total_debit: number
+  total_credit: number
+  receivable_change: number
+  balance: number
+}
+
+export interface CustomerLedger {
+  receivable_accounts: { id: string; code: string; name: string }[]
+  period: { from: string | null; to: string | null }
+  opening_balance: number
+  entries: CustomerLedgerEntry[]
+  totals: { debit: number; credit: number; closing_balance: number }
+}
+
+export async function fetchCustomerLedger(customerId: string, params: { date_from?: string; date_to?: string } = {}): Promise<CustomerLedger> {
+  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]).toString()
+  const response = await apiCall<{ data: CustomerLedger }>(
+    `/customers/${customerId}/account-balance/ledger${query ? `?${query}` : ""}`,
+    "GET",
+    undefined,
+    true,
+  )
+  return response.data
+}
+
 export async function fetchSuggestedSplit(customerId: string, amount: number): Promise<AccountSplitLine[]> {
   const response = await apiCall<{ data: AccountSplitLine[] }>(
     `/customers/${customerId}/account-balance/split?amount=${encodeURIComponent(amount)}`,
