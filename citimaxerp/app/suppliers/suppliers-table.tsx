@@ -453,7 +453,7 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <PermissionGuard permissions={["can_edit_suppliers", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                        <PermissionGuard permissions={["can_edit_suppliers", "can_update_suppliers", "can_manage_system", "can_manage_company"]} hideOnDenied>
                           <DropdownMenuItem>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit

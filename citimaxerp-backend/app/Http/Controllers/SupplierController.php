@@ -128,7 +128,9 @@ class SupplierController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_manage_suppliers', $user->company_id)) {
+        // can_create_suppliers is what roles (e.g. Accountant) are given and what the Add Supplier button checks.
+        if (!$this->hasPermission($request, 'can_create_suppliers', $user->company_id)
+            && !$this->hasPermission($request, 'can_manage_suppliers', $user->company_id)) {
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized to create suppliers.', 'data' => null], 403);
         }
         $validator = Validator::make($request->all(), [

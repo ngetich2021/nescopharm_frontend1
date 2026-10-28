@@ -48,6 +48,30 @@ class ExpenseCategoryController extends Controller
     // Removed canManageCompany, now handled by hasPermission
 
     /**
+     * Whoever records expenses (e.g. an Accountant) can list categories and add one, within their
+     * own company; editing and deleting categories stays with company admins.
+     */
+    protected function canUseCategories(Request $request, ?string $companyId, bool $creating = false): bool
+    {
+        if ($this->hasPermission($request, 'can_manage_system') || $this->hasPermission($request, 'can_manage_company', $companyId)) {
+            return true;
+        }
+        if ($companyId !== null && $request->user()->company_id !== $companyId) {
+            return false;
+        }
+        $role = $request->user()->role;
+        $keys = $creating
+            ? ['can_create_expenses', 'can_manage_all_expenses']
+            : ['can_view_expenses', 'can_create_expenses', 'can_manage_all_expenses'];
+        foreach ($keys as $key) {
+            if ($role?->hasPermission($key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Display a listing of the expense categories.
      *
      * @param  \Illuminate\Http\Request  $request
@@ -56,7 +80,7 @@ class ExpenseCategoryController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_manage_system') && !$this->hasPermission($request, 'can_manage_company', $user->company_id)) {
+        if (!$this->canUseCategories($request, $user->company_id)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to view expense categories.',
@@ -114,7 +138,7 @@ class ExpenseCategoryController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_manage_system') && !$this->hasPermission($request, 'can_manage_company', $user->company_id)) {
+        if (!$this->canUseCategories($request, $user->company_id, true)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to create expense categories.',
@@ -200,7 +224,7 @@ class ExpenseCategoryController extends Controller
                 'message' => 'Expense category not found.',
             ], 404);
         }
-        if (!$this->hasPermission($request, 'can_manage_system') && !$this->hasPermission($request, 'can_manage_company', $category->company_id)) {
+        if (!$this->canUseCategories($request, $category->company_id)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to view expense category.',
