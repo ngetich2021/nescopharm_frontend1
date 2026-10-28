@@ -88,8 +88,11 @@ const costOf = (product: Product) => parseFloat(String(product.unit_cost ?? "0")
 // description is edited in Excel (rename), and two rows given the same description merge into one product.
 const EXPORT_HEADERS = [
   "S/No.", "Item No.", "Row Type", "Size", "Item Description", "Unit of Measure", "Cost Price",
-  "Tax Status", "Reorder Level", "Ref",
+  "Tax Status", "Reorder Level", "Status", "Ref",
 ]
+
+// "Active" / "Inactive" - the products import reads this column back, so editing it in Excel switches products on or off.
+const activeStatus = (value: unknown) => (value === false || value === "false" || value === 0 || value === "0" ? "Inactive" : "Active")
 
 const taxStatus = (product: Product) => {
   const p = product as any
@@ -111,12 +114,12 @@ function exportRows(product: Product): (string | number)[][] {
   const rows: (string | number)[][] = [[
     itemNo, "Item", sizes.length ? `${sizes.length} sizes` : "", p.name,
     p.unit_of_measurement ?? "", costOf(product), taxStatus(product),
-    p.low_stock_threshold ?? "", p.id,
+    p.low_stock_threshold ?? "", activeStatus(p.is_active), p.id,
   ]]
   sizes.forEach((v: any, i: number) => {
     rows.push([
       `${itemNo}.${i + 1}`, "Size", v.name ?? "", sizedName(p.name, v.name), "", Number(v.cost || 0),
-      "", "", v.id ?? "",
+      "", "", activeStatus(v.is_active), v.id ?? "",
     ])
   })
   return rows
