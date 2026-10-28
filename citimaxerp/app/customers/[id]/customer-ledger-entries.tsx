@@ -7,21 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
 import { BookOpen, RefreshCw } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { CustomerLedger, fetchCustomerLedger } from "@/lib/customer-balance"
-
-const ENTRY_TYPE_LABELS: Record<string, string> = {
-  sales_invoice: "Invoice",
-  customer_payment: "Receipt",
-  customer_refund: "Refund",
-  credit_note: "Credit Note",
-  credit_note_refund: "Credit Refund",
-  reversal: "Reversal",
-}
-
-const amount = (n: number) => (n > 0.005 ? formatCurrency(n) : "")
 
 /**
  * The customer's double entries: each journal entry touching them with every line (debit and
@@ -56,6 +46,21 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
 
   const glLink = `/finance/general-ledger?customer_id=${customerId}${dateFrom ? `&date_from=${dateFrom}` : ""}${dateTo ? `&date_to=${dateTo}` : ""}`
   const receivable = data?.receivable_accounts.map((a) => `${a.code} ${a.name}`).join(", ")
+
+  // Each entry as one row on the customer's receivable, with the other side named underneath.
+  const receivableIds = new Set(data?.receivable_accounts.map((a) => a.id) ?? [])
+  const rows = (data?.entries ?? []).map((entry) => {
+    const own = entry.lines.filter((l) => l.is_customer_line && receivableIds.has(l.account_id))
+    const debit = own.reduce((s, l) => s + l.debit, 0)
+    const credit = own.reduce((s, l) => s + l.credit, 0)
+    const others = entry.lines
+      .filter((l) => !own.includes(l))
+      .map((l) => `${l.debit > 0 ? "Dr" : "Cr"} ${l.account_code ?? ""} ${l.account_name ?? ""} ${formatCurrency(l.debit || l.credit)}`.replace(/\s+/g, " "))
+      .join(" · ")
+    return { entry, debit, credit, others }
+  })
+  const totalDebit = rows.reduce((s, r) => s + r.debit, 0)
+  const totalCredit = rows.reduce((s, r) => s + r.credit, 0)
 
   return (
     <Card className="min-w-0">
@@ -103,67 +108,70 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
           <p className="text-sm text-muted-foreground">No ledger entries for this customer{dateFrom || dateTo ? " in this period" : ""}.</p>
         ) : (
           <div className="space-y-3">
-            <div className="flex flex-wrap justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-              <span>Opening balance{dateFrom ? ` (${formatDate(dateFrom)})` : ""}</span>
-              <span className="font-medium">{formatCurrency(data.opening_balance)}</span>
-            </div>
-
-            {data.entries.map((entry, idx) => (
-              <div key={entry.id} className={`rounded-md border ${entry.status === "reversed" ? "opacity-70" : ""}`}>
-                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 border-b bg-muted/40 px-3 py-2">
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                      <span className="text-muted-foreground">{idx + 1}.</span>
-                      <span className="whitespace-nowrap">{entry.date ? formatDate(entry.date) : "—"}</span>
-                      <span className="font-semibold">{entry.reference || entry.entry_number}</span>
-                      {entry.transaction_type && ENTRY_TYPE_LABELS[entry.transaction_type] && (
-                        <Badge variant="outline" className="text-[10px]">{ENTRY_TYPE_LABELS[entry.transaction_type]}</Badge>
-                      )}
-                      {entry.status === "reversed" && <Badge variant="secondary" className="text-[10px]">Reversed</Badge>}
-                    </div>
-                    <p className="text-xs text-muted-foreground break-words">
-                      {entry.description}
-                      {entry.reference && entry.reference !== entry.entry_number && <> · {entry.entry_number}</>}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[11px] text-muted-foreground">Customer balance</p>
-                    <p className="text-sm font-semibold whitespace-nowrap">{formatCurrency(entry.balance)}</p>
-                  </div>
-                </div>
-
-                <div className="px-3 py-1.5 text-sm">
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <span>Account</span>
-                    <span className="w-28 text-right">Debit</span>
-                    <span className="w-28 text-right">Credit</span>
-                  </div>
-                  {entry.lines.map((line, li) => (
-                    <div key={li} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 py-1 border-t border-dashed first:border-t-0">
-                      <span className={`min-w-0 break-words ${line.credit > 0 && line.debit <= 0 ? "pl-6" : ""}`}>
-                        <span className="font-mono text-xs text-muted-foreground mr-1">{line.account_code}</span>
-                        {line.account_name}
-                      </span>
-                      <span className="w-28 text-right font-mono whitespace-nowrap">{amount(line.debit)}</span>
-                      <span className="w-28 text-right font-mono whitespace-nowrap">{amount(line.credit)}</span>
-                    </div>
-                  ))}
-                </div>
+            {/* Same layout as the General Ledger's account view: one row per entry, the debit or
+                credit on the customer's receivable, and the running balance. The other side of
+                each double entry is listed under its description. */}
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="font-semibold">{receivable || "Accounts Receivable"}</p>
+                <p className="text-xs text-muted-foreground">Opening Balance: {formatCurrency(data.opening_balance)}</p>
               </div>
-            ))}
-
-            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 rounded-md bg-muted/50 px-3 py-2 text-sm font-medium">
-              <span>Totals</span>
-              <span className="w-28 text-right font-mono whitespace-nowrap">{formatCurrency(data.totals.debit)}</span>
-              <span className="w-28 text-right font-mono whitespace-nowrap">{formatCurrency(data.totals.credit)}</span>
+              <div className="text-right">
+                <p className="text-lg font-bold">{formatCurrency(data.totals.closing_balance)}</p>
+                <p className="text-xs text-muted-foreground">Closing Balance</p>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-between gap-2 rounded-md border px-3 py-2 text-sm">
-              <span className="font-medium">Closing balance</span>
-              <span className="font-semibold">{formatCurrency(data.totals.closing_balance)}</span>
+
+            <div className="rounded-md border overflow-x-auto">
+              <Table className="min-w-[640px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">S/No</TableHead>
+                    <TableHead className="whitespace-nowrap">Date</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Debit</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Running Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map(({ entry, debit, credit, others }, idx) => (
+                    <TableRow key={entry.id} className={entry.status === "reversed" ? "text-muted-foreground" : ""}>
+                      <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="whitespace-nowrap">{entry.date ? formatDate(entry.date) : "—"}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{entry.reference || entry.entry_number}</TableCell>
+                      <TableCell>
+                        <span className="break-words">{entry.description}</span>
+                        {entry.status === "reversed" && <Badge variant="secondary" className="ml-2 text-[10px]">Reversed</Badge>}
+                        {others && <p className="text-[11px] text-muted-foreground">{others}</p>}
+                      </TableCell>
+                      <TableCell className="text-right font-mono whitespace-nowrap">{debit > 0.005 ? formatCurrency(debit) : "-"}</TableCell>
+                      <TableCell className="text-right font-mono whitespace-nowrap">{credit > 0.005 ? formatCurrency(credit) : "-"}</TableCell>
+                      <TableCell className="text-right font-mono font-medium whitespace-nowrap">{formatCurrency(entry.balance)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 border-t pt-3 text-sm text-center">
+              <div>
+                <p className="font-medium">Total Debits</p>
+                <p className="font-mono">{formatCurrency(totalDebit)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Total Credits</p>
+                <p className="font-mono">{formatCurrency(totalCredit)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Net Change</p>
+                <p className="font-mono">{formatCurrency(totalDebit - totalCredit)}</p>
+              </div>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Customer balance is what the customer owes on {receivable || "Accounts Receivable"} after each entry (negative: in the customer&apos;s favour).
+              Running Balance is what the customer owes after each entry (negative: in the customer&apos;s favour). The line under each description is the other side of the double entry.
               {!showCorrections && data.hidden_corrections > 0 && (
                 <> {data.hidden_corrections} entries from edited documents (each with the reversal that cancels it) are hidden; balances are unchanged.</>
               )}
