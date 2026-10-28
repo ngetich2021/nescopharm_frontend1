@@ -147,11 +147,38 @@ class AgingController extends Controller
             ->map(fn ($v) => (float) $v)
             ->all();
 
-        $rows = [];
-        foreach ($receipts as $r) {
+        // Supplier bills entered without a goods receipt (e.g. brought in from the old system). A bill a
+        // receipt already covers (metadata.ledger = receipt) is left out; its debit notes count as paid.
+        $bills = DB::table('accounts_payable as b')
+            ->leftJoin('suppliers as s', 's.id', '=', 'b.vendor_id')
+            ->where('b.company_id', $companyId)
+            ->whereNotIn('b.status', ['draft', 'cancelled'])
+            ->whereDate('b.invoice_date', '<=', $asOf)
+            ->whereRaw("coalesce(b.metadata->>'ledger', '') <> 'receipt'")
+            ->select('b.id', 'b.invoice_number', 'b.invoice_date', 'b.vendor_id', 'b.total_amount', 's.name as supplier_name', 's.payment_terms_days',
+                DB::raw("coalesce(b.metadata->>'kind', 'bill') as kind"))
+            ->get();
+        foreach ($bills->where('kind', 'debit_note') as $dn) {
+            $paid[$dn->vendor_id] = ($paid[$dn->vendor_id] ?? 0.0) + (float) $dn->total_amount;
+        }
+
+        $documents = collect($receipts)->map(function ($r) {
             $goods = round((float) $r->goods, 2);
             $vat = (float) $r->tax_rate > 0 ? round($goods * (float) $r->tax_rate / 100, 2) : 0.0;
-            $total = round($goods + (float) $r->shipping_cost + (float) $r->logistics_cost + $vat, 2);
+            return (object) [
+                'id' => $r->id, 'supplier_id' => $r->supplier_id, 'supplier_name' => $r->supplier_name,
+                'number' => $r->product_receipt_number ?: substr($r->id, 0, 8), 'date' => Carbon::parse($r->created_at),
+                'terms' => $r->payment_terms_days, 'total' => round($goods + (float) $r->shipping_cost + (float) $r->logistics_cost + $vat, 2),
+            ];
+        })->concat($bills->where('kind', '!=', 'debit_note')->map(fn ($b) => (object) [
+            'id' => $b->id, 'supplier_id' => $b->vendor_id, 'supplier_name' => $b->supplier_name,
+            'number' => $b->invoice_number, 'date' => Carbon::parse($b->invoice_date),
+            'terms' => $b->payment_terms_days, 'total' => round((float) $b->total_amount, 2),
+        ]))->sortBy(fn ($d) => $d->date->timestamp)->values();
+
+        $rows = [];
+        foreach ($documents as $r) {
+            $total = $r->total;
             if ($total <= 0) {
                 continue;
             }
@@ -161,13 +188,13 @@ class AgingController extends Controller
             if ($balance <= 0.009) {
                 continue;
             }
-            $date = Carbon::parse($r->created_at);
+            $date = $r->date;
             $rows[] = [
                 'id' => $r->id,
                 'supplier' => ['id' => $r->supplier_id, 'name' => $r->supplier_name ?? 'Unknown supplier'],
-                'invoice_number' => $r->product_receipt_number ?: substr($r->id, 0, 8),
+                'invoice_number' => $r->number,
                 'invoice_date' => $date->toDateString(),
-                'due_date' => $date->copy()->addDays((int) ($r->payment_terms_days ?? 0))->toDateString(),
+                'due_date' => $date->copy()->addDays((int) ($r->terms ?? 0))->toDateString(),
                 'total_amount' => $total,
                 'paid_amount' => round($applied, 2),
                 'balance_amount' => $balance,

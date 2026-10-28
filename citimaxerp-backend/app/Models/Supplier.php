@@ -41,6 +41,7 @@ class Supplier extends Model
         'payment_terms_type',
         'payment_terms_days',
         'payment_terms_description',
+        'tax_information',
     ];
 
     // Ensure proper casting for PostgreSQL booleans & integers

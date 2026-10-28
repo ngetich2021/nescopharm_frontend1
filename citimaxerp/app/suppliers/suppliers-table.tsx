@@ -32,6 +32,7 @@ import {
   Plus,
   Edit,
   Eye,
+  FileSpreadsheet,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -39,6 +40,7 @@ import { SupplierDetailsSheet } from "./supplier-details-sheet"
 import { CreateSupplierSheet } from "./components/create-supplier-sheet"
 import { Supplier, getSuppliers, deleteSupplier, exportSuppliers, importSuppliers } from "@/lib/suppliers"
 import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
+import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SuppliersTableSkeleton } from "./suppliers-table-skeleton"
 import { useToast } from "@/hooks/use-toast"
@@ -261,6 +263,19 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
     }
   }
 
+  // Blank sheet with the same columns as Export, plus a guide tab, for capturing new suppliers.
+  const handleTemplate = async () => {
+    try {
+      downloadTemplate(await fetchImportSchema("suppliers"), { fileName: "Suppliers Import Template.xlsx" })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to download the template",
+        variant: "destructive"
+      })
+    }
+  }
+
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -380,6 +395,11 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
               {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Export
             </Button>
+            <Button variant="outline" size="sm" onClick={handleTemplate}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Template
+            </Button>
+            <ImportHistoryDialog kind="suppliers" title="Supplier" />
             <div className="relative">
               <input
                 type="file"

@@ -115,6 +115,35 @@ export async function getSupplier(id: string): Promise<Supplier> {
 }
 
 // Create new supplier
+export interface SupplierStatementEntry {
+  date: string
+  type: "opening_balance" | "bill" | "receipt" | "debit_note" | "payment"
+  reference: string
+  description: string
+  billed: number
+  paid: number
+  balance: number
+}
+
+export interface SupplierStatement {
+  entries: SupplierStatementEntry[]
+  totals: { billed: number; paid: number; balance: number }
+}
+
+// Bills, debit notes and payments with the running amount owed to the supplier.
+export async function getSupplierStatement(id: string): Promise<SupplierStatement> {
+  const response = await apiCall<{ status: string; data: SupplierStatement; message?: string }>(
+    `/suppliers/${id}/statement`,
+    "GET",
+    undefined,
+    true
+  )
+  if (response.status === "success" && response.data) {
+    return response.data
+  }
+  throw new Error(response.message || "Failed to fetch supplier statement")
+}
+
 export async function createSupplier(payload: CreateSupplierPayload): Promise<Supplier> {
   const response = await apiCall<{ status: string; data: Supplier; message?: string }>(
     "/suppliers",
@@ -212,6 +241,7 @@ export async function exportSuppliers(): Promise<void> {
     "Bank Account Number": s.bank_account_number || "",
     "Bank Branch": s.bank_branch || "",
     "Bank Swift Code": s.bank_swift_code || "",
+    "KRA PIN": s.tax_information || "",
     "Notes": s.notes || "",
     "Active": s.is_active ? "Yes" : "No",
   }))

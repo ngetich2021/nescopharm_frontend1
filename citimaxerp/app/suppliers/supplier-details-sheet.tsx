@@ -19,11 +19,22 @@ import {
   Edit,
   Trash2,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Receipt
 } from "lucide-react"
-import { getSupplier, deleteSupplier, Supplier } from "@/lib/suppliers"
+import { getSupplier, deleteSupplier, getSupplierStatement, Supplier, SupplierStatement } from "@/lib/suppliers"
 import { useToast } from "@/hooks/use-toast"
 import { EditSupplierSheet } from "./components/edit-supplier-sheet"
+
+const money = (n: number) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// 12-Jul-26
+function shortDate(date: string): string {
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return date
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]
+  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`
+}
 
 interface SupplierDetailsSheetProps {
   supplierId: string | null
@@ -37,12 +48,14 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [statement, setStatement] = useState<SupplierStatement | null>(null)
 
   useEffect(() => {
     if (open && supplierId) {
       fetchSupplierDetails()
     } else {
       setSupplier(null)
+      setStatement(null)
       setError(null)
     }
   }, [open, supplierId])
@@ -56,6 +69,8 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
     try {
       const data = await getSupplier(supplierId)
       setSupplier(data)
+      // The account is extra: the details still show if it can't be loaded.
+      getSupplierStatement(supplierId).then(setStatement).catch(() => setStatement(null))
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch supplier details'))
       toast({
@@ -138,6 +153,63 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                 </div>
 
                 <Separator />
+
+                {/* Account: bills, debit notes and payments with the amount owed */}
+                {statement && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2">
+                          <Receipt className="h-5 w-5" />
+                          Account Statement
+                        </span>
+                        <span className={`text-base ${statement.totals.balance > 0 ? "text-red-600" : "text-green-700"}`}>
+                          {statement.totals.balance > 0 ? "Owed " : "Balance "}KES {money(statement.totals.balance)}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {statement.entries.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No bills or payments recorded.</p>
+                      ) : (
+                        <div className="max-h-[420px] overflow-auto rounded border">
+                          <table className="w-full text-xs">
+                            <thead className="sticky top-0 bg-gray-50 text-gray-600">
+                              <tr className="[&>th]:whitespace-nowrap [&>th]:px-2 [&>th]:py-1.5">
+                                <th className="text-left">S/No.</th>
+                                <th className="text-left">Date</th>
+                                <th className="text-left">Reference</th>
+                                <th className="text-left">Description</th>
+                                <th className="text-right">Billed</th>
+                                <th className="text-right">Paid</th>
+                                <th className="text-right">Balance</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {statement.entries.map((e, i) => (
+                                <tr key={i} className="border-t [&>td]:px-2 [&>td]:py-1">
+                                  <td className="text-gray-500">{i + 1}</td>
+                                  <td className="whitespace-nowrap">{shortDate(e.date)}</td>
+                                  <td className="whitespace-nowrap">{e.reference}</td>
+                                  <td>{e.description}</td>
+                                  <td className="text-right tabular-nums">{e.billed ? money(e.billed) : "—"}</td>
+                                  <td className="text-right tabular-nums">{e.paid ? money(e.paid) : "—"}</td>
+                                  <td className="text-right tabular-nums font-medium">{money(e.balance)}</td>
+                                </tr>
+                              ))}
+                              <tr className="border-t bg-gray-50 font-semibold [&>td]:px-2 [&>td]:py-1.5">
+                                <td colSpan={4}>Total</td>
+                                <td className="text-right tabular-nums">{money(statement.totals.billed)}</td>
+                                <td className="text-right tabular-nums">{money(statement.totals.paid)}</td>
+                                <td className="text-right tabular-nums">{money(statement.totals.balance)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Contact Information */}
                 <Card>

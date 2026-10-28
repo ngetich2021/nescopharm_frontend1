@@ -147,7 +147,7 @@ class DataImportController extends Controller
                 'item' => (string) ($r['name'] ?? ''),
                 'size' => null,
                 'action' => $r['status'] ?? 'created',
-                'changes' => !empty($r['message']) ? [['field' => 'result', 'from' => null, 'to' => $r['message']]] : [],
+                'changes' => $r['changes'] ?? (!empty($r['message']) ? [['field' => 'result', 'from' => null, 'to' => $r['message']]] : []),
             ], $results),
         ]);
     }
@@ -328,6 +328,7 @@ class DataImportController extends Controller
                 'bank_account_number' => $cell('bank_account_number') ?: null,
                 'bank_branch' => $cell('bank_branch') ?: null,
                 'bank_swift_code' => $cell('bank_swift_code') ?: null,
+                'tax_information' => $cell('tax_information') ?: null,
                 'notes' => $cell('notes') ?: null,
                 'is_active' => $this->yesNo($cell('is_active')),
             ], fn ($v) => $v !== null);
@@ -336,9 +337,13 @@ class DataImportController extends Controller
             if ($supplier) {
                 $supplier->fill($fields);
                 if ($supplier->isDirty()) {
+                    // What changed, field by field, for the import history.
+                    $changes = collect($supplier->getDirty())->map(fn ($to, $field) => [
+                        'field' => $field, 'from' => $supplier->getOriginal($field), 'to' => $to,
+                    ])->values()->all();
                     $supplier->save();
                     $summary['updated']++;
-                    $results[] = $result + ['status' => 'updated'];
+                    $results[] = $result + ['status' => 'updated', 'changes' => $changes];
                 } else {
                     $summary['unchanged']++;
                     $results[] = $result + ['status' => 'unchanged'];

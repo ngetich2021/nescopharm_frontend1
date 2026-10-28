@@ -623,6 +623,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['patch', 'put'], 'debts/order/{order_id}', [DebtController::class, 'updateByOrderId']);
 
     // Supplier routes
+    Route::get('suppliers/{id}/statement', [SupplierController::class, 'statement']);
     Route::apiResource('suppliers', SupplierController::class);
 
     // Asset register routes

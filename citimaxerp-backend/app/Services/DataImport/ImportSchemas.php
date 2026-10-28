@@ -98,6 +98,7 @@ class ImportSchemas
                 ['key' => 'bank_account_number', 'label' => 'Bank Account Number', 'type' => 'text', 'example' => '1234567890'],
                 ['key' => 'bank_branch', 'label' => 'Bank Branch', 'type' => 'text', 'example' => 'Westlands'],
                 ['key' => 'bank_swift_code', 'label' => 'Bank Swift Code', 'type' => 'text', 'example' => 'KCBLKENX'],
+                ['key' => 'tax_information', 'label' => 'KRA PIN', 'type' => 'text', 'example' => 'P051234567X'],
                 ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => 'Preferred packaging supplier'],
                 ['key' => 'is_active', 'label' => 'Active', 'type' => 'yesno', 'example' => 'Yes', 'help' => 'Yes or No. Blank counts as Yes for a new supplier.'],
             ],

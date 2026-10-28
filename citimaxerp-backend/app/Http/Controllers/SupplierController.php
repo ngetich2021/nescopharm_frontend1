@@ -125,6 +125,96 @@ class SupplierController extends Controller
         ]);
     }
 
+    /**
+     * The supplier's account, oldest first: bills (and opening balances) raise what is owed, debit
+     * notes and payments bring it down. A goods receipt shows as a bill unless one already covers it.
+     */
+    public function statement(Request $request, $id)
+    {
+        $supplier = Supplier::find($id);
+        if (!$supplier) {
+            return response()->json(['status' => 'failed', 'message' => 'Supplier not found.', 'data' => null], 404);
+        }
+        $canBrowse = collect(self::SUPPLIER_BROWSING_WORKFLOW_PERMISSIONS)
+            ->contains(fn ($permission) => $this->hasPermission($request, $permission, $supplier->company_id));
+        if (!$canBrowse) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view supplier.', 'data' => null], 403);
+        }
+
+        $entries = collect();
+        $bills = DB::table('accounts_payable')->where('vendor_id', $supplier->id)
+            ->whereNotIn('status', ['draft', 'cancelled'])->get();
+        foreach ($bills as $b) {
+            $meta = json_decode($b->metadata ?? '{}', true) ?: [];
+            $kind = $meta['kind'] ?? 'bill';
+            $amount = round((float) $b->total_amount, 2);
+            $entries->push([
+                'date' => substr((string) $b->invoice_date, 0, 10),
+                'type' => $kind,
+                'reference' => $b->invoice_number,
+                'description' => $b->description ?: ($kind === 'debit_note' ? 'Debit note' : 'Bill'),
+                'billed' => $kind === 'debit_note' ? 0.0 : $amount,
+                'paid' => $kind === 'debit_note' ? $amount : 0.0,
+            ]);
+        }
+        $covered = $bills->map(fn ($b) => json_decode($b->metadata ?? '{}', true)['receipt_id'] ?? null)->filter()->all();
+
+        $receipts = DB::table('product_receipts as r')
+            ->leftJoin('purchase_orders as po', 'po.id', '=', 'r.purchase_order_id')
+            ->where('r.supplier_id', $supplier->id)
+            ->whereNotIn('r.id', $covered)
+            ->select('r.product_receipt_number', 'r.reference_number', 'r.created_at', 'r.shipping_cost', 'r.logistics_cost', 'po.tax_rate',
+                DB::raw('(SELECT COALESCE(SUM(COALESCE(i.quantity, 0) * COALESCE(i.unit_price, 0)), 0) FROM product_receipt_items i WHERE i.product_receipt_id = r.id) as goods'))
+            ->get();
+        foreach ($receipts as $r) {
+            $goods = round((float) $r->goods, 2);
+            $vat = (float) $r->tax_rate > 0 ? round($goods * (float) $r->tax_rate / 100, 2) : 0.0;
+            $entries->push([
+                'date' => substr((string) $r->created_at, 0, 10),
+                'type' => 'receipt',
+                'reference' => $r->product_receipt_number,
+                'description' => 'Goods received' . ($r->reference_number ? " (invoice {$r->reference_number})" : ''),
+                'billed' => round($goods + (float) $r->shipping_cost + (float) $r->logistics_cost + $vat, 2),
+                'paid' => 0.0,
+            ]);
+        }
+
+        $payments = DB::table('supplier_payments')->where('supplier_id', $supplier->id)->where('status', 'completed')->get();
+        foreach ($payments as $p) {
+            $entries->push([
+                'date' => substr((string) $p->payment_date, 0, 10),
+                'type' => 'payment',
+                'reference' => $p->payment_number,
+                'description' => 'Payment - ' . ucwords(str_replace('_', ' ', (string) $p->payment_method))
+                    . ($p->transaction_reference ? " ({$p->transaction_reference})" : ''),
+                'billed' => 0.0,
+                'paid' => round((float) $p->amount, 2),
+            ]);
+        }
+
+        // Bills before payments on the same day, as on the supplier's ledger.
+        $order = ['opening_balance' => 0, 'bill' => 1, 'receipt' => 1, 'debit_note' => 2, 'payment' => 3];
+        $balance = 0.0;
+        $rows = $entries->sortBy([['date', 'asc'], fn ($a, $b) => ($order[$a['type']] ?? 9) <=> ($order[$b['type']] ?? 9)])
+            ->values()
+            ->map(function ($e) use (&$balance) {
+                $balance = round($balance + $e['billed'] - $e['paid'], 2);
+                return $e + ['balance' => $balance];
+            });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'entries' => $rows,
+                'totals' => [
+                    'billed' => round($rows->sum('billed'), 2),
+                    'paid' => round($rows->sum('paid'), 2),
+                    'balance' => $balance,
+                ],
+            ],
+        ]);
+    }
+
     public function store(Request $request)
     {
         $user = $request->user();
@@ -174,6 +264,7 @@ class SupplierController extends Controller
                     'payment_terms_type' => $request->input('payment_terms_type'),
                     'payment_terms_days' => $request->input('payment_terms_days'),
                     'payment_terms_description' => $request->input('payment_terms_description'),
+                    'tax_information' => $request->input('tax_information'),
                 ];
 
                 Log::info('Creating supplier with data:', $data);

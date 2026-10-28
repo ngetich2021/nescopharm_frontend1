@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\AccountsPayable;
+use App\Models\ChartOfAccount;
 use App\Models\Cheque;
 use App\Models\CompanyAccountingSettings;
 use App\Models\CreditNote;
@@ -67,6 +69,7 @@ class LedgerPostingService
             $model instanceof OrderDispatch => [$this->syncDispatch($model, $deleted)],
             $model instanceof CreditNote => $this->syncCreditNote($model, $deleted),
             $model instanceof SupplierPayment => [$this->syncSupplierPayment($model, $deleted)],
+            $model instanceof AccountsPayable => [$this->syncSupplierBill($model, $deleted)],
             $model instanceof PayrollRun => $this->syncPayrollRun($model, $deleted),
             $model instanceof \App\Models\BankTransfer => [$this->syncBankTransfer($model, $deleted)],
             default => [],
@@ -413,6 +416,47 @@ class LedgerPostingService
         }
 
         return $this->syncEntry($payment, 'supplier_payment', $desired);
+    }
+
+    /**
+     * Supplier bill (accounts_payable row): DR Inventory (or the account named in
+     * metadata.debit_account_code, e.g. an expense or Equity for an opening balance)
+     * / CR Payables. A debit note (metadata.kind = debit_note) is the reverse. A bill
+     * whose goods receipt already posted it (metadata.ledger = receipt) is left alone.
+     */
+    public function syncSupplierBill(AccountsPayable $bill, bool $deleted = false): ?JournalEntry
+    {
+        $settings = $this->settings($bill->company_id);
+        $meta = $bill->metadata ?? [];
+        if (($meta['ledger'] ?? null) === 'receipt') {
+            return $this->syncEntry($bill, 'supplier_bill', self::SKIP);
+        }
+
+        $desired = null;
+        $amount = $this->money($bill->total_amount);
+        if (!$deleted && $settings && $amount > 0 && !in_array($bill->status, ['draft', 'cancelled'], true)) {
+            $supplierName = Supplier::whereKey($bill->vendor_id)->value('name') ?? 'supplier';
+            $ref = $bill->invoice_number;
+            $isDebitNote = ($meta['kind'] ?? 'bill') === 'debit_note';
+            $other = ['key' => 'inventory', 'description' => ($bill->description ?: $ref) . " - {$supplierName}"];
+            if (!empty($meta['debit_account_code'])) {
+                $other['account_id'] = ChartOfAccount::where('company_id', $bill->company_id)
+                    ->where('account_code', $meta['debit_account_code'])->value('id');
+            }
+            $payable = ['key' => 'accounts_payable', 'contact' => [$bill->vendor_id, Supplier::class],
+                'description' => ($isDebitNote ? 'Debit note' : 'Bill') . " {$ref} - {$supplierName}"];
+            $desired = [
+                'date' => $bill->invoice_date ?? $bill->created_at,
+                'prefix' => $isDebitNote ? 'DN' : 'BILL',
+                'reference' => $ref,
+                'description' => ($isDebitNote ? 'Supplier debit note' : 'Supplier bill') . " {$ref} - {$supplierName}",
+                'lines' => $isDebitNote
+                    ? [$payable + ['debit' => $amount], $other + ['credit' => $amount]]
+                    : [$other + ['debit' => $amount], $payable + ['credit' => $amount]],
+            ];
+        }
+
+        return $this->syncEntry($bill, 'supplier_bill', $desired);
     }
 
     // =====================================================================
