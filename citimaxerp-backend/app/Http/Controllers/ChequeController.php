@@ -65,7 +65,7 @@ class ChequeController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $query = Cheque::with(['customer:id,name', 'invoice:id,invoice_number', 'supplier:id,name', 'purchaseOrder:id,order_number'])
+        $query = Cheque::with(['customer:id,name', 'invoice:id,invoice_number', 'supplier:id,name', 'purchaseOrder:id,order_number', 'bounceChargeInvoice:id,invoice_number'])
             ->where('company_id', $user->company_id);
 
         if ($request->filled('status')) {
@@ -93,25 +93,36 @@ class ChequeController extends Controller
     /**
      * Every invoice a received cheque pays: once approved, the invoices its payment was actually
      * allocated to; while pending, the invoices its split plans to pay (or its single invoice).
+     * A bounced or cancelled cheque pays nothing, so it lists no invoices. invoice_lines carries
+     * the amount on each invoice where known.
      */
     protected function attachInvoiceNumbers($cheques): void
     {
         $allocated = PaymentAllocation::with('invoice:id,invoice_number')
             ->whereIn('payment_id', $cheques->pluck('payment_id')->filter()->unique()->values())
-            ->get(['payment_id', 'invoice_id'])
+            ->get(['payment_id', 'invoice_id', 'amount_allocated'])
             ->groupBy('payment_id');
 
         foreach ($cheques as $cheque) {
-            $numbers = $cheque->payment_id
-                ? $allocated->get($cheque->payment_id, collect())->map(fn ($a) => $a->invoice?->invoice_number)->filter()->sort()->values()
-                : collect();
-            if ($numbers->isEmpty() && !empty($cheque->allocation_plan)) {
-                $numbers = collect($cheque->allocation_plan)->pluck('invoice_number')->filter();
+            $lines = collect();
+            if (!in_array($cheque->status, ['bounced', 'cancelled'], true)) {
+                if ($cheque->payment_id) {
+                    $lines = $allocated->get($cheque->payment_id, collect())
+                        ->filter(fn ($a) => $a->invoice)
+                        ->map(fn ($a) => ['invoice_number' => $a->invoice->invoice_number, 'amount' => round((float) $a->amount_allocated, 2)]);
+                }
+                if ($lines->isEmpty() && !empty($cheque->allocation_plan)) {
+                    $lines = collect($cheque->allocation_plan)
+                        ->filter(fn ($l) => !empty($l['invoice_number']))
+                        ->map(fn ($l) => ['invoice_number' => $l['invoice_number'], 'amount' => isset($l['amount']) ? round((float) $l['amount'], 2) : null]);
+                }
+                if ($lines->isEmpty() && $cheque->invoice) {
+                    $lines = collect([['invoice_number' => $cheque->invoice->invoice_number, 'amount' => null]]);
+                }
             }
-            if ($numbers->isEmpty() && $cheque->invoice) {
-                $numbers = collect([$cheque->invoice->invoice_number]);
-            }
-            $cheque->setAttribute('invoice_numbers', $numbers->unique()->values()->all());
+            $lines = $lines->sortBy('invoice_number')->unique('invoice_number')->values();
+            $cheque->setAttribute('invoice_lines', $lines->all());
+            $cheque->setAttribute('invoice_numbers', $lines->pluck('invoice_number')->all());
         }
     }
 

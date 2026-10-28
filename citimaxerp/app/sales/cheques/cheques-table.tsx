@@ -39,7 +39,9 @@ import {
   Plus,
   ArrowDownToLine,
   ArrowUpFromLine,
+  Eye,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
 import {
   Cheque,
@@ -62,6 +64,11 @@ function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
+// Invoices a received cheque pays (none once bounced or cancelled).
+function invoiceCount(cheque: Cheque) {
+  return cheque.invoice_lines?.length ?? cheque.invoice_numbers?.length ?? 0
+}
+
 function isOverdue(cheque: Cheque) {
   return cheque.status === "pending" && new Date(cheque.maturity_date) < new Date(new Date().toDateString())
 }
@@ -74,6 +81,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
   const [directionFilter, setDirectionFilter] = useState<string>("all")
   const [actioningId, setActioningId] = useState<string | null>(null)
   const [showRecordIssued, setShowRecordIssued] = useState(false)
+  const [detailsCheque, setDetailsCheque] = useState<Cheque | null>(null)
 
   const refreshCheques = useCallback(async () => {
     setIsLoading(true)
@@ -148,6 +156,13 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
       : `Mark cheque ${cheque.cheque_number} as bounced?`
 
   const ActionsDropdown = ({ cheque }: { cheque: Cheque }) => {
+    const viewDetails = (
+      <DropdownMenuItem onClick={() => setDetailsCheque(cheque)}>
+        <Eye className="h-4 w-4 mr-2" />
+        View Details
+      </DropdownMenuItem>
+    )
+
     if (cheque.status === "approved" && cheque.direction === "received") {
       return (
         <DropdownMenu>
@@ -158,6 +173,8 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
+            {viewDetails}
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() =>
                 handleAction(cheque, bounceCheque, `Cheque ${cheque.cheque_number} marked as bounced.`, bounceConfirm(cheque))
@@ -172,7 +189,19 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
     }
 
     if (cheque.status !== "pending") {
-      return null
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+            {viewDetails}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
     }
 
     return (
@@ -184,6 +213,8 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          {viewDetails}
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() =>
               handleAction(
@@ -293,6 +324,8 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         onSuccess={refreshCheques}
       />
 
+      <ChequeDetailsDialog cheque={detailsCheque} onClose={() => setDetailsCheque(null)} />
+
       <div className="rounded-md border bg-white">
         <Table>
           <TableHeader>
@@ -365,14 +398,18 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
                         : "-"}
                   </TableCell>
                   <TableCell>
-                    {cheque.invoice_numbers?.length ? (
-                      <div className="flex flex-col">
-                        {cheque.invoice_numbers.map((n) => (
-                          <span key={n}>{n}</span>
-                        ))}
-                      </div>
+                    {cheque.direction === "issued" ? (
+                      cheque.purchase_order?.order_number || "-"
                     ) : (
-                      cheque.invoice?.invoice_number || cheque.purchase_order?.order_number || "-"
+                      // The count; click to see which invoices.
+                      <Button
+                        variant="link"
+                        className={`h-auto p-0 ${invoiceCount(cheque) === 0 ? "text-muted-foreground" : ""}`}
+                        onClick={() => setDetailsCheque(cheque)}
+                        title="View invoices"
+                      >
+                        {invoiceCount(cheque)}
+                      </Button>
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{formatCurrency(cheque.amount)}</TableCell>
@@ -400,5 +437,78 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         </Table>
       </div>
     </div>
+  )
+}
+
+function ChequeDetailsDialog({ cheque, onClose }: { cheque: Cheque | null; onClose: () => void }) {
+  if (!cheque) return null
+  const lines = cheque.invoice_lines ?? (cheque.invoice_numbers ?? []).map((n) => ({ invoice_number: n, amount: null }))
+  const party = cheque.direction === "issued"
+    ? cheque.payee_display_name || cheque.supplier?.name || "-"
+    : cheque.customer ? getCustomerDisplayName(cheque.customer) : "-"
+  const notPaying = cheque.status === "bounced" || cheque.status === "cancelled"
+
+  const field = (label: string, value: React.ReactNode) => (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-medium">{value}</p>
+    </div>
+  )
+
+  return (
+    <Dialog open={!!cheque} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Cheque {cheque.cheque_number}
+            <Badge className={getChequeStatusColor(cheque.status)}>{formatStatus(cheque.status)}</Badge>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          {field(cheque.direction === "issued" ? "Payee" : "Customer", party)}
+          {field("Bank", cheque.bank_name)}
+          {field("Amount", formatCurrency(cheque.amount))}
+          {field("Direction", cheque.direction === "issued" ? "Issued" : "Received")}
+          {field("Issue Date", formatDate(cheque.issue_date))}
+          {field("Maturity Date", formatDate(cheque.maturity_date))}
+          {cheque.purchase_order?.order_number && field("Purchase Order", cheque.purchase_order.order_number)}
+          {cheque.bounce_charge_invoice?.invoice_number && field("Bounced Cheque Charges", cheque.bounce_charge_invoice.invoice_number)}
+        </div>
+
+        {cheque.direction === "received" && (
+          <div className="space-y-2">
+            <p className="text-sm font-semibold">Invoices ({lines.length})</p>
+            {lines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {notPaying ? `This cheque ${cheque.status === "bounced" ? "bounced" : "was cancelled"}, so it pays no invoices.` : "No invoices linked."}
+              </p>
+            ) : (
+              <div className="rounded-md border max-h-64 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">S/No</TableHead>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lines.map((l, i) => (
+                      <TableRow key={l.invoice_number}>
+                        <TableCell>{i + 1}</TableCell>
+                        <TableCell className="font-medium">{l.invoice_number}</TableCell>
+                        <TableCell className="text-right">{l.amount != null ? formatCurrency(l.amount) : "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {cheque.notes && <p className="text-sm text-muted-foreground">{cheque.notes}</p>}
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -36,6 +36,10 @@ export interface Cheque {
   invoice?: { id: string; invoice_number: string }
   // Every invoice the cheque pays: where it was applied once approved, its planned split while pending.
   invoice_numbers?: string[]
+  // The same invoices with the amount on each, where known. Empty for a bounced or cancelled cheque.
+  invoice_lines?: { invoice_number: string; amount: number | null }[]
+  // The KES 2,000 bounced cheque charges invoice raised when a customer's cheque bounced.
+  bounce_charge_invoice?: { id: string; invoice_number: string } | null
   supplier?: { id: string; name: string }
   purchase_order?: { id: string; order_number: string }
 }
