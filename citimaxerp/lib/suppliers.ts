@@ -131,9 +131,10 @@ export interface SupplierStatement {
 }
 
 // Bills, debit notes and payments with the running amount owed to the supplier.
-export async function getSupplierStatement(id: string): Promise<SupplierStatement> {
+export async function getSupplierStatement(id: string, period?: { from?: string; to?: string }): Promise<SupplierStatement> {
+  const qs = toQueryString({ date_from: period?.from, date_to: period?.to })
   const response = await apiCall<{ status: string; data: SupplierStatement; message?: string }>(
-    `/suppliers/${id}/statement`,
+    `/suppliers/${id}/statement${qs ? `?${qs}` : ""}`,
     "GET",
     undefined,
     true

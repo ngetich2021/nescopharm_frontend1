@@ -174,7 +174,17 @@ class AgingController extends Controller
             'id' => $b->id, 'supplier_id' => $b->vendor_id, 'supplier_name' => $b->supplier_name,
             'number' => $b->invoice_number, 'date' => Carbon::parse($b->invoice_date),
             'terms' => $b->payment_terms_days, 'total' => round((float) $b->total_amount, 2),
-        ]))->sortBy(fn ($d) => $d->date->timestamp)->values();
+        ]))->concat(DB::table('delivery_invoices as d')
+            ->leftJoin('suppliers as s', 's.id', '=', 'd.supplier_id')
+            ->where('d.company_id', $companyId)->whereNotNull('d.supplier_id')->where('d.status', '!=', 'cancelled')
+            ->whereDate(DB::raw('coalesce(d.invoice_date, d.created_at)'), '<=', $asOf)
+            ->select('d.id', 'd.supplier_id', 's.name as supplier_name', 'd.invoice_number', 'd.invoice_date', 'd.created_at', 's.payment_terms_days', 'd.total_amount')
+            ->get()
+            ->map(fn ($d) => (object) [
+                'id' => $d->id, 'supplier_id' => $d->supplier_id, 'supplier_name' => $d->supplier_name,
+                'number' => $d->invoice_number, 'date' => Carbon::parse($d->invoice_date ?? $d->created_at),
+                'terms' => $d->payment_terms_days, 'total' => round((float) $d->total_amount, 2),
+            ]))->sortBy(fn ($d) => $d->date->timestamp)->values();
 
         $rows = [];
         foreach ($documents as $r) {

@@ -53,6 +53,7 @@ class DeliveryInvoiceController extends Controller
                   ->orWhere('transporter_invoice_number', 'like', "%{$search}%")
                   ->orWhere('transporter_name', 'like', "%{$search}%")
                   ->orWhere('zone', 'like', "%{$search}%")
+                  ->orWhere('order_reference', 'ilike', "%{$search}%")
                   ->orWhereHas('orderDispatch.order', function ($subQ) use ($search) {
                       $subQ->where('order_number', 'like', "%{$search}%");
                   })
@@ -191,17 +192,14 @@ class DeliveryInvoiceController extends Controller
         }
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($invoice, $user, $request) {
-            $invoice->update([
-                'status' => 'paid',
-                'payment_method' => $request->input('payment_method'),
-                'payment_reference' => $request->input('payment_reference'),
-                'payment_date' => $request->input('payment_date') ?? now(),
-                'cheque_number' => $request->input('cheque_number'),
-                'bank_name' => $request->input('bank_name'),
-                'cheque_maturity_date' => $request->input('cheque_maturity_date'),
-                'amount_paid' => $invoice->total_amount,
-                'paid_by' => $user->id,
-            ]);
+            // Also records the payment to the transporter (Payments page, statement, books).
+            $invoice->recordPayment(
+                $user->id,
+                $request->input('payment_method'),
+                $request->input('payment_reference'),
+                $request->input('payment_date'),
+                $request->only(['cheque_number', 'bank_name', 'cheque_maturity_date']),
+            );
 
             // Payment only settles the transporter - the dispatch already moved on when
             // logistics were recorded, so its delivery status is left as it is.
@@ -225,6 +223,43 @@ class DeliveryInvoiceController extends Controller
             'message' => 'Delivery invoice marked as paid.',
             'delivery_invoice' => $invoice->fresh(['orderDispatch.order', 'deliveryRate', 'createdBy', 'paidBy']),
         ], 200);
+    }
+
+    /**
+     * Transporters (from delivery rates and delivery invoices) with what they have billed, been paid and
+     * are owed, for picking whose statement to see. Their statement is GET /suppliers/{supplier_id}/statement.
+     */
+    public function transporters(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_delivery_invoices', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view delivery invoices.'], 403);
+        }
+
+        $names = DeliveryInvoice::where('company_id', $user->company_id)->pluck('transporter_name')
+            ->concat(\App\Models\DeliveryRate::where('company_id', $user->company_id)->pluck('transporter_name'))
+            ->filter()->map(fn ($n) => trim($n))->unique(fn ($n) => mb_strtolower($n));
+
+        // Read only: a transporter that has never been invoiced has no supplier record yet and is skipped.
+        $rows = $names->map(function ($name) use ($user) {
+            $supplier = \App\Models\Supplier::where('company_id', $user->company_id)
+                ->whereRaw('lower(trim(name)) = ?', [mb_strtolower($name)])->first();
+            if (!$supplier) {
+                return null;
+            }
+            $billed = (float) DeliveryInvoice::where('supplier_id', $supplier->id)->where('status', '!=', 'cancelled')->sum('total_amount');
+            $paid = (float) \App\Models\SupplierPayment::where('supplier_id', $supplier->id)->where('status', 'completed')->sum('amount');
+            return [
+                'supplier_id' => $supplier->id,
+                'name' => $supplier->name,
+                'invoices' => DeliveryInvoice::where('supplier_id', $supplier->id)->where('status', '!=', 'cancelled')->count(),
+                'billed' => round($billed, 2),
+                'paid' => round($paid, 2),
+                'balance' => round($billed - $paid, 2),
+            ];
+        })->filter()->sortBy('name')->values();
+
+        return response()->json(['status' => 'success', 'data' => $rows]);
     }
 
     public function exportExcel(Request $request)
@@ -251,37 +286,49 @@ class DeliveryInvoiceController extends Controller
             });
         }
 
-        $invoices = $query->orderBy('created_at', 'desc')->get();
+        if ($request->filled('supplier_id')) {
+            $query->where('supplier_id', $request->input('supplier_id'));
+        }
 
-        // Generate CSV content
-        $headers = ['Invoice #', 'Order', 'Customer', 'Transporter', 'Zone', 'Cartons', 'Rate/Carton', 'Total', 'Status', 'Date'];
-        $rows = $invoices->map(function ($invoice) {
-            return [
-                $invoice->invoice_number,
-                $invoice->orderDispatch?->order?->order_number ?? '-',
-                $invoice->orderDispatch?->order?->customer?->name ?? '-',
-                $invoice->transporter_name,
-                $invoice->zone,
-                $invoice->number_of_cartons,
-                number_format((float)$invoice->rate_per_carton, 2),
-                number_format((float)$invoice->total_amount, 2),
-                ucfirst($invoice->status),
-                $invoice->created_at->format('Y-m-d'),
-            ];
-        });
+        $invoices = $query->orderBy('invoice_date')->orderBy('invoice_number')->get();
 
-        // Create CSV
-        $filename = 'delivery-invoices-' . now()->format('Y-m-d-His') . '.csv';
-        $csv = collect([$headers])->merge($rows)->map(function ($row) {
-            return implode(',', array_map(function ($value) {
-                return '"' . str_replace('"', '""', (string)$value) . '"';
-            }, $row));
-        })->implode("\n");
-
-        return response($csv, 200, [
-            'Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        // Same columns as the Delivery Invoices import template (plus S/No.), so the file can be edited
+        // and uploaded back: a row keeps its Invoice No. and updates that invoice.
+        $methods = ['bank_transfer' => 'Bank Transfer', 'cash' => 'Cash', 'mpesa' => 'M-Pesa', 'cheque' => 'Cheque'];
+        $headers = ['S/No.', 'Invoice No.', 'Invoice Date', 'Transporter', 'Transporter Invoice No.', 'Order No.', 'Customer / Destination',
+            'Zone', 'Cartons', 'Rate per Carton', 'Amount', 'Status', 'Payment Date', 'Payment Method', 'Payment Reference', 'Notes'];
+        $rows = $invoices->values()->map(fn ($invoice, $i) => [
+            $i + 1,
+            $invoice->invoice_number,
+            optional($invoice->invoice_date ?? $invoice->created_at)->format('d/m/Y'),
+            $invoice->transporter_name,
+            $invoice->transporter_invoice_number,
+            $invoice->orderDispatch?->order?->order_number,
+            $invoice->orderDispatch?->order?->customer?->name ?? $invoice->order_reference,
+            $invoice->zone ? ucfirst($invoice->zone) : null,
+            $invoice->number_of_cartons,
+            $invoice->rate_per_carton !== null ? (float) $invoice->rate_per_carton : null,
+            (float) $invoice->total_amount,
+            ['paid' => 'Paid', 'cancelled' => 'Cancelled'][$invoice->status] ?? 'Unpaid',
+            $invoice->status === 'paid' ? optional($invoice->payment_date)->format('d/m/Y') : null,
+            $invoice->status === 'paid' ? ($methods[$invoice->payment_method] ?? $invoice->payment_method) : null,
+            $invoice->status === 'paid' ? $invoice->payment_reference : null,
+            $invoice->notes,
         ]);
+
+        $book = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $book->getActiveSheet()->setTitle('Delivery Invoices');
+        $sheet->fromArray([$headers, ...$rows->all()], null, 'A1', true);
+        $sheet->getStyle('A1:P1')->getFont()->setBold(true);
+        foreach (range('A', 'P') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+        $sheet->getStyle('J2:K' . ($rows->count() + 1))->getNumberFormat()->setFormatCode('#,##0.00');
+
+        $filename = 'delivery-invoices-' . now()->format('Y-m-d') . '.xlsx';
+        return response()->streamDownload(function () use ($book) {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save('php://output');
+        }, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
     public function cancel(Request $request, $id)

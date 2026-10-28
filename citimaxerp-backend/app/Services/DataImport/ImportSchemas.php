@@ -15,6 +15,7 @@ class ImportSchemas
         return [
             'suppliers' => self::suppliers(),
             'supplier_payments' => self::supplierPayments(),
+            'delivery_invoices' => self::deliveryInvoices(),
             'customers' => self::customers(),
             'opening_stock' => self::openingStock(),
             'purchase_order_items' => self::purchaseOrderItems(),
@@ -124,6 +125,35 @@ class ImportSchemas
                 ['key' => 'reference', 'label' => 'Reference', 'type' => 'text', 'example' => 'Payment voucher 161 - Prime Bank', 'aliases' => ['transactionreference'], 'help' => 'Bank or M-Pesa reference, cheque number, voucher.'],
                 ['key' => 'po_number', 'label' => 'PO Number', 'type' => 'text', 'example' => '', 'aliases' => ['po', 'purchaseorder'], 'help' => 'Optional: the purchase order this pays.'],
                 ['key' => 'status', 'label' => 'Status', 'type' => 'choice', 'choices' => ['Completed', 'Pending', 'Cancelled'], 'example' => 'Completed', 'help' => 'Blank counts as Completed.'],
+                ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
+            ],
+        ];
+    }
+
+    private static function deliveryInvoices(): array
+    {
+        return [
+            'key' => 'delivery_invoices',
+            'label' => 'Delivery Invoices',
+            'order' => 3,
+            'description' => 'What transporters charged for deliveries. Each transporter is kept as a supplier; a Paid row also records the payment (Payments page) and both post to the books.',
+            'matching' => 'A row with an Invoice No. already in the system updates that invoice. A row without one is added, unless the same transporter, date, amount and transporter invoice / order is already recorded.',
+            'permission' => 'can_pay_delivery_invoices',
+            'columns' => [
+                ['key' => 'invoice_number', 'label' => 'Invoice No.', 'type' => 'text', 'example' => '', 'aliases' => ['invoice', 'deliveryinvoice'], 'help' => 'Leave blank for a new invoice; the system numbers it (DI-00001).'],
+                ['key' => 'invoice_date', 'label' => 'Invoice Date', 'type' => 'date', 'required' => true, 'example' => '15/09/2026', 'aliases' => ['date', 'deliverydate'], 'help' => 'Day first: 15/09/2026.'],
+                ['key' => 'transporter', 'label' => 'Transporter', 'type' => 'text', 'required' => true, 'example' => 'IMEVO LTD', 'aliases' => ['transportername', 'deliveredby', 'rider'], 'help' => 'Created as a supplier the first time it appears.'],
+                ['key' => 'transporter_invoice_number', 'label' => 'Transporter Invoice No.', 'type' => 'text', 'example' => 'IMV-2231', 'aliases' => ['theirinvoice', 'transporterinvoice']],
+                ['key' => 'order_number', 'label' => 'Order No.', 'type' => 'text', 'example' => 'ORD-0123', 'aliases' => ['order'], 'help' => 'Optional. Links the invoice to that order\'s dispatch when it exists.'],
+                ['key' => 'customer', 'label' => 'Customer / Destination', 'type' => 'text', 'example' => 'Kisumu - Lenexa Healthcare', 'aliases' => ['customer', 'destination']],
+                ['key' => 'zone', 'label' => 'Zone', 'type' => 'choice', 'choices' => ['Nairobi', 'Upcountry'], 'example' => 'Upcountry'],
+                ['key' => 'cartons', 'label' => 'Cartons', 'type' => 'number', 'example' => '12', 'aliases' => ['numberofcartons', 'ctns']],
+                ['key' => 'rate', 'label' => 'Rate per Carton', 'type' => 'number', 'example' => '290', 'aliases' => ['rate', 'ratecarton']],
+                ['key' => 'amount', 'label' => 'Amount', 'type' => 'number', 'example' => '3480', 'aliases' => ['total', 'totalamount'], 'help' => 'Blank = Cartons x Rate per Carton.'],
+                ['key' => 'status', 'label' => 'Status', 'type' => 'choice', 'choices' => ['Paid', 'Unpaid', 'Cancelled'], 'example' => 'Paid', 'help' => 'Blank counts as Unpaid for a new invoice.'],
+                ['key' => 'payment_date', 'label' => 'Payment Date', 'type' => 'date', 'example' => '20/09/2026', 'help' => 'For Paid rows; blank = the invoice date.'],
+                ['key' => 'payment_method', 'label' => 'Payment Method', 'type' => 'choice', 'choices' => ['Bank Transfer', 'Cash', 'M-Pesa', 'Cheque'], 'example' => 'M-Pesa', 'help' => 'For Paid rows; blank = Cash.'],
+                ['key' => 'payment_reference', 'label' => 'Payment Reference', 'type' => 'text', 'example' => 'QWE12RT45'],
                 ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
             ],
         ];

@@ -70,6 +70,7 @@ class LedgerPostingService
             $model instanceof CreditNote => $this->syncCreditNote($model, $deleted),
             $model instanceof SupplierPayment => [$this->syncSupplierPayment($model, $deleted)],
             $model instanceof AccountsPayable => [$this->syncSupplierBill($model, $deleted)],
+            $model instanceof \App\Models\DeliveryInvoice => [$this->syncDeliveryInvoice($model, $deleted)],
             $model instanceof PayrollRun => $this->syncPayrollRun($model, $deleted),
             $model instanceof \App\Models\BankTransfer => [$this->syncBankTransfer($model, $deleted)],
             default => [],
@@ -457,6 +458,39 @@ class LedgerPostingService
         }
 
         return $this->syncEntry($bill, 'supplier_bill', $desired);
+    }
+
+    /**
+     * Delivery invoice: what the company owes the transporter. DR the Transport expense account
+     * (Miscellaneous Expense if the chart has none) / CR Payables. Paying it is a supplier payment.
+     */
+    public function syncDeliveryInvoice(\App\Models\DeliveryInvoice $invoice, bool $deleted = false): ?JournalEntry
+    {
+        $settings = $this->settings($invoice->company_id);
+        $desired = null;
+        $amount = $this->money($invoice->total_amount);
+
+        if (!$deleted && $settings && $amount > 0 && $invoice->status !== 'cancelled') {
+            $ref = $invoice->invoice_number;
+            $transporter = $invoice->transporter_name ?: 'transporter';
+            $transportAccount = ChartOfAccount::where('company_id', $invoice->company_id)
+                ->where('account_type', 'expense')->where('is_active', true)
+                ->where('account_name', 'ilike', 'transport%')->orderBy('account_code')->value('id');
+            $desired = [
+                'date' => $invoice->invoice_date ?? $invoice->created_at,
+                'prefix' => 'DLV',
+                'reference' => $ref,
+                'description' => "Delivery invoice {$ref} - {$transporter}",
+                'lines' => [
+                    ['account_id' => $transportAccount, 'key' => 'miscellaneous_expense', 'debit' => $amount,
+                        'description' => "Delivery {$ref} - {$transporter}" . ($invoice->zone ? " ({$invoice->zone})" : '')],
+                    ['key' => 'accounts_payable', 'credit' => $amount, 'contact' => [$invoice->supplier_id, Supplier::class],
+                        'description' => "Payable to {$transporter} - {$ref}"],
+                ],
+            ];
+        }
+
+        return $this->syncEntry($invoice, 'delivery_invoice', $desired);
     }
 
     // =====================================================================

@@ -43,6 +43,21 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/rbac";
 import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, exportDeliveryInvoicesToExcel, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
+import { DeliveryInvoicesImport, TransporterStatement } from "./delivery-invoices-excel";
+import { ImportHistoryDialog } from "@/components/import-history-dialog";
+
+// Imported invoices for deliveries made before the system have no order, only what the old records said.
+const orderLabel = (invoice: DeliveryInvoice) =>
+  invoice.order_dispatch?.order?.order_number || invoice.order_reference || invoice.order_dispatch?.order_id || "—";
+
+// 12-Jul-26
+const shortDate = (date?: string | null) => {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return date;
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`;
+};
 
 const STATUS_STYLES: Record<string, string> = {
   paid: "bg-green-100 text-green-800",
@@ -172,7 +187,7 @@ export function DeliveryInvoicesTable() {
     const headers = ["Invoice #", "Order", "Transporter", "Zone", "Cartons", "Rate/Carton", "Total", "Status"];
     const values = [
       invoice.invoice_number,
-      invoice.order_dispatch?.order?.order_number || invoice.order_dispatch?.order_id || "",
+      orderLabel(invoice),
       invoice.transporter_name,
       invoice.zone,
       invoice.number_of_cartons,
@@ -197,7 +212,7 @@ export function DeliveryInvoicesTable() {
   const handleExportToExcel = async () => {
     try {
       await exportDeliveryInvoicesToExcel({ search: search || undefined });
-      toast({ title: "Success", description: "Delivery invoices exported to CSV" });
+      toast({ title: "Success", description: "Delivery invoices exported to Excel" });
     } catch (error) {
       toast({ title: "Error", description: "Failed to export delivery invoices", variant: "destructive" });
     }
@@ -260,6 +275,11 @@ export function DeliveryInvoicesTable() {
                 Export
               </Button>
             </div>
+            <div className="flex flex-wrap gap-2">
+              <TransporterStatement />
+              {canPay && <DeliveryInvoicesImport onImported={loadInvoices} />}
+              <ImportHistoryDialog kind="delivery_invoices" title="Delivery Invoice" />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -282,6 +302,7 @@ export function DeliveryInvoicesTable() {
                       Invoice # {getSortIcon("invoice_number")}
                     </div>
                   </TableHead>
+                  <TableHead className="whitespace-nowrap">Date</TableHead>
                   <TableHead className="cursor-pointer" onClick={() => toggleSort("order_number")}>
                     <div className="flex items-center gap-1">
                       Order {getSortIcon("order_number")}
@@ -321,8 +342,9 @@ export function DeliveryInvoicesTable() {
                   return (
                   <TableRow key={invoice.id}>
                     <TableCell className="text-sm text-muted-foreground">{rowNumber}</TableCell>
-                    <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                    <TableCell className="font-medium">{invoice.order_dispatch?.order?.order_number || invoice.order_dispatch?.order_id || "—"}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{invoice.invoice_number}</TableCell>
+                    <TableCell className="whitespace-nowrap">{shortDate(invoice.invoice_date || invoice.created_at)}</TableCell>
+                    <TableCell className="font-medium">{orderLabel(invoice)}</TableCell>
                     <TableCell>{invoice.transporter_name}</TableCell>
                     <TableCell className="capitalize">{invoice.zone}</TableCell>
                     <TableCell>{invoice.number_of_cartons}</TableCell>
@@ -435,7 +457,7 @@ export function DeliveryInvoicesTable() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Order ID</Label>
-                  <p className="font-medium">{viewingInvoice.order_dispatch?.order?.order_number || viewingInvoice.order_dispatch?.order_id || "—"}</p>
+                  <p className="font-medium">{orderLabel(viewingInvoice)}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Transporter</Label>

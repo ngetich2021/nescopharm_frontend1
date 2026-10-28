@@ -21,6 +21,9 @@ export interface DeliveryInvoice {
   cheque_maturity_date?: string | null;
   amount_paid: string | number;
   notes: string | null;
+  invoice_date?: string | null;
+  order_reference?: string | null;
+  supplier_id?: string | null;
   created_at: string;
   updated_at: string;
   // Laravel serializes eager-loaded relations in snake_case (matching the
@@ -107,10 +110,12 @@ export async function getDeliveryInvoices(params?: {
 export async function exportDeliveryInvoicesToExcel(params?: {
   status?: string;
   search?: string;
+  supplierId?: string;
 }): Promise<void> {
   const qs = new URLSearchParams();
   if (params?.status) qs.append('status', params.status);
   if (params?.search) qs.append('search', params.search);
+  if (params?.supplierId) qs.append('supplier_id', params.supplierId);
 
   const queryString = qs.toString() ? `?${qs.toString()}` : '';
   // Downloaded here rather than opened in another window.
@@ -126,6 +131,37 @@ export async function exportDeliveryInvoicesToExcel(params?: {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+}
+
+/** Preview (dryRun) or save a delivery invoices sheet. Paid rows also record the transporter payment. */
+export async function importDeliveryInvoices(file: File, dryRun: boolean = true): Promise<any> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("dry_run", dryRun ? "1" : "0");
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/data-import/delivery_invoices`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof body.message === "string" ? body.message : "Import failed");
+  return body;
+}
+
+export interface Transporter {
+  supplier_id: string;
+  name: string;
+  invoices: number;
+  billed: number;
+  paid: number;
+  balance: number;
+}
+
+/** Transporters with their totals; each one's statement is its supplier statement. */
+export async function getTransporters(): Promise<Transporter[]> {
+  const response = await apiCall<{ data: Transporter[] }>("/delivery-invoices/transporters", "GET");
+  return response.data ?? [];
 }
 
 export async function getDeliveryInvoice(id: string): Promise<DeliveryInvoice> {

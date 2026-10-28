@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\DeliveryInvoice;
 use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -107,6 +108,7 @@ class DataImportController extends Controller
             [$summary, $results] = match ($entity) {
                 'suppliers' => $this->importSuppliers($body, $cells, $user->company_id, $headingRow),
                 'supplier_payments' => $this->importSupplierPayments($body, $cells, $user->company_id, $headingRow),
+                'delivery_invoices' => $this->importDeliveryInvoices($body, $cells, $user, $headingRow),
                 'customers' => $this->importCustomers($body, $cells, $user, $headingRow),
                 'opening_stock' => $this->importOpeningStock($body, $cells, $user, $headingRow),
                 'past_invoices' => $this->importPastInvoices($body, $cells, $user, $headingRow),
@@ -492,6 +494,155 @@ class DataImportController extends Controller
                 'amount_paid' => $paid,
                 'payment_status' => $paid >= (float) $po->total_amount && (float) $po->total_amount > 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
             ]);
+        }
+
+        return [$summary, $results];
+    }
+
+    /**
+     * Transporters' delivery invoices, old or current. The transporter becomes (or is matched to) a
+     * supplier; a Paid row records the supplier payment through DeliveryInvoice::recordPayment, so the
+     * Pay button and the import settle an invoice the same way. Books post after the import commits.
+     */
+    private function importDeliveryInvoices(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+        $methods = ['banktransfer' => 'bank_transfer', 'bank' => 'bank_transfer', 'eft' => 'bank_transfer', 'rtgs' => 'bank_transfer',
+            'cash' => 'cash', 'mpesa' => 'mpesa', 'mobilemoney' => 'mpesa', 'cheque' => 'cheque', 'check' => 'cheque'];
+        $orders = \App\Models\Order::where('company_id', $companyId)->whereNotNull('order_number')->get(['id', 'order_number'])
+            ->keyBy(fn ($o) => mb_strtolower(trim($o->order_number)));
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $number = $cell('invoice_number');
+            $transporter = trim($cell('transporter'));
+            $result = ['row' => $line, 'key' => $number ?: "Row {$line}", 'name' => $transporter];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            $date = $this->date($cell('invoice_date'));
+            $cartons = $this->number($cell('cartons'));
+            $rate = $this->number($cell('rate'));
+            $amount = $this->number($cell('amount')) ?? ($cartons !== null && $rate !== null ? round($cartons * $rate, 2) : null);
+            $statusText = strtolower($cell('status'));
+            $status = match ($statusText) { '' => null, 'paid' => 'paid', 'unpaid', 'pending' => 'pending', 'cancelled', 'canceled' => 'cancelled', default => false };
+            $paymentDate = $cell('payment_date') !== '' ? $this->date($cell('payment_date')) : $date;
+            $methodText = preg_replace('/[^a-z]/', '', strtolower($cell('payment_method')));
+            $method = $methodText === '' ? 'cash' : ($methods[$methodText] ?? null);
+            $orderNo = $cell('order_number');
+            $order = $orderNo !== '' ? $orders->get(mb_strtolower($orderNo)) : null;
+
+            if ($transporter === '') {
+                $fail('Transporter is required.');
+                continue;
+            }
+            if (!$date) {
+                $fail('Invoice Date is missing or not a date (use 15/09/2026).');
+                continue;
+            }
+            if ($amount === null || $amount <= 0) {
+                $fail('Amount is needed (or Cartons and Rate per Carton), above 0.');
+                continue;
+            }
+            if ($status === false) {
+                $fail('Status must be Paid, Unpaid or Cancelled.');
+                continue;
+            }
+            if ($status === 'paid' && (!$paymentDate || !$method)) {
+                $fail(!$paymentDate ? 'Payment Date is not a date.' : 'Payment Method must be Bank Transfer, Cash, M-Pesa or Cheque.');
+                continue;
+            }
+            if ($orderNo !== '' && !$order) {
+                $fail("No order numbered \"{$orderNo}\" - leave Order No. blank and put it under Customer / Destination.");
+                continue;
+            }
+            $dispatchId = $order ? \App\Models\OrderDispatch::where('order_id', $order->id)->orderByDesc('created_at')->value('id') : null;
+
+            $fields = array_filter([
+                'invoice_date' => $date,
+                'transporter_name' => $transporter,
+                'transporter_invoice_number' => $cell('transporter_invoice_number') ?: null,
+                'order_dispatch_id' => $dispatchId,
+                'order_reference' => $cell('customer') ?: ($order && !$dispatchId ? "Order {$order->order_number}" : null),
+                'zone' => $cell('zone') !== '' ? strtolower($cell('zone')) : null,
+                'number_of_cartons' => $cartons !== null ? (int) $cartons : null,
+                'rate_per_carton' => $rate,
+                'total_amount' => round($amount, 2),
+                'notes' => $cell('notes') ?: null,
+            ], fn ($v) => $v !== null);
+
+            // Invoice No. finds the invoice to update; without one, a delivery already recorded is left alone.
+            $invoice = $number !== ''
+                ? DeliveryInvoice::where('company_id', $companyId)->where('invoice_number', $number)->first()
+                : ($dispatchId ? DeliveryInvoice::where('order_dispatch_id', $dispatchId)->where('status', '!=', 'cancelled')->first() : null)
+                    ?? DeliveryInvoice::where('company_id', $companyId)->whereRaw('lower(trim(transporter_name)) = ?', [mb_strtolower($transporter)])
+                        ->whereDate('invoice_date', $date)->where('total_amount', round($amount, 2))
+                        ->where(fn ($q) => $fields['transporter_invoice_number'] ?? null
+                            ? $q->where('transporter_invoice_number', $fields['transporter_invoice_number'])
+                            : $q->where('order_reference', $fields['order_reference'] ?? null))
+                        ->first();
+            if ($number !== '' && !$invoice) {
+                $fail("No delivery invoice numbered \"{$number}\" - leave Invoice No. blank to add a new one.");
+                continue;
+            }
+
+            $isNew = !$invoice;
+            $invoice ??= new DeliveryInvoice(['company_id' => $companyId, 'invoice_number' => DeliveryInvoice::nextInvoiceNumber($companyId),
+                'status' => 'pending', 'created_by' => $user->id]);
+            if ($invoice->exists && mb_strtolower(trim((string) $invoice->transporter_name)) !== mb_strtolower($transporter)) {
+                $invoice->supplier_id = null; // re-matched to the new transporter on save
+            }
+            $invoice->fill($fields);
+            $changes = $isNew ? [] : collect($invoice->getDirty())->except(['supplier_id'])->map(function ($to, $field) use ($invoice) {
+                $from = $invoice->getOriginal($field);
+                return ['field' => $field, 'from' => $from instanceof \DateTimeInterface ? $from->format('Y-m-d') : $from, 'to' => $to];
+            })->values()->all();
+            $invoice->save();
+
+            // Status: Paid records/updates its payment; Unpaid undoes one; Cancelled cancels both.
+            $wanted = $status ?? ($isNew ? 'pending' : $invoice->status);
+            $payment = $invoice->supplier_payment_id ? SupplierPayment::find($invoice->supplier_payment_id) : null;
+            if ($wanted === 'paid') {
+                $samePayment = $invoice->status === 'paid' && $payment && $payment->status === 'completed'
+                    && $payment->payment_method === $method && (float) $payment->amount === (float) $invoice->total_amount
+                    && $payment->payment_date?->toDateString() === $paymentDate
+                    && $invoice->payment_reference === ($cell('payment_reference') ?: null);
+                if (!$samePayment) {
+                    $invoice->recordPayment($user->id, $method, $cell('payment_reference') ?: null, $paymentDate);
+                    $changes[] = ['field' => 'payment', 'from' => $payment ? 'KES ' . number_format((float) $payment->amount, 2) : null,
+                        'to' => 'KES ' . number_format((float) $invoice->total_amount, 2) . " paid {$paymentDate} ({$method})"];
+                }
+            } elseif ($wanted === 'cancelled' && $invoice->status !== 'cancelled') {
+                $changes[] = ['field' => 'status', 'from' => $invoice->status === 'pending' ? 'unpaid' : $invoice->status, 'to' => 'cancelled'];
+                $invoice->cancel();
+            } elseif ($wanted === 'pending' && $invoice->status !== 'pending') {
+                $payment?->update(['status' => 'cancelled']);
+                $changes[] = ['field' => 'status', 'from' => $invoice->status, 'to' => 'unpaid'];
+                $invoice->update(['status' => 'pending', 'amount_paid' => 0, 'payment_date' => null, 'payment_method' => null,
+                    'payment_reference' => null, 'paid_by' => null, 'supplier_payment_id' => null]);
+            }
+
+            if ($isNew) {
+                $summary['created']++;
+                $results[] = ['key' => $invoice->invoice_number, 'status' => 'created',
+                    'message' => $invoice->status === 'paid' ? 'Paid - payment recorded.' : null] + $result;
+            } elseif ($changes) {
+                $summary['updated']++;
+                $results[] = ['key' => $invoice->invoice_number, 'status' => 'updated', 'changes' => $changes] + $result;
+            } else {
+                $summary['unchanged']++;
+                $results[] = ['key' => $invoice->invoice_number, 'status' => 'unchanged',
+                    'message' => $number === '' ? "Already recorded as {$invoice->invoice_number}." : null] + $result;
+            }
         }
 
         return [$summary, $results];

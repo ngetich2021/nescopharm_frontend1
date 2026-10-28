@@ -157,6 +157,29 @@ class SupplierController extends Controller
                 'paid' => $kind === 'debit_note' ? $amount : 0.0,
             ]);
         }
+        // A transporter's delivery invoices are its bills.
+        $deliveries = DB::table('delivery_invoices as d')
+            ->leftJoin('order_dispatches as od', 'od.id', '=', 'd.order_dispatch_id')
+            ->leftJoin('orders as o', 'o.id', '=', 'od.order_id')
+            ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
+            ->where('d.supplier_id', $supplier->id)->where('d.status', '!=', 'cancelled')
+            ->select('d.invoice_number', 'd.transporter_invoice_number', 'd.invoice_date', 'd.created_at', 'd.zone',
+                'd.number_of_cartons', 'd.total_amount', 'd.order_reference', 'o.order_number', 'c.name as customer_name')
+            ->get();
+        foreach ($deliveries as $d) {
+            $what = $d->order_number ? "Order {$d->order_number}" . ($d->customer_name ? " - {$d->customer_name}" : '') : $d->order_reference;
+            $entries->push([
+                'date' => substr((string) ($d->invoice_date ?? $d->created_at), 0, 10),
+                'type' => 'bill',
+                'reference' => $d->invoice_number,
+                'description' => 'Delivery' . ($what ? " - {$what}" : '')
+                    . ($d->number_of_cartons ? " ({$d->number_of_cartons} ctns" . ($d->zone ? ", {$d->zone}" : '') . ')' : '')
+                    . ($d->transporter_invoice_number ? " - their inv {$d->transporter_invoice_number}" : ''),
+                'billed' => round((float) $d->total_amount, 2),
+                'paid' => 0.0,
+            ]);
+        }
+
         $covered = $bills->map(fn ($b) => json_decode($b->metadata ?? '{}', true)['receipt_id'] ?? null)->filter()->all();
 
         $receipts = DB::table('product_receipts as r')
@@ -185,7 +208,7 @@ class SupplierController extends Controller
                 'date' => substr((string) $p->payment_date, 0, 10),
                 'type' => 'payment',
                 'reference' => $p->payment_number,
-                'description' => 'Payment - ' . ucwords(str_replace('_', ' ', (string) $p->payment_method))
+                'description' => 'Payment - ' . (['mpesa' => 'M-Pesa', 'bank_transfer' => 'Bank Transfer'][$p->payment_method] ?? ucwords(str_replace('_', ' ', (string) $p->payment_method)))
                     . ($p->transaction_reference ? " ({$p->transaction_reference})" : ''),
                 'billed' => 0.0,
                 'paid' => round((float) $p->amount, 2),
@@ -201,6 +224,21 @@ class SupplierController extends Controller
                 $balance = round($balance + $e['billed'] - $e['paid'], 2);
                 return $e + ['balance' => $balance];
             });
+
+        // Optional period: what came before it is one opening balance line, what came after is left out.
+        $from = $request->filled('date_from') ? substr($request->input('date_from'), 0, 10) : null;
+        $to = $request->filled('date_to') ? substr($request->input('date_to'), 0, 10) : null;
+        if ($from || $to) {
+            $before = $from ? $rows->filter(fn ($e) => $e['date'] < $from) : collect();
+            $inPeriod = $rows->filter(fn ($e) => (!$from || $e['date'] >= $from) && (!$to || $e['date'] <= $to))->values();
+            $opening = round($before->sum('billed') - $before->sum('paid'), 2);
+            $rows = $inPeriod;
+            if ($from) {
+                $rows->prepend(['date' => $from, 'type' => 'opening_balance', 'reference' => 'OB', 'description' => 'Opening balance',
+                    'billed' => 0.0, 'paid' => 0.0, 'balance' => $opening]);
+            }
+            $balance = $rows->isEmpty() ? $opening : (float) $rows->last()['balance'];
+        }
 
         return response()->json([
             'status' => 'success',

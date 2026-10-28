@@ -759,12 +759,7 @@ class LogisticController extends Controller
      */
     protected function generateDeliveryInvoiceNumber($companyId): string
     {
-        $last = \App\Models\DeliveryInvoice::where('company_id', $companyId)
-            ->latest('created_at')
-            ->first();
-
-        $nextNumber = $last ? ((int) substr($last->invoice_number, 3)) + 1 : 1;
-        return 'DI-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+        return \App\Models\DeliveryInvoice::nextInvoiceNumber($companyId);
     }
 
     /**

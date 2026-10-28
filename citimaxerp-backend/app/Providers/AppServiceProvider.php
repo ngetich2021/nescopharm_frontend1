@@ -80,6 +80,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\OrderDispatchItem::class,
             \App\Models\SupplierPayment::class,
             \App\Models\AccountsPayable::class,
+            \App\Models\DeliveryInvoice::class,
             \App\Models\PayrollRun::class,
             \App\Models\PayrollPayslip::class,
             \App\Models\BankTransfer::class,

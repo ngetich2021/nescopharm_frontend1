@@ -583,6 +583,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Delivery Invoices (auto-created when logistics is created with a rate; accountant pays)
     Route::get('/delivery-invoices', [\App\Http\Controllers\DeliveryInvoiceController::class, 'index']);
     Route::get('/delivery-invoices/export/excel', [\App\Http\Controllers\DeliveryInvoiceController::class, 'exportExcel']);
+    Route::get('/delivery-invoices/transporters', [\App\Http\Controllers\DeliveryInvoiceController::class, 'transporters']);
     Route::get('/delivery-invoices/{id}', [\App\Http\Controllers\DeliveryInvoiceController::class, 'show']);
     Route::post('/delivery-invoices/{id}/pay', [\App\Http\Controllers\DeliveryInvoiceController::class, 'pay']);
     Route::post('/delivery-invoices/{id}/cancel', [\App\Http\Controllers\DeliveryInvoiceController::class, 'cancel']);
