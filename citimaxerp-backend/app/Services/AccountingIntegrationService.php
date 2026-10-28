@@ -1319,7 +1319,7 @@ class AccountingIntegrationService
     /**
      * Reverse a journal entry
      */
-    public function reverseJournalEntry(string $journalEntryId, ?string $reason = null): JournalEntry
+    public function reverseJournalEntry(string $journalEntryId, ?string $reason = null, ?string $entryDate = null): JournalEntry
     {
         $originalEntry = JournalEntry::with('items')->findOrFail($journalEntryId);
         
@@ -1345,7 +1345,7 @@ class AccountingIntegrationService
         // Create reversal entry
         $reversalEntry = $this->createJournalEntry([
             'prefix' => 'REV',
-            'entry_date' => now()->toDateString(),
+            'entry_date' => $entryDate ?? now()->toDateString(),
             'reference' => "REV-{$originalEntry->entry_number}",
             'description' => "Reversal of {$originalEntry->entry_number}: {$reason}",
             'entry_type' => 'manual',

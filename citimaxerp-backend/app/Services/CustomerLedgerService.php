@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\Models\ChartOfAccount;
+use App\Models\Cheque;
 use App\Models\Customer;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryItem;
 use Illuminate\Database\Query\Builder;
@@ -57,7 +60,7 @@ class CustomerLedgerService
         if ($dateTo) {
             $query->where('entry_date', '<=', $dateTo);
         }
-        $entries = $query->orderBy('entry_date')->orderBy('created_at')->get();
+        $entries = $this->bouncesTogether($customerId, $query->orderBy('entry_date')->orderBy('created_at')->get());
 
         $balance = round($opening, 2);
         $totalDebit = 0.0;
@@ -119,6 +122,45 @@ class CustomerLedgerService
                 'closing_balance' => $balance,
             ],
         ];
+    }
+
+    /**
+     * A bounced cheque's receipt reversal goes last on its date, followed straight away by the
+     * cheque's bounced cheque charges entry.
+     */
+    protected function bouncesTogether(string $customerId, $entries)
+    {
+        $cheques = Cheque::where('customer_id', $customerId)
+            ->where('direction', 'received')
+            ->where('status', 'bounced')
+            ->get(['id', 'payment_id', 'bounce_charge_invoice_id']);
+        if ($cheques->isEmpty()) {
+            return $entries;
+        }
+
+        $byPayment = $cheques->filter(fn ($c) => $c->payment_id)->pluck('id', 'payment_id');
+        $byCharge = $cheques->filter(fn ($c) => $c->bounce_charge_invoice_id)->pluck('id', 'bounce_charge_invoice_id');
+        $originalIds = $entries->map(fn ($e) => $e->metadata['original_entry_id'] ?? null)->filter()->values();
+        $originals = JournalEntry::whereIn('id', $originalIds)->where('source_type', Payment::class)->pluck('source_id', 'id');
+
+        $place = function (JournalEntry $e) use ($byPayment, $byCharge, $originals) {
+            if ($e->source_type === Invoice::class && isset($byCharge[$e->source_id])) {
+                return [1, $byCharge[$e->source_id], 1];
+            }
+            $paymentId = $originals[$e->metadata['original_entry_id'] ?? ''] ?? null;
+            if ($paymentId && isset($byPayment[$paymentId])) {
+                return [1, $byPayment[$paymentId], 0];
+            }
+            return [0, '', 0];
+        };
+
+        return $entries->values()
+            ->map(fn ($e, $i) => [$e, $place($e), $i])
+            ->sort(function ($a, $b) {
+                return [$a[0]->entry_date->toDateString(), $a[1], $a[2]] <=> [$b[0]->entry_date->toDateString(), $b[1], $b[2]];
+            })
+            ->map(fn ($x) => $x[0])
+            ->values();
     }
 
     /**

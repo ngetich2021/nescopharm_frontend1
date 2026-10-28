@@ -128,6 +128,23 @@ class Cheque extends Model
         return $this->belongsTo(Payment::class);
     }
 
+    public function bounceChargeInvoice()
+    {
+        return $this->belongsTo(Invoice::class, 'bounce_charge_invoice_id');
+    }
+
+    /**
+     * The date a bounced cheque counts as bounced: it bounced when banked, the day after it
+     * matured. Its bounced cheque charges invoice carries the same date, so the bounce and the
+     * charge sit together on the statement and in the ledger.
+     */
+    public function bounceDate(): string
+    {
+        return $this->maturity_date
+            ? $this->maturity_date->copy()->addDay()->toDateString()
+            : ($this->updated_at ?? now())->toDateString();
+    }
+
     public function supplierPayment()
     {
         return $this->belongsTo(SupplierPayment::class);

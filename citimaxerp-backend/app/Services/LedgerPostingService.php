@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Cheque;
 use App\Models\CompanyAccountingSettings;
 use App\Models\CreditNote;
 use App\Models\Customer;
@@ -94,11 +95,14 @@ class LedgerPostingService
             } elseif ($this->invoiceIsRecognisable($invoice, $settings)) {
                 $total = $this->money($invoice->total_amount);
                 $tax = $this->money($invoice->tax_amount);
+                $bouncedCheque = Cheque::where('bounce_charge_invoice_id', $invoice->id)->value('cheque_number');
                 $desired = [
                     'date' => $invoice->invoice_date ?? $invoice->created_at,
                     'prefix' => 'INV',
                     'reference' => $invoice->invoice_number,
-                    'description' => "Sales invoice {$invoice->invoice_number}",
+                    'description' => $bouncedCheque
+                        ? "Bounced cheque charges {$invoice->invoice_number} - cheque {$bouncedCheque}"
+                        : "Sales invoice {$invoice->invoice_number}",
                     'lines' => [
                         ['key' => 'accounts_receivable', 'debit' => $total, 'contact' => [$invoice->customer_id, Customer::class], 'description' => "Invoice {$invoice->invoice_number}"],
                         ['key' => 'sales_revenue', 'credit' => $total - $tax, 'description' => "Sales - invoice {$invoice->invoice_number}"],
@@ -169,7 +173,16 @@ class LedgerPostingService
             }
         }
 
-        return $this->syncEntry($payment, 'customer_payment', $desired);
+        // A bounced cheque's receipt comes off on the bounce date, beside its bounced cheque charges.
+        $reversal = null;
+        if ($payment->status === 'failed') {
+            $cheque = Cheque::where('payment_id', $payment->id)->where('status', 'bounced')->first();
+            if ($cheque) {
+                $reversal = ['date' => $cheque->bounceDate(), 'reason' => "Cheque {$cheque->cheque_number} bounced"];
+            }
+        }
+
+        return $this->syncEntry($payment, 'customer_payment', $desired, $reversal);
     }
 
     protected function isUninvoicedOrderReceipt(Payment $payment): bool
@@ -584,8 +597,9 @@ class LedgerPostingService
      * Reconcile the ledger for one (document, purpose) pair with $desired.
      *
      * @param array|string|null $desired entry spec, null for "nothing should be posted", or self::SKIP
+     * @param array{date: string, reason: string}|null $reversal date and reason for reversing the old entry (default: today)
      */
-    public function syncEntry(Model $source, string $purpose, array|string|null $desired): ?JournalEntry
+    public function syncEntry(Model $source, string $purpose, array|string|null $desired, ?array $reversal = null): ?JournalEntry
     {
         if ($desired === self::SKIP) {
             $this->outcomes[] = 'skip';
@@ -613,9 +627,13 @@ class LedgerPostingService
             return null;
         }
 
-        return DB::transaction(function () use ($existing, $spec, $source, $purpose) {
+        return DB::transaction(function () use ($existing, $spec, $source, $purpose, $reversal) {
             foreach ($existing as $entry) {
-                $this->engine->reverseJournalEntry($entry->id, $spec ? 'Source document changed' : 'Source document voided or deleted');
+                $this->engine->reverseJournalEntry(
+                    $entry->id,
+                    $reversal['reason'] ?? ($spec ? 'Source document changed' : 'Source document voided or deleted'),
+                    $reversal['date'] ?? null,
+                );
             }
             if (!$spec) {
                 return null;

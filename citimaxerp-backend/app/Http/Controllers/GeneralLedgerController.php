@@ -107,7 +107,7 @@ class GeneralLedgerController extends Controller
             }
 
             $items = $query->get()->sortBy(function ($item) {
-                return $item->journalEntry->entry_date->toDateString() . $item->account->account_code;
+                return $item->journalEntry->entry_date->toDateString() . $item->account->account_code . $item->journalEntry->created_at?->format('Y-m-d H:i:s.u');
             });
 
             // Group by account and calculate running balances

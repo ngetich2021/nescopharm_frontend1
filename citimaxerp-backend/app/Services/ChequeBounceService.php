@@ -81,10 +81,8 @@ class ChequeBounceService
     protected function raiseCharge(Cheque $cheque, User $user): Invoice
     {
         $customer = $cheque->customer;
-        // The cheque bounced when it was banked: the charge is dated the day after it matured.
-        $chargeDate = $cheque->maturity_date
-            ? $cheque->maturity_date->copy()->addDay()->toDateString()
-            : now()->toDateString();
+        // Dated with the bounce (the day after it matured), so it follows the bounced cheque.
+        $chargeDate = $cheque->bounceDate();
 
         $invoice = Invoice::create([
             'company_id' => $cheque->company_id,
