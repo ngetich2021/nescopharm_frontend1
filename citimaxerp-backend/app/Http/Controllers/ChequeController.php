@@ -547,6 +547,10 @@ class ChequeController extends Controller
                     'approved_at' => now(),
                 ]);
 
+                // The split was planned when the cheque was recorded; anything raised since (a
+                // bounced cheque charge) still takes its place in the oldest-first order.
+                $result['moved'] = $accounts->rebalanceOldestFirst($cheque->company_id, $customer->id);
+
                 return $result;
             });
 
@@ -554,9 +558,12 @@ class ChequeController extends Controller
                 ->map(fn ($a) => number_format($a['amount'], 2) . ' to ' . $a['invoice_number'])
                 ->implode(', ');
 
+            $moved = collect($result['moved'])->map(fn ($m) => number_format($m['amount'], 2) . " moved from {$m['from']} to {$m['to']}")->implode(', ');
+
             return response()->json([
                 'message' => 'Cheque approved: ' . ($applied ?: 'nothing applied to invoices')
-                    . ($result['left_as_credit'] > 0.005 ? '; ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
+                    . ($result['left_as_credit'] > 0.005 ? '; ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : '')
+                    . ($moved ? "; oldest invoices paid first: {$moved}" : ''),
                 'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number']),
                 'allocations' => $result['allocations'],
                 'left_as_credit' => $result['left_as_credit'],

@@ -62,17 +62,17 @@ class ChequeBounceService
 
             $cheque->update(['status' => 'bounced']);
 
-            // The oldest invoices stay paid: money on newer invoices moves back to cover them,
-            // so the shortfall from the bounce lands on the newest ones.
-            $moved = $reversed && $cheque->customer_id
-                ? app(CustomerAccountService::class)->rebalanceOldestFirst($cheque->company_id, $cheque->customer_id)
-                : [];
-
             $charge = $cheque->bounce_charge_invoice_id ? Invoice::find($cheque->bounce_charge_invoice_id) : null;
             if (!$charge && $cheque->customer_id) {
                 $charge = $this->raiseCharge($cheque, $user);
                 $cheque->update(['bounce_charge_invoice_id' => $charge->id]);
             }
+
+            // The oldest invoices stay paid, the charge included in its date's place: money on
+            // newer invoices moves back to cover them, so the shortfall lands on the newest ones.
+            $moved = $cheque->customer_id
+                ? app(CustomerAccountService::class)->rebalanceOldestFirst($cheque->company_id, $cheque->customer_id)
+                : [];
 
             return ['reversed' => $reversed, 'moved' => $moved, 'charge_invoice' => $charge];
         });
