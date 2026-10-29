@@ -9,17 +9,34 @@ use Carbon\Carbon;
 
 class Invoice extends Model
 {
+    // An invoice carried over from the old system is known by its old number, kept as its File No:
+    // File No 54 is NSK/0054.
+    public const LEGACY_PREFIX = 'NSK/';
+
     /**
-     * Always return the short invoice number when accessing invoice_number
+     * The number as printed: NSK/0054 when the invoice has a File No, otherwise the short form
+     * (INV-853b296e-0074 is INV-0074). The stored number never changes, so the INV sequence holds.
+     * Queries that pick columns must include file_number for the NSK form.
      */
     public function getInvoiceNumberAttribute($value)
     {
-        // If invoice_number is like INV-853b296e-0074, return INV-0074
-        if (preg_match('/^(INV)-(?:[\w-]+)-(\d{4})$/', $value, $matches)) {
-            return $matches[1] . '-' . $matches[2];
+        return self::printedNumber($value, $this->attributes['file_number'] ?? null);
+    }
+
+    public static function printedNumber(?string $stored, $fileNumber = null): ?string
+    {
+        $fileNumber = trim((string) $fileNumber);
+        if (preg_match('/^\d+$/', $fileNumber)) {
+            return self::LEGACY_PREFIX . str_pad(ltrim($fileNumber, '0') ?: '0', 4, '0', STR_PAD_LEFT);
         }
-        // Fallback: return original
-        return $value;
+
+        return self::shortNumber($stored);
+    }
+
+    // INV-853b296e-0074 is INV-0074.
+    public static function shortNumber(?string $stored): ?string
+    {
+        return $stored && preg_match('/^(INV)-(?:[\w-]+)-(\d{4})$/', $stored, $matches) ? $matches[1] . '-' . $matches[2] : $stored;
     }
 
     use HasFactory;

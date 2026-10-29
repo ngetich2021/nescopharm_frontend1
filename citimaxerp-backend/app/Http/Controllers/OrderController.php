@@ -246,7 +246,7 @@ class OrderController extends Controller
                         $query->select('id', 'order_id', 'delivery_status', 'estimated_delivery_date', 'created_at', 'updated_at');
                     },
                     'invoiceApprover:id,first_name,last_name,email',
-                    'invoice:id,order_id,invoice_number,status,etims_status',
+                    'invoice:id,order_id,invoice_number,file_number,status,etims_status',
                 ]);
 
             if (!$this->hasPermission($request, 'can_manage_all_quotes')) {

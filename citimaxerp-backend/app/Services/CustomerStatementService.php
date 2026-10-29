@@ -39,7 +39,7 @@ class CustomerStatementService
 
         // Every order dated in the period, invoiced or not, so the customer's full trading
         // history (past sales brought across from the old system included) is on the statement.
-        $orders = Order::with('invoice:id,order_id,invoice_number')
+        $orders = Order::with('invoice:id,order_id,invoice_number,file_number')
             ->where('customer_id', $customerId)
             ->whereBetween(DB::raw('COALESCE(order_date, created_at)'), [$from, $to])
             ->orderByRaw('COALESCE(order_date, created_at)')
@@ -67,7 +67,7 @@ class CustomerStatementService
         $chequeReceipts = $bounced->filter(fn ($b) => $b['receipt_date']);
         $periodReceipts = $chequeReceipts->filter(fn ($b) => $b['receipt_date'] >= $from->toDateString() && $b['receipt_date'] <= $to->toDateString())->values();
 
-        $payments = Payment::with('invoice:id,invoice_number')
+        $payments = Payment::with('invoice:id,invoice_number,file_number')
             ->where('customer_id', $customerId)
             ->where(fn ($q) => $q->where('status', 'completed')->orWhereIn('id', $bouncedPaymentIds))
             ->whereBetween('payment_date', [$from, $to])

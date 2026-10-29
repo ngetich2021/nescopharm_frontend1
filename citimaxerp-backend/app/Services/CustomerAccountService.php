@@ -57,7 +57,7 @@ class CustomerAccountService
             ->orderBy('credit_note_date')
             ->get(['id', 'credit_note_number', 'credit_note_date', 'invoice_id', 'total_amount', 'amount_applied', 'amount_refunded', 'balance_amount']);
 
-        $pendingCheques = Cheque::with('invoice:id,invoice_number')
+        $pendingCheques = Cheque::with('invoice:id,invoice_number,file_number')
             ->where('company_id', $companyId)
             ->where('customer_id', $customerId)
             ->where('direction', 'received')
@@ -496,7 +496,7 @@ class CustomerAccountService
             ->get()
             ->map(function (Payment $payment) {
                 $invoiceIds = $payment->allocations->pluck('invoice_id');
-                $numbers = Invoice::whereIn('id', $invoiceIds)->pluck('invoice_number', 'id');
+                $numbers = Invoice::whereIn('id', $invoiceIds)->get(['id', 'invoice_number', 'file_number'])->pluck('invoice_number', 'id');
                 $applied = $payment->allocations->map(fn ($a) => [
                     'invoice_id' => $a->invoice_id,
                     'invoice_number' => $numbers[$a->invoice_id] ?? null,

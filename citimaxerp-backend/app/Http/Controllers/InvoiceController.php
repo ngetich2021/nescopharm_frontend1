@@ -213,6 +213,8 @@ class InvoiceController extends Controller
                     $term = $request->input('search');
                     $query->where(function ($q) use ($term) {
                         $q->where('invoice_number', 'ilike', "%{$term}%")
+                            // The printed old-system number, NSK/0054 for File No 54.
+                            ->orWhereRaw("file_number ~ '^[0-9]+$' AND ? || lpad(ltrim(file_number, '0'), 4, '0') ilike ?", [Invoice::LEGACY_PREFIX, "%{$term}%"])
                             ->orWhereHas('customer', function ($cq) use ($term) {
                                 $cq->where('name', 'ilike', "%{$term}%")
                                     ->orWhere('business_name', 'ilike', "%{$term}%");
@@ -1672,7 +1674,7 @@ class InvoiceController extends Controller
         $payment = Payment::where('company_id', $user->company_id)->findOrFail($paymentId);
 
         return response()->json([
-            'data' => $payment->allocations()->with('invoice:id,invoice_number,total_amount,balance_amount,status')->get(),
+            'data' => $payment->allocations()->with('invoice:id,invoice_number,file_number,total_amount,balance_amount,status')->get(),
             'available_amount' => app(\App\Services\CustomerAccountService::class)->paymentAvailable($payment),
         ]);
     }
@@ -1701,7 +1703,7 @@ class InvoiceController extends Controller
 
             // Get allocation details
             $allocations = $payment->allocations()
-                ->with('invoice:id,invoice_number,total_amount')
+                ->with('invoice:id,invoice_number,file_number,total_amount')
                 ->get()
                 ->map(function ($allocation) {
                     return [

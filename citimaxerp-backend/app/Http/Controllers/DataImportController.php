@@ -850,8 +850,10 @@ class DataImportController extends Controller
         $results = [];
         $catalogue = $this->catalogue($companyId);
         $customers = Customer::with('account')->where('company_id', $companyId)->get();
-        $existingNumbers = \App\Models\Invoice::where('company_id', $companyId)->pluck('invoice_number')
-            ->map(fn ($n) => mb_strtolower(trim($n)))->flip();
+        // Known by its printed number (NSK/0054 once it has a File No) or its INV number.
+        $existingNumbers = \App\Models\Invoice::where('company_id', $companyId)->get(['invoice_number', 'file_number'])
+            ->flatMap(fn ($i) => [$i->invoice_number, \App\Models\Invoice::shortNumber($i->getRawOriginal('invoice_number'))])
+            ->map(fn ($n) => mb_strtolower(trim((string) $n)))->filter()->unique()->flip();
         $storeId = DB::table('stores')->where('company_id', $companyId)->value('id');
         $cutoff = ImportSchemas::PAST_INVOICE_CUTOFF;
 
