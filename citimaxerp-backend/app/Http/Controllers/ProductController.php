@@ -3226,6 +3226,41 @@ class ProductController extends Controller
     }
 
     /**
+     * Every batch still holding stock, in one light list (no pagination or relations), for the
+     * products export's Current Stock column (totalled per product and size there).
+     */
+    public function getBatchStock(Request $request)
+    {
+        $companyId = $request->user()->company_id;
+        if (!$this->hasPermission($request, 'can_view_products', $companyId)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $batches = DB::table('inventory_batches as b')
+            ->leftJoin('stores as s', 's.id', '=', 'b.store_id')
+            ->where('b.company_id', $companyId)
+            ->where('b.quantity_available', '>', 0)
+            ->orderBy('b.expiry_date')
+            ->get([
+                'b.product_id', 'b.variant_id', 'b.batch_number', 'b.lot_number', 'b.expiry_date', 'b.status',
+                'b.quantity_available', 'b.quantity_allocated', 's.name as store_name',
+            ])
+            ->map(fn ($b) => [
+                'product_id' => $b->product_id,
+                'variant_id' => $b->variant_id,
+                'batch_number' => $b->batch_number,
+                'lot_number' => $b->lot_number,
+                'expiry_date' => $b->expiry_date ? substr((string) $b->expiry_date, 0, 10) : null,
+                'status' => $b->status,
+                'quantity_available' => (float) $b->quantity_available,
+                'quantity_allocated' => (float) $b->quantity_allocated,
+                'store' => $b->store_name,
+            ]);
+
+        return response()->json(['data' => $batches]);
+    }
+
+    /**
      * Create a new inventory batch for a product
      */
     public function createInventoryBatch(Request $request, $productId)

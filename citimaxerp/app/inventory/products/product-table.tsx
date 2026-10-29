@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast"
 import { getProductById, type Product, type ProductSummary } from "@/lib/products"
 import { priceOptionsFor, priceListsFor, PRICE_LIST_CODES } from "@/lib/price-codes"
 import { sizedName } from "@/lib/product-sizes"
+import { getBatchStock, type BatchStock } from "@/lib/batches"
 import { ImportProductsDialog } from "./components/import-products-dialog"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import * as XLSX from "xlsx"
@@ -86,10 +87,25 @@ const costOf = (product: Product) => parseFloat(String(product.unit_cost ?? "0")
 // Same layout the products import reads back: one row per item, then one row per size (164.1, 164.2 ...).
 // "Ref" is the system's own id, kept in a hidden column so a row still finds its product after the
 // description is edited in Excel (rename), and two rows given the same description merge into one product.
+// "Current Stock" is for reading only (the import ignores it): the total still in the item's batches.
 const EXPORT_HEADERS = [
   "S/No.", "Item No.", "Row Type", "Size", "Item Description", "Unit of Measure", "Cost Price",
-  "Tax Status", "Reorder Level", "Status", "Ref",
+  "Tax Status", "Reorder Level", "Current Stock", "Status", "Ref",
 ]
+
+// Stock still in batches, totalled per product and per size.
+type StockTotals = { byProduct: Map<string, number>; byVariant: Map<string, number> }
+
+const totalStock = (batches: BatchStock[]): StockTotals => {
+  const byProduct = new Map<string, number>()
+  const byVariant = new Map<string, number>()
+  for (const b of batches) {
+    const qty = Number(b.quantity_available || 0)
+    byProduct.set(b.product_id, (byProduct.get(b.product_id) ?? 0) + qty)
+    if (b.variant_id) byVariant.set(b.variant_id, (byVariant.get(b.variant_id) ?? 0) + qty)
+  }
+  return { byProduct, byVariant }
+}
 
 // "Active" / "Inactive" - the products import reads this column back, so editing it in Excel switches products on or off.
 const activeStatus = (value: unknown) => (value === false || value === "false" || value === 0 || value === "0" ? "Inactive" : "Active")
@@ -106,7 +122,7 @@ const sortedSizes = (product: Product) =>
     String(a.name ?? "").localeCompare(String(b.name ?? ""), undefined, { numeric: true }),
   )
 
-function exportRows(product: Product): (string | number)[][] {
+function exportRows(product: Product, stock: StockTotals): (string | number)[][] {
   const p = product as any
   const sizes = p.has_variations ? sortedSizes(product) : []
   const itemNo = p.item_number ?? ""
@@ -114,27 +130,28 @@ function exportRows(product: Product): (string | number)[][] {
   const rows: (string | number)[][] = [[
     itemNo, "Item", sizes.length ? `${sizes.length} sizes` : "", p.name,
     p.unit_of_measurement ?? "", costOf(product), taxStatus(product),
-    p.low_stock_threshold ?? "", activeStatus(p.is_active), p.id,
+    // An item with sizes shows the total of all its sizes.
+    p.low_stock_threshold ?? "", stock.byProduct.get(p.id) ?? 0, activeStatus(p.is_active), p.id,
   ]]
   sizes.forEach((v: any, i: number) => {
     rows.push([
       `${itemNo}.${i + 1}`, "Size", v.name ?? "", sizedName(p.name, v.name), "", Number(v.cost || 0),
-      "", "", activeStatus(v.is_active), v.id ?? "",
+      "", "", stock.byVariant.get(v.id) ?? 0, activeStatus(v.is_active), v.id ?? "",
     ])
   })
   return rows
 }
 
 // Every row - items and sizes alike - gets the next serial number.
-const exportSheet = (products: Product[]) => [
+const exportSheet = (products: Product[], stock: StockTotals) => [
   EXPORT_HEADERS,
-  ...products.flatMap(exportRows).map((row, i) => [i + 1, ...row]),
+  ...products.flatMap((p) => exportRows(p, stock)).map((row, i) => [i + 1, ...row]),
 ]
 
 const exportFileName = (ext: string) => documentFileName([sessionCompanyName(), "Products List", todayFileDate()], ext)
 
-function downloadCSVTemplate(products: Product[]) {
-  const csvContent = exportSheet(products)
+function downloadCSVTemplate(products: Product[], stock: StockTotals) {
+  const csvContent = exportSheet(products, stock)
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     .join("\n")
 
@@ -150,8 +167,8 @@ function downloadCSVTemplate(products: Product[]) {
   URL.revokeObjectURL(url)
 }
 
-function downloadExcelTemplate(products: Product[]) {
-  const ws = XLSX.utils.aoa_to_sheet(exportSheet(products))
+function downloadExcelTemplate(products: Product[], stock: StockTotals) {
+  const ws = XLSX.utils.aoa_to_sheet(exportSheet(products, stock))
   ws["!cols"] = EXPORT_HEADERS.map((h) =>
     h === "Ref" ? { wch: 38, hidden: true } : { wch: h === "Item Description" ? 55 : h === "S/No." ? 7 : Math.max(h.length + 2, 10) })
   const wb = XLSX.utils.book_new()
@@ -307,11 +324,18 @@ export function ProductTable({
   }
 
   // Exports what the table currently shows, filters included.
-  const handleExport = (format: "csv" | "excel") => {
+  const handleExport = async (format: "csv" | "excel") => {
+    let stock: StockTotals
+    try {
+      stock = totalStock(await getBatchStock())
+    } catch (error: any) {
+      toast({ title: "Export failed", description: error?.message || "Could not load batch stock", variant: "destructive" })
+      return
+    }
     if (format === "csv") {
-      downloadCSVTemplate(filteredAndSortedProducts)
+      downloadCSVTemplate(filteredAndSortedProducts, stock)
     } else {
-      downloadExcelTemplate(filteredAndSortedProducts)
+      downloadExcelTemplate(filteredAndSortedProducts, stock)
     }
   }
 

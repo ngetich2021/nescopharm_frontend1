@@ -10,6 +10,24 @@ import type {
 } from "@/types/batches"
 
 
+// Every batch still holding stock (no pagination), for the products export.
+export interface BatchStock {
+  product_id: string
+  variant_id: string | null
+  batch_number: string | null
+  lot_number: string | null
+  expiry_date: string | null
+  status: string | null
+  quantity_available: number
+  quantity_allocated: number
+  store: string | null
+}
+
+export async function getBatchStock(): Promise<BatchStock[]> {
+  const response = await apiCall<{ data: BatchStock[] }>("/inventory/batch-stock", "GET", undefined, true)
+  return response.data || []
+}
+
 // List all batches with filtering and pagination
 export async function getBatches(filters: {
   store_id?: string

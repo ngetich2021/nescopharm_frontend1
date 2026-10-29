@@ -201,6 +201,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Company-wide inventory routes
     Route::get('/inventory/summary', [ProductController::class, 'getInventorySummary']);
     Route::get('/inventory/batches', [ProductController::class, 'getInventoryBatches']);
+    Route::get('/inventory/batch-stock', [ProductController::class, 'getBatchStock']);
     Route::get('/inventory/movements', [ProductController::class, 'getInventoryMovements']);
     Route::get('/inventory/expiring', [ProductController::class, 'getExpiringBatches']);
     Route::get('/inventory/low-stock', [ProductController::class, 'getLowStockProducts']);
