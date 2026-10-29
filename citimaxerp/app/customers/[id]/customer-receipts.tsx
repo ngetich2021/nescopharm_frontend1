@@ -98,7 +98,6 @@ export function CustomerReceipts({ customerId }: { customerId: string }) {
                   <th className="px-2 py-1.5 text-left font-medium border-b">Method</th>
                   <th className="px-2 py-1.5 text-left font-medium border-b">Reference</th>
                   <th className="px-2 py-1.5 text-right font-medium border-b">Amount</th>
-                  <th className="px-2 py-1.5 text-left font-medium border-b">Paid Invoices</th>
                   <th className="px-2 py-1.5 text-right font-medium border-b">Credit</th>
                   <th className="px-2 py-1.5 border-b" />
                 </tr>
@@ -123,17 +122,6 @@ export function CustomerReceipts({ customerId }: { customerId: string }) {
                     </td>
                     <td className={`px-2 py-1.5 text-right whitespace-nowrap font-medium ${r.status === "cancelled" ? "line-through" : ""}`}>
                       {kes(r.amount)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      {r.applied.length === 0 ? (
-                        <span className="text-gray-400">—</span>
-                      ) : (
-                        r.applied.map((a) => (
-                          <div key={a.invoice_id} className="whitespace-nowrap">
-                            {a.invoice_number ?? "Invoice"} <span className="text-gray-500">{kes(a.amount)}</span>
-                          </div>
-                        ))
-                      )}
                     </td>
                     <td className="px-2 py-1.5 text-right whitespace-nowrap">
                       {r.credit > 0.005 ? kes(r.credit) : <span className="text-gray-400">—</span>}
