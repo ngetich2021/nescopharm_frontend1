@@ -532,7 +532,11 @@ class ChequeController extends Controller
                 );
                 if ($result['left_as_credit'] > 0.005) {
                     $more = $accounts->allocate($result['payment'], null, "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), remainder applied to the next unpaid invoices");
-                    $result['allocations'] = array_merge($result['allocations'], $more);
+                    // The remainder can top up an invoice the split already paid part of: one line each.
+                    $result['allocations'] = collect(array_merge($result['allocations'], $more))
+                        ->groupBy('invoice_id')
+                        ->map(fn ($rows) => array_merge($rows->last(), ['amount' => round($rows->sum('amount'), 2)]))
+                        ->values()->all();
                     $result['allocated'] = round(array_sum(array_column($result['allocations'], 'amount')), 2);
                     $result['left_as_credit'] = round((float) $cheque->amount - $result['allocated'], 2);
                 }

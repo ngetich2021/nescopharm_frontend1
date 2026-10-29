@@ -273,13 +273,20 @@ class CustomerAccountService
                     continue;
                 }
 
-                PaymentAllocation::create([
-                    'payment_id' => $payment->id,
-                    'invoice_id' => $invoice->id,
-                    'amount_allocated' => $put,
-                    'allocated_date' => now(),
-                    'notes' => $notes,
-                ]);
+                // One allocation per receipt and invoice: a second pass over the same invoice (a
+                // cheque's split, then its remainder oldest-first) tops the existing one up.
+                $existing = PaymentAllocation::where('payment_id', $payment->id)->where('invoice_id', $invoice->id)->first();
+                if ($existing) {
+                    $existing->update(['amount_allocated' => round((float) $existing->amount_allocated + $put, 2)]);
+                } else {
+                    PaymentAllocation::create([
+                        'payment_id' => $payment->id,
+                        'invoice_id' => $invoice->id,
+                        'amount_allocated' => $put,
+                        'allocated_date' => now(),
+                        'notes' => $notes,
+                    ]);
+                }
                 $invoice->update(['amount_paid' => (float) $invoice->amount_paid + $put]);
                 $this->payments->syncOrderPaid($invoice);
                 $invoice->refresh();
