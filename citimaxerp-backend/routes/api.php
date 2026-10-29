@@ -290,6 +290,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/customers/{customerId}/account-balance/split',[\App\Http\Controllers\CustomerBalanceController::class, 'suggestSplit']);
     Route::post('/customers/{customerId}/account-balance/receive', [\App\Http\Controllers\CustomerBalanceController::class, 'receive']);
     Route::post('/customers/{customerId}/account-balance/apply-credit', [\App\Http\Controllers\CustomerBalanceController::class, 'applyCredit']);
+    Route::get('/customers/{customerId}/receipts', [\App\Http\Controllers\CustomerBalanceController::class, 'receipts']);
+    Route::post('/customers/{customerId}/receipts/{paymentId}/cancel', [\App\Http\Controllers\CustomerBalanceController::class, 'cancelReceipt']);
+    Route::delete('/customers/{customerId}/receipts/{paymentId}',[\App\Http\Controllers\CustomerBalanceController::class, 'deleteReceipt']);
     Route::delete('/customers/{customerId}', [CustomerController::class, 'destroy'])->name('customers.destroy');
 
     // Customer notes

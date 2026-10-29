@@ -479,6 +479,139 @@ class CustomerAccountService
             ->orderBy('invoices.created_at');
     }
 
+    /**
+     * Every receipt taken from the customer (cash, M-Pesa, bank, approved cheques), newest first,
+     * with the invoices it paid and what is left as their credit. Cancelled ones stay listed.
+     */
+    public function receipts(string $companyId, string $customerId): Collection
+    {
+        $orderIds = \App\Models\Order::where('company_id', $companyId)->where('customer_id', $customerId)->pluck('id');
+
+        return Payment::where('company_id', $companyId)
+            ->whereIn('status', ['completed', 'cancelled'])
+            ->where(fn ($q) => $q->where('customer_id', $customerId)->orWhereIn('order_id', $orderIds))
+            ->with('allocations')
+            ->orderByDesc('payment_date')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (Payment $payment) {
+                $invoiceIds = $payment->allocations->pluck('invoice_id');
+                $numbers = Invoice::whereIn('id', $invoiceIds)->pluck('invoice_number', 'id');
+                $applied = $payment->allocations->map(fn ($a) => [
+                    'invoice_id' => $a->invoice_id,
+                    'invoice_number' => $numbers[$a->invoice_id] ?? null,
+                    'amount' => round((float) $a->amount_allocated, 2),
+                ])->values()->all();
+                // The older auto-invoice path ties a receipt straight to its invoice, with no allocation rows.
+                if (!$applied && $payment->status === 'completed' && ($direct = $this->directInvoice($payment))) {
+                    $applied[] = ['invoice_id' => $direct->id, 'invoice_number' => $direct->invoice_number, 'amount' => round((float) $payment->amount_paid, 2)];
+                }
+                $cheque = Cheque::where('payment_id', $payment->id)->first();
+
+                return [
+                    'id' => $payment->id,
+                    'payment_number' => $payment->payment_number,
+                    'payment_date' => $payment->payment_date?->toDateString(),
+                    'payment_method' => $payment->payment_method,
+                    'status' => $payment->status,
+                    'reference' => $payment->transaction_id,
+                    'cheque_number' => $cheque?->cheque_number,
+                    'amount' => round((float) $payment->amount_paid, 2),
+                    'refunded' => round((float) $payment->amount_refunded, 2),
+                    'credit' => round($this->paymentAvailable($payment), 2),
+                    'applied' => $applied,
+                    'created_at' => $payment->created_at?->toIso8601String(),
+                ];
+            });
+    }
+
+    /**
+     * Take back a receipt captured in error: what it paid comes back off those invoices (they owe
+     * it again) and the ledger drops it (LedgerSyncObserver). No other receipt is moved.
+     * Cancel keeps the receipt (and its cheque) on record as cancelled; delete removes both.
+     *
+     * @return array{reversed: array<int, array{invoice_number: string, amount: float}>, cheque_number: ?string}
+     */
+    public function removeReceipt(Payment $payment, bool $cancel): array
+    {
+        return DB::transaction(function () use ($payment, $cancel) {
+            $payment = Payment::lockForUpdate()->findOrFail($payment->id);
+            if ($cancel && $payment->status !== 'completed') {
+                throw new RuntimeException("Only a received payment can be cancelled (this one is {$payment->status})");
+            }
+            if ($payment->refunds()->whereIn('status', ['completed', 'pending'])->exists()) {
+                throw new RuntimeException('Part of this payment was refunded to the customer; cancel that refund first');
+            }
+
+            // A cancelled receipt was already taken off its invoices.
+            $reversed = $payment->status === 'completed' ? $this->reverseReceipt($payment) : [];
+
+            $cheque = Cheque::where('payment_id', $payment->id)->first();
+            if ($cancel) {
+                $cheque?->update(['status' => 'cancelled']);
+                $payment->update(['status' => 'cancelled']);
+            } else {
+                // The cheque was the same capture, so it goes too (unless a bounce charge was raised on it).
+                if ($cheque) {
+                    $cheque->bounce_charge_invoice_id
+                        ? $cheque->update(['status' => 'cancelled', 'payment_id' => null])
+                        : $cheque->delete();
+                }
+                if (\Illuminate\Support\Facades\Schema::hasTable('mpesa_transactions')) {
+                    // The M-Pesa record itself is the bank's; it just stops pointing at the deleted receipt.
+                    DB::table('mpesa_transactions')->where('payment_id', $payment->id)->update(['payment_id' => null]);
+                }
+                $payment->delete();
+            }
+
+            return ['reversed' => $reversed, 'cheque_number' => $cheque?->cheque_number];
+        });
+    }
+
+    /** @return array<int, array{invoice_number: string, amount: float}> */
+    protected function reverseReceipt(Payment $payment): array
+    {
+        $reversed = [];
+        $allocations = PaymentAllocation::where('payment_id', $payment->id)->get();
+        foreach ($allocations as $allocation) {
+            $invoice = Invoice::lockForUpdate()->find($allocation->invoice_id);
+            if ($invoice) {
+                $invoice->update(['amount_paid' => max(0, round((float) $invoice->amount_paid - (float) $allocation->amount_allocated, 2))]);
+                $this->payments->syncOrderPaid($invoice->fresh());
+                $reversed[] = ['invoice_number' => $invoice->invoice_number, 'amount' => round((float) $allocation->amount_allocated, 2)];
+            }
+            $allocation->delete();
+        }
+
+        if ($allocations->isEmpty()) {
+            $invoice = $this->directInvoice($payment);
+            if ($invoice) {
+                $take = round(min((float) $payment->amount_paid, (float) $invoice->amount_paid), 2);
+                if ($take > 0) {
+                    $invoice->update(['amount_paid' => round((float) $invoice->amount_paid - $take, 2)]);
+                    $this->payments->syncOrderPaid($invoice->fresh());
+                    $reversed[] = ['invoice_number' => $invoice->invoice_number, 'amount' => $take];
+                }
+            } elseif ($payment->order_id && ($order = \App\Models\Order::find($payment->order_id))) {
+                // A deposit on an order not yet invoiced.
+                $paid = max(0, round((float) $order->amount_paid - (float) $payment->amount_paid, 2));
+                $order->forceFill([
+                    'amount_paid' => $paid,
+                    'payment_status' => $paid > 0 ? 'partial' : 'unpaid',
+                ])->saveQuietly();
+            }
+        }
+
+        return $reversed;
+    }
+
+    protected function directInvoice(Payment $payment): ?Invoice
+    {
+        return $payment->invoice_id
+            ? Invoice::find($payment->invoice_id)
+            : Invoice::where('payment_id', $payment->id)->first();
+    }
+
     /** Open invoices oldest first; when $orderId is given, that order's invoice leads. */
     protected function oldestFirst(string $companyId, string $customerId, ?string $orderId = null): Collection
     {

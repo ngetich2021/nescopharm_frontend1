@@ -186,6 +186,39 @@ export async function applyCustomerCredit(customerId: string): Promise<{ message
   return { message: response.message }
 }
 
+// A receipt taken from the customer (CustomerAccountService::receipts).
+export interface CustomerReceipt {
+  id: string
+  payment_number: string | null
+  payment_date: string | null
+  payment_method: string
+  status: "completed" | "cancelled"
+  reference: string | null
+  cheque_number: string | null
+  amount: number
+  refunded: number
+  credit: number
+  applied: { invoice_id: string; invoice_number: string | null; amount: number }[]
+  created_at: string | null
+}
+
+export async function fetchCustomerReceipts(customerId: string): Promise<CustomerReceipt[]> {
+  const response = await apiCall<{ data: CustomerReceipt[] }>(`/customers/${customerId}/receipts`, "GET", undefined, true)
+  return response.data
+}
+
+// Cancel or delete a receipt captured in error; its money comes back off the invoices it paid.
+// A cancelled one stays listed as cancelled; a deleted one is gone.
+export async function cancelCustomerReceipt(customerId: string, paymentId: string): Promise<{ message: string }> {
+  const response = await apiCall<{ message: string }>(`/customers/${customerId}/receipts/${paymentId}/cancel`, "POST", undefined, true)
+  return { message: response.message }
+}
+
+export async function deleteCustomerReceipt(customerId: string, paymentId: string): Promise<{ message: string }> {
+  const response = await apiCall<{ message: string }>(`/customers/${customerId}/receipts/${paymentId}`, "DELETE", undefined, true)
+  return { message: response.message }
+}
+
 // A PD cheque on the customer's account, spread over several invoices once it is approved.
 export async function recordChequeOnAccount(data: ChequeOnAccountRequest): Promise<{ message: string }> {
   const { attachment, allocations, ...fields } = data

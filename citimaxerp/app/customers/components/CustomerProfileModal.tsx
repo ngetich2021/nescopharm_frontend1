@@ -40,16 +40,15 @@ import {
   Wallet,
 } from "lucide-react";
 import { CustomerAccount } from "@/app/customers/[id]/customer-account";
+import { CustomerReceipts } from "@/app/customers/[id]/customer-receipts";
 import { getDocuments, type Document as CustomerDocument } from "@/lib/documents";
 import { type Customer, getCustomerProfile, createCustomerNote, type CustomerProfileData } from "@/lib/customers";
-import { type Payment } from "@/lib/customers";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { ApplicationStatusSection } from "@/app/customers/[id]/application-status-section";
 import { FileLink } from "@/components/file-preview"
-import { paymentMethodLabel } from "@/lib/payment-methods"
 
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
   pharmacy: "Pharmacy",
@@ -533,51 +532,7 @@ export function CustomerProfileModal({
                 </TabsContent>
 
                 <TabsContent value="payments" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <CreditCard className="h-5 w-5" />
-                        Payment History
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {(() => {
-                        const payments = customerProfile?.payments || [];
-                        return payments.length > 0 ? (
-                          <div className="space-y-3">
-                            {payments.slice(0, 3).map((payment: Payment) => (
-                              <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                  <div className="font-medium">Payment for Order {payment.order_id}</div>
-                                  <div className="text-sm text-gray-500">
-                                    {format(new Date(payment.created_at), "MMM dd, yyyy")}
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="font-medium">KES {parseFloat(payment.amount_paid).toLocaleString()}</div>
-                                  <div className="flex gap-2">
-                                    <Badge variant="outline" className="text-xs">
-                                      {paymentMethodLabel(payment.payment_method)}
-                                    </Badge>
-                                    <Badge variant="outline" className={`text-xs ${
-                                      payment.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                      {payment.status}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-gray-500">
-                            <CreditCard className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                            <p>No payments found</p>
-                          </div>
-                        );
-                      })()}
-                    </CardContent>
-                  </Card>
+                  <CustomerReceipts customerId={currentCustomer.id} />
                 </TabsContent>
 
                 <TabsContent value="notes" className="space-y-4">

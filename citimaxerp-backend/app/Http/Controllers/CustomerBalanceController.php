@@ -127,6 +127,64 @@ class CustomerBalanceController extends Controller
         ], 201);
     }
 
+    // Receipts taken from the customer, for the Payments tab of their profile.
+    public function receipts(Request $request, string $customerId): JsonResponse
+    {
+        if (!$this->hasPermission($request, 'can_view_invoices')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        $companyId = $request->user()->company_id;
+        Customer::where('company_id', $companyId)->findOrFail($customerId);
+
+        return response()->json(['data' => $this->accounts->receipts($companyId, $customerId)]);
+    }
+
+    // A receipt captured in error: its money comes back off the invoices it paid. Cancel keeps it
+    // on record as cancelled; delete removes it.
+    public function cancelReceipt(Request $request, string $customerId, string $paymentId): JsonResponse
+    {
+        return $this->removeReceipt($request, $customerId, $paymentId, true);
+    }
+
+    public function deleteReceipt(Request $request, string $customerId, string $paymentId): JsonResponse
+    {
+        return $this->removeReceipt($request, $customerId, $paymentId, false);
+    }
+
+    protected function removeReceipt(Request $request, string $customerId, string $paymentId, bool $cancel): JsonResponse
+    {
+        if (!$this->hasPermission($request, 'can_delete_invoices')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        $companyId = $request->user()->company_id;
+        Customer::where('company_id', $companyId)->findOrFail($customerId);
+        $payment = Payment::where('company_id', $companyId)->findOrFail($paymentId);
+        if (!$this->accounts->receipts($companyId, $customerId)->contains('id', $payment->id)) {
+            return response()->json(['message' => 'This payment is not one of this customer\'s receipts'], 404);
+        }
+
+        try {
+            $result = $this->accounts->removeReceipt($payment, $cancel);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            $verb = $cancel ? 'cancel' : 'delete';
+            Log::error("Failed to {$verb} customer payment", ['payment_id' => $paymentId, 'error' => $e->getMessage()]);
+            return response()->json(['message' => "Failed to {$verb} payment", 'error' => $e->getMessage()], 500);
+        }
+
+        $done = $cancel ? 'cancelled' : 'deleted';
+        $reversed = collect($result['reversed'])->map(fn ($r) => number_format($r['amount'], 2) . ' back on ' . $r['invoice_number'])->implode(', ');
+
+        return response()->json([
+            'message' => 'Payment of ' . number_format((float) $payment->amount_paid, 2) . " {$done}"
+                . ($reversed ? "; {$reversed}" : '')
+                . ($result['cheque_number'] ? "; cheque {$result['cheque_number']} {$done}" : ''),
+            'data' => $result,
+            'account' => $this->accounts->summary($companyId, $customerId),
+        ]);
+    }
+
     public function applyCredit(Request $request, string $customerId): JsonResponse
     {
         if (!$this->hasPermission($request, 'can_update_invoices')) {
