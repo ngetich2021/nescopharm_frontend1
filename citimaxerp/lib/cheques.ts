@@ -149,6 +149,22 @@ export async function bounceCheque(id: string): Promise<Cheque & { message?: str
   return { ...response.data, message: response.message }
 }
 
+export interface UpdateChequeRequest {
+  cheque_number?: string
+  bank_name?: string
+  amount?: number
+  issue_date?: string
+  maturity_date?: string
+  notes?: string | null
+}
+
+// Pending: anything can change. Approved: only number, bank and notes (the server says why otherwise).
+export async function updateCheque(id: string, data: UpdateChequeRequest): Promise<Cheque & { message?: string }> {
+  const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}`, "PUT", data, true)
+  await invalidateChequesCache()
+  return { ...response.data, message: response.message }
+}
+
 export async function cancelCheque(id: string): Promise<Cheque> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/cancel`, "POST", undefined, true)
   await invalidateChequesCache()

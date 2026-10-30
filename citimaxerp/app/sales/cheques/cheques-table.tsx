@@ -40,8 +40,9 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Eye,
+  Pencil,
 } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
 import {
   Cheque,
@@ -51,7 +52,10 @@ import {
   cancelCheque,
   fetchCheques,
   getChequeStatusColor,
+  updateCheque,
 } from "@/lib/cheques"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { RecordIssuedChequeModal } from "./record-issued-cheque-modal"
 import { FileLink } from "@/components/file-preview"
@@ -82,6 +86,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
   const [actioningId, setActioningId] = useState<string | null>(null)
   const [showRecordIssued, setShowRecordIssued] = useState(false)
   const [detailsCheque, setDetailsCheque] = useState<Cheque | null>(null)
+  const [editCheque, setEditCheque] = useState<Cheque | null>(null)
 
   const refreshCheques = useCallback(async () => {
     setIsLoading(true)
@@ -162,6 +167,12 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         View Details
       </DropdownMenuItem>
     )
+    const edit = (
+      <DropdownMenuItem onClick={() => setEditCheque(cheque)}>
+        <Pencil className="h-4 w-4 mr-2" />
+        Edit
+      </DropdownMenuItem>
+    )
 
     if (cheque.status === "approved" && cheque.direction === "received") {
       return (
@@ -174,6 +185,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             {viewDetails}
+            {edit}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() =>
@@ -214,6 +226,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           {viewDetails}
+          {edit}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() =>
@@ -325,6 +338,7 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
       />
 
       <ChequeDetailsDialog cheque={detailsCheque} onClose={() => setDetailsCheque(null)} />
+      <EditChequeDialog cheque={editCheque} onClose={() => setEditCheque(null)} onSaved={refreshCheques} />
 
       <div className="rounded-md border bg-white">
         <Table>
@@ -437,6 +451,101 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         </Table>
       </div>
     </div>
+  )
+}
+
+// Correct a cheque captured wrongly. An approved one has already paid its invoices, so only its
+// number, bank and notes can change.
+function EditChequeDialog({ cheque, onClose, onSaved }: { cheque: Cheque | null; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({ cheque_number: "", bank_name: "", amount: "", issue_date: "", maturity_date: "", notes: "" })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!cheque) return
+    setForm({
+      cheque_number: cheque.cheque_number,
+      bank_name: cheque.bank_name,
+      amount: String(cheque.amount),
+      issue_date: String(cheque.issue_date).slice(0, 10),
+      maturity_date: String(cheque.maturity_date).slice(0, 10),
+      notes: cheque.notes ?? "",
+    })
+  }, [cheque])
+
+  if (!cheque) return null
+  const approved = cheque.status === "approved"
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const result = await updateCheque(cheque.id, {
+        cheque_number: form.cheque_number.trim(),
+        bank_name: form.bank_name.trim(),
+        notes: form.notes || null,
+        ...(approved ? {} : { amount: Number(form.amount), issue_date: form.issue_date, maturity_date: form.maturity_date }),
+      })
+      toast({ title: "Saved", description: result.message || "Cheque updated" })
+      onClose()
+      onSaved()
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "Could not update cheque", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!cheque} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Cheque {cheque.cheque_number}</DialogTitle>
+        </DialogHeader>
+        {approved && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
+            Approved: its money is already on the invoices, so only the number, bank and notes can change.
+            To change the amount or dates, delete its payment from the customer&apos;s Payments tab and record it again.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label>Cheque Number</Label>
+            <Input value={form.cheque_number} onChange={set("cheque_number")} />
+          </div>
+          <div className="space-y-1">
+            <Label>Bank</Label>
+            <Input value={form.bank_name} onChange={set("bank_name")} />
+          </div>
+          <div className="space-y-1">
+            <Label>Amount</Label>
+            <Input type="number" min="0" step="0.01" value={form.amount} onChange={set("amount")} disabled={approved} />
+          </div>
+          <div />
+          <div className="space-y-1">
+            <Label>Issue Date</Label>
+            <Input type="date" value={form.issue_date} onChange={set("issue_date")} disabled={approved} />
+          </div>
+          <div className="space-y-1">
+            <Label>Maturity Date</Label>
+            <Input type="date" value={form.maturity_date} onChange={set("maturity_date")} disabled={approved} />
+          </div>
+          <div className="col-span-2 space-y-1">
+            <Label>Notes</Label>
+            <Textarea rows={2} value={form.notes} onChange={set("notes")} />
+          </div>
+        </div>
+        {!approved && cheque.direction === "received" && !cheque.invoice_id && (
+          <p className="text-xs text-muted-foreground">Changing the amount re-works which invoices it pays, oldest first.</p>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={save} disabled={saving || !form.cheque_number.trim() || !form.bank_name.trim() || (!approved && !(Number(form.amount) > 0))}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

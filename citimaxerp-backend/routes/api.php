@@ -1056,6 +1056,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('cheques', [ChequeController::class, 'index']);
     Route::get('cheques/{id}', [ChequeController::class, 'show']);
     Route::post('cheques', [ChequeController::class, 'store']);
+    Route::put('cheques/{id}', [ChequeController::class, 'update']);
     Route::post('cheques/{id}/approve', [ChequeController::class, 'approve']);
     Route::post('cheques/{id}/bounce', [ChequeController::class, 'bounce']);
     Route::post('cheques/{id}/cancel', [ChequeController::class, 'cancel']);

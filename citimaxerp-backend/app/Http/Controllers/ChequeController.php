@@ -526,7 +526,7 @@ class ChequeController extends Controller
                     (float) $cheque->amount,
                     'cheque',
                     $cheque->maturity_date->toDateString(),
-                    $cheque->cheque_number,
+                    $this->paymentReference($cheque->cheque_number),
                     "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
                     $split,
                 );
@@ -574,6 +574,101 @@ class ChequeController extends Controller
             Log::error('Failed to approve cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
             return response()->json(['message' => 'Failed to approve cheque', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * A payment's reference must be unique, but two cheques can share a number (a customer's
+     * cheque book reused, or one cheque recorded in two parts), so a repeat gets " (2)", " (3)"...
+     */
+    protected function paymentReference(string $chequeNumber, ?string $exceptPaymentId = null): string
+    {
+        $taken = fn (string $ref) => Payment::where('transaction_id', $ref)
+            ->when($exceptPaymentId, fn ($q) => $q->where('id', '!=', $exceptPaymentId))
+            ->exists();
+        $ref = $chequeNumber;
+        for ($n = 2; $taken($ref); $n++) {
+            $ref = "{$chequeNumber} ({$n})";
+        }
+
+        return $ref;
+    }
+
+    /**
+     * Correct a cheque captured wrongly. While pending everything can change (an account
+     * cheque's split is re-worked oldest-first when its amount changes). Once approved its
+     * money is on the invoices, so only the number, bank and notes can change; to change the
+     * amount or dates, delete its payment from the customer's Payments tab and record it again.
+     */
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        $cheque = Cheque::where('company_id', $user->company_id)->findOrFail($id);
+        $allowed = $cheque->direction === 'issued'
+            ? $this->hasPermission($request, 'can_update_suppliers', $user->company_id) || $this->hasPermission($request, 'can_update_invoices', $user->company_id)
+            : $this->hasPermission($request, 'can_update_invoices', $user->company_id);
+        if (!$allowed) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        if (!in_array($cheque->status, ['pending', 'approved'], true)) {
+            return response()->json(['message' => "A {$cheque->status} cheque cannot be edited."], 400);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'cheque_number' => 'sometimes|required|string|max:100',
+            'bank_name' => 'sometimes|required|string|max:150',
+            'amount' => 'sometimes|required|numeric|min:0.01',
+            'issue_date' => 'sometimes|required|date',
+            'maturity_date' => 'sometimes|required|date',
+            'notes' => 'nullable|string',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $data = $request->only(['cheque_number', 'bank_name', 'amount', 'issue_date', 'maturity_date', 'notes']);
+        $issue = $data['issue_date'] ?? $cheque->issue_date->toDateString();
+        $maturity = $data['maturity_date'] ?? $cheque->maturity_date->toDateString();
+        if ($maturity < $issue) {
+            return response()->json(['message' => 'The maturity date cannot be before the issue date.'], 422);
+        }
+
+        if ($cheque->status === 'approved') {
+            $changesMoney = (isset($data['amount']) && abs((float) $data['amount'] - (float) $cheque->amount) > 0.005)
+                || (isset($data['issue_date']) && $data['issue_date'] !== $cheque->issue_date->toDateString())
+                || (isset($data['maturity_date']) && $data['maturity_date'] !== $cheque->maturity_date->toDateString());
+            if ($changesMoney) {
+                return response()->json(['message' => 'This cheque is approved and already paid its invoices, so only its number, bank and notes can be changed. To change the amount or dates, delete its payment from the customer\'s Payments tab and record the cheque again.'], 422);
+            }
+            unset($data['amount'], $data['issue_date'], $data['maturity_date']);
+        }
+
+        $amount = (float) ($data['amount'] ?? $cheque->amount);
+        if ($cheque->status === 'pending' && $cheque->direction === 'received') {
+            if ($cheque->invoice_id) {
+                $invoice = Invoice::find($cheque->invoice_id);
+                if ($invoice && $amount > $invoice->outstanding() + 0.01) {
+                    return response()->json(['message' => 'Cheque amount exceeds invoice balance', 'balance_due' => $invoice->outstanding()], 400);
+                }
+            } elseif (isset($data['amount']) && abs($amount - (float) $cheque->amount) > 0.005) {
+                $data['allocation_plan'] = app(\App\Services\CustomerAccountService::class)->suggestSplit($cheque->company_id, $cheque->customer_id, $amount);
+            }
+        }
+
+        DB::transaction(function () use ($cheque, $data) {
+            $cheque->update($data);
+            // The approved cheque's payment carries its number and bank too.
+            if ($cheque->status === 'approved' && $cheque->payment_id && $payment = Payment::find($cheque->payment_id)) {
+                $payment->update([
+                    'transaction_id' => $this->paymentReference($cheque->cheque_number, $payment->id),
+                    'notes' => "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
+                ]);
+            }
+        });
+
+        $fresh = $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number']);
+        $this->attachInvoiceNumbers(collect([$fresh]));
+
+        return response()->json(['message' => "Cheque {$fresh->cheque_number} updated", 'data' => $fresh]);
     }
 
     /**
