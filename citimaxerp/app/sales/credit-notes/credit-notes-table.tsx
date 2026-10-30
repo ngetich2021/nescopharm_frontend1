@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { matchesDocNumber } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import {
   Table,
@@ -120,7 +121,7 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
       const matchesSearch =
         searchQuery === "" ||
         creditNote.credit_note_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        creditNote.invoice?.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        matchesDocNumber(creditNote.invoice?.invoice_number, searchQuery) ||
         getCustomerDisplayName(creditNote).toLowerCase().includes(searchQuery.toLowerCase())
 
       const matchesStatus =

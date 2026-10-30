@@ -212,9 +212,8 @@ class InvoiceController extends Controller
                 if ($request->filled('search')) {
                     $term = $request->input('search');
                     $query->where(function ($q) use ($term) {
-                        $q->where('invoice_number', 'ilike', "%{$term}%")
-                            // The printed old-system number, NSK/0054 for File No 54.
-                            ->orWhereRaw("file_number ~ '^[0-9]+$' AND ? || lpad(ltrim(file_number, '0'), 4, '0') ilike ?", [Invoice::LEGACY_PREFIX, "%{$term}%"])
+                        // The printed number too: NSK/0054 for File No 54.
+                        $q->where(fn ($nq) => $nq->whereNumberMatches($term))
                             ->orWhereHas('customer', function ($cq) use ($term) {
                                 $cq->where('name', 'ilike', "%{$term}%")
                                     ->orWhere('business_name', 'ilike', "%{$term}%");

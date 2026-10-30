@@ -23,7 +23,13 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/notifications"
-import { DATA_CHANGED_EVENT } from "@/lib/api"
+import apiCall, { DATA_CHANGED_EVENT } from "@/lib/api"
+
+interface GlobalSearchResults {
+  invoices: { id: string; number: string; customer: string | null; amount: number; status: string }[]
+  orders: { id: string; number: string; invoice_number: string | null; customer: string | null; amount: number; status: string }[]
+  customers: { id: string; name: string | null; city: string | null }[]
+}
 import { format, formatDistanceToNow } from "date-fns"
 
 function NotificationIcon({ notification }: { notification: AppNotification }) {
@@ -129,9 +135,53 @@ export function TopNav() {
     }
   }
 
+  // Invoices (NSK/0427 however typed), orders and customers, as you type.
+  const [results, setResults] = useState<GlobalSearchResults | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [resultsOpen, setResultsOpen] = useState(false)
+
+  useEffect(() => {
+    const term = searchQuery.trim()
+    if (term.length < 2) {
+      setResults(null)
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const found = await apiCall<GlobalSearchResults>(`/search?q=${encodeURIComponent(term)}`, "GET", undefined, true)
+        if (!cancelled) setResults(found)
+      } catch {
+        if (!cancelled) setResults({ invoices: [], orders: [], customers: [] })
+      } finally {
+        if (!cancelled) setSearching(false)
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchQuery])
+
+  const searchHits = results
+    ? [
+        ...results.invoices.map((i) => ({ key: `i${i.id}`, href: `/sales/invoices/${i.id}`, title: i.number, sub: i.customer, kind: "Invoice" })),
+        ...results.orders.map((o) => ({ key: `o${o.id}`, href: `/sales/orders/${o.id}`, title: o.invoice_number ? `${o.number} · ${o.invoice_number}` : o.number, sub: o.customer, kind: "Order" })),
+        ...results.customers.map((c) => ({ key: `c${c.id}`, href: `/customers/${c.id}`, title: c.name, sub: c.city, kind: "Customer" })),
+      ]
+    : []
+
+  const openHit = (href: string) => {
+    setResultsOpen(false)
+    setSearchQuery("")
+    router.push(href)
+  }
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    // Implement search functionality here
+    // Enter opens the first match.
+    if (searchHits.length > 0) openHit(searchHits[0].href)
   }
 
   const handleSignOut = async () => {
@@ -175,12 +225,44 @@ export function TopNav() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
             type="text"
-            placeholder="Search customers, orders, products..."
+            placeholder="Search invoices (NSK/0427), orders, customers..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setResultsOpen(true)
+            }}
+            onFocus={() => setResultsOpen(true)}
+            onBlur={() => setTimeout(() => setResultsOpen(false), 150)}
             className="pl-10 pr-4 py-2 w-full border-gray-300 focus:border-[#1E2764] focus:ring-[#1E2764]"
             disabled={authLoading || isSigningOut}
           />
+          {resultsOpen && searchQuery.trim().length >= 2 && (
+            <div className="absolute left-0 right-0 top-full mt-1 max-h-96 overflow-y-auto rounded-md border bg-white shadow-lg z-50">
+              {searching && !results ? (
+                <p className="flex items-center gap-2 p-3 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Searching...
+                </p>
+              ) : searchHits.length === 0 ? (
+                <p className="p-3 text-sm text-gray-500">Nothing found for &quot;{searchQuery.trim()}&quot;</p>
+              ) : (
+                searchHits.map((hit) => (
+                  <button
+                    key={hit.key}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => openHit(hit.href)}
+                    className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0 hover:bg-gray-50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-gray-900">{hit.title}</span>
+                      {hit.sub && <span className="block truncate text-xs text-gray-500">{hit.sub}</span>}
+                    </span>
+                    <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{hit.kind}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </form>
       </div>
 

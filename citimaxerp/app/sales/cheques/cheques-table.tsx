@@ -56,7 +56,7 @@ import {
 } from "@/lib/cheques"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, matchesDocNumber } from "@/lib/utils"
 import { RecordIssuedChequeModal } from "./record-issued-cheque-modal"
 import { FileLink } from "@/components/file-preview"
 
@@ -117,8 +117,8 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
         cheque.cheque_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         cheque.bank_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         cheque.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cheque.invoice?.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cheque.invoice_numbers?.some((n) => n.toLowerCase().includes(searchQuery.toLowerCase()))
+        matchesDocNumber(cheque.invoice?.invoice_number, searchQuery) ||
+        cheque.invoice_numbers?.some((n) => matchesDocNumber(n, searchQuery))
 
       const matchesStatus = statusFilter === "all" || cheque.status === statusFilter
       const matchesDirection = directionFilter === "all" || cheque.direction === directionFilter

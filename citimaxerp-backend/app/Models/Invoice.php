@@ -33,6 +33,31 @@ class Invoice extends Model
         return self::shortNumber($stored);
     }
 
+    public static function nextFileNumber(string $companyId): int
+    {
+        return 1 + (int) self::where('company_id', $companyId)
+            ->whereRaw("file_number ~ '^[0-9]+$'")
+            ->max(\Illuminate\Support\Facades\DB::raw('file_number::int'));
+    }
+
+    /**
+     * Invoices whose number matches a search, as printed or as typed: "NSK/0427", "nsk 427",
+     * "NSK427" and "0427" all find NSK/0427 (File No 427); "INV-0074" finds INV-...-0074.
+     */
+    public function scopeWhereNumberMatches($query, string $term)
+    {
+        $term = trim($term);
+        $query->where(function ($q) use ($term) {
+            $q->where('invoice_number', 'ilike', "%{$term}%")
+                ->orWhereRaw("file_number ~ '^[0-9]+$' AND ? || lpad(ltrim(file_number, '0'), 4, '0') ilike ?", [self::LEGACY_PREFIX, "%{$term}%"]);
+            if (preg_match('/^(?:nsk\s*[\/\-]?\s*)?0*(\d+)$/i', $term, $m)) {
+                $q->orWhereRaw("file_number ~ '^[0-9]+$' AND file_number::int = ?", [(int) $m[1]]);
+            }
+        });
+
+        return $query;
+    }
+
     // INV-853b296e-0074 is INV-0074.
     public static function shortNumber(?string $stored): ?string
     {
@@ -162,6 +187,12 @@ class Invoice extends Model
 
             // Set balance amount
             $model->balance_amount = $model->outstanding();
+
+            // An order's invoice is numbered NSK/0429, NSK/0430...: the next File No after the
+            // highest in use (other invoices, e.g. bounced cheque charges, keep their INV number).
+            if ($model->order_id && blank($model->file_number) && $model->company_id) {
+                $model->file_number = (string) self::nextFileNumber($model->company_id);
+            }
         });
 
         static::updating(function ($model) {

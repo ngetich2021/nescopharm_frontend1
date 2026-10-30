@@ -440,6 +440,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/subscription-plans-stats', [App\Http\Controllers\SubscriptionPlanController::class, 'getStatistics']);
 
     // Order routes
+    Route::get('/search', \App\Http\Controllers\GlobalSearchController::class)->name('search.global');
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');

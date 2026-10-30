@@ -173,6 +173,8 @@ class OrderController extends Controller
                     $term = $request->input('search');
                     $query->where(function ($q) use ($term) {
                         $q->where('order_number', 'ilike', "%{$term}%")
+                            // Its invoice's number, e.g. NSK/0427.
+                            ->orWhereHas('invoice', fn ($iq) => $iq->whereNumberMatches($term))
                             ->orWhereHas('customer', function ($cq) use ($term) {
                                 $cq->where('name', 'ilike', "%{$term}%")
                                     ->orWhere('business_name', 'ilike', "%{$term}%");
@@ -181,7 +183,7 @@ class OrderController extends Controller
                 }
 
                 $perPage = (int) $request->input('per_page', 1000);
-                $orders = $query->select('id', 'customer_id', 'company_id', 'order_number', 'total_amount', 'discount', 'tax', 'final_amount', 'status', 'payment_status', 'invoice_approved_at', 'order_date', 'created_at', 'updated_at')
+                $orders = $query->with('invoice:id,order_id,invoice_number,file_number')->select('id', 'customer_id', 'company_id', 'order_number', 'total_amount', 'discount', 'tax', 'final_amount', 'status', 'payment_status', 'invoice_approved_at', 'order_date', 'created_at', 'updated_at')
                     ->orderBy('order_date', 'desc')
                     ->orderBy('created_at', 'desc')
                     ->paginate($perPage);

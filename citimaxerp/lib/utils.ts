@@ -5,6 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Whether a document number matches what was typed, however it was typed: "NSK/0427",
+// "nsk 427", "NSK427" and "0427" all find NSK/0427 (mirrors Invoice::scopeWhereNumberMatches).
+export function matchesDocNumber(number: string | null | undefined, query: string): boolean {
+  if (!number || !query.trim()) return false
+  const squash = (s: string) => s.toLowerCase().replace(/[\s/-]/g, "")
+  if (squash(number).includes(squash(query))) return true
+  const typed = query.trim().match(/^(?:nsk\s*[/-]?\s*)?0*(\d+)$/i)
+  const nsk = number.match(/^NSK\/0*(\d+)$/i)
+  return !!typed && !!nsk && typed[1] === nsk[1]
+}
+
 export function formatCurrency(amount: number | string): string {
   // Convert to number and handle invalid amounts
   let numericAmount = Number(amount)

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { matchesDocNumber } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -142,7 +143,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
     (typeFilter === "all" || invoice.type.toLowerCase() === typeFilter) &&
     (paymentTypeFilter === "all" || invoice.payment_type === paymentTypeFilter) &&
     (searchTerm === "" ||
-      (invoice.invoice_number && invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      matchesDocNumber(invoice.invoice_number, searchTerm) ||
       (invoice.customer?.name && invoice.customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       ((invoice.customer as any)?.business_name && (invoice.customer as any).business_name.toLowerCase().includes(searchTerm.toLowerCase()))
     )

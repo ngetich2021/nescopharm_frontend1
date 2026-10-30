@@ -31,6 +31,7 @@ import { EditOrderModal } from "@/components/modals/edit-order-modal"
 import { DeleteOrderConfirmationDialog } from "./components/DeleteOrderConfirmationDialog"
 import { toast } from "@/components/ui/use-toast"
 import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate, declinedDeletesAt, orderEditingOpen } from "@/lib/orders"
+import { matchesDocNumber } from "@/lib/utils"
 import { PermissionGuard } from "@/components/PermissionGuard"
 
 interface OrdersTableProps {
@@ -431,6 +432,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
     const matchesSearch =
       searchQuery === "" ||
       (order.order_number && order.order_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      matchesDocNumber(order.invoice?.invoice_number, searchQuery) ||
       (order.customer?.name && order.customer.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       ((order.customer as any)?.business_name && (order.customer as any).business_name.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -593,6 +595,9 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                       <span className="text-sm font-semibold text-primary">
                         {formatOrderNumber(order)}
                       </span>
+                      {order.invoice?.invoice_number && (
+                        <span className="text-xs text-muted-foreground">{order.invoice.invoice_number}</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
