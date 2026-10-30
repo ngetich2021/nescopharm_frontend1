@@ -4,9 +4,10 @@ import { useEffect, useId, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Trash2, Loader2, Pencil } from "lucide-react"
 import { getProducts } from "@/lib/products"
-import { DEFAULT_UNIT, findAllByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { DEFAULT_UNIT, describeOption, findAllByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { activeSizesOf, sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
@@ -66,7 +67,7 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
         <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b text-xs font-semibold text-gray-700 uppercase tracking-wide">
             <th className="text-left py-2 pr-2 w-12">S/No</th>
-            <th className="text-left py-2 pr-2 w-36">Code No.</th>
+            <th className="text-left py-2 pr-2 w-44">Code / Item Search</th>
             <th className="text-left py-2 pr-2">Item Name</th>
             <th className="text-left py-2 pr-2 w-36">Pack Size</th>
             <th className="text-right py-2 pr-2 w-28">Price per Pack (Ksh)</th>
@@ -262,6 +263,42 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
   const [text, setText] = useState(saved && saved !== "Custom" ? saved : "")
   const [looking, setLooking] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  // Typing a name or item number instead of a code lists matching items with their prices, as on orders.
+  const [nameHits, setNameHits] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
+  const [listOpen, setListOpen] = useState(false)
+
+  useEffect(() => {
+    const q = text.trim()
+    if (q.length < 2 || looksLikeCode(q) || q === form.getValues(`items.${index}.price_label`)) {
+      setNameHits([])
+      setSearching(false)
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await getProducts(1, 30, { search: q })
+        if (!cancelled) setNameHits(data || [])
+      } catch {
+        if (!cancelled) setNameHits([])
+      } finally {
+        if (!cancelled) setSearching(false)
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text])
+
+  const pickFromSearch = (product: any, option: PriceOption) => {
+    apply([product], option)
+    setNameHits([])
+    setListOpen(false)
+  }
 
   // A code shared by several sizes sets the price but leaves the product empty until a size is picked.
   const apply = (matches: any[], option: PriceOption) => {
@@ -303,10 +340,9 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
       return
     }
     const local = findAllByPriceCode(products, value)
-    if ((local && local.products.length === 1) || !looksLikeCode(value)) {
-      if (!local) setNotFound(true)
-      return
-    }
+    // A name or item number is picked from the search list, not resolved here.
+    if (!looksLikeCode(value)) return
+    if (local && local.products.length === 1) return
     setLooking(true)
     try {
       const { data } = await getProducts(1, 100, { search: value.replace(/\s+/g, "") })
@@ -322,29 +358,78 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
     }
   }
 
+  const typed = text.trim()
+  const nameSearch = typed.length >= 2 && !looksLikeCode(typed) && typed !== form.getValues(`items.${index}.price_label`)
+
   return (
-    <div className="relative">
-      <Input
-        value={text}
-        list={listId}
-        placeholder="e.g. NSPD 001"
-        className={`h-10 font-mono uppercase ${notFound ? "border-red-500" : ""}`}
-        aria-label={`Code for row ${index + 1}`}
-        onChange={(e) => {
-          setText(e.target.value)
-          setNotFound(false)
-          if (form.getValues(`items.${index}.product_id`) && e.target.value.trim() !== form.getValues(`items.${index}.price_label`)) clear()
-        }}
-        onBlur={resolveRemotely}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            resolveRemotely()
-          }
-        }}
-      />
-      {looking && <Loader2 className="absolute right-2 top-3 h-4 w-4 animate-spin text-gray-400" />}
-      {notFound && <p className="text-xs text-red-600 mt-1">Code not found</p>}
-    </div>
+    <Popover open={listOpen && nameSearch} onOpenChange={setListOpen}>
+      <PopoverAnchor asChild>
+        <div className="relative">
+          <Input
+            value={text}
+            list={listId}
+            placeholder="Code (NSPD 001) or name"
+            className={`h-10 ${looksLikeCode(text) ? "font-mono uppercase" : ""} ${notFound ? "border-red-500" : ""}`}
+            aria-label={`Code or item name for row ${index + 1}`}
+            onChange={(e) => {
+              setText(e.target.value)
+              setNotFound(false)
+              setListOpen(true)
+              if (form.getValues(`items.${index}.product_id`) && e.target.value.trim() !== form.getValues(`items.${index}.price_label`)) clear()
+            }}
+            onFocus={() => setListOpen(true)}
+            onBlur={resolveRemotely}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                resolveRemotely()
+              }
+              if (e.key === "Escape") setListOpen(false)
+            }}
+          />
+          {(looking || searching) && <Loader2 className="absolute right-2 top-3 h-4 w-4 animate-spin text-gray-400" />}
+          {notFound && <p className="text-xs text-red-600 mt-1">Code not found</p>}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        className="w-[28rem] max-h-80 overflow-y-auto p-1"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        // Picking an item must not take focus from the box first.
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        {searching && nameHits.length === 0 ? (
+          <p className="p-2 text-sm text-gray-500">Searching...</p>
+        ) : nameHits.length === 0 ? (
+          <p className="p-2 text-sm text-gray-500">No items found</p>
+        ) : (
+          nameHits.map((product) => {
+            const options = priceOptionsFor(product)
+            return (
+              <div key={product.id} className="border-b last:border-b-0 py-1">
+                <p className="px-2 text-sm font-medium text-gray-900">
+                  {product.name}
+                  <span className="ml-1 text-xs font-normal text-gray-500">No. {product.item_number ?? "-"} · {Number(product.stock_quantity ?? 0).toLocaleString()} in stock</span>
+                </p>
+                {options.length === 0 ? (
+                  <p className="px-2 text-xs text-gray-400">No price on any list</p>
+                ) : (
+                  options.map((option) => (
+                    <button
+                      key={option.code}
+                      type="button"
+                      className="block w-full rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-100"
+                      onClick={() => pickFromSearch(product, option)}
+                    >
+                      {describeOption(option)}
+                    </button>
+                  ))
+                )}
+              </div>
+            )
+          })
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }

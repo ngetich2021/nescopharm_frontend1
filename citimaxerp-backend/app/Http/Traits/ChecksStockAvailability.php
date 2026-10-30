@@ -34,4 +34,29 @@ trait ChecksStockAvailability
 
         return null;
     }
+
+    /**
+     * Checks every line and reports all the short ones together, so a quote or order with
+     * several missing products names them all at once instead of one per attempt.
+     *
+     * @param  iterable<array{0: ?Product, 1: ?ProductVariant, 2: int}>  $lines
+     * @return string|null One message listing each short line, or null if all are covered.
+     */
+    protected function insufficientStockSummary(iterable $lines): ?string
+    {
+        $short = [];
+        foreach ($lines as [$product, $variant, $quantity]) {
+            if (!$product || $quantity <= 0 || !$product->track_inventory) continue;
+            $available = $variant ? (int) $variant->stock_quantity : (int) $product->stock_quantity;
+            if ($quantity > $available) {
+                $label = $variant ? "{$product->name} ({$variant->name})" : $product->name;
+                $short[] = "• {$label}: requested {$quantity}, only {$available} available";
+            }
+        }
+
+        if (!$short) return null;
+
+        $count = count($short);
+        return ($count === 1 ? '1 product does not' : "{$count} products do not") . " have enough stock:\n" . implode("\n", $short);
+    }
 }

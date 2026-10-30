@@ -1314,13 +1314,11 @@ class OrderController extends Controller
         // A past (pre-go-live) sale's goods left long ago - there is no stock to check.
         if (!$order->stock_deducted_at && !$order->is_historical) {
             $order->loadMissing('orderItems.product', 'orderItems.variant');
-            foreach ($order->orderItems as $index => $item) {
-                if ($error = $this->insufficientStockMessage($item->product, $item->variant, (int) ($item->base_quantity ?: $item->quantity))) {
-                    return response()->json([
-                        'status' => 'failed',
-                        'message' => "Item at index {$index}: {$error}",
-                    ], 400);
-                }
+            $error = $this->insufficientStockSummary($order->orderItems->map(fn ($item) => [
+                $item->product, $item->variant, (int) ($item->base_quantity ?: $item->quantity),
+            ]));
+            if ($error) {
+                return response()->json(['status' => 'failed', 'message' => $error], 400);
             }
         }
 

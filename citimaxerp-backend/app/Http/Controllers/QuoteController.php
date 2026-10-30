@@ -773,15 +773,13 @@ class QuoteController extends Controller
                 // stock when the line is for a specific variant, not the parent
                 // product's base stock - a product with variants doesn't hold
                 // sellable stock at the base level.
-                foreach ($quote->quoteItems as $index => $item) {
-                    $product = $item->product;
-                    $variant = $item->variant_id ? ($item->variant ?? \App\Models\ProductVariant::find($item->variant_id)) : null;
-                    if ($error = $this->insufficientStockMessage($product, $variant, PackagingCalculatorService::piecesFor($item->quantity, $item->price_unit))) {
-                        return response()->json([
-                            'status' => 'failed',
-                            'message' => "Item at index {$index}: {$error}",
-                        ], 400);
-                    }
+                $error = $this->insufficientStockSummary($quote->quoteItems->map(fn ($item) => [
+                    $item->product,
+                    $item->variant_id ? ($item->variant ?? \App\Models\ProductVariant::find($item->variant_id)) : null,
+                    PackagingCalculatorService::piecesFor($item->quantity, $item->price_unit),
+                ]));
+                if ($error) {
+                    return response()->json(['status' => 'failed', 'message' => $error], 400);
                 }
 
                 // Generate order number
