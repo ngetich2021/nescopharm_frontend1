@@ -35,7 +35,7 @@ import {
   Cell,
   Legend
 } from "recharts"
-import { cn } from "@/lib/utils"
+import { cn, matchesDocNumber } from "@/lib/utils"
 
 type DateRangeType = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'this_year' | 'custom'
 
@@ -266,8 +266,21 @@ export default function SalesReportPage() {
         <a href={`/sales/orders/${row.original.id}`} className="font-medium text-primary hover:underline">{row.original.order_number}</a>
       ),
     },
+    {
+      accessorKey: "invoice_number",
+      header: sortable("Invoice"),
+      cell: ({ row }: any) => <span className="whitespace-nowrap">{row.original.invoice_number || "-"}</span>,
+    },
     { accessorKey: "order_date", header: sortable("Date") },
-    { accessorKey: "customer", header: sortable("Customer") },
+    {
+      accessorKey: "customer",
+      header: sortable("Customer"),
+      // The table's search box: customer, order number, or invoice number however typed (NSK/0427, nsk 427...).
+      filterFn: (row: any, _id: string, value: string) =>
+        String(row.original.customer ?? "").toLowerCase().includes(String(value).toLowerCase()) ||
+        String(row.original.order_number ?? "").toLowerCase().includes(String(value).toLowerCase()) ||
+        matchesDocNumber(row.original.invoice_number, value),
+    },
     { accessorKey: "county", header: sortable("County"), cell: ({ row }: any) => row.original.county || "-" },
     { accessorKey: "town", header: sortable("Town"), cell: ({ row }: any) => row.original.town || "-" },
     { accessorKey: "sales_rep", header: sortable("Sales Rep") },

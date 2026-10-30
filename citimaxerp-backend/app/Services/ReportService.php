@@ -673,11 +673,15 @@ class ReportService
                 DB::raw("COALESCE(NULLIF(TRIM(customers.business_name), ''), customers.name) as customer"),
                 'customers.county', 'customers.region', 'customers.city',
                 DB::raw("NULLIF(TRIM(CONCAT(rep.first_name, ' ', rep.last_name)), '') as sales_rep"),
+                DB::raw('(SELECT i.invoice_number FROM invoices i WHERE i.order_id = orders.id ORDER BY i.created_at LIMIT 1) as invoice_number'),
+                DB::raw('(SELECT i.file_number FROM invoices i WHERE i.order_id = orders.id ORDER BY i.created_at LIMIT 1) as invoice_file_number'),
             ])
             ->map(fn ($o) => [
                 'id' => $o->id,
                 // Shown short (ORD-0299) like everywhere else - see Order::getOrderNumberAttribute.
                 'order_number' => preg_match('/^(ORD)-(?:[\w-]+)-(\d{4})$/', (string) $o->order_number, $m) ? "{$m[1]}-{$m[2]}" : $o->order_number,
+                // Its invoice as printed: NSK/0427.
+                'invoice_number' => $o->invoice_number ? \App\Models\Invoice::printedNumber($o->invoice_number, $o->invoice_file_number) : null,
                 'order_date' => $o->order_date ? substr((string) $o->order_date, 0, 10) : null,
                 'customer' => $o->customer,
                 'county' => $o->county,
