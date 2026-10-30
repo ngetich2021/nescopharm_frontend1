@@ -126,7 +126,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
     const totalPieces = lines.reduce((sum, l) => sum + l.pieces, 0)
     // Blank space under the items so the column divider runs down like the printed form; it
     // shrinks as lines are added so the note stays on one page.
-    const fillerMm = Math.max(6, 50 - lines.length * 6)
+    const fillerMm = Math.max(4, 36 - lines.length * 5)
     const referenceRows: (typeof referenceCells)[] = []
     for (let i = 0; i < referenceCells.length; i += 2) referenceRows.push(referenceCells.slice(i, i + 2))
 
@@ -141,7 +141,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
             key={letterheadSrc}
             src={letterheadSrc}
             alt={`${company?.name || 'Company'} letterhead`}
-            className="w-full h-auto max-h-36 object-contain mb-1.5 print:max-h-[32mm]"
+            className="w-full h-auto mb-1.5"
             onError={() => setLetterheadIndex((i) => i + 1)}
           />
         ) : (

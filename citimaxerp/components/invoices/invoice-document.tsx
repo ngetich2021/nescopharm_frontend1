@@ -85,7 +85,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           <img
             src={company?.letterhead_url || invoice.company?.letterhead_url || undefined}
             alt={`${company?.name || invoice.company?.name} letterhead`}
-            className="w-full h-auto max-h-36 object-contain mb-1.5 print:max-h-[32mm]"
+            className="w-full h-auto mb-1.5"
             crossOrigin="anonymous"
           />
         )}
