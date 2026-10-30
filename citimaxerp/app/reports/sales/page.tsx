@@ -311,6 +311,53 @@ export default function SalesReportPage() {
     return { count: rows.length, total, paid, balance: total - paid }
   }, [shownOrders])
 
+  // Sales accounts, laid out like the old system's: Date, Particulars, Vch Type, Vch No (NSK/0427),
+  // Debit (credit notes), Credit (sales) and a running Balance over the rows shown, oldest first.
+  const [ledgerSearch, setLedgerSearch] = useState("")
+  const ledgerRows = useMemo(() => {
+    const rows: any[] = data?.sales_accounts || []
+    const q = ledgerSearch.trim().toLowerCase()
+    const shown = q
+      ? rows.filter((r) =>
+          String(r.particulars ?? "").toLowerCase().includes(q) ||
+          String(r.vch_type ?? "").toLowerCase().includes(q) ||
+          matchesDocNumber(r.vch_no, ledgerSearch))
+      : rows
+    let balance = 0
+    return shown.map((r, i) => {
+      balance += Number(r.credit || 0) - Number(r.debit || 0)
+      return { ...r, sno: i + 1, balance }
+    })
+  }, [data, ledgerSearch])
+  const ledgerTotals = useMemo(() => ({
+    debit: ledgerRows.reduce((s, r) => s + Number(r.debit || 0), 0),
+    credit: ledgerRows.reduce((s, r) => s + Number(r.credit || 0), 0),
+  }), [ledgerRows])
+  // 02-Oct-26
+  const ledgerDate = (iso?: string) => {
+    if (!iso) return "-"
+    const d = new Date(`${iso}T00:00:00`)
+    return `${String(d.getDate()).padStart(2, "0")}-${d.toLocaleString("en-GB", { month: "short" })}-${String(d.getFullYear()).slice(-2)}`
+  }
+  const amount = (v: any) => Number(v) ? Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""
+  // Not sortable: the balance runs down the rows in date order.
+  const ledgerColumns = [
+    { accessorKey: "sno", header: "S/No" },
+    { id: "date", accessorFn: (r: any) => ledgerDate(r.date), header: "Date" },
+    {
+      accessorKey: "particulars",
+      header: "Particulars",
+      cell: ({ row }: any) => row.original.order_id
+        ? <a href={`/sales/orders/${row.original.order_id}`} className="text-primary hover:underline">{row.original.particulars}</a>
+        : row.original.particulars,
+    },
+    { accessorKey: "vch_type", header: "Vch Type" },
+    { id: "vch_no", accessorFn: (r: any) => r.vch_no || "", header: "Vch No.", cell: ({ row }: any) => <span className="whitespace-nowrap">{row.original.vch_no || ""}</span> },
+    { id: "debit", accessorFn: (r: any) => Number(r.debit || 0), header: () => <div className="text-right">Debit</div>, cell: ({ row }: any) => <div className="text-right tabular-nums">{amount(row.original.debit)}</div> },
+    { id: "credit", accessorFn: (r: any) => Number(r.credit || 0), header: () => <div className="text-right">Credit</div>, cell: ({ row }: any) => <div className="text-right tabular-nums">{amount(row.original.credit)}</div> },
+    { id: "balance", accessorFn: (r: any) => Number(r.balance.toFixed(2)), header: () => <div className="text-right">Balance</div>, cell: ({ row }: any) => <div className="text-right tabular-nums font-medium">{row.original.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div> },
+  ]
+
   const customerLabel = (id: string) => {
     const c = customers.find((x) => x.id === id)
     return c ? getCustomerDisplayName(c) : "All Customers"
@@ -761,13 +808,14 @@ export default function SalesReportPage() {
 
                 {/* Detailed Data Tabs */}
                 <Card className="shadow-sm">
-                    <Tabs defaultValue="orders" className="w-full">
+                    <Tabs defaultValue="accounts" className="w-full">
                         <CardHeader className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <CardTitle>Detailed Breakdown</CardTitle>
                                 <CardDescription>Click a column heading to sort. Every table can be exported.</CardDescription>
                             </div>
                             <TabsList className="flex h-auto flex-wrap">
+                                <TabsTrigger value="accounts">Sales Accounts</TabsTrigger>
                                 <TabsTrigger value="orders">Orders ({(data?.orders || []).length})</TabsTrigger>
                                 <TabsTrigger value="products">Products</TabsTrigger>
                                 <TabsTrigger value="customers">Customers</TabsTrigger>
@@ -779,6 +827,37 @@ export default function SalesReportPage() {
                             </TabsList>
                         </CardHeader>
                         <CardContent>
+                            <TabsContent value="accounts" className="mt-0">
+                                <div className="mb-3 grid grid-cols-2 gap-3 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-4">
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Sales Accounts</p>
+                                        <p className="font-semibold">{periodLabel}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {ledgerRows.length} entr{ledgerRows.length === 1 ? "y" : "ies"}
+                                            {ledgerSearch.trim() && ` matching "${ledgerSearch.trim()}"`}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Debit (credit notes)</p>
+                                        <p className="font-semibold text-red-700">{kes(ledgerTotals.debit)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Credit (sales)</p>
+                                        <p className="font-semibold text-emerald-700">{kes(ledgerTotals.credit)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Balance</p>
+                                        <p className="font-semibold">{kes(ledgerTotals.credit - ledgerTotals.debit)}</p>
+                                    </div>
+                                </div>
+                                <Input
+                                    value={ledgerSearch}
+                                    onChange={(e) => setLedgerSearch(e.target.value)}
+                                    placeholder="Search customer, Vch No (NSK/0427) or type..."
+                                    className="mb-3 max-w-sm"
+                                />
+                                <DataTable columns={ledgerColumns} data={ledgerRows} hideSearch exportFileName="sales_accounts" />
+                            </TabsContent>
                             <TabsContent value="orders" className="mt-0">
                                 <div className="mb-3 grid grid-cols-2 gap-3 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-4">
                                     <div>

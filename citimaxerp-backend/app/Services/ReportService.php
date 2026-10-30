@@ -682,6 +682,9 @@ class ReportService
                 'order_number' => preg_match('/^(ORD)-(?:[\w-]+)-(\d{4})$/', (string) $o->order_number, $m) ? "{$m[1]}-{$m[2]}" : $o->order_number,
                 // Its invoice as printed: NSK/0427.
                 'invoice_number' => $o->invoice_number ? \App\Models\Invoice::printedNumber($o->invoice_number, $o->invoice_file_number) : null,
+                // Its voucher number on the sales accounts: NSK/0427 only when it has a File No.
+                'vch_no' => preg_match('/^\d+$/', trim((string) $o->invoice_file_number)) ? \App\Models\Invoice::printedNumber(null, $o->invoice_file_number) : null,
+                'file_no' => preg_match('/^\d+$/', trim((string) $o->invoice_file_number)) ? (int) $o->invoice_file_number : null,
                 'order_date' => $o->order_date ? substr((string) $o->order_date, 0, 10) : null,
                 'customer' => $o->customer,
                 'county' => $o->county,
@@ -694,6 +697,38 @@ class ReportService
                 'paid' => round((float) $o->amount_paid, 2),
                 'vat' => round((float) $o->tax, 2),
             ])->values()->all();
+
+        // Sales accounts, as the old system printed them: each order a Sales voucher credited
+        // under its NSK number, each credit note a debit; oldest first (the page runs the balance).
+        $creditNoteQuery = CreditNote::query()
+            ->where('company_id', $this->companyId)
+            ->whereIn('status', ['issued', 'applied', 'refunded']);
+        $this->applyCreditNoteFilters($creditNoteQuery, $filters);
+        $salesAccounts = collect($orders)->map(fn ($o) => [
+            'date' => $o['order_date'],
+            'particulars' => $o['customer'],
+            'vch_type' => 'Sales',
+            'vch_no' => $o['vch_no'],
+            'debit' => 0,
+            'credit' => $o['total'],
+            'order_id' => $o['id'],
+            'seq' => [0, $o['file_no'] ?? PHP_INT_MAX],
+        ])->concat($creditNoteQuery->get([
+            'id', 'credit_note_number', 'credit_note_date', 'total_amount',
+            DB::raw("(SELECT COALESCE(NULLIF(TRIM(c.business_name), ''), c.name) FROM customers c WHERE c.id = credit_notes.customer_id) as customer"),
+        ])->map(fn ($cn) => [
+            'date' => $cn->credit_note_date ? substr((string) $cn->credit_note_date, 0, 10) : null,
+            'particulars' => $cn->customer,
+            'vch_type' => 'Credit Note',
+            'vch_no' => $cn->credit_note_number,
+            'debit' => round((float) $cn->total_amount, 2),
+            'credit' => 0,
+            'credit_note_id' => $cn->id,
+            'seq' => [1, (int) preg_replace('/\D/', '', (string) $cn->credit_note_number)],
+        ]))
+            ->sort(fn ($a, $b) => [$a['date'], $a['seq']] <=> [$b['date'], $b['seq']])
+            ->map(fn ($r) => array_diff_key($r, ['seq' => 1]))
+            ->values()->all();
 
         // Payment status breakdown - build query with all filters
         $paymentStatusQuery = DB::table('orders')
@@ -718,6 +753,7 @@ class ReportService
             'sales_by_city' => $byLocation('city'),
             'sales_by_rep' => $salesByRep,
             'orders' => $orders,
+            'sales_accounts' => $salesAccounts,
             'sales_rep_options' => $repOptions,
             'location_options' => [
                 'regions' => $options('region', []),
