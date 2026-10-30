@@ -17,9 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, ShoppingCart, Trash2, X, Pencil, Edit, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
 import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { StockHint, stockCheck } from "@/components/stock-hint"
-import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
-import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
 import { InstantPaymentPrompt } from "@/components/instant-payment-prompt"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -123,9 +121,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const [paymentOption, setPaymentOption] = useState<'instant' | 'credit'>('instant')
   const [creditTerms, setCreditTerms] = useState<CustomerCreditTerms | null>(null)
   const [isLoadingCreditTerms, setIsLoadingCreditTerms] = useState(false)
-  const [downPaymentAmount, setDownPaymentAmount] = useState(0)
-  const [downPaymentMethod, setDownPaymentMethod] = useState("")
-  const [downPaymentTransactionRef, setDownPaymentTransactionRef] = useState("")
   const [instantPaymentMethod, setInstantPaymentMethod] = useState("")
   const [instantPaymentReference, setInstantPaymentReference] = useState("")
   const [salesReps, setSalesReps] = useState<SalesRep[]>([])
@@ -137,9 +132,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
 
   useEffect(() => {
     const customerId = selectedCustomer?.id
-    setDownPaymentAmount(0)
-    setDownPaymentMethod("")
-    setDownPaymentTransactionRef("")
     if (!customerId) {
       setCreditTerms(null)
       return
@@ -487,10 +479,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   // A past sale's goods left before the opening stock was taken, so there is nothing to check.
   const shortLines = isPastSale ? [] : orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
 
-  const creditOverage = paymentChecks && paymentOption === 'credit' && creditTerms?.credit_days
-    ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
-    : 0
-
   // Only the newly-added portion needs a payment method - money already
   // recorded on this order before the modal opened doesn't need re-justifying.
   const newInstantPaymentAmount = paymentChecks && paymentOption === 'instant'
@@ -511,11 +499,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
 
     if (paymentChecks && paymentOption === 'credit' && !creditTerms?.credit_days) {
       toast.error("This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.")
-      return
-    }
-
-    if (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) {
-      toast.error(`This exceeds available credit by KES ${creditOverage.toLocaleString()}. Enter how that amount will be paid now to proceed.`)
       return
     }
 
@@ -563,21 +546,8 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
       // Make the API call to update the order
       await apiCall(`/orders/${order?.id}`, "PUT", payload)
 
-      // Record a real payment against the order for the portion covering the
-      // credit overage, so it shows up in payment history rather than just
-      // being a number written into the order's amount_paid field.
-      if (creditOverage > 0 && order?.id) {
-        await createPayment({
-          order_id: order.id,
-          payment_method: downPaymentMethod,
-          amount_paid: downPaymentAmount,
-          transaction_id: downPaymentTransactionRef || undefined,
-          status: 'completed',
-        })
-      }
-
-      // Same idea for an instant sale - only the newly-added amount needs a
-      // fresh Payment record; money already on the order was recorded before.
+      // For an instant sale only the newly-added amount needs a fresh Payment
+      // record; money already on the order was recorded before.
       if (newInstantPaymentAmount > 0 && order?.id) {
         await createPayment({
           order_id: order.id,
@@ -1035,9 +1005,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                   <p className="font-medium text-purple-900">
                     Approved terms: Net {creditTerms.credit_days} ({creditTerms.credit_days} days)
                   </p>
-                  {creditTerms.available_credit != null && (
-                    <p className="text-purple-700">Available credit: KES {Number(creditTerms.available_credit).toLocaleString()}</p>
-                  )}
                   {creditTerms.has_pending_change && (
                     <p className="text-amber-700 mt-1">Note: a terms change is pending GM approval and not yet in effect.</p>
                   )}
@@ -1048,17 +1015,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                   switch to instant payment, before this order can be saved.
                 </div>
               )
-            )}
-            {creditOverage > 0 && (
-              <CreditOveragePrompt
-                overage={creditOverage}
-                downPaymentAmount={downPaymentAmount}
-                onDownPaymentAmountChange={setDownPaymentAmount}
-                downPaymentMethod={downPaymentMethod}
-                onDownPaymentMethodChange={setDownPaymentMethod}
-                downPaymentTransactionRef={downPaymentTransactionRef}
-                onDownPaymentTransactionRefChange={setDownPaymentTransactionRef}
-              />
             )}
             {paymentChecks && paymentOption === 'instant' && (
               <InstantPaymentPrompt
@@ -1200,7 +1156,6 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
                 loading ||
                 shortLines.length > 0 ||
                 (paymentChecks && paymentOption === 'credit' && !creditTerms?.credit_days) ||
-                (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) ||
                 (paymentChecks && paymentOption === 'instant' && amountPaid < calculateTotal()) ||
                 (newInstantPaymentAmount > 0 && !instantPaymentMethod)
               }

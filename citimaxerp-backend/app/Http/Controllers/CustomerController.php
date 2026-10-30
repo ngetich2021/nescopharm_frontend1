@@ -676,6 +676,8 @@ class CustomerController extends Controller
                 'available_credit' => $availableCredit,
                 'credit_days' => $customer->account->credit_days ?? null,
                 'credit_terms' => $customer->account->credit_terms ?? null,
+                // Credit invoices past their due date: these, not the limit, hold back new credit sales.
+                'overdue' => app(\App\Services\CustomerCreditTermsResolver::class)->overdue($customer),
                 'has_pending_change' => $customer->account
                     ? (!is_null($customer->account->pending_credit_limit) || !is_null($customer->account->pending_credit_days))
                     : false,
@@ -700,6 +702,14 @@ class CustomerController extends Controller
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to delete customers.'
+            ], 403);
+        }
+        // Accountants delete customers straight away, but only ones that never bought anything.
+        if (strtolower(trim((string) $user->role?->name)) === 'accountant'
+            && (Order::where('customer_id', $customer->id)->exists() || Invoice::where('customer_id', $customer->id)->exists())) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'This customer has orders or invoices, so an accountant cannot delete them. Ask the GM or an admin.',
             ], 403);
         }
         try {

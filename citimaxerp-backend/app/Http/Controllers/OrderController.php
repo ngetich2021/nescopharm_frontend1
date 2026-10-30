@@ -377,6 +377,13 @@ class OrderController extends Controller
                 );
             }
 
+            // Credit is held back by days, not by the KES limit: a customer with credit
+            // invoices past their due date can't take more on credit (past sales aside).
+            if ($orderCredit['payment_type'] === 'credit' && !$isHistorical && $customer
+                && ($blocker = $this->creditTermsResolver->overdueBlocker($customer))) {
+                return response()->json(['status' => 'failed', 'message' => $blocker], 400);
+            }
+
             // Validate delivery location if provided
             if ($request->has('delivery_location_id')) {
                 $deliveryLocation = DeliveryLocation::find($request->input('delivery_location_id'));
@@ -669,6 +676,16 @@ class OrderController extends Controller
                 'status' => 'failed',
                 'message' => 'Unauthorized to edit orders for this company.',
             ], 403);
+        }
+
+        // After the deadline the order itself is closed; status/payment updates (e.g. the POS
+        // marking an order paid) still go through.
+        $contentFields = ['customer_id', 'items', 'discount', 'tax', 'order_date', 'notes', 'sales_rep_id', 'delivery_location_id', 'currency', 'payment_type', 'credit_terms_days'];
+        if (!Order::editingOpen() && $request->hasAny($contentFields)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Orders could be edited until ' . \Carbon\Carbon::parse(Order::EDIT_DEADLINE)->format('d-m-Y') . '. Editing is now closed.',
+            ], 400);
         }
 
         $validator = Validator::make($request->all(), [

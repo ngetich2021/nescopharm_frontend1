@@ -29,7 +29,7 @@ import { fetchInvoices, fetchInvoiceByOrderId, Invoice, createInvoiceFromOrder }
 import { fetchCustomerCreditTerms, CustomerCreditTerms } from "@/lib/customers"
 import { getInvoiceStatusColor, getInvoiceStatusLabel } from "@/lib/invoice-status"
 import { getLogistics, createLogistics, CreateLogisticsData, Logistics as ApiLogistics } from "@/lib/logistics"
-import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, declinedDeletesAt, isPastSaleDate } from "@/lib/orders"
+import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, declinedDeletesAt, isPastSaleDate, orderEditingOpen } from "@/lib/orders"
 import { useAuth } from "@/lib/auth-context"
 import { Textarea } from "@/components/ui/textarea"
 import { DeliveryLocation as ApiDeliveryLocation } from "@/lib/delivery-locations"
@@ -746,18 +746,21 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
             <Printer className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
             Print
           </Button>
-          {/* Completed orders stay editable, e.g. to add VAT to sales made before tax was set up. */}
-          <PermissionGuard permissions={["can_update_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditOrderModalOpen(true)}
-              size="sm"
-              className="text-xs sm:text-sm h-8 sm:h-9"
-            >
-              <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Edit
-            </Button>
-          </PermissionGuard>
+          {/* Completed orders stay editable (e.g. to add VAT to sales made before tax was set up)
+              until the editing deadline. */}
+          {orderEditingOpen() && (
+            <PermissionGuard permissions={["can_update_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditOrderModalOpen(true)}
+                size="sm"
+                className="text-xs sm:text-sm h-8 sm:h-9"
+              >
+                <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                Edit
+              </Button>
+            </PermissionGuard>
+          )}
           <PermissionGuard permissions={["can_delete_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
             <Button
               variant="outline"

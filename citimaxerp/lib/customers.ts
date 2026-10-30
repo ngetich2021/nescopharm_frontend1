@@ -501,6 +501,15 @@ export interface CustomerCreditTerms {
   credit_terms: string | null
   has_pending_change: boolean
   customer_account_id: string | null
+  // Credit invoices past their due date; these (not the KES limit) hold back new credit sales.
+  overdue?: { count: number; amount: number; oldest_invoice: string | null; oldest_days: number }
+}
+
+// Why a new credit sale can't go ahead (customer has invoices past their credit days), or null.
+export function overdueCreditMessage(terms: CustomerCreditTerms | null | undefined): string | null {
+  const o = terms?.overdue
+  if (!o || o.count === 0) return null
+  return `${o.count} credit invoice${o.count === 1 ? "" : "s"} past due (KES ${Number(o.amount).toLocaleString()}; oldest ${o.oldest_invoice}, ${o.oldest_days} days late). Collect payment first, or sell on instant payment.`
 }
 
 export async function fetchCustomerCreditTerms(customerId: string): Promise<CustomerCreditTerms> {

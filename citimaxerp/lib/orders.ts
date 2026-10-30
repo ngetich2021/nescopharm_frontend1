@@ -57,6 +57,11 @@ export interface Order {
 export const HISTORICAL_CUTOFF = "2026-10-17"
 export const isPastSaleDate = (date?: string | null) => !!date && date.slice(0, 10) < HISTORICAL_CUTOFF
 
+// Last day orders can be edited (Nairobi time); matches Order::EDIT_DEADLINE on the backend.
+export const ORDER_EDIT_DEADLINE = "2026-10-31"
+export const orderEditingOpen = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" }).format(new Date()) <= ORDER_EDIT_DEADLINE
+
 // Define the detailed order type with all related data
 export interface OrderDetail extends Order {
   notes?: string

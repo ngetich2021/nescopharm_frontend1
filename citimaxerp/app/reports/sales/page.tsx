@@ -277,6 +277,23 @@ export default function SalesReportPage() {
     { id: "paid", accessorFn: num("paid"), header: sortable("Paid"), cell: ({ row }: any) => kes(row.original.paid) },
   ]
 
+  // The selected period in words, e.g. "01 Oct 2026 – 30 Oct 2026", for the totals.
+  const fmtDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  const periodLabel = (() => {
+    const from = calculateDateFrom(dateRange)
+    const to = dateRange === 'yesterday' ? daysAgo(1) : dateRange === 'custom' && dateTo ? dateTo : ymd(new Date())
+    if (!from) return "All dates"
+    return from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`
+  })()
+
+  // Totals of every order in the period (all pages of the table, not just the one showing).
+  const orderTotals = useMemo(() => {
+    const rows: any[] = data?.orders || []
+    const total = rows.reduce((s, r) => s + Number(r.total || 0), 0)
+    const paid = rows.reduce((s, r) => s + Number(r.paid || 0), 0)
+    return { count: rows.length, total, paid, balance: total - paid }
+  }, [data])
+
   const customerLabel = (id: string) => {
     const c = customers.find((x) => x.id === id)
     return c ? getCustomerDisplayName(c) : "All Customers"
@@ -303,7 +320,7 @@ export default function SalesReportPage() {
         </div>
 
         {/* Filters Section */}
-        <Card className="border-border/40 bg-background/60 backdrop-blur-md shadow-sm sticky top-0 z-20">
+        <Card className="border-border/40 bg-background/60 backdrop-blur-md shadow-sm">
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
               {/* Date Range */}
@@ -536,6 +553,9 @@ export default function SalesReportPage() {
              </div>
         ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <p className="text-sm text-muted-foreground">
+                    Figures for <span className="font-semibold text-foreground">{periodLabel}</span>
+                </p>
                 {/* Summary Cards */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <EnhancedMetricCard
@@ -743,6 +763,25 @@ export default function SalesReportPage() {
                         </CardHeader>
                         <CardContent>
                             <TabsContent value="orders" className="mt-0">
+                                <div className="mb-3 grid grid-cols-2 gap-3 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-4">
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Period</p>
+                                        <p className="font-semibold">{periodLabel}</p>
+                                        <p className="text-xs text-muted-foreground">{orderTotals.count} order{orderTotals.count === 1 ? "" : "s"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Total</p>
+                                        <p className="font-semibold">{kes(orderTotals.total)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Paid</p>
+                                        <p className="font-semibold text-emerald-700">{kes(orderTotals.paid)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Balance</p>
+                                        <p className="font-semibold text-red-700">{kes(orderTotals.balance)}</p>
+                                    </div>
+                                </div>
                                 <DataTable columns={ordersColumns} data={data?.orders || []} filterColumn="customer" exportFileName="sales_orders" />
                             </TabsContent>
                             <TabsContent value="products" className="mt-0">

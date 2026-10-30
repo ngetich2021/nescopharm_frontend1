@@ -166,6 +166,14 @@ class Order extends Model
         return !empty($date) && \Carbon\Carbon::parse($date)->toDateString() < self::HISTORICAL_CUTOFF;
     }
 
+    /** Orders can be edited up to and including this day (Nairobi time); after it they are closed. */
+    public const EDIT_DEADLINE = '2026-10-31';
+
+    public static function editingOpen(): bool
+    {
+        return now('Africa/Nairobi')->toDateString() <= self::EDIT_DEADLINE;
+    }
+
     // Only the GM, a Director or the Warehouse Manager may sign an order off for invoicing.
     public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director', 'warehouse manager'];
 

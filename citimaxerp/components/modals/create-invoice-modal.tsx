@@ -19,7 +19,7 @@ import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { createInvoice, CreateInvoiceRequest, fetchSalesReps, SalesRep } from "@/lib/invoices"
-import { getCustomers, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
+import { getCustomers, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName, overdueCreditMessage } from "@/lib/customers"
 import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 import { getProducts } from "@/lib/products"
 import { useToast } from "@/hooks/use-toast"
@@ -27,7 +27,7 @@ import { formatCurrency } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { MappingValidationAlert } from "@/components/mapping-validation-alert"
 import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
-import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
+import { coversOverage } from "@/lib/credit-overage"
 import {
   INVOICE_TAX_OPTIONS,
   invoiceTaxCodeForProduct,
@@ -324,9 +324,9 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
     total: finalTotal,
   }
 
-  const creditOverage = paymentOption === 'credit' && creditTerms?.credit_days
-    ? getCreditOverage(finalInvoiceTotals.total, creditTerms.available_credit)
-    : 0
+  // Credit is held back by days (invoices past their due date), never by the KES credit limit.
+  const creditOverage = 0
+  const overdueBlock = paymentOption === 'credit' ? overdueCreditMessage(creditTerms) : null
 
   const onSubmit: SubmitHandler<InvoiceFormData> = async (data) => {
     if (paymentOption === 'instant' && !paymentMethod) {
@@ -344,6 +344,11 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
         description: "This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.",
         variant: "destructive",
       })
+      return
+    }
+
+    if (overdueBlock) {
+      toast({ title: "Cannot sell on credit", description: overdueBlock, variant: "destructive" })
       return
     }
 
@@ -680,9 +685,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
                         <p className="font-medium text-purple-900">
                           Approved terms: Net {creditTerms.credit_days} ({creditTerms.credit_days} days)
                         </p>
-                        {creditTerms.available_credit != null && (
-                          <p className="text-purple-700">Available credit: KES {Number(creditTerms.available_credit).toLocaleString()}</p>
-                        )}
+                        {overdueBlock && <p className="mt-1 font-medium text-red-700">Cannot sell on credit: {overdueBlock}</p>}
                         {creditTerms.has_pending_change && (
                           <p className="text-amber-700 mt-1">Note: a terms change is pending GM approval and not yet in effect.</p>
                         )}

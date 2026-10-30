@@ -53,6 +53,46 @@ class CustomerCreditTermsResolver
     }
 
     /**
+     * Credit invoices still owing after their due date (invoice date + the customer's credit
+     * days). New credit sales are held back by these, not by the KES credit limit.
+     */
+    public function overdue(Customer $customer): array
+    {
+        $today = now('Africa/Nairobi')->toDateString();
+        $invoices = Invoice::where('customer_id', $customer->id)
+            ->where('company_id', $customer->company_id)
+            ->where('payment_type', 'credit')
+            ->whereNotIn('status', ['cancelled', 'paid'])
+            ->where('balance_amount', '>', 0.005)
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', $today)
+            ->orderBy('due_date')
+            ->get(['invoice_number', 'due_date', 'balance_amount']);
+
+        $oldest = $invoices->first();
+
+        return [
+            'count' => $invoices->count(),
+            'amount' => round((float) $invoices->sum('balance_amount'), 2),
+            'oldest_invoice' => $oldest?->invoice_number,
+            'oldest_days' => $oldest ? (int) Carbon::parse($oldest->due_date)->diffInDays(Carbon::parse($today)) : 0,
+        ];
+    }
+
+    /** Why a new credit sale can't go ahead, or null if it can. */
+    public function overdueBlocker(Customer $customer): ?string
+    {
+        $o = $this->overdue($customer);
+        if ($o['count'] === 0) {
+            return null;
+        }
+
+        return "This customer has {$o['count']} credit invoice(s) past their credit days (KES "
+            . number_format($o['amount'], 2) . " overdue; oldest {$o['oldest_invoice']}, {$o['oldest_days']} days late). "
+            . 'Collect payment first, or sell on instant payment.';
+    }
+
+    /**
      * How much of this customer's credit limit is still unused - null if
      * they have no credit limit set at all (credit isn't meaningful for
      * them either way). Mirrors CustomerController::creditTerms() exactly

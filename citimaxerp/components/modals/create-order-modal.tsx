@@ -15,17 +15,15 @@ import { Switch } from "@/components/ui/switch"
 import { Plus, Search, ShoppingCart, Trash2, X, Pencil, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
 import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { StockHint, stockCheck } from "@/components/stock-hint"
-import { getCreditOverage, coversOverage } from "@/lib/credit-overage"
 import { createPayment } from "@/lib/payments"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
 import { OrderVatSelect } from "@/components/order-vat-select"
-import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
 import { InstantPaymentPrompt } from "@/components/instant-payment-prompt"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts } from "@/lib/products"
-import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
+import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName, overdueCreditMessage } from "@/lib/customers"
 import { formatPackagingForDisplay } from "@/lib/packaging-utils"
 import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
@@ -104,9 +102,6 @@ export function CreateOrderModal({
   const [paymentOption, setPaymentOption] = useState<'instant' | 'credit'>('instant')
   const [creditTerms, setCreditTerms] = useState<CustomerCreditTerms | null>(null)
   const [isLoadingCreditTerms, setIsLoadingCreditTerms] = useState(false)
-  const [downPaymentAmount, setDownPaymentAmount] = useState(0)
-  const [downPaymentMethod, setDownPaymentMethod] = useState("")
-  const [downPaymentTransactionRef, setDownPaymentTransactionRef] = useState("")
   const [instantPaymentMethod, setInstantPaymentMethod] = useState("")
   const [instantPaymentReference, setInstantPaymentReference] = useState("")
 
@@ -114,9 +109,6 @@ export function CreateOrderModal({
   // vs GM-approved credit terms), but the user can still switch it for this order.
   useEffect(() => {
     const customerId = selectedCustomer?.id
-    setDownPaymentAmount(0)
-    setDownPaymentMethod("")
-    setDownPaymentTransactionRef("")
     if (!customerId) {
       setCreditTerms(null)
       return
@@ -394,11 +386,10 @@ export function CreateOrderModal({
   const shortLines = isPastSale ? [] : orderItems.filter((item) => stockCheck(item.quantity, item.price_unit, availableFor(item)).short)
 
   // A past sale is already settled history: it goes in on credit whatever the customer's
-  // terms or limit, so no approved terms or overage payment is asked for.
+  // terms, so no approved terms are asked for. Credit is held back by days (invoices past
+  // their due date), never by the KES credit limit.
   const creditChecks = !isPastSale && paymentOption === 'credit'
-  const creditOverage = creditChecks && creditTerms?.credit_days
-    ? getCreditOverage(calculateTotal(), creditTerms.available_credit)
-    : 0
+  const overdueBlock = creditChecks ? overdueCreditMessage(creditTerms) : null
 
   const handleCreateOrder = async () => {
     // Validation
@@ -417,8 +408,8 @@ export function CreateOrderModal({
       return
     }
 
-    if (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) {
-      toast.error(`This exceeds available credit by KES ${creditOverage.toLocaleString()}. Enter how that amount will be paid now to proceed.`)
+    if (overdueBlock) {
+      toast.error(`Cannot sell on credit: ${overdueBlock}`)
       return
     }
 
@@ -468,22 +459,8 @@ export function CreateOrderModal({
       }
       const orderResponse = await apiCall<{ order: { id: string } }>("/orders", "POST", payload)
 
-      // Record a real payment against the order for the portion covering the
-      // credit overage, so it shows up in payment history rather than just
-      // being a number written into the order's amount_paid field.
-      if (creditOverage > 0 && orderResponse?.order?.id) {
-        await createPayment({
-          order_id: orderResponse.order.id,
-          payment_method: downPaymentMethod,
-          amount_paid: downPaymentAmount,
-          transaction_id: downPaymentTransactionRef || undefined,
-          status: 'completed',
-          payment_date: orderDate,
-        })
-      }
-
-      // Same as the credit-overage down payment - record a real Payment for
-      // an instant sale rather than just writing a number into amount_paid.
+      // Record a real Payment for an instant sale rather than just writing a
+      // number into amount_paid.
       if (paymentOption === 'instant' && amountPaid > 0 && orderResponse?.order?.id) {
         await createPayment({
           order_id: orderResponse.order.id,
@@ -537,9 +514,6 @@ export function CreateOrderModal({
     setPaymentOption("instant")
     setCreditTerms(null)
     setAmountPaid(0)
-    setDownPaymentAmount(0)
-    setDownPaymentMethod("")
-    setDownPaymentTransactionRef("")
     setInstantPaymentMethod("")
     setInstantPaymentReference("")
     setDiscount(0)
@@ -974,7 +948,7 @@ export function CreateOrderModal({
 
             {isPastSale && paymentOption === 'credit' && (
               <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                Past sale: credit terms and the credit limit are not checked.
+                Past sale: credit terms and overdue invoices are not checked.
               </p>
             )}
             {creditChecks && (
@@ -987,12 +961,10 @@ export function CreateOrderModal({
                   <p className="font-medium text-purple-900">
                     Approved terms: Net {creditTerms.credit_days} ({creditTerms.credit_days} days)
                   </p>
-                  {creditTerms.available_credit != null && (
-                    <p className="text-purple-700">Available credit: KES {Number(creditTerms.available_credit).toLocaleString()}</p>
-                  )}
                   {creditTerms.has_pending_change && (
                     <p className="text-amber-700 mt-1">Note: a terms change is pending GM approval and not yet in effect.</p>
                   )}
+                  {overdueBlock && <p className="mt-1 font-medium text-red-700">Cannot sell on credit: {overdueBlock}</p>}
                 </div>
               ) : (
                 <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
@@ -1000,17 +972,6 @@ export function CreateOrderModal({
                   switch to instant payment, before this order can be created.
                 </div>
               )
-            )}
-            {creditOverage > 0 && (
-              <CreditOveragePrompt
-                overage={creditOverage}
-                downPaymentAmount={downPaymentAmount}
-                onDownPaymentAmountChange={setDownPaymentAmount}
-                downPaymentMethod={downPaymentMethod}
-                onDownPaymentMethodChange={setDownPaymentMethod}
-                downPaymentTransactionRef={downPaymentTransactionRef}
-                onDownPaymentTransactionRefChange={setDownPaymentTransactionRef}
-              />
             )}
             {paymentOption === 'instant' && (
               <InstantPaymentPrompt
@@ -1152,7 +1113,7 @@ export function CreateOrderModal({
                 loading ||
                 shortLines.length > 0 ||
                 (creditChecks && !creditTerms?.credit_days) ||
-                (creditOverage > 0 && (!coversOverage(downPaymentAmount, creditOverage) || !downPaymentMethod)) ||
+                !!overdueBlock ||
                 (paymentOption === 'instant' && (amountPaid < calculateTotal() || !instantPaymentMethod))
               }
             >
