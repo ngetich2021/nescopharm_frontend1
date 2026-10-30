@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download } from "lucide-react" // Import Download icon
 
 interface DataTableProps<TData, TValue> {
@@ -36,6 +36,7 @@ interface DataTableProps<TData, TValue> {
   hideExport?: boolean // Hide the export button
   hideColumns?: boolean // Hide the columns dropdown
   pageSizeOptions?: number[] // Rows-per-page choices (first is the default), plus "All"
+  footer?: React.ReactNode // Footer rows (<TableRow>s) under the table, e.g. totals
 }
 
 // "All" rows on one page.
@@ -51,6 +52,7 @@ export function DataTable<TData, TValue>({
   hideExport = false,
   hideColumns = false,
   pageSizeOptions,
+  footer,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -191,6 +193,7 @@ export function DataTable<TData, TValue>({
               </TableRow>
             )}
           </TableBody>
+          {footer && <TableFooter>{footer}</TableFooter>}
         </Table>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 py-4">

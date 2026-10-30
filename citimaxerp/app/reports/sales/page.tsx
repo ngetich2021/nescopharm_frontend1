@@ -10,6 +10,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { ArrowUpDown, Check, ChevronsUpDown, UserCheck } from "lucide-react"
 import { getProductCategories, ProductCategory } from "@/lib/product-categories"
 import { DataTable } from "@/components/ui/data-table"
+import { TableCell, TableRow } from "@/components/ui/table"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { useToast } from "@/hooks/use-toast"
 import { 
@@ -859,7 +860,31 @@ export default function SalesReportPage() {
                                     placeholder="Search customer, Vch No (NSK/0427) or type..."
                                     className="mb-3 max-w-sm"
                                 />
-                                <DataTable pageSizeOptions={PAGE_SIZES} columns={ledgerColumns} data={ledgerRows} hideSearch exportFileName="sales_accounts" />
+                                <DataTable
+                                    pageSizeOptions={PAGE_SIZES}
+                                    columns={ledgerColumns}
+                                    data={ledgerRows}
+                                    hideSearch
+                                    exportFileName="sales_accounts"
+                                    // As the old system printed it: totals of every entry shown, then the closing balance under Credit.
+                                    footer={ledgerRows.length > 0 && (
+                                        <>
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-right font-semibold">Current Total:</TableCell>
+                                                <TableCell className="text-right font-semibold tabular-nums">{ledgerTotals.debit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                                <TableCell className="text-right font-semibold tabular-nums">{ledgerTotals.credit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                                <TableCell />
+                                            </TableRow>
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="text-right font-semibold">Closing Balance:</TableCell>
+                                                <TableCell className="text-right font-bold tabular-nums">
+                                                    {(ledgerTotals.credit - ledgerTotals.debit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </TableCell>
+                                                <TableCell />
+                                            </TableRow>
+                                        </>
+                                    )}
+                                />
                             </TabsContent>
                             <TabsContent value="orders" className="mt-0">
                                 <div className="mb-3 grid grid-cols-2 gap-3 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-4">
