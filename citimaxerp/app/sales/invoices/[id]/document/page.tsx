@@ -266,7 +266,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
           customerAccount={customerAccount}
           companyPin={companyPin}
           enclosures={dispatchId && (
-            <div className="mt-6 print:mt-0 print:break-before-page">
+            <div className="invoice-sheet mt-6 print:mt-0 print:break-before-page">
               <DeliveryNoteDocument
                 ref={deliveryNoteRef}
                 dispatchId={dispatchId}

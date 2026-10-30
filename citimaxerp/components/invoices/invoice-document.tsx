@@ -67,9 +67,16 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
 ) {
   return (
     <>
-      <Card 
+      {/* No page margin when printing, so the browser has nowhere to print its own header and
+          footer (the page's web address, date and title). The white space is padding on each sheet
+          instead, repeated on every printed page. */}
+      <style>{`@media print {
+        @page { size: A4; margin: 0; }
+        .invoice-sheet { padding: 9mm 11mm !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+      }`}</style>
+      <Card
         ref={invoiceRef}
-        className="max-w-4xl mx-auto bg-white p-6 md:p-8 shadow-lg print:shadow-none print:max-w-none print:m-0 print:p-6 print:border-0 text-sm"
+        className="invoice-sheet max-w-4xl mx-auto bg-white p-6 md:p-8 shadow-lg print:shadow-none print:max-w-none print:m-0 print:border-0 text-sm"
       >
         {/* Letterhead Banner - the sole source of company identity/contact info on this document.
             Full width at its natural aspect ratio - cropping or forcing a fixed height distorts/cuts
@@ -326,30 +333,33 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           </div>
         )}
 
-        {/* Company KRA PIN & Payment Details - always shown, side by side */}
+        {/* Company KRA PIN & Payment Details - always shown, side by side, kept whole on one
+            printed page (never split across a page break) and compact to save space. */}
         {(() => {
           const c = company || (invoice.company as Company | undefined)
           return (
-            <div className="mt-6 border border-gray-300 text-xs leading-snug">
-              <p className="bg-gray-50 border-b border-gray-300 px-2 py-1 font-bold text-gray-800">
+            <div className="mt-4 border border-gray-300 text-[11px] leading-tight break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+              <p className="bg-gray-50 border-b border-gray-300 px-2 py-0.5 font-bold text-gray-800">
                 {(c?.name || 'COMPANY').toUpperCase()} PAYMENT DETAILS
               </p>
-              <div className="grid grid-cols-3 divide-x divide-gray-300">
-                <div className="px-2 py-1.5">
-                  <p className="font-semibold text-gray-800 mb-0.5">COMPANY&apos;S KRA PIN</p>
+              <div className="grid grid-cols-[1fr_1.2fr_2fr] divide-x divide-gray-300">
+                <div className="px-2 py-1">
+                  <p className="font-semibold text-gray-800">COMPANY&apos;S KRA PIN</p>
                   <p className="font-bold text-gray-900">{companyPin || COMPANY_KRA_PIN}</p>
                 </div>
-                <div className="px-2 py-1.5 text-gray-700">
-                  <p className="font-semibold text-gray-800 mb-0.5">M-PESA</p>
+                <div className="px-2 py-1 text-gray-700">
+                  <p className="font-semibold text-gray-800">M-PESA</p>
                   <p>Paybill: <span className="font-semibold text-gray-900">{c?.mpesa_paybill || INVOICE_PAYMENT_DETAILS.mpesaPaybill}</span></p>
                   <p>Account No: <span className="font-semibold text-gray-900">{c?.mpesa_account_number || INVOICE_PAYMENT_DETAILS.mpesaAccount}</span></p>
                 </div>
-                <div className="px-2 py-1.5 text-gray-700">
-                  <p className="font-semibold text-gray-800 mb-0.5">BANK DETAILS</p>
-                  <p>Bank: <span className="font-semibold text-gray-900">{c?.bank_name || INVOICE_PAYMENT_DETAILS.bankName}</span></p>
+                <div className="px-2 py-1 text-gray-700">
+                  <p className="font-semibold text-gray-800">BANK DETAILS</p>
+                  <p>
+                    Bank: <span className="font-semibold text-gray-900">{c?.bank_name || INVOICE_PAYMENT_DETAILS.bankName}</span>
+                    {' · '}Branch: <span className="font-semibold text-gray-900">{c?.bank_branch || INVOICE_PAYMENT_DETAILS.bankBranch}</span>
+                  </p>
                   <p>A/C Name: <span className="font-semibold text-gray-900">{c?.bank_account_name || INVOICE_PAYMENT_DETAILS.bankAccountName}</span></p>
                   <p>A/C No: <span className="font-semibold text-gray-900">{c?.bank_account_number || INVOICE_PAYMENT_DETAILS.bankAccountNumber}</span></p>
-                  <p>Branch: <span className="font-semibold text-gray-900">{c?.bank_branch || INVOICE_PAYMENT_DETAILS.bankBranch}</span></p>
                 </div>
               </div>
             </div>
