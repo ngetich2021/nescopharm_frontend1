@@ -19,12 +19,15 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
+import { exportTable, type ExportCell, type ExportFormat } from "@/lib/table-export"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download } from "lucide-react" // Import Download icon
+import { Download, FileDown, FileSpreadsheet, FileText, Loader2 } from "lucide-react"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -37,6 +40,9 @@ interface DataTableProps<TData, TValue> {
   hideColumns?: boolean // Hide the columns dropdown
   pageSizeOptions?: number[] // Rows-per-page choices (first is the default), plus "All"
   footer?: React.ReactNode // Footer rows (<TableRow>s) under the table, e.g. totals
+  exportTitle?: string // Heading on exports (default: from exportFileName)
+  exportSubtitle?: string // e.g. the period
+  exportFooter?: ExportCell[][] // Rows under the exported table, e.g. totals
 }
 
 // "All" rows on one page.
@@ -53,6 +59,9 @@ export function DataTable<TData, TValue>({
   hideColumns = false,
   pageSizeOptions,
   footer,
+  exportTitle,
+  exportSubtitle,
+  exportFooter,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -79,35 +88,39 @@ export function DataTable<TData, TValue>({
     },
   })
 
-  const handleExport = () => {
-    if (onExport) {
-      onExport(data) // Use custom export logic if provided
-    } else {
-      // Default CSV export logic
-      const headers = table
-        .getAllColumns()
-        .filter((column) => column.getIsVisible())
-        .map((column) => column.id)
-      const rows = table.getRowModel().rows.map((row) =>
-        headers
-          .map((header) => {
-            const cellValue = row.getValue(header)
-            // Handle potential object values or complex types
-            if (typeof cellValue === "object" && cellValue !== null) {
-              return JSON.stringify(cellValue)
-            }
-            return cellValue
-          })
-          .join(","),
-      )
-      const csvContent = [headers.join(","), ...rows].join("\n")
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-      const link = document.createElement("a")
-      link.href = URL.createObjectURL(blob)
-      link.setAttribute("download", `${exportFileName}.csv`)
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+  const company = useOptionalAuth()?.userProfile?.company
+  const [exporting, setExporting] = React.useState(false)
+
+  // Every row matching the search and sort (not just the page shown), as CSV, Excel or PDF
+  // headed with the company letterhead.
+  const handleExport = async (format: ExportFormat) => {
+    const cols = table
+      .getAllColumns()
+      .filter((column) => column.getIsVisible() && column.accessorFn && !["select", "actions"].includes(column.id))
+    const label = (column: (typeof cols)[number]) => {
+      const meta = column.columnDef.meta as { exportHeader?: string } | undefined
+      const header = column.columnDef.header
+      return meta?.exportHeader ?? (header as { exportLabel?: string } | undefined)?.exportLabel ?? (typeof header === "string" ? header : column.id.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
+    }
+    const value = (v: unknown): ExportCell => {
+      if (v == null) return ""
+      if (typeof v === "number") return v
+      if (typeof v === "object") return JSON.stringify(v)
+      // Amounts sent as strings ("1200.50") export as numbers; codes like "0712..." stay text.
+      return /^-?\d+\.\d+$/.test(String(v)) ? Number(v) : String(v)
+    }
+    setExporting(true)
+    try {
+      await exportTable(format, {
+        fileName: exportFileName,
+        title: exportTitle ?? exportFileName.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        subtitle: exportSubtitle,
+        headers: cols.map(label),
+        rows: table.getPrePaginationRowModel().rows.map((row) => cols.map((c) => value(row.getValue(c.id)))),
+        footer: exportFooter,
+      }, company)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -125,11 +138,32 @@ export function DataTable<TData, TValue>({
           )}
           {(!hideExport || !hideColumns) && (
             <div className="ml-auto flex space-x-2">
-              {!hideExport && (
-                <Button variant="outline" onClick={handleExport} size="sm">
+              {!hideExport && onExport && (
+                <Button variant="outline" onClick={() => onExport(data)} size="sm">
                   <Download className="mr-2 h-4 w-4" />
                   Export
                 </Button>
+              )}
+              {!hideExport && !onExport && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={exporting}>
+                      {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleExport("xlsx")}>
+                      <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel (.xlsx)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                      <FileText className="mr-2 h-4 w-4" /> PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("csv")}>
+                      <FileDown className="mr-2 h-4 w-4" /> CSV
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {!hideColumns && (
                 <DropdownMenu>

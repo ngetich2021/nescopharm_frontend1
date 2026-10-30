@@ -48,7 +48,7 @@ const PAGE_SIZES = [20, 50, 100, 250]
 const kes = (v: any) => `KES ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 // Clickable column header that sorts the table (click again to reverse).
-const sortable = (label: string, align: "left" | "right" = "left") => ({ column }: any) => (
+const sortable = (label: string, align: "left" | "right" = "left") => Object.assign(({ column }: any) => (
   <button
     type="button"
     className={cn("inline-flex items-center gap-1 font-medium hover:text-foreground", align === "right" && "ml-auto")}
@@ -57,7 +57,7 @@ const sortable = (label: string, align: "left" | "right" = "left") => ({ column 
     {label}
     <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />
   </button>
-)
+), { exportLabel: label }) // the column's name on exports
 // Sort numbers as numbers (the API sends amounts as strings).
 const num = (key: string) => (row: any) => Number(row[key] || 0)
 
@@ -866,6 +866,12 @@ export default function SalesReportPage() {
                                     data={ledgerRows}
                                     hideSearch
                                     exportFileName="sales_accounts"
+                                    exportTitle="Sales Accounts"
+                                    exportSubtitle={periodLabel}
+                                    exportFooter={[
+                                        ["", "", "", "", "Current Total:", ledgerTotals.debit, ledgerTotals.credit, ""],
+                                        ["", "", "", "", "", "Closing Balance:", ledgerTotals.credit - ledgerTotals.debit, ""],
+                                    ]}
                                     // As the old system printed it: totals of every entry shown, then the closing balance under Credit.
                                     footer={ledgerRows.length > 0 && (
                                         <>
@@ -915,14 +921,14 @@ export default function SalesReportPage() {
                                     placeholder="Search customer, order or invoice (NSK/0427)..."
                                     className="mb-3 max-w-sm"
                                 />
-                                <DataTable pageSizeOptions={PAGE_SIZES} columns={ordersColumns} data={shownOrders} hideSearch exportFileName="sales_orders" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={ordersColumns} data={shownOrders} hideSearch exportFileName="sales_orders" exportSubtitle={periodLabel} />
                             </TabsContent>
                             <TabsContent value="products" className="mt-0">
                                 <DataTable pageSizeOptions={PAGE_SIZES}
                                     columns={topProductsColumns} 
                                     data={data?.top_products || []} 
                                     filterColumn="name"
-                                    exportFileName="top_products_sales"
+                                    exportFileName="top_products_sales" exportSubtitle={periodLabel}
                                 />
                             </TabsContent>
                             <TabsContent value="customers" className="mt-0">
@@ -930,20 +936,20 @@ export default function SalesReportPage() {
                                     columns={topCustomersColumns} 
                                     data={data?.top_customers || []} 
                                     filterColumn="name"
-                                    exportFileName="top_customers_sales"
+                                    exportFileName="top_customers_sales" exportSubtitle={periodLabel}
                                 />
                             </TabsContent>
                             <TabsContent value="region" className="mt-0">
-                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Region")} data={data?.sales_by_region || []} filterColumn="name" exportFileName="sales_by_region" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Region")} data={data?.sales_by_region || []} filterColumn="name" exportFileName="sales_by_region" exportSubtitle={periodLabel} />
                             </TabsContent>
                             <TabsContent value="county" className="mt-0">
-                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("County")} data={data?.sales_by_county || []} filterColumn="name" exportFileName="sales_by_county" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("County")} data={data?.sales_by_county || []} filterColumn="name" exportFileName="sales_by_county" exportSubtitle={periodLabel} />
                             </TabsContent>
                             <TabsContent value="town" className="mt-0">
-                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Town")} data={data?.sales_by_city || []} filterColumn="name" exportFileName="sales_by_town" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Town")} data={data?.sales_by_city || []} filterColumn="name" exportFileName="sales_by_town" exportSubtitle={periodLabel} />
                             </TabsContent>
                             <TabsContent value="rep" className="mt-0">
-                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Sales Rep")} data={data?.sales_by_rep || []} filterColumn="name" exportFileName="sales_by_rep" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Sales Rep")} data={data?.sales_by_rep || []} filterColumn="name" exportFileName="sales_by_rep" exportSubtitle={periodLabel} />
                                 {(data?.sales_by_rep || []).every((r: any) => r.id === "unassigned") && (
                                     <p className="mt-3 text-sm text-muted-foreground">
                                         No orders have a sales rep yet. Pick the rep when creating or editing an order (roles marked as sales reps appear in that list).
@@ -955,7 +961,7 @@ export default function SalesReportPage() {
                                     columns={summaryColumns} 
                                     data={data?.summary_by_date || []} 
                                     filterColumn="date"
-                                    exportFileName="daily_sales_log"
+                                    exportFileName="daily_sales_log" exportSubtitle={periodLabel}
                                 />
                             </TabsContent>
                         </CardContent>

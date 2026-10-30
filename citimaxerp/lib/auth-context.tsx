@@ -464,6 +464,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// For shared components that may render outside the provider (undefined there).
+export const useOptionalAuth = () => useContext(AuthContext)
+
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (context === undefined) {
