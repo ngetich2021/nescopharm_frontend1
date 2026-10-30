@@ -124,13 +124,16 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
       return { item, packs, perPack, pieces: perPack ? packs * perPack : packs }
     })
     const totalPieces = lines.reduce((sum, l) => sum + l.pieces, 0)
+    // Blank space under the items so the column divider runs down like the printed form; it
+    // shrinks as lines are added so the note stays on one page.
+    const fillerMm = Math.max(6, 50 - lines.length * 6)
     const referenceRows: (typeof referenceCells)[] = []
     for (let i = 0; i < referenceCells.length; i += 2) referenceRows.push(referenceCells.slice(i, i + 2))
 
     return (
       <Card
         ref={ref}
-        className={`max-w-4xl mx-auto bg-white p-6 md:p-8 shadow-lg print:shadow-none print:max-w-none print:m-0 print:p-6 print:border-0 text-sm ${className || ""}`}
+        className={`max-w-4xl mx-auto bg-white p-6 md:p-8 shadow-lg print:shadow-none print:max-w-none print:m-0 print:p-4 print:border-0 text-sm ${className || ""}`}
       >
         {letterheadSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -138,7 +141,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
             key={letterheadSrc}
             src={letterheadSrc}
             alt={`${company?.name || 'Company'} letterhead`}
-            className="w-full h-auto mb-2"
+            className="w-full h-auto max-h-36 object-contain mb-1.5 print:max-h-[32mm]"
             onError={() => setLetterheadIndex((i) => i + 1)}
           />
         ) : (
@@ -152,12 +155,12 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
         )}
 
         {/* Header */}
-        <div className="flex justify-between items-end mb-3">
-          <h1 className="text-xl font-bold text-gray-900 tracking-wide">DELIVERY NOTE</h1>
+        <div className="flex justify-between items-end mb-1">
+          <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">DELIVERY NOTE</h1>
         </div>
 
         {/* Buyer / Reference - one continuous bordered box, matching the invoice's own layout */}
-        <div className="grid grid-cols-2 border border-gray-300 text-xs leading-tight">
+        <div className="grid grid-cols-2 border border-gray-300 text-[11px] leading-tight">
           <div className="px-2 py-1 border-r border-gray-300">
             <p className="text-[10px] font-semibold text-gray-500 mb-0.5">BUYER (BILL TO)</p>
             <div className="text-gray-900">
@@ -176,9 +179,9 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
             {referenceRows.map((row, i) => (
               <div key={i} className="grid grid-cols-2 divide-x divide-gray-300">
                 {row.map((cell) => (
-                  <div key={cell.label} className="px-1.5 py-0.5">
-                    <p className="text-[10px] text-gray-500">{cell.label}</p>
-                    <p className="text-gray-900 break-words font-semibold">{cell.value}</p>
+                  <div key={cell.label} className="px-1.5 py-px">
+                    <p className="text-[9px] text-gray-500">{cell.label}</p>
+                    <p className="text-gray-900 [overflow-wrap:anywhere] font-semibold">{cell.value}</p>
                   </div>
                 ))}
               </div>
@@ -208,10 +211,10 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
             <tbody>
               {lines.map(({ item, packs, perPack, pieces }, idx) => (
                 <tr key={idx}>
-                  <td className={`border-r border-gray-300 px-2 ${idx === 0 ? 'pt-4' : 'pt-0.5'} font-bold text-gray-900`}>
+                  <td className={`border-r border-gray-300 px-2 ${idx === 0 ? 'pt-2' : 'pt-0.5'} font-bold text-gray-900`}>
                     {item.product ? sizedName(item.product.name, item.variant?.name) : 'Product'}
                   </td>
-                  <td className={`text-right px-2 ${idx === 0 ? 'pt-4' : 'pt-0.5'} text-gray-900 whitespace-nowrap`}>
+                  <td className={`text-right px-2 ${idx === 0 ? 'pt-2' : 'pt-0.5'} text-gray-900 whitespace-nowrap`}>
                     {perPack && (
                       <span className="text-gray-600">({perPack.toLocaleString()} x {packs.toLocaleString()}) = </span>
                     )}
@@ -227,7 +230,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
               )}
               {/* Filler so the column divider runs down the page like the printed form */}
               <tr>
-                <td className="border-r border-gray-300 h-64" />
+                <td className="border-r border-gray-300" style={{ height: `${fillerMm}mm` }} />
                 <td />
               </tr>
               <tr className="border-t border-gray-300">
@@ -239,6 +242,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
             </tbody>
           </table>
 
+          <div className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
           <div className="border-t border-gray-300 px-2 py-0.5 text-right italic text-gray-700">E. &amp; O.E</div>
 
           <div className="grid grid-cols-2 border-t border-gray-300">
@@ -249,7 +253,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
               </div>
               <div className="border-t border-r border-gray-300 px-2 py-1 text-gray-700">Recd. in Good Condition</div>
             </div>
-            <div className="border-l border-gray-300 flex flex-col justify-between min-h-[90px]">
+            <div className="border-l border-gray-300 flex flex-col justify-between min-h-[72px]">
               <p className="px-2 pt-1 text-right font-bold text-gray-900">for {company?.name || 'the Company'}</p>
               <div className="grid grid-cols-3 gap-3 px-2 pb-1 items-end">
                 <div>
@@ -263,6 +267,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
                 <p className="border-t border-gray-500 pt-0.5 text-right text-gray-700">Authorised Signatory</p>
               </div>
             </div>
+          </div>
           </div>
         </div>
 

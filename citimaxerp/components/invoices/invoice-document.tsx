@@ -85,14 +85,14 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           <img
             src={company?.letterhead_url || invoice.company?.letterhead_url || undefined}
             alt={`${company?.name || invoice.company?.name} letterhead`}
-            className="w-full h-auto mb-2"
+            className="w-full h-auto max-h-36 object-contain mb-1.5 print:max-h-[32mm]"
             crossOrigin="anonymous"
           />
         )}
 
         {/* Header */}
-        <div className="flex justify-between items-end mb-3">
-          <h1 className="text-xl font-bold text-gray-900 tracking-wide">INVOICE</h1>
+        <div className="flex justify-between items-end mb-1">
+          <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">INVOICE</h1>
           {invoice.due_date && invoice.due_date !== invoice.invoice_date && (
             <p className="text-xs text-gray-600">
               Due Date: <span className="font-semibold text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
@@ -103,7 +103,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         {/* Bill To / Reference & Dispatch Details - one continuous bordered
             box (matching the reference invoice's own layout) instead of
             two loosely-spaced, differently-styled sections. */}
-        <div className="grid grid-cols-2 border border-gray-300 text-xs leading-tight">
+        <div className="grid grid-cols-[2fr_3fr] border border-gray-300 text-[11px] leading-tight">
           <div className="px-2 py-1 border-r border-gray-300">
             <p className="text-[10px] font-semibold text-gray-500 mb-0.5">BUYER (BILL TO)</p>
             {(() => {
@@ -175,9 +175,9 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
               return rows.map((row, i) => (
                 <div key={i} className="grid grid-cols-4 divide-x divide-gray-300">
                   {row.map((cell) => (
-                    <div key={cell.label} className="px-1.5 py-0.5">
-                      <p className="text-[10px] text-gray-500">{cell.label}</p>
-                      <p className="text-gray-900 break-words font-semibold">{cell.value}</p>
+                    <div key={cell.label} className="px-1.5 py-px">
+                      <p className="text-[9px] text-gray-500">{cell.label}</p>
+                      <p className="text-gray-900 [overflow-wrap:anywhere] font-semibold">{cell.value}</p>
                     </div>
                   ))}
                 </div>
@@ -190,8 +190,8 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
             the Buyer/Reference box (as its own full-width row) rather than
             squeezed into a quarter-width grid cell where it wrapped across
             several lines and inflated the whole table's height. */}
-        <div className="mb-4 border border-t-0 border-gray-300 px-1.5 py-0.5 text-xs leading-tight">
-          <p className="text-[10px] text-gray-500">Terms of Delivery</p>
+        <div className="mb-2 border border-t-0 border-gray-300 px-1.5 py-px text-[11px] leading-tight">
+          <p className="text-[9px] text-gray-500">Terms of Delivery</p>
           <p className="font-bold text-gray-900 break-words">
             {invoice.terms_of_delivery && !/returns?\b/i.test(invoice.terms_of_delivery)
               ? invoice.terms_of_delivery
@@ -200,17 +200,17 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         </div>
 
         {/* Line Items Table */}
-        <div className="mb-4">
+        <div className="mb-2">
           <table className="w-full border border-gray-300 border-collapse">
             <thead>
               <tr className="bg-gray-50 text-xs">
-                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 w-10">S/No</th>
-                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap">Code No.</th>
-                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Item Name</th>
-                <th className="border border-gray-300 text-left px-2 py-1.5 font-semibold text-gray-700">Pack Size</th>
-                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Price per Pack (Ksh)</th>
-                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Order Qty</th>
-                <th className="border border-gray-300 text-right px-2 py-1.5 font-semibold text-gray-700">Total Value (Ksh)</th>
+                <th className="border border-gray-300 text-left px-1.5 py-1 print:py-0.5 font-semibold text-gray-700 w-10">S/No</th>
+                <th className="border border-gray-300 text-left px-1.5 py-1 print:py-0.5 font-semibold text-gray-700 whitespace-nowrap">Code No.</th>
+                <th className="border border-gray-300 text-left px-1.5 py-1 print:py-0.5 font-semibold text-gray-700">Item Name</th>
+                <th className="border border-gray-300 text-left px-1.5 py-1 print:py-0.5 font-semibold text-gray-700">Pack Size</th>
+                <th className="border border-gray-300 text-right px-1.5 py-1 print:py-0.5 font-semibold text-gray-700">Price per Pack (Ksh)</th>
+                <th className="border border-gray-300 text-right px-1.5 py-1 print:py-0.5 font-semibold text-gray-700">Order Qty</th>
+                <th className="border border-gray-300 text-right px-1.5 py-1 print:py-0.5 font-semibold text-gray-700">Total Value (Ksh)</th>
               </tr>
             </thead>
             <tbody>
@@ -227,12 +227,12 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                 const vatRate = parseFloat((item.tax_rate ?? 0).toString())
                 const unitPriceInclVat = parseFloat(item.unit_price.toString()) * (1 + vatRate / 100)
                 return (
-                  <tr key={item.id || index} className="leading-5">
-                    <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">{index + 1}</td>
-                    <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top whitespace-nowrap font-mono text-xs">
+                  <tr key={item.id || index} className="leading-tight">
+                    <td className="border border-gray-300 px-1.5 py-1 print:py-0.5 text-gray-900 align-top">{index + 1}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 print:py-0.5 text-gray-900 align-top whitespace-nowrap font-mono text-xs">
                       {documentCode(item.metadata?.price_label, (item.product as any)?.item_number)}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">
+                    <td className="border border-gray-300 px-1.5 py-1 print:py-0.5 text-gray-900 align-top">
                       <p className="font-semibold">{item.description}</p>
                       {vatRate > 0 && (
                         <span className="inline-block mt-0.5 border border-gray-500 px-1 text-[10px] font-semibold text-gray-700">
@@ -246,12 +246,12 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                         </div>
                       ))}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 text-gray-900 align-top">{packSize}</td>
-                    <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
+                    <td className="border border-gray-300 px-1.5 py-1 print:py-0.5 text-gray-900 align-top">{packSize}</td>
+                    <td className="border border-gray-300 text-right px-1.5 py-1 print:py-0.5 text-gray-900 align-top whitespace-nowrap">
                       {formatAmount(unitPriceInclVat)}
                     </td>
                     {/* Per-batch qtys only when the line was split across batches; one batch would just repeat the total. */}
-                    <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top whitespace-nowrap">
+                    <td className="border border-gray-300 text-right px-1.5 py-1 print:py-0.5 text-gray-900 align-top whitespace-nowrap">
                       <p className="font-semibold">{qty.toLocaleString()}</p>
                       {batches.length > 1 && batches.map((b, i) => (
                         <div key={i} className="text-xs">
@@ -260,7 +260,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                         </div>
                       ))}
                     </td>
-                    <td className="border border-gray-300 text-right px-2 py-1.5 text-gray-900 align-top font-semibold">
+                    <td className="border border-gray-300 text-right px-1.5 py-1 print:py-0.5 text-gray-900 align-top font-semibold">
                       {formatAmount(qty * unitPriceInclVat)}
                     </td>
                   </tr>
@@ -270,9 +270,11 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           </table>
         </div>
 
+        {/* From the totals to the thank-you footer prints as one block, never split across pages. */}
+        <div className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
         {/* Totals Section */}
-        <div className="flex justify-end mb-4">
-          <div className="w-64 space-y-2">
+        <div className="flex justify-end mb-2">
+          <div className="w-64 space-y-0.5">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Subtotal:</span>
               <span className="text-gray-900">KES {formatAmount(invoice.subtotal)}</span>
@@ -289,7 +291,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                 <span className="text-gray-900">KES {formatAmount(invoice.tax_amount)}</span>
               </div>
             )}
-            <div className="flex justify-between text-lg font-bold border-t-2 border-gray-300 pt-2">
+            <div className="flex justify-between text-base font-bold border-t-2 border-gray-300 pt-1">
               <span>Total:</span>
               <span>KES {formatAmount(invoice.total_amount)}</span>
             </div>
@@ -307,9 +309,9 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         </div>
 
         {/* Amount Chargeable (in words) */}
-        <div className="mb-8 pt-3 border-t border-gray-200 flex justify-between items-start gap-4">
+        <div className="mb-2 pt-1.5 border-t border-gray-200 flex justify-between items-start gap-4">
           <div>
-            <p className="text-xs font-semibold text-gray-600 mb-1">Amount Chargeable (in words)</p>
+            <p className="text-xs font-semibold text-gray-600">Amount Chargeable (in words)</p>
             <p className="text-sm font-medium text-gray-900">{amountInWords(invoice.total_amount)}</p>
           </div>
           <p className="text-xs text-gray-500 italic whitespace-nowrap">E. &amp; O.E</p>
@@ -317,16 +319,16 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
 
         {/* Notes & Payment Terms */}
         {(invoice.notes || invoice.payment_terms) && (
-          <div className="border-t border-gray-200 pt-6 space-y-4">
+          <div className="border-t border-gray-200 pt-1.5 space-y-1">
             {invoice.payment_terms && (
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-1">Payment Terms</p>
+                <p className="text-xs font-semibold text-gray-700">Payment Terms</p>
                 <p className="text-sm text-gray-600">{invoice.payment_terms}</p>
               </div>
             )}
             {invoice.notes && (
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-1">Notes</p>
+                <p className="text-xs font-semibold text-gray-700">Notes</p>
                 <p className="text-sm text-gray-600">{invoice.notes}</p>
               </div>
             )}
@@ -338,7 +340,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         {(() => {
           const c = company || (invoice.company as Company | undefined)
           return (
-            <div className="mt-4 border border-gray-300 text-[11px] leading-tight break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+            <div className="mt-2 border border-gray-300 text-[11px] leading-tight break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
               <p className="bg-gray-50 border-b border-gray-300 px-2 py-0.5 font-bold text-gray-800">
                 {(c?.name || 'COMPANY').toUpperCase()} PAYMENT DETAILS
               </p>
@@ -367,7 +369,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         })()}
 
         {/* Declaration & Signature */}
-        <div className="mt-8 pt-6 border-t border-gray-200 flex justify-between items-end gap-8">
+        <div className="mt-2 pt-1.5 border-t border-gray-200 flex justify-between items-end gap-8">
           <div className="max-w-sm">
             <p className="text-xs font-semibold text-gray-700 mb-1">Declaration</p>
             <p className="text-xs text-gray-500">
@@ -375,15 +377,15 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
             </p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-700 mb-8">for {company?.name || invoice.company?.name || 'the Company'}</p>
+            <p className="text-sm text-gray-700 mb-6">for {company?.name || invoice.company?.name || 'the Company'}</p>
             <p className="text-xs text-gray-500 border-t border-gray-300 pt-1">Authorised Signatory</p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-12 pt-6 border-t border-gray-200 text-center text-xs text-gray-500 space-y-1">
-          <p>Thank you for your business!</p>
-          <p>This is a Computer Generated Invoice</p>
+        <div className="mt-2 pt-1 border-t border-gray-200 text-center text-xs text-gray-500">
+          <p>Thank you for your business! · This is a Computer Generated Invoice</p>
+        </div>
         </div>
       </Card>
 
