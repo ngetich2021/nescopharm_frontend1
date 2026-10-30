@@ -9,7 +9,6 @@ use App\Models\SalaryAdvance;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -276,8 +275,7 @@ class EmployeeSelfServiceController extends Controller
      * Director has nobody above them in this chain, so their own report is
      * self-certified/auto-approved on submission rather than left pending
      * forever. Falls back to whoever holds the can_manage_company/system
-     * bypass if no user literally holds the GM/Director role, same
-     * fallback resolveDefaultApproverId() uses for leave/salary.
+     * bypass if no user literally holds the GM/Director role.
      */
     private function resolveDailyReportApprover(Employee $employee, User $submittingUser): array
     {
@@ -345,82 +343,9 @@ class EmployeeSelfServiceController extends Controller
             return $employee;
         }
 
-        $payload = [
-            'id' => (string) Str::uuid(),
-            'company_id' => $user->company_id,
-            'user_id' => $user->id,
-            'employee_number' => $this->generateEmployeeNumber($user->company_id),
-            'first_name' => $user->first_name,
-            'last_name' => $user->last_name,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'hire_date' => now()->toDateString(),
-            'employment_type' => 'full_time',
-            'payment_frequency' => 'monthly',
-            'basic_salary' => 0,
-            'is_active' => true,
-            'created_by' => $user->id,
-            'metadata' => [
-                'provisioned_from_user_id' => $user->id,
-                'provisioned_from_employee_portal' => true,
-            ],
-        ];
-
-        if ($this->hasEmployeeApproverColumns()) {
-            $payload['leave_approver_id'] = $this->resolveDefaultApproverId($user->company_id, $user->id, 'can_approve_leave');
-            $payload['salary_advance_approver_id'] = $this->resolveDefaultApproverId($user->company_id, $user->id, 'can_approve_salary_changes');
-        }
-
-        return Employee::create($payload);
-    }
-
-    private function generateEmployeeNumber(string $companyId): string
-    {
-        $nextNumber = Employee::where('company_id', $companyId)->count() + 1;
-
-        do {
-            $employeeNumber = 'EMP-' . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
-            $exists = Employee::where('company_id', $companyId)
-                ->where('employee_number', $employeeNumber)
-                ->exists();
-            $nextNumber++;
-        } while ($exists);
-
-        return $employeeNumber;
-    }
-
-    /**
-     * The oldest active user who actually holds the given approval permission
-     * directly (i.e. really GM/Director, or explicitly granted approval
-     * rights) - preferred over a generic company-admin account that merely
-     * has the can_manage_company/can_manage_system blanket bypass, so a
-     * technical super_admin/citimax_admin signup account doesn't get picked
-     * ahead of the actual GM or Director. Only falls back to that bypass if
-     * the company has no dedicated approver at all.
-     */
-    private function resolveDefaultApproverId(string $companyId, string $currentUserId, string $permissionKey): ?string
-    {
-        $direct = \App\Models\User::where('company_id', $companyId)
-            ->where('id', '!=', $currentUserId)
-            ->whereRaw('is_active = true')
-            ->whereHas('role.permissions', function ($q) use ($permissionKey) {
-                $q->where('key', $permissionKey);
-            })
-            ->orderBy('created_at')
-            ->value('id');
-
-        if ($direct) {
-            return $direct;
-        }
-
-        return \App\Models\User::where('company_id', $companyId)
-            ->where('id', '!=', $currentUserId)
-            ->whereRaw('is_active = true')
-            ->whereHas('role.permissions', function ($q) {
-                $q->whereIn('key', ['can_manage_company', 'can_manage_system']);
-            })
-            ->orderBy('created_at')
-            ->value('id');
+        // No matching employee: this login isn't staff (or HR hasn't linked it yet). Never make
+        // one up - that added logins such as admins and the system developer as employees.
+        return null;
     }
 
     private function hasEmployeeApproverColumns(): bool

@@ -421,63 +421,8 @@ export default function EmployeePortalPage() {
     return <div className="p-6 text-sm text-muted-foreground">Loading employee portal...</div>;
   }
 
-  if (!employee) {
-    return <div className="p-6 text-sm text-muted-foreground">No employee profile is linked to this login yet.</div>;
-  }
-
-  const employeeStatus = employee.employment_status || (employee.is_active ? "active" : "inactive");
-  const pendingLeaveCount = leaveRequests.filter((item) => item.status.toLowerCase() === "pending").length;
-  const pendingAdvanceCount = salaryAdvances.filter((item) => item.status.toLowerCase() === "pending").length;
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-3xl border bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-800 p-6 text-white shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <Badge className="w-fit border border-white/20 bg-white/10 text-white hover:bg-white/10">Employee Portal</Badge>
-            <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight">
-                {[employee.first_name, employee.last_name].filter(Boolean).join(" ") || "Employee Workspace"}
-              </h1>
-              <p className="max-w-2xl text-sm text-slate-200">
-                Submit leave and salary advance requests, track approval progress, and see who is responsible for reviewing each request.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
-              <CardContent className="flex items-center gap-3 p-4">
-                <UserRound className="h-5 w-5 text-emerald-200" />
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-300">Status</p>
-                  <p className="text-sm font-semibold capitalize">{formatStatus(employeeStatus)}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
-              <CardContent className="flex items-center gap-3 p-4">
-                <CalendarDays className="h-5 w-5 text-emerald-200" />
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-300">Pending Leave</p>
-                  <p className="text-sm font-semibold">{pendingLeaveCount}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
-              <CardContent className="flex items-center gap-3 p-4">
-                <CreditCard className="h-5 w-5 text-emerald-200" />
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-300">Pending Advances</p>
-                  <p className="text-sm font-semibold">{pendingAdvanceCount}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {(canApproveLeave || canApproveSalary || canApproveDailyReports) && (
+  // Approvers (GM, Directors) review others' requests here even without an employee profile of their own.
+  const approvalsPanel = (canApproveLeave || canApproveSalary || canApproveDailyReports) && (
         <Card className="shadow-sm border-amber-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -585,7 +530,70 @@ export default function EmployeePortalPage() {
             )}
           </CardContent>
         </Card>
-      )}
+      );
+
+  if (!employee) {
+    return (
+      <div className="space-y-6">
+        <div className="p-6 text-sm text-muted-foreground">No employee profile is linked to this login. HR links each login to its employee record.</div>
+        {approvalsPanel}
+      </div>
+    );
+  }
+
+  const employeeStatus = employee.employment_status || (employee.is_active ? "active" : "inactive");
+  const pendingLeaveCount = leaveRequests.filter((item) => item.status.toLowerCase() === "pending").length;
+  const pendingAdvanceCount = salaryAdvances.filter((item) => item.status.toLowerCase() === "pending").length;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-800 p-6 text-white shadow-sm">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <Badge className="w-fit border border-white/20 bg-white/10 text-white hover:bg-white/10">Employee Portal</Badge>
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight">
+                {[employee.first_name, employee.last_name].filter(Boolean).join(" ") || "Employee Workspace"}
+              </h1>
+              <p className="max-w-2xl text-sm text-slate-200">
+                Submit leave and salary advance requests, track approval progress, and see who is responsible for reviewing each request.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+              <CardContent className="flex items-center gap-3 p-4">
+                <UserRound className="h-5 w-5 text-emerald-200" />
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-300">Status</p>
+                  <p className="text-sm font-semibold capitalize">{formatStatus(employeeStatus)}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+              <CardContent className="flex items-center gap-3 p-4">
+                <CalendarDays className="h-5 w-5 text-emerald-200" />
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-300">Pending Leave</p>
+                  <p className="text-sm font-semibold">{pendingLeaveCount}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+              <CardContent className="flex items-center gap-3 p-4">
+                <CreditCard className="h-5 w-5 text-emerald-200" />
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-300">Pending Advances</p>
+                  <p className="text-sm font-semibold">{pendingAdvanceCount}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {approvalsPanel}
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <Card className="shadow-sm">
