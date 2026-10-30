@@ -155,7 +155,7 @@ export default function PriceListsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Price Lists</h1>
             <p className="text-sm text-gray-600">
-              To change prices: download the current list, edit the prices in Excel, then upload it back. Rows are matched to products by item description; new descriptions create new products.
+              To change prices: download the current list, edit the prices in Excel, then upload it back. Rows are matched to products by code, then item description. A price list never creates products: create a new product first, then upload its price. Rows that match no product are listed as errors and skipped.
             </p>
           </div>
           <Button variant="outline" asChild>
@@ -369,10 +369,9 @@ export default function PriceListsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
                 <div><p className="text-muted-foreground">Rows</p><p className="text-lg font-semibold">{result.summary.rows}</p></div>
                 <div><p className="text-muted-foreground">Matched products</p><p className="text-lg font-semibold">{result.summary.products_matched}</p></div>
-                <div><p className="text-muted-foreground">New products</p><p className="text-lg font-semibold">{result.summary.products_created}</p></div>
                 <div><p className="text-muted-foreground">Prices added / updated</p><p className="text-lg font-semibold">{result.summary.prices_added} / {result.summary.prices_updated}</p></div>
                 <div><p className="text-muted-foreground">Errors</p><p className={`text-lg font-semibold ${result.summary.errors ? "text-red-600" : ""}`}>{result.summary.errors}</p></div>
               </div>

@@ -335,8 +335,9 @@ class ProductController extends Controller
 
     /**
      * Import one price list (NSPV, NSPH, NSPO, NSPD...) from Excel/CSV. Rows are matched to products by
-     * item description (case-insensitive); products that don't exist yet are created. With dry_run=1
-     * nothing is saved and the per-row result is returned for review.
+     * code, then item description (case-insensitive); a row matching no product is reported, never
+     * created - products are created first. With dry_run=1 nothing is saved and the per-row result is
+     * returned for review.
      */
     public function importPriceList(Request $request)
     {
@@ -359,8 +360,6 @@ class ProductController extends Controller
         $companyId = $user->company_id;
         $listName = strtoupper(trim($request->input('list_name')));
         $dryRun = $request->boolean('dry_run');
-        $storeId = $request->input('store_id')
-            ?: DB::table('stores')->where('company_id', $companyId)->orderBy('created_at')->value('id');
 
         try {
             $rows = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file')->getRealPath())
@@ -464,39 +463,34 @@ class ProductController extends Controller
                 $product = $matches->first();
                 $notes = [];
                 $oldPrice = null;
+                // A price list only prices products that already exist; it never makes one. A row whose
+                // description matches nothing (often a typo) is reported so the product is created first,
+                // instead of a stockless look-alike being added and sold in its place.
                 if (!$product) {
-                    $product = Product::create([
-                        'id' => (string) Str::uuid(),
-                        'company_id' => $companyId,
-                        'store_id' => $storeId,
-                        'product_number' => $this->generateProductNumber($companyId),
-                        'name' => $description,
-                        'price' => $listName === 'NSPV' ? $price : 0,
-                        'unit_cost' => 0,
-                        'unit_of_measurement' => $uom,
-                        'is_active' => true,
-                        'track_inventory' => true,
-                        'is_taxable' => $tax['is_taxable'] ?? true,
-                        'tax_rate' => $tax['tax_rate'] ?? null,
-                    ]);
-                    $summary['products_created']++;
-                    $status = 'created';
-                } else {
-                    $updates = [];
-                    if ($listName === 'NSPV') {
-                        $updates['price'] = $price;
-                        $updates['unit_of_measurement'] = $uom;
-                    }
-                    if ($tax !== null) {
-                        $updates['is_taxable'] = $tax['is_taxable'];
-                        $updates['tax_rate'] = $tax['tax_rate'];
-                    }
-                    if ($updates) {
-                        $product->update($updates);
-                    }
-                    $summary['products_matched']++;
-                    $status = 'matched';
+                    $summary['errors']++;
+                    $results[] = $result + [
+                        'status' => 'error',
+                        'price' => $price,
+                        'unit_of_measure' => $uom,
+                        'message' => 'No product with this description. Create the product first (or fix the spelling to match it), then upload the list again.',
+                    ];
+                    continue;
                 }
+
+                $updates = [];
+                if ($listName === 'NSPV') {
+                    $updates['price'] = $price;
+                    $updates['unit_of_measurement'] = $uom;
+                }
+                if ($tax !== null) {
+                    $updates['is_taxable'] = $tax['is_taxable'];
+                    $updates['tax_rate'] = $tax['tax_rate'];
+                }
+                if ($updates) {
+                    $product->update($updates);
+                }
+                $summary['products_matched']++;
+                $status = 'matched';
 
                 $tier = ProductPriceTier::where('company_id', $companyId)
                     ->where('tier_name', $listName)
