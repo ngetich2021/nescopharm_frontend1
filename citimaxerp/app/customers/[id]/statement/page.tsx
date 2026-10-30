@@ -13,6 +13,7 @@ import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, filePeriod, printWithFileName } from "@/lib/document-names"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 function toNumber(amount: string | number | null | undefined): number {
   if (amount === null || amount === undefined) return 0
@@ -265,7 +266,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
         useCORS: true,
         allowTaint: true,
         backgroundColor: "#ffffff",
-        logging: false,
+        logging: false, onclone: fixTextOffset,
       })
 
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })

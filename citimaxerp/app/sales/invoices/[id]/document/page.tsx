@@ -17,6 +17,7 @@ import { DOCUMENT_COPIES, InvoiceDocument, loadInvoiceDocumentData, RETURN_POLIC
 import { FileLink } from "@/components/file-preview"
 import { listOrderDispatches } from "@/lib/order-dispatches"
 import { DeliveryNoteDocument } from "@/components/dispatch/delivery-note-document"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -116,7 +117,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        logging: false,
+        logging: false, onclone: fixTextOffset,
       })
       
       const imgData = canvas.toDataURL('image/png')
@@ -145,7 +146,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
           useCORS: true,
           allowTaint: true,
           backgroundColor: '#ffffff',
-          logging: false,
+          logging: false, onclone: fixTextOffset,
         })
         const noteRatio = Math.min(pdfWidth / noteCanvas.width, pdfHeight / noteCanvas.height)
         pdf.addPage()

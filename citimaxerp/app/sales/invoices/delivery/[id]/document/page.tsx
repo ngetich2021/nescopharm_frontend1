@@ -10,6 +10,7 @@ import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 const STATUS_STYLES: Record<string, string> = {
   paid: "bg-green-100 text-green-800",
@@ -62,7 +63,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
         useCORS: true,
         allowTaint: true,
         backgroundColor: "#ffffff",
-        logging: false,
+        logging: false, onclone: fixTextOffset,
       })
 
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })

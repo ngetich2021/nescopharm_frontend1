@@ -100,7 +100,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">INVOICE</h1>
           <div className="flex flex-col items-end gap-0.5">
             {copyLabel && (
-              <p className="border border-gray-800 px-2 text-xs font-bold tracking-widest text-gray-900">{copyLabel}</p>
+              <p className="min-w-[11rem] border-2 border-gray-800 px-4 py-0.5 text-center text-sm font-bold leading-5 tracking-[0.3em] text-gray-900">{copyLabel}</p>
             )}
             {invoice.due_date && invoice.due_date !== invoice.invoice_date && (
               <p className="text-xs text-gray-600">

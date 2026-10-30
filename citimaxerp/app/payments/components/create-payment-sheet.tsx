@@ -248,7 +248,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Add New Payment</SheetTitle>
+          <SheetTitle>Receive Payment</SheetTitle>
           <SheetDescription>Record a new payment transaction. Fill in the details below.</SheetDescription>
         </SheetHeader>
 
@@ -460,7 +460,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                   Creating...
                 </>
               ) : (
-                "Create Payment"
+                "Receive Payment"
               )}
             </Button>
           </SheetFooter>

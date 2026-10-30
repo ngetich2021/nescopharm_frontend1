@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { DeliveryNoteDocument, type DeliveryNoteLoaded } from "@/components/dispatch/delivery-note-document"
 import { DOCUMENT_COPIES } from "@/components/invoices/invoice-document"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -45,7 +46,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       const html2canvas = (await import('html2canvas')).default
       const { jsPDF } = await import('jspdf')
       const element = docRef.current
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false })
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, onclone: fixTextOffset })
       const imgData = canvas.toDataURL('image/png')
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       const pdfWidth = pdf.internal.pageSize.getWidth()

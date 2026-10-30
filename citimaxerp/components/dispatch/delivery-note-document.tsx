@@ -160,7 +160,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
         <div className="flex justify-between items-end mb-1">
           <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">DELIVERY NOTE</h1>
           {copyLabel && (
-            <p className="border border-gray-800 px-2 text-xs font-bold tracking-widest text-gray-900">{copyLabel}</p>
+            <p className="min-w-[11rem] border-2 border-gray-800 px-4 py-0.5 text-center text-sm font-bold leading-5 tracking-[0.3em] text-gray-900">{copyLabel}</p>
           )}
         </div>
 

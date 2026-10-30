@@ -127,7 +127,7 @@ export function CustomerReceipts({ customerId }: { customerId: string }) {
                       {r.credit > 0.005 ? kes(r.credit) : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-2 py-1.5 text-right whitespace-nowrap">
-                      <PermissionGuard permissions={["can_delete_invoices", "can_manage_system", "can_manage_company"]} hideOnDenied>
+                      <PermissionGuard permissions={["can_delete_invoices", "can_refund_payments", "can_manage_system", "can_manage_company"]} hideOnDenied>
                         {busyId === r.id ? (
                           <Loader2 className="h-4 w-4 animate-spin inline-block text-gray-500" />
                         ) : (

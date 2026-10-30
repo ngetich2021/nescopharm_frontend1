@@ -10,6 +10,7 @@ import { getEtimsConfig } from "@/lib/etims"
 import { PRINT_KEY } from "@/lib/filing"
 import { printWithFileName } from "@/lib/document-names"
 import { InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, type InvoiceDocumentData } from "@/components/invoices/invoice-document"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 /**
  * Several invoices, each on its own page, in the same layout as a single printed invoice -
@@ -92,7 +93,7 @@ export default function FilingPrintPage() {
       for (let i = 0; i < docs.length; i++) {
         const el = refs.current[i]
         if (!el) continue
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false })
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false, onclone: fixTextOffset })
         const ratio = Math.min(pageW / canvas.width, pageH / canvas.height)
         if (i > 0) pdf.addPage()
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (pageW - canvas.width * ratio) / 2, 10, canvas.width * ratio, canvas.height * ratio)

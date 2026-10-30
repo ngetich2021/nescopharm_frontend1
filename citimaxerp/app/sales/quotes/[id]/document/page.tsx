@@ -12,6 +12,7 @@ import { DocumentViewToggle, useDocumentView } from "@/components/document-view-
 import { documentCode } from "@/lib/price-codes"
 import { buildBuyerBlock } from "@/lib/customer-address"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -61,7 +62,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
         useCORS: true,
         allowTaint: true,
         backgroundColor: "#ffffff",
-        logging: false,
+        logging: false, onclone: fixTextOffset,
       })
 
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })

@@ -331,7 +331,7 @@ export function PaymentsTable() {
               className="border-[#E30040] text-[#E30040] hover:bg-[#E30040]/10"
             >
               <CreditCard className="mr-2 h-4 w-4" />
-              Add Payment
+              Receive Payment
             </Button>
             <Button variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />

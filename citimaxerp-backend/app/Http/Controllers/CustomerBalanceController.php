@@ -153,7 +153,9 @@ class CustomerBalanceController extends Controller
 
     protected function removeReceipt(Request $request, string $customerId, string $paymentId, bool $cancel): JsonResponse
     {
-        if (!$this->hasPermission($request, 'can_delete_invoices')) {
+        // Taking back a payment captured in error is a refund-type action: accountants (who refund
+        // payments but don't delete invoices) can do it as well as those who delete invoices.
+        if (!$this->hasPermission($request, 'can_delete_invoices') && !$this->hasPermission($request, 'can_refund_payments')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         $companyId = $request->user()->company_id;

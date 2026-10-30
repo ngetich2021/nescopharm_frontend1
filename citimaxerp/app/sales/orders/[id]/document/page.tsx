@@ -13,6 +13,7 @@ import { ArrowLeft, Download, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 export default function OrderDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -106,7 +107,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        logging: false,
+        logging: false, onclone: fixTextOffset,
       })
 
       const imgData = canvas.toDataURL('image/png')

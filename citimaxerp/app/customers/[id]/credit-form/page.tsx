@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context"
 import { usePermissions } from "@/hooks/use-permissions"
 import { compressImageIfLarge } from "@/lib/image-compression"
 import { documentFileName, todayFileDate, printWithFileName } from "@/lib/document-names"
+import { fixTextOffset } from "@/lib/pdf-capture"
 
 // The customer profile response includes several Credit Appraisal Form fields
 // that aren't yet part of the shared `CustomerProfileData` type (confirmed live
@@ -304,7 +305,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        logging: false,
+        logging: false, onclone: fixTextOffset,
       })
 
       const imgData = canvas.toDataURL('image/png')
