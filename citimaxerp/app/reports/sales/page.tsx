@@ -272,15 +272,7 @@ export default function SalesReportPage() {
       cell: ({ row }: any) => <span className="whitespace-nowrap">{row.original.invoice_number || "-"}</span>,
     },
     { accessorKey: "order_date", header: sortable("Date") },
-    {
-      accessorKey: "customer",
-      header: sortable("Customer"),
-      // The table's search box: customer, order number, or invoice number however typed (NSK/0427, nsk 427...).
-      filterFn: (row: any, _id: string, value: string) =>
-        String(row.original.customer ?? "").toLowerCase().includes(String(value).toLowerCase()) ||
-        String(row.original.order_number ?? "").toLowerCase().includes(String(value).toLowerCase()) ||
-        matchesDocNumber(row.original.invoice_number, value),
-    },
+    { accessorKey: "customer", header: sortable("Customer") },
     { accessorKey: "county", header: sortable("County"), cell: ({ row }: any) => row.original.county || "-" },
     { accessorKey: "town", header: sortable("Town"), cell: ({ row }: any) => row.original.town || "-" },
     { accessorKey: "sales_rep", header: sortable("Sales Rep") },
@@ -299,13 +291,25 @@ export default function SalesReportPage() {
     return from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`
   })()
 
-  // Totals of every order in the period (all pages of the table, not just the one showing).
-  const orderTotals = useMemo(() => {
+  // The orders table's search: customer, order number, or invoice number however typed (NSK/0427, nsk 427...).
+  const [orderSearch, setOrderSearch] = useState("")
+  const shownOrders = useMemo(() => {
     const rows: any[] = data?.orders || []
+    const q = orderSearch.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((r) =>
+      String(r.customer ?? "").toLowerCase().includes(q) ||
+      String(r.order_number ?? "").toLowerCase().includes(q) ||
+      matchesDocNumber(r.invoice_number, orderSearch))
+  }, [data, orderSearch])
+
+  // Totals of the orders shown (every page of the table, and only those matching the search).
+  const orderTotals = useMemo(() => {
+    const rows: any[] = shownOrders
     const total = rows.reduce((s, r) => s + Number(r.total || 0), 0)
     const paid = rows.reduce((s, r) => s + Number(r.paid || 0), 0)
     return { count: rows.length, total, paid, balance: total - paid }
-  }, [data])
+  }, [shownOrders])
 
   const customerLabel = (id: string) => {
     const c = customers.find((x) => x.id === id)
@@ -780,7 +784,10 @@ export default function SalesReportPage() {
                                     <div>
                                         <p className="text-xs text-muted-foreground">Period</p>
                                         <p className="font-semibold">{periodLabel}</p>
-                                        <p className="text-xs text-muted-foreground">{orderTotals.count} order{orderTotals.count === 1 ? "" : "s"}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {orderTotals.count} order{orderTotals.count === 1 ? "" : "s"}
+                                            {orderSearch.trim() && ` matching "${orderSearch.trim()}"`}
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-muted-foreground">Total</p>
@@ -795,7 +802,13 @@ export default function SalesReportPage() {
                                         <p className="font-semibold text-red-700">{kes(orderTotals.balance)}</p>
                                     </div>
                                 </div>
-                                <DataTable columns={ordersColumns} data={data?.orders || []} filterColumn="customer" exportFileName="sales_orders" />
+                                <Input
+                                    value={orderSearch}
+                                    onChange={(e) => setOrderSearch(e.target.value)}
+                                    placeholder="Search customer, order or invoice (NSK/0427)..."
+                                    className="mb-3 max-w-sm"
+                                />
+                                <DataTable columns={ordersColumns} data={shownOrders} hideSearch exportFileName="sales_orders" />
                             </TabsContent>
                             <TabsContent value="products" className="mt-0">
                                 <DataTable 
