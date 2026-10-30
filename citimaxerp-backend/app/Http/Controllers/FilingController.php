@@ -273,7 +273,7 @@ class FilingController extends Controller
     }
 
     /**
-     * A whole number from 1 to $max ("007" and Excel's "7.0" are 7); empty clears it.
+     * A whole number from 1 to $max ("007", Excel's "7.0" and "NSK/0007" are 7); empty clears it.
      *
      * @return array{0: ?string, 1: ?string} [value, error]
      */
@@ -283,6 +283,8 @@ class FilingController extends Controller
         if ($raw === '') {
             return [null, null];
         }
+        // Typed as printed: NSK/0429, nsk 429.
+        $raw = preg_replace('/^nsk\s*[\/\-]?\s*/i', '', $raw);
         if (!preg_match('/^\d+(\.0+)?$/', $raw)) {
             return [null, "File No must be a whole number from 1 to {$max}"];
         }

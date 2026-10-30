@@ -190,8 +190,12 @@ class Invoice extends Model
 
             // An order's invoice is numbered NSK/0429, NSK/0430...: the next File No after the
             // highest in use (other invoices, e.g. bounced cheque charges, keep their INV number).
+            // It is filed under that number straight away; if the old system already used it, the
+            // number is changed on the Filing page.
             if ($model->order_id && blank($model->file_number) && $model->company_id) {
                 $model->file_number = (string) self::nextFileNumber($model->company_id);
+                $model->filed_at = now();
+                $model->filed_by = auth()->id();
             }
         });
 
