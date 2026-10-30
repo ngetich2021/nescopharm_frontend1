@@ -29,7 +29,7 @@ import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
-import { HISTORICAL_CUTOFF } from "@/lib/orders"
+import { HISTORICAL_CUTOFF, PAST_SALES_UNTIL } from "@/lib/orders"
 
 type Customer = LibCustomer
 
@@ -59,7 +59,7 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-const formatCutoff = () => HISTORICAL_CUTOFF.split("-").reverse().join("-")
+const formatCutoff = () => PAST_SALES_UNTIL.split("-").reverse().join("-")
 
 export function CreateOrderModal({
   children, 
@@ -1001,7 +1001,7 @@ export function CreateOrderModal({
               />
               {isPastSale && (
                 <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Past sale (before {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
+                  Past sale (dated up to {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
                   but stock will not change - those goods left before your opening stock was taken.
                 </p>
               )}

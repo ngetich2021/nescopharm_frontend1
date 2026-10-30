@@ -158,8 +158,8 @@ class Order extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    /** Go-live: sales dated before this were made in the previous system, so they never move stock. */
-    public const HISTORICAL_CUTOFF = '2026-10-17';
+    /** Go-live: sales dated before this (up to 31 Oct 2026) are past sales, so they never move stock. */
+    public const HISTORICAL_CUTOFF = '2026-11-01';
 
     public static function isHistoricalDate($date): bool
     {

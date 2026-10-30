@@ -54,7 +54,9 @@ export interface Order {
 
 // Go-live date; matches Order::HISTORICAL_CUTOFF on the backend. Orders dated before it are
 // past sales: they count in sales and balances but never move stock.
-export const HISTORICAL_CUTOFF = "2026-10-17"
+export const HISTORICAL_CUTOFF = "2026-11-01"
+// The last day that counts as a past sale (shown to users).
+export const PAST_SALES_UNTIL = "2026-10-31"
 export const isPastSaleDate = (date?: string | null) => !!date && date.slice(0, 10) < HISTORICAL_CUTOFF
 
 // Last day orders can be edited (Nairobi time); matches Order::EDIT_DEADLINE on the backend.

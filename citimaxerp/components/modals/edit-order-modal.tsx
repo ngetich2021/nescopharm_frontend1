@@ -24,7 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts, getProductById } from "@/lib/products"
 import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
-import { OrderDetail, HISTORICAL_CUTOFF } from "@/lib/orders"
+import { OrderDetail, HISTORICAL_CUTOFF, PAST_SALES_UNTIL } from "@/lib/orders"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
 import { OrderVatSelect } from "@/components/order-vat-select"
@@ -75,7 +75,7 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-const formatCutoff = () => HISTORICAL_CUTOFF.split("-").reverse().join("-")
+const formatCutoff = () => PAST_SALES_UNTIL.split("-").reverse().join("-")
 
 type ProductWithVariants = Product & { variants?: ProductVariant[] }
 
@@ -1044,7 +1044,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
               />
               {isPastSale && (
                 <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Past sale (before {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
+                  Past sale (dated up to {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
                   but stock will not change - those goods left before your opening stock was taken.
                 </p>
               )}
