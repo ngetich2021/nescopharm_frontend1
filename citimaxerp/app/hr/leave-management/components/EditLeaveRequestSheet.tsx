@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetClose,
@@ -15,27 +13,28 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { updateLeaveRequest, type LeaveRequest } from "@/lib/leave";
+import { balanceAfter, emptyLeaveForm, leaveFormFrom, leavePayload, updateLeaveRequest, type LeaveRequest } from "@/lib/leave";
 import { getEmployees, type Employee } from "@/lib/employees";
 import { useAuth } from "@/lib/auth-context";
+import { LeaveFormFields } from "./LeaveFormFields";
 
 interface EditLeaveRequestSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   leaveRequest: LeaveRequest | null;
+  /** All leave on record, for the balance left after this one. */
+  leaveRequests: LeaveRequest[];
+  recordsApprover: string | null;
 }
 
-export function EditLeaveRequestSheet({ open, onOpenChange, onSuccess, leaveRequest }: EditLeaveRequestSheetProps) {
+export function EditLeaveRequestSheet({ open, onOpenChange, onSuccess, leaveRequest, leaveRequests, recordsApprover }: EditLeaveRequestSheetProps) {
   const { companyId, hasPermission } = useAuth();
   const canApprove = hasPermission("can_approve_leave");
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
-  const [leaveType, setLeaveType] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [reason, setReason] = useState("");
+  const [form, setForm] = useState(emptyLeaveForm);
   const [status, setStatus] = useState("");
   const { toast } = useToast();
 
@@ -48,31 +47,25 @@ export function EditLeaveRequestSheet({ open, onOpenChange, onSuccess, leaveRequ
   useEffect(() => {
     if (leaveRequest) {
       setEmployeeId(leaveRequest.employee_id || "");
-      setLeaveType(leaveRequest.leaveType || "");
-      setStartDate(leaveRequest.startDate || "");
-      setEndDate(leaveRequest.endDate || "");
-      setReason(leaveRequest.reason || "");
+      setForm(leaveFormFrom(leaveRequest));
       setStatus(leaveRequest.status || "");
     }
   }, [leaveRequest]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveRequest) return;
+    if (!leaveRequest || loading) return;
     setLoading(true);
     try {
       await updateLeaveRequest(leaveRequest.id, {
         employee_id: employeeId,
-        leave_type: leaveType,
-        start_date: startDate,
-        end_date: endDate,
-        reason,
+        ...leavePayload(form),
         status,
       });
       onSuccess();
       onOpenChange(false);
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to update leave request.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "Failed to update leave request.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -80,7 +73,7 @@ export function EditLeaveRequestSheet({ open, onOpenChange, onSuccess, leaveRequ
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Edit Leave Request</SheetTitle>
           <SheetDescription>Update the details below to modify this leave request.</SheetDescription>
@@ -104,39 +97,13 @@ export function EditLeaveRequestSheet({ open, onOpenChange, onSuccess, leaveRequ
             </select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="leaveType">Leave Type</Label>
-            <select
-              id="leaveType"
-              value={leaveType}
-              onChange={(e) => setLeaveType(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              required
-            >
-              <option value="">Select leave type</option>
-              <option value="annual">Annual Leave</option>
-              <option value="sick">Sick Leave</option>
-              <option value="maternity">Maternity Leave</option>
-              <option value="paternity">Paternity Leave</option>
-              <option value="unpaid">Unpaid Leave</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
-            <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Brief reason for leave" required />
-          </div>
+          <LeaveFormFields
+            value={form}
+            onChange={setForm}
+            balanceAfter={employeeId ? balanceAfter(leaveRequests, employeeId, form, leaveRequest?.id) : null}
+            recordsApprover={recordsApprover}
+            isRecord={!!leaveRequest?.isRecord}
+          />
 
           <div className="space-y-2">
             <Label htmlFor="status">Status</Label>

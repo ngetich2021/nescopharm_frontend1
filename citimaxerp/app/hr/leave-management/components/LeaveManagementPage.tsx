@@ -7,13 +7,14 @@ import { EditLeaveRequestSheet } from "./EditLeaveRequestSheet";
 import { ViewLeaveRequestSheet } from "./ViewLeaveRequestSheet";
 import { DeleteLeaveRequestDialog } from "./DeleteLeaveRequestDialog";
 import { LeaveManagementTable } from "./LeaveManagementTable";
-import { getLeaveRequests, type LeaveRequest } from "@/lib/leave";
+import { getLeaveRequestsData, type LeaveRequest } from "@/lib/leave";
 import { useAuth } from "@/lib/auth-context";
 
 export function LeaveManagementPage() {
   const { companyId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [recordsApprover, setRecordsApprover] = useState<string | null>(null);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [viewSheetOpen, setViewSheetOpen] = useState(false);
@@ -28,8 +29,9 @@ export function LeaveManagementPage() {
     if (!companyId) return;
     setLoading(true);
     try {
-      const data = await getLeaveRequests({ search: searchTerm || undefined });
-      setLeaveRequests(data);
+      const data = await getLeaveRequestsData({ search: searchTerm || undefined });
+      setLeaveRequests(data.leave_requests);
+      setRecordsApprover(data.records_approver);
     } catch (error) {
       toast({ title: "Error", description: "Failed to load leave requests.", variant: "destructive" });
     } finally {
@@ -117,6 +119,8 @@ export function LeaveManagementPage() {
         open={createSheetOpen}
         onOpenChange={setCreateSheetOpen}
         onSuccess={handleCreateSuccess}
+        leaveRequests={leaveRequests}
+        recordsApprover={recordsApprover}
       />
 
       <ViewLeaveRequestSheet
@@ -131,6 +135,8 @@ export function LeaveManagementPage() {
         onOpenChange={setEditSheetOpen}
         onSuccess={handleEditSuccess}
         leaveRequest={selectedLeaveRequest}
+        leaveRequests={leaveRequests}
+        recordsApprover={recordsApprover}
       />
 
       <DeleteLeaveRequestDialog

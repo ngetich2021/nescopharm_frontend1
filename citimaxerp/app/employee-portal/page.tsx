@@ -19,12 +19,13 @@ import {
   getEmployeePortalSalaryAdvances,
   getEmployeePortalDailyReports,
 } from "@/lib/employee-portal";
-import { getLeaveRequests, approveLeaveRequest, updateLeaveRequest } from "@/lib/leave";
+import { getLeaveRequests, approveLeaveRequest, updateLeaveRequest, balanceAfter, emptyLeaveForm, formatDuration, leavePayload, leaveTypeLabel, reasonCategoryLabel } from "@/lib/leave";
+import { LeaveFormFields } from "@/app/hr/leave-management/components/LeaveFormFields";
 import { getSalaryAdvances, approveSalaryAdvance, updateSalaryAdvance } from "@/lib/salary-advance";
 import { getDailyReports, approveDailyReport, rejectDailyReport, isSunday, getEntriesForDate, saveDraftReport, getDraftReport, clearDraftReport, isFormComplete, shouldAutoSubmit } from "@/lib/daily-reports";
 import { useAuth } from "@/lib/auth-context";
 import type { Employee } from "@/lib/employees";
-import type { LeaveRequest } from "@/lib/leave";
+import type { LeaveBalance, LeaveRequest } from "@/lib/leave";
 import type { SalaryAdvanceRequest } from "@/lib/salary-advance";
 import type { DailyWorkReport, DailyWorkReportEntry } from "@/lib/daily-reports";
 import { Briefcase, CalendarDays, CreditCard, UserRound, FileBarChart, ShieldCheck, CheckCircle2, XCircle, Plus, Trash2 } from "lucide-react";
@@ -64,6 +65,8 @@ export default function EmployeePortalPage() {
   const isGMOrDirector = user?.role?.name && (user.role.name === 'GM' || user.role.name === 'Director');
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
+  const [leaveRecordsApprover, setLeaveRecordsApprover] = useState<string | null>(null);
   const [salaryAdvances, setSalaryAdvances] = useState<SalaryAdvanceRequest[]>([]);
   const [dailyReports, setDailyReports] = useState<DailyWorkReport[]>([]);
   const [pendingLeaveApprovals, setPendingLeaveApprovals] = useState<LeaveRequest[]>([]);
@@ -71,12 +74,7 @@ export default function EmployeePortalPage() {
   const [pendingDailyReportApprovals, setPendingDailyReportApprovals] = useState<DailyWorkReport[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [leaveForm, setLeaveForm] = useState({
-    leave_type: "annual",
-    start_date: "",
-    end_date: "",
-    reason: "",
-  });
+  const [leaveForm, setLeaveForm] = useState(emptyLeaveForm);
   const [advanceForm, setAdvanceForm] = useState({
     amount: "",
     request_date: "",
@@ -117,7 +115,9 @@ export default function EmployeePortalPage() {
         getEmployeePortalDailyReports(),
       ]);
       setEmployee(profile);
-      setLeaveRequests(leaveData);
+      setLeaveRequests(leaveData.leave_requests);
+      setLeaveBalances(leaveData.balances);
+      setLeaveRecordsApprover(leaveData.records_approver);
       setSalaryAdvances(advanceData);
       setDailyReports(dailyReportData);
     } catch (error: any) {
@@ -383,9 +383,12 @@ export default function EmployeePortalPage() {
     if (submittingLeave) return;
     setSubmittingLeave(true);
     try {
-      await createEmployeePortalLeaveRequest(leaveForm);
-      toast({ title: "Success", description: "Leave request submitted." });
-      setLeaveForm({ leave_type: "annual", start_date: "", end_date: "", reason: "" });
+      const saved = await createEmployeePortalLeaveRequest(leavePayload(leaveForm));
+      toast({
+        title: "Success",
+        description: saved?.isRecord ? `Leave recorded, approved by ${saved.approvedBy || "the General Manager"}.` : "Leave request submitted.",
+      });
+      setLeaveForm(emptyLeaveForm());
       loadData();
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to submit leave request.", variant: "destructive" });
@@ -494,7 +497,7 @@ export default function EmployeePortalPage() {
                 {canApproveLeave && pendingLeaveApprovals.map((req) => (
                   <div key={req.id} className="flex items-center justify-between rounded-xl border p-3">
                     <div>
-                      <p className="text-sm font-semibold">{req.employee} - {req.leaveType} leave</p>
+                      <p className="text-sm font-semibold">{req.employee} - {leaveTypeLabel(req.leaveType)}</p>
                       <p className="text-xs text-muted-foreground">{req.startDate} to {req.endDate}</p>
                       {req.reason && <p className="text-xs text-muted-foreground mt-1">{req.reason}</p>}
                     </div>
@@ -664,29 +667,30 @@ export default function EmployeePortalPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLeaveSubmit} className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Leave Type</Label>
-                    <Input value={leaveForm.leave_type} onChange={(e) => setLeaveForm({ ...leaveForm, leave_type: e.target.value })} placeholder="annual" />
-                  </div>
-                  <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
-                    Requests submitted here also appear in the main leave management table for authorized reviewers.
-                  </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {leaveBalances.map((b) => (
+                    <div key={b.leaveType} className="rounded-xl border bg-slate-50 p-3">
+                      <p className="text-xs text-muted-foreground">{leaveTypeLabel(b.leaveType)}</p>
+                      <p className="text-sm font-semibold">{b.balance} of {b.allowance} days left</p>
+                    </div>
+                  ))}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Start Date</Label>
-                    <Input type="date" value={leaveForm.start_date} onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })} />
+                    <Label>Employee</Label>
+                    <div className="rounded-md border bg-muted px-3 py-2 text-sm">{`${employee.first_name} ${employee.last_name}`.trim()}</div>
                   </div>
                   <div className="space-y-2">
-                    <Label>End Date</Label>
-                    <Input type="date" value={leaveForm.end_date} onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })} />
+                    <Label>Department</Label>
+                    <div className="rounded-md border bg-muted px-3 py-2 text-sm">{employee.department || "Not assigned"}</div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Reason</Label>
-                  <Textarea value={leaveForm.reason} onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })} rows={5} />
-                </div>
+                <LeaveFormFields
+                  value={leaveForm}
+                  onChange={setLeaveForm}
+                  balanceAfter={balanceAfter(leaveRequests, employee.id || "", leaveForm)}
+                  recordsApprover={leaveRecordsApprover}
+                />
                 <Button type="submit" disabled={submittingLeave}>
                   {submittingLeave ? "Submitting..." : "Submit Leave Request"}
                 </Button>
@@ -708,14 +712,25 @@ export default function EmployeePortalPage() {
                   <div key={request.id} className="rounded-2xl border p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
-                        <p className="text-sm font-semibold capitalize">{formatStatus(request.leaveType)} leave</p>
+                        <p className="text-sm font-semibold">{leaveTypeLabel(request.leaveType)} · {formatDuration(request)}</p>
                         <p className="text-sm text-muted-foreground">
                           {request.startDate} to {request.endDate}
+                          {request.reportingDate ? ` · back ${request.reportingDate}` : ""}
                         </p>
+                        {request.balanceDays != null && (
+                          <p className="text-xs text-muted-foreground">Balance after: {request.balanceDays} days</p>
+                        )}
                       </div>
                       <Badge className={getStatusClass(request.status)}>{formatStatus(request.status)}</Badge>
                     </div>
-                    <p className="mt-3 text-sm text-muted-foreground">{request.reason}</p>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {[reasonCategoryLabel(request.reasonCategory), request.reason].filter(Boolean).join(": ")}
+                    </p>
+                    {request.status === "approved" && request.approvedBy && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Approved by {request.approvedBy}{request.approvedAt ? ` on ${request.approvedAt}` : ""}{request.isRecord ? " (record)" : ""}
+                      </p>
+                    )}
                   </div>
                 ))
               )}

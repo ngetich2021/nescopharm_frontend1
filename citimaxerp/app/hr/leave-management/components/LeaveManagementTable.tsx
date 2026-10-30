@@ -39,15 +39,7 @@ import {
   Clock
 } from "lucide-react";
 
-interface LeaveRequest {
-  id: string;
-  employee: string;
-  leaveType: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
-  status: string;
-}
+import { formatDuration, leaveTypeLabel, reasonCategoryLabel, type LeaveRequest } from "@/lib/leave";
 
 interface LeaveManagementTableProps {
   leaveRequests: LeaveRequest[];
@@ -153,9 +145,12 @@ export function LeaveManagementTable({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12 font-semibold">S/No</TableHead>
                 <TableHead className="font-semibold">Employee</TableHead>
                 <TableHead className="font-semibold">Leave Type</TableHead>
                 <TableHead className="font-semibold">Dates</TableHead>
+                <TableHead className="font-semibold">Days</TableHead>
+                <TableHead className="font-semibold">Balance</TableHead>
                 <TableHead className="font-semibold">Reason</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="text-right font-semibold">Actions</TableHead>
@@ -164,7 +159,7 @@ export function LeaveManagementTable({
             <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   <div className="flex items-center justify-center space-x-2">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                     <span>Loading leave requests...</span>
@@ -173,7 +168,7 @@ export function LeaveManagementTable({
               </TableRow>
             ) : leaveRequests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   <div className="text-gray-500">
                     <p className="font-semibold">No leave requests found</p>
                     <p className="text-sm">Request your first leave to get started</p>
@@ -181,22 +176,24 @@ export function LeaveManagementTable({
                 </TableCell>
               </TableRow>
             ) : (
-              leaveRequests.map((request) => {
+              leaveRequests.map((request, index) => {
                 return (
-                  <TableRow 
-                    key={request.id} 
+                  <TableRow
+                    key={request.id}
                     className="hover:bg-gray-50 cursor-pointer"
                     onClick={() => onViewLeaveRequest(request)}
                   >
+                    <TableCell className="text-gray-500">{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-primary">
                           {request.employee}
                         </span>
+                        {request.department && <span className="text-xs text-gray-500">{request.department}</span>}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {request.leaveType}
+                      {leaveTypeLabel(request.leaveType)}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -206,11 +203,18 @@ export function LeaveManagementTable({
                         <span className="text-xs text-gray-500">
                           to {format(new Date(request.endDate), "MMM dd, yyyy")}
                         </span>
+                        {request.reportingDate && (
+                          <span className="text-xs text-gray-500">
+                            back {format(new Date(request.reportingDate), "MMM dd, yyyy")}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDuration(request)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{request.balanceDays != null ? `${request.balanceDays} days` : "—"}</TableCell>
                     <TableCell>
                       <div className="max-w-[200px] truncate" title={request.reason}>
-                        {request.reason}
+                        {[reasonCategoryLabel(request.reasonCategory), request.reason].filter(Boolean).join(": ")}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -218,6 +222,9 @@ export function LeaveManagementTable({
                         {getStatusIcon(request.status)}
                         {getStatusBadge(request.status)}
                       </div>
+                      {request.status.toLowerCase() === "approved" && request.approvedBy && (
+                        <span className="text-xs text-gray-500">by {request.approvedBy}{request.isRecord ? " (record)" : ""}</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <ActionsDropdown

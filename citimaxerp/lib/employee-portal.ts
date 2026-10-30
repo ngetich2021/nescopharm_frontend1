@@ -1,6 +1,6 @@
 import apiCall from "./api";
 import type { Employee } from "./employees";
-import type { LeaveRequest } from "./leave";
+import type { LeaveBalance, LeaveRequest } from "./leave";
 import type { SalaryAdvanceRequest } from "./salary-advance";
 import type { DailyWorkReport, DailyWorkReportEntry } from "./daily-reports";
 
@@ -9,18 +9,21 @@ export async function getEmployeePortalProfile(): Promise<Employee> {
   return response.employee;
 }
 
-export async function getEmployeePortalLeaveRequests(status?: string): Promise<LeaveRequest[]> {
+export async function getEmployeePortalLeaveRequests(status?: string): Promise<{
+  leave_requests: LeaveRequest[];
+  balances: LeaveBalance[];
+  records_approver: string | null;
+}> {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
-  const response = await apiCall<{ leave_requests: LeaveRequest[] }>(`/employee-portal/leave-requests${query}`, "GET");
-  return response.leave_requests || [];
+  const response = await apiCall<{ leave_requests: LeaveRequest[]; balances?: LeaveBalance[]; records_approver?: string | null }>(`/employee-portal/leave-requests${query}`, "GET");
+  return {
+    leave_requests: response.leave_requests || [],
+    balances: response.balances || [],
+    records_approver: response.records_approver || null,
+  };
 }
 
-export async function createEmployeePortalLeaveRequest(data: {
-  leave_type: string;
-  start_date: string;
-  end_date: string;
-  reason: string;
-}): Promise<LeaveRequest> {
+export async function createEmployeePortalLeaveRequest(data: Record<string, string | number>): Promise<LeaveRequest> {
   const response = await apiCall<{ leave_request: LeaveRequest }>("/employee-portal/leave-requests", "POST", data);
   return response.leave_request;
 }

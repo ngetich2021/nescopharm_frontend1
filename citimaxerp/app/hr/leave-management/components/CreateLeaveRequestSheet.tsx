@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetClose,
@@ -15,25 +13,26 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { createLeaveRequest } from "@/lib/leave";
+import { balanceAfter, createLeaveRequest, emptyLeaveForm, leavePayload, type LeaveRequest } from "@/lib/leave";
 import { getEmployees, type Employee } from "@/lib/employees";
 import { useAuth } from "@/lib/auth-context";
+import { LeaveFormFields } from "./LeaveFormFields";
 
 interface CreateLeaveRequestSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  /** All leave on record, for the balance left after this one. */
+  leaveRequests: LeaveRequest[];
+  recordsApprover: string | null;
 }
 
-export function CreateLeaveRequestSheet({ open, onOpenChange, onSuccess }: CreateLeaveRequestSheetProps) {
+export function CreateLeaveRequestSheet({ open, onOpenChange, onSuccess, leaveRequests, recordsApprover }: CreateLeaveRequestSheetProps) {
   const { companyId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
-  const [leaveType, setLeaveType] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [reason, setReason] = useState("");
+  const [form, setForm] = useState(emptyLeaveForm);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -42,26 +41,20 @@ export function CreateLeaveRequestSheet({ open, onOpenChange, onSuccess }: Creat
     }
   }, [open, companyId]);
 
+  const employee = employees.find((e) => e.id === employeeId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     try {
-      await createLeaveRequest({
-        employee_id: employeeId,
-        leave_type: leaveType,
-        start_date: startDate,
-        end_date: endDate,
-        reason,
-      });
+      await createLeaveRequest({ employee_id: employeeId, ...leavePayload(form) });
       setEmployeeId("");
-      setLeaveType("");
-      setStartDate("");
-      setEndDate("");
-      setReason("");
+      setForm(emptyLeaveForm());
       onSuccess();
       onOpenChange(false);
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to create leave request.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "Failed to create leave request.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -69,63 +62,42 @@ export function CreateLeaveRequestSheet({ open, onOpenChange, onSuccess }: Creat
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Leave Request</SheetTitle>
-          <SheetDescription>Fill in the details below to create a new leave request.</SheetDescription>
+          <SheetDescription>Fill in the leave form. Leave starting today or earlier is saved as an approved record.</SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="space-y-2">
-            <Label htmlFor="employeeId">Employee</Label>
-            <select
-              id="employeeId"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              required
-            >
-              <option value="">Select employee</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.first_name} {emp.last_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="leaveType">Leave Type</Label>
-            <select
-              id="leaveType"
-              value={leaveType}
-              onChange={(e) => setLeaveType(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              required
-            >
-              <option value="">Select leave type</option>
-              <option value="annual">Annual Leave</option>
-              <option value="sick">Sick Leave</option>
-              <option value="maternity">Maternity Leave</option>
-              <option value="paternity">Paternity Leave</option>
-              <option value="unpaid">Unpaid Leave</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              <Label htmlFor="employeeId">Employee</Label>
+              <select
+                id="employeeId"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                required
+              >
+                <option value="">Select employee</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+              <Label>Department</Label>
+              <div className="rounded-md border bg-muted px-3 py-2 text-sm">{employee?.department || "—"}</div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
-            <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Brief reason for leave" required />
-          </div>
+          <LeaveFormFields
+            value={form}
+            onChange={setForm}
+            balanceAfter={employeeId ? balanceAfter(leaveRequests, employeeId, form) : null}
+            recordsApprover={recordsApprover}
+          />
 
           <SheetFooter className="mt-6">
             <SheetClose asChild>

@@ -44,7 +44,7 @@ class EmployeeSelfServiceController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'No employee profile is linked to this login.'], 404);
         }
 
-        $query = LeaveRequest::with('employee')
+        $query = LeaveRequest::with(['employee', 'approvedBy'])
             ->where('company_id', $employee->company_id)
             ->where('employee_id', $employee->id);
 
@@ -54,7 +54,9 @@ class EmployeeSelfServiceController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'leave_requests' => $query->latest()->get()->map(fn ($lr) => $this->formatLeaveRequest($lr)),
+            'leave_requests' => $query->latest()->get()->map(fn ($lr) => $lr->toApiArray()),
+            'balances' => LeaveRequest::balancesFor($employee),
+            'records_approver' => optional(LeaveRequest::recordsApprover($employee->company_id))->full_name,
         ]);
     }
 
@@ -65,32 +67,23 @@ class EmployeeSelfServiceController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'No employee profile is linked to this login.'], 404);
         }
 
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), array_merge([
             'leave_type' => 'required|in:annual,sick,maternity,paternity,unpaid',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'reason' => 'required|string',
-        ]);
+            'reason' => 'required_without:reason_category|nullable|string',
+        ], LeaveRequest::formRules()));
 
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors()], 422);
         }
 
-        $leaveRequest = LeaveRequest::create([
-            'company_id' => $employee->company_id,
-            'employee_id' => $employee->id,
-            'leave_type' => $request->leave_type,
-            'start_date' => $request->start_date,
-            'end_date' => $request->end_date,
-            'reason' => $request->reason,
-            'status' => 'pending',
-            'created_by' => $request->user()->id,
-        ]);
+        $leaveRequest = LeaveRequest::createFor($employee, $request->all(), $request->user());
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Leave request submitted successfully.',
-            'leave_request' => $this->formatLeaveRequest($leaveRequest->load('employee')),
+            'message' => $leaveRequest->is_record ? 'Leave recorded as approved.' : 'Leave request submitted successfully.',
+            'leave_request' => $leaveRequest->toApiArray(),
         ], 201);
     }
 
@@ -446,22 +439,6 @@ class EmployeeSelfServiceController extends Controller
         }
 
         return $relationships;
-    }
-
-    private function formatLeaveRequest(LeaveRequest $lr): array
-    {
-        return [
-            'id' => $lr->id,
-            'employee_id' => $lr->employee_id,
-            'employee' => $lr->employee ? trim($lr->employee->first_name . ' ' . $lr->employee->last_name) : '',
-            'leaveType' => $lr->leave_type,
-            'startDate' => optional($lr->start_date)->format('Y-m-d'),
-            'endDate' => optional($lr->end_date)->format('Y-m-d'),
-            'reason' => $lr->reason,
-            'status' => $lr->status,
-            'created_at' => $lr->created_at,
-            'updated_at' => $lr->updated_at,
-        ];
     }
 
     private function formatAdvance(SalaryAdvance $adv): array

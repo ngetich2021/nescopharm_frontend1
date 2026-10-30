@@ -43,7 +43,7 @@ class LeaveController extends Controller
             }
         }
 
-        $query = LeaveRequest::with('employee')->where('company_id', $user->company_id);
+        $query = LeaveRequest::with(['employee', 'approvedBy'])->where('company_id', $user->company_id);
 
         if (!$canViewAll && !$canManageCompany) {
             $query->whereHas('employee', fn ($q) => $q->where('leave_approver_id', $user->id));
@@ -63,14 +63,13 @@ class LeaveController extends Controller
             });
         }
 
-        $leaveRequests = $query->orderBy('created_at', 'desc')->get()->map(function ($lr) {
-            return $this->formatLeaveRequest($lr);
-        });
+        $leaveRequests = $query->orderBy('created_at', 'desc')->get()->map(fn ($lr) => $lr->toApiArray());
 
         return response()->json([
             'status' => 'success',
             'message' => 'Leave requests retrieved successfully.',
             'leave_requests' => $leaveRequests,
+            'records_approver' => optional(LeaveRequest::recordsApprover($user->company_id))->full_name,
         ], 200);
     }
 
@@ -81,41 +80,35 @@ class LeaveController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
         }
 
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), array_merge([
             'employee_id' => 'required|uuid|exists:employees,id',
             'leave_type'  => 'required|in:annual,sick,maternity,paternity,unpaid',
             'start_date'  => 'required|date',
             'end_date'    => 'required|date|after_or_equal:start_date',
-            'reason'      => 'required|string',
-        ]);
+            'reason'      => 'required_without:reason_category|nullable|string',
+        ], LeaveRequest::formRules()));
 
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors()], 422);
         }
 
-        $leaveRequest = LeaveRequest::create([
-            'company_id'  => $user->company_id,
-            'employee_id' => $request->employee_id,
-            'leave_type'  => $request->leave_type,
-            'start_date'  => $request->start_date,
-            'end_date'    => $request->end_date,
-            'reason'      => $request->reason,
-            'status'      => 'pending',
-            'created_by'  => $user->id,
-        ]);
+        $employee = Employee::where('company_id', $user->company_id)->find($request->employee_id);
+        if (!$employee) {
+            return response()->json(['status' => 'failed', 'message' => 'Employee not found.'], 404);
+        }
 
-        $leaveRequest->load('employee');
+        $leaveRequest = LeaveRequest::createFor($employee, $request->all(), $user);
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Leave request created successfully.',
-            'leave_request' => $this->formatLeaveRequest($leaveRequest),
+            'message' => $leaveRequest->is_record ? 'Leave recorded as approved.' : 'Leave request created successfully.',
+            'leave_request' => $leaveRequest->toApiArray(),
         ], 201);
     }
 
     public function show(Request $request, $id)
     {
-        $leaveRequest = LeaveRequest::with('employee')->find($id);
+        $leaveRequest = LeaveRequest::with(['employee', 'approvedBy'])->find($id);
         if (!$leaveRequest) {
             return response()->json(['status' => 'failed', 'message' => 'Leave request not found.'], 404);
         }
@@ -126,7 +119,7 @@ class LeaveController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Leave request retrieved successfully.',
-            'leave_request' => $this->formatLeaveRequest($leaveRequest),
+            'leave_request' => $leaveRequest->toApiArray(),
         ], 200);
     }
 
@@ -140,20 +133,29 @@ class LeaveController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
         }
 
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), array_merge([
             'employee_id' => 'sometimes|uuid|exists:employees,id',
             'leave_type'  => 'sometimes|in:annual,sick,maternity,paternity,unpaid',
             'start_date'  => 'sometimes|date',
             'end_date'    => 'sometimes|date|after_or_equal:start_date',
-            'reason'      => 'sometimes|string',
+            'reason'      => 'sometimes|nullable|string',
             'status'      => 'sometimes|in:pending,approved,rejected,cancelled',
-        ]);
+        ], LeaveRequest::formRules()));
 
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors()], 422);
         }
 
-        $updateData = $request->only(['employee_id', 'leave_type', 'start_date', 'end_date', 'reason', 'status']);
+        $updateData = array_merge(
+            $request->only(['employee_id', 'leave_type', 'start_date', 'end_date', 'status']),
+            LeaveRequest::formAttributes($request->all()),
+        );
+        if ($request->exists('reason')) {
+            $updateData['reason'] = (string) $request->input('reason');
+        }
+        if ($leaveRequest->is_record && $request->filled('approved_on')) {
+            $updateData['approved_at'] = $request->input('approved_on');
+        }
 
         // Approving/rejecting is a decision for the assigned approver, or
         // GM/Director (can_manage_company) / can_approve_leave - unlike the
@@ -171,13 +173,18 @@ class LeaveController extends Controller
             $updateData['approved_at'] = now();
         }
 
-        $leaveRequest->update($updateData);
-        $leaveRequest->load('employee');
+        $leaveRequest->fill($updateData);
+        // A balance not typed in follows the request's type, dates and length.
+        if (!$request->filled('balance_days')) {
+            $leaveRequest->balance_days = $leaveRequest->computeBalance();
+        }
+        $leaveRequest->save();
+        $leaveRequest->load(['employee', 'approvedBy']);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Leave request updated successfully.',
-            'leave_request' => $this->formatLeaveRequest($leaveRequest),
+            'leave_request' => $leaveRequest->toApiArray(),
         ], 200);
     }
 
@@ -217,29 +224,12 @@ class LeaveController extends Controller
             'approved_by' => $request->user()->id,
             'approved_at' => now(),
         ]);
-        $leaveRequest->load('employee');
+        $leaveRequest->load(['employee', 'approvedBy']);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Leave request approved successfully.',
-            'leave_request' => $this->formatLeaveRequest($leaveRequest),
+            'leave_request' => $leaveRequest->toApiArray(),
         ], 200);
-    }
-
-    private function formatLeaveRequest(LeaveRequest $lr): array
-    {
-        $employee = $lr->employee;
-        return [
-            'id'          => $lr->id,
-            'employee_id' => $lr->employee_id,
-            'employee'    => $employee ? trim($employee->first_name . ' ' . $employee->last_name) : '',
-            'leaveType'   => $lr->leave_type,
-            'startDate'   => $lr->start_date ? $lr->start_date->format('Y-m-d') : null,
-            'endDate'     => $lr->end_date ? $lr->end_date->format('Y-m-d') : null,
-            'reason'      => $lr->reason,
-            'status'      => $lr->status,
-            'created_at'  => $lr->created_at,
-            'updated_at'  => $lr->updated_at,
-        ];
     }
 }
