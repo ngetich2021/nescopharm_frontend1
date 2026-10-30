@@ -41,6 +41,9 @@ type DateRangeType = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 't
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+// Rows per page on every table (plus "All").
+const PAGE_SIZES = [20, 50, 100, 250]
+
 const kes = (v: any) => `KES ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 // Clickable column header that sorts the table (click again to reverse).
@@ -856,7 +859,7 @@ export default function SalesReportPage() {
                                     placeholder="Search customer, Vch No (NSK/0427) or type..."
                                     className="mb-3 max-w-sm"
                                 />
-                                <DataTable columns={ledgerColumns} data={ledgerRows} hideSearch exportFileName="sales_accounts" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={ledgerColumns} data={ledgerRows} hideSearch exportFileName="sales_accounts" />
                             </TabsContent>
                             <TabsContent value="orders" className="mt-0">
                                 <div className="mb-3 grid grid-cols-2 gap-3 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-4">
@@ -887,10 +890,10 @@ export default function SalesReportPage() {
                                     placeholder="Search customer, order or invoice (NSK/0427)..."
                                     className="mb-3 max-w-sm"
                                 />
-                                <DataTable columns={ordersColumns} data={shownOrders} hideSearch exportFileName="sales_orders" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={ordersColumns} data={shownOrders} hideSearch exportFileName="sales_orders" />
                             </TabsContent>
                             <TabsContent value="products" className="mt-0">
-                                <DataTable 
+                                <DataTable pageSizeOptions={PAGE_SIZES}
                                     columns={topProductsColumns} 
                                     data={data?.top_products || []} 
                                     filterColumn="name"
@@ -898,7 +901,7 @@ export default function SalesReportPage() {
                                 />
                             </TabsContent>
                             <TabsContent value="customers" className="mt-0">
-                                <DataTable 
+                                <DataTable pageSizeOptions={PAGE_SIZES}
                                     columns={topCustomersColumns} 
                                     data={data?.top_customers || []} 
                                     filterColumn="name"
@@ -906,16 +909,16 @@ export default function SalesReportPage() {
                                 />
                             </TabsContent>
                             <TabsContent value="region" className="mt-0">
-                                <DataTable columns={breakdownColumns("Region")} data={data?.sales_by_region || []} filterColumn="name" exportFileName="sales_by_region" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Region")} data={data?.sales_by_region || []} filterColumn="name" exportFileName="sales_by_region" />
                             </TabsContent>
                             <TabsContent value="county" className="mt-0">
-                                <DataTable columns={breakdownColumns("County")} data={data?.sales_by_county || []} filterColumn="name" exportFileName="sales_by_county" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("County")} data={data?.sales_by_county || []} filterColumn="name" exportFileName="sales_by_county" />
                             </TabsContent>
                             <TabsContent value="town" className="mt-0">
-                                <DataTable columns={breakdownColumns("Town")} data={data?.sales_by_city || []} filterColumn="name" exportFileName="sales_by_town" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Town")} data={data?.sales_by_city || []} filterColumn="name" exportFileName="sales_by_town" />
                             </TabsContent>
                             <TabsContent value="rep" className="mt-0">
-                                <DataTable columns={breakdownColumns("Sales Rep")} data={data?.sales_by_rep || []} filterColumn="name" exportFileName="sales_by_rep" />
+                                <DataTable pageSizeOptions={PAGE_SIZES} columns={breakdownColumns("Sales Rep")} data={data?.sales_by_rep || []} filterColumn="name" exportFileName="sales_by_rep" />
                                 {(data?.sales_by_rep || []).every((r: any) => r.id === "unassigned") && (
                                     <p className="mt-3 text-sm text-muted-foreground">
                                         No orders have a sales rep yet. Pick the rep when creating or editing an order (roles marked as sales reps appear in that list).
@@ -923,7 +926,7 @@ export default function SalesReportPage() {
                                 )}
                             </TabsContent>
                             <TabsContent value="daily" className="mt-0">
-                                <DataTable 
+                                <DataTable pageSizeOptions={PAGE_SIZES}
                                     columns={summaryColumns} 
                                     data={data?.summary_by_date || []} 
                                     filterColumn="date"

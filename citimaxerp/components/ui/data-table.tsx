@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download } from "lucide-react" // Import Download icon
 
@@ -34,7 +35,11 @@ interface DataTableProps<TData, TValue> {
   hideSearch?: boolean // Hide the search input
   hideExport?: boolean // Hide the export button
   hideColumns?: boolean // Hide the columns dropdown
+  pageSizeOptions?: number[] // Rows-per-page choices (first is the default), plus "All"
 }
+
+// "All" rows on one page.
+const ALL_ROWS = Number.MAX_SAFE_INTEGER
 
 export function DataTable<TData, TValue>({
   columns,
@@ -45,6 +50,7 @@ export function DataTable<TData, TValue>({
   hideSearch = false,
   hideExport = false,
   hideColumns = false,
+  pageSizeOptions,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -62,6 +68,7 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    initialState: pageSizeOptions?.length ? { pagination: { pageIndex: 0, pageSize: pageSizeOptions[0] } } : undefined,
     state: {
       sorting,
       columnFilters,
@@ -186,11 +193,39 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredSelectedRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s)
-          selected.
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2 py-4">
+        {pageSizeOptions?.length ? (
+          (() => {
+            const { pageIndex, pageSize } = table.getState().pagination
+            const total = table.getFilteredRowModel().rows.length
+            const from = total ? pageIndex * pageSize + 1 : 0
+            const to = Math.min(total, (pageIndex + 1) * pageSize)
+            return (
+              <div className="flex flex-1 flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span>Showing {from}–{to} of {total}</span>
+                <span className="flex items-center gap-2">
+                  Rows per page
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(v) => { table.setPageSize(Number(v)); table.setPageIndex(0) }}
+                  >
+                    <SelectTrigger className="h-8 w-[80px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {pageSizeOptions.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                      <SelectItem value={String(ALL_ROWS)}>All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </span>
+                {table.getPageCount() > 1 && <span>Page {pageIndex + 1} of {table.getPageCount()}</span>}
+              </div>
+            )
+          })()
+        ) : (
+          <div className="flex-1 text-sm text-muted-foreground">
+            {table.getFilteredSelectedRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s)
+            selected.
+          </div>
+        )}
         <div className="space-x-2">
           <Button
             variant="outline"
