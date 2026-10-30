@@ -675,11 +675,12 @@ export default function EmployeePortalPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLeaveSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {/* Days left of each yearly allowance, e.g. Sick 3/7. */}
+                <div className="grid grid-cols-4 gap-2">
                   {leaveBalances.map((b) => (
-                    <div key={b.leaveType} className="rounded-xl border bg-slate-50 p-3">
-                      <p className="text-xs text-muted-foreground">{leaveTypeLabel(b.leaveType)}</p>
-                      <p className="text-sm font-semibold">{b.balance} of {b.allowance} days left</p>
+                    <div key={b.leaveType} className="rounded-lg border bg-slate-50 px-2 py-1.5 text-center" title={`${b.balance} of ${b.allowance} days left`}>
+                      <p className="truncate text-[11px] text-muted-foreground">{leaveTypeLabel(b.leaveType).replace(/ Leave$/, "")}</p>
+                      <p className="text-sm font-semibold">{b.balance}/{b.allowance}</p>
                     </div>
                   ))}
                 </div>

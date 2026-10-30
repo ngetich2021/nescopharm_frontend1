@@ -626,9 +626,9 @@ class UserController extends Controller
                                 });
                         });
                     } elseif ($roleScope === 'dispatch_approver') {
-                        // Only Directors, the GM and the Warehouse Manager approve dispatches.
+                        // Directors, the GM, the Warehouse Manager and Accountants approve dispatches.
                         $query->whereHas('role', function ($q) {
-                            $q->whereRaw('LOWER(name) IN (?, ?, ?, ?)', ['director', 'directors', 'gm', 'warehouse manager']);
+                            $q->whereRaw('LOWER(name) IN (?, ?, ?, ?, ?)', ['director', 'directors', 'gm', 'warehouse manager', 'accountant']);
                         });
                     } elseif (str_starts_with($roleScope, 'can_')) {
                         // A permission-key scope (e.g. "can_approve_requisitions") restricts

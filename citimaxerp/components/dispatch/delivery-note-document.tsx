@@ -23,12 +23,14 @@ interface DeliveryNoteDocumentProps {
   className?: string
   onLoaded?: (data: DeliveryNoteLoaded) => void
   onError?: (message: string) => void
+  // Which printed copy this is (ORIGINAL, DUPLICATE...), shown top right.
+  copyLabel?: string
 }
 
 // The printed delivery note for an order dispatch. Shown on its own page and after the
 // invoice, so the two go out together.
 export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocumentProps>(
-  function DeliveryNoteDocument({ dispatchId, className, onLoaded, onError }, ref) {
+  function DeliveryNoteDocument({ dispatchId, className, onLoaded, onError, copyLabel }, ref) {
     const [dispatch, setDispatch] = useState<OrderDispatch | null>(null)
     const [company, setCompany] = useState<Company | null>(null)
     const [customerDetails, setCustomerDetails] = useState<CustomerProfileData | null>(null)
@@ -157,6 +159,9 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
         {/* Header */}
         <div className="flex justify-between items-end mb-1">
           <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">DELIVERY NOTE</h1>
+          {copyLabel && (
+            <p className="border border-gray-800 px-2 text-xs font-bold tracking-widest text-gray-900">{copyLabel}</p>
+          )}
         </div>
 
         {/* Buyer / Reference - one continuous bordered box, matching the invoice's own layout */}

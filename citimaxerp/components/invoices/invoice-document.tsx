@@ -58,11 +58,16 @@ type Props = InvoiceDocumentData & {
   withPolicy?: boolean
   // Pages sent with the invoice, printed after it and before the return policy (e.g. the delivery note).
   enclosures?: React.ReactNode
+  // Which printed copy this is (ORIGINAL, DUPLICATE...), shown top right.
+  copyLabel?: string
 }
+
+/** The four printed copies of an invoice or delivery note, each labelled top right. */
+export const DOCUMENT_COPIES = ["ORIGINAL", "DUPLICATE", "TRIPLICATE", "QUADRUPLICATE"] as const
 
 /** The printed invoice, any enclosures, then the enclosed return policy page. */
 export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function InvoiceDocument(
-  { invoice, company, customerDetails, customerAccount, companyPin, withPolicy = true, enclosures },
+  { invoice, company, customerDetails, customerAccount, companyPin, withPolicy = true, enclosures, copyLabel },
   invoiceRef,
 ) {
   return (
@@ -93,11 +98,16 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         {/* Header */}
         <div className="flex justify-between items-end mb-1">
           <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">INVOICE</h1>
-          {invoice.due_date && invoice.due_date !== invoice.invoice_date && (
-            <p className="text-xs text-gray-600">
-              Due Date: <span className="font-semibold text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
-            </p>
-          )}
+          <div className="flex flex-col items-end gap-0.5">
+            {copyLabel && (
+              <p className="border border-gray-800 px-2 text-xs font-bold tracking-widest text-gray-900">{copyLabel}</p>
+            )}
+            {invoice.due_date && invoice.due_date !== invoice.invoice_date && (
+              <p className="text-xs text-gray-600">
+                Due Date: <span className="font-semibold text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Bill To / Reference & Dispatch Details - one continuous bordered

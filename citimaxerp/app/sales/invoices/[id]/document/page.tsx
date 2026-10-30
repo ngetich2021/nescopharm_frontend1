@@ -13,7 +13,7 @@ import { ArrowLeft, Download, FileText, Mail, Printer } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
-import { InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, RETURN_POLICY_PDF } from "@/components/invoices/invoice-document"
+import { DOCUMENT_COPIES, InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, RETURN_POLICY_PDF } from "@/components/invoices/invoice-document"
 import { FileLink } from "@/components/file-preview"
 import { listOrderDispatches } from "@/lib/order-dispatches"
 import { DeliveryNoteDocument } from "@/components/dispatch/delivery-note-document"
@@ -258,24 +258,34 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
 
       {/* Invoice Document */}
       <div className="container mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
-        <InvoiceDocument
-          ref={invoiceRef}
-          invoice={invoice}
-          company={company}
-          customerDetails={customerDetails}
-          customerAccount={customerAccount}
-          companyPin={companyPin}
-          enclosures={dispatchId && (
-            <div className="invoice-sheet mt-6 print:mt-0 print:break-before-page">
-              <DeliveryNoteDocument
-                ref={deliveryNoteRef}
-                dispatchId={dispatchId}
-                onLoaded={() => setDeliveryNoteReady(true)}
-                onError={() => setDispatchId(null)}
-              />
-            </div>
-          )}
-        />
+        {/* Printed four times - Original, Duplicate, Triplicate, Quadruplicate - each invoice
+            followed by its delivery note; the return policy goes with the original. Only the
+            original shows on screen (and in the PDF). */}
+        {DOCUMENT_COPIES.map((copyLabel, i) => (
+          <div key={copyLabel} className={i === 0 ? undefined : "hidden print:block print:break-before-page"}>
+            <InvoiceDocument
+              ref={i === 0 ? invoiceRef : undefined}
+              invoice={invoice}
+              company={company}
+              customerDetails={customerDetails}
+              customerAccount={customerAccount}
+              companyPin={companyPin}
+              copyLabel={copyLabel}
+              withPolicy={i === 0}
+              enclosures={dispatchId && (
+                <div className="invoice-sheet mt-6 print:mt-0 print:break-before-page">
+                  <DeliveryNoteDocument
+                    ref={i === 0 ? deliveryNoteRef : undefined}
+                    dispatchId={dispatchId}
+                    copyLabel={copyLabel}
+                    onLoaded={i === 0 ? () => setDeliveryNoteReady(true) : undefined}
+                    onError={i === 0 ? () => setDispatchId(null) : undefined}
+                  />
+                </div>
+              )}
+            />
+          </div>
+        ))}
       </div>
     </div>
   )

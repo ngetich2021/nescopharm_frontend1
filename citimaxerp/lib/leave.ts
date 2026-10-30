@@ -93,6 +93,38 @@ export function nextDay(date: string): string {
   return d.toISOString().split('T')[0];
 }
 
+const addDaysUtc = (date: string, n: number) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().split('T')[0];
+};
+const isSundayUtc = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay() === 0;
+
+/**
+ * Last day of leave and the reporting (day in) date for leave starting $start, counted in working
+ * days with Sundays off. Leave in hours is taken within the start day, so the employee is back the
+ * same day.
+ */
+export function leaveDates(start: string, total: number, unit: string): { end: string; reporting: string } {
+  if (!start) return { end: '', reporting: '' };
+  if (unit === 'hours' || !(total > 0)) return { end: start, reporting: unit === 'hours' ? start : addDaysUtc(start, 1) };
+  let end = start;
+  let counted = isSundayUtc(start) ? 0 : 1;
+  while (counted < Math.ceil(total)) {
+    end = addDaysUtc(end, 1);
+    if (!isSundayUtc(end)) counted++;
+  }
+  let reporting = addDaysUtc(end, 1);
+  while (isSundayUtc(reporting)) reporting = addDaysUtc(reporting, 1);
+  return { end, reporting };
+}
+
+/** "Mon, 28 Sep 2026" for a yyyy-mm-dd date. */
+export function formatLeaveDate(date?: string | null): string {
+  if (!date) return '';
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
 const HOURS_PER_DAY = 8;
 
 /** Leave days the form asks for: the total typed in (hours count as part days), else start to end. */
