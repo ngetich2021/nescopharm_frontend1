@@ -7,8 +7,10 @@ use App\Models\CreditNoteLineItem;
 use App\Models\CreditNoteRefund;
 use App\Models\CompanyEtimsConfig;
 use App\Models\Customer;
+use App\Models\InventoryBatch;
 use App\Models\InventoryMovement;
 use App\Models\Invoice;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Http\Request;
@@ -810,6 +812,61 @@ class CreditNoteController extends Controller
             'stock_quantity' => $quantityAfter,
         ]);
 
+        // Stock is the sum of its batches, so the goods go back into the batches this invoice's
+        // sale took them from (less what earlier credit notes on it already returned), and any
+        // more into the soonest-expiring batch. Each batch return is its own movement.
+        $reference = [
+            'reference_type' => 'credit_note',
+            'reference_id' => $creditNote->id,
+            'reference_number' => $creditNote->credit_note_number,
+        ];
+        $note = "Returned on credit note {$creditNote->credit_note_number}";
+        $remaining = $quantity;
+        foreach ($this->batchesSoldOn($creditNote, $product->id, $variant?->id) as $batchId => $sold) {
+            $batch = InventoryBatch::find($batchId);
+            $back = $batch ? min($remaining, $sold, (int) $batch->quantity_sold) : 0;
+            if ($back > 0 && $batch->restoreFromSale($back, $reference, $note)) {
+                $remaining -= $back;
+            }
+            if ($remaining <= 0) {
+                return;
+            }
+        }
+
+        $batch = InventoryBatch::where('company_id', $creditNote->company_id)
+            ->where('product_id', $product->id)
+            ->when($variant, fn ($q) => $q->where('variant_id', $variant->id), fn ($q) => $q->whereNull('variant_id'))
+            ->where(fn ($q) => $q->whereNull('expiry_date')->orWhere('expiry_date', '>=', now()->toDateString()))
+            ->orderByRaw('expiry_date IS NULL, expiry_date ASC')
+            ->orderBy('received_date')
+            ->first();
+        if ($batch) {
+            $before = (int) $batch->quantity_available;
+            $batch->quantity_available = $before + $remaining;
+            $batch->quantity_sold = max(0, (int) $batch->quantity_sold - $remaining);
+            $batch->save();
+            $batch->updateStatus();
+            $batch->movements()->create($reference + [
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'company_id' => $batch->company_id,
+                'store_id' => $batch->store_id,
+                'product_id' => $batch->product_id,
+                'variant_id' => $batch->variant_id,
+                'type' => 'return',
+                'quantity' => $remaining,
+                'quantity_before' => $before,
+                'quantity_after' => $batch->quantity_available,
+                'unit_cost' => $batch->unit_cost,
+                'unit_price' => $lineItem->unit_price,
+                'total_value' => $remaining * (float) $lineItem->unit_price,
+                'created_by' => $userId,
+                'notes' => $note,
+            ]);
+            return;
+        }
+
+        // No batch for this product at all: the return is recorded against the product alone.
+        $quantity = $remaining;
         InventoryMovement::create([
             'company_id' => $creditNote->company_id,
             'store_id' => $inventoryModel->store_id ?? $product->store_id,
@@ -834,6 +891,43 @@ class CreditNoteController extends Controller
                 'credit_note_line_item_id' => $lineItem->id,
             ],
         ]);
+    }
+
+    /** Batch id => pieces the invoice's sale took from it for this product, not yet credited back. */
+    protected function batchesSoldOn(CreditNote $creditNote, string $productId, ?string $variantId): array
+    {
+        $orderId = Invoice::whereKey($creditNote->invoice_id)->value('order_id');
+        if (!$orderId) {
+            return [];
+        }
+
+        $sold = [];
+        OrderItem::where('order_id', $orderId)
+            ->where('product_id', $productId)
+            ->when($variantId, fn ($q) => $q->where('variant_id', $variantId), fn ($q) => $q->whereNull('variant_id'))
+            ->get()
+            ->each(function (OrderItem $item) use (&$sold) {
+                foreach ($item->batch_allocations ?? [] as $allocation) {
+                    if (!empty($allocation['batch_id'])) {
+                        $sold[$allocation['batch_id']] = ($sold[$allocation['batch_id']] ?? 0) + (int) $allocation['quantity'];
+                    }
+                }
+            });
+        if (!$sold) {
+            return [];
+        }
+
+        $returned = InventoryMovement::where('reference_type', 'credit_note')
+            ->whereIn('reference_id', CreditNote::where('invoice_id', $creditNote->invoice_id)->select('id'))
+            ->whereIn('batch_id', array_keys($sold))
+            ->groupBy('batch_id')
+            ->selectRaw('batch_id, SUM(quantity) as qty')
+            ->pluck('qty', 'batch_id');
+        foreach ($sold as $batchId => $qty) {
+            $sold[$batchId] = $qty - (int) ($returned[$batchId] ?? 0);
+        }
+
+        return array_filter($sold, fn ($qty) => $qty > 0);
     }
 
     /**

@@ -93,7 +93,8 @@ class CreditNoteInventoryAndRevenueTest extends TestCase
             'company_id' => $this->company->id,
             'customer_id' => $this->customer->id,
             'status' => 'sent',
-            'invoice_date' => now()->toDateString(),
+            // After go-live: crediting a past sale puts no stock back.
+            'invoice_date' => '2026-11-05',
             'due_date' => now()->addDays(30)->toDateString(),
             'subtotal' => 240,
             'tax_amount' => 0,

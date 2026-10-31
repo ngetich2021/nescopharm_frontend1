@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CreditNote;
 use App\Models\Invoice;
+use App\Models\InventoryBatch;
 use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -119,7 +120,7 @@ class CreditNoteService
         }
     }
 
-    // Undo the stock an issued credit note put back (CreditNoteController::restoreInventoryForCreditNoteLineItem).
+    // Undo the stock an issued credit note put back, product and batch (CreditNoteController::restoreInventoryForCreditNoteLineItem).
     protected function takeBackStock(CreditNote $creditNote): void
     {
         $movements = InventoryMovement::where('reference_type', 'credit_note')
@@ -131,6 +132,13 @@ class CreditNoteService
                 : Product::find($movement->product_id);
             if ($stock) {
                 $stock->update(['stock_quantity' => (int) $stock->stock_quantity - (int) $movement->quantity]);
+            }
+            // Out of the batch it went back into, which counts it as sold again.
+            if ($movement->batch_id && ($batch = InventoryBatch::find($movement->batch_id))) {
+                $batch->quantity_available = max(0, (int) $batch->quantity_available - (int) $movement->quantity);
+                $batch->quantity_sold = (int) $batch->quantity_sold + (int) $movement->quantity;
+                $batch->save();
+                $batch->updateStatus();
             }
             $movement->delete();
         }
