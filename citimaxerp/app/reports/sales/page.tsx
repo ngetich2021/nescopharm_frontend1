@@ -21,6 +21,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { EnhancedMetricCard } from "@/app/dashboard/components/enhanced-metric-card"
 import {
   Area,
@@ -317,9 +318,18 @@ export default function SalesReportPage() {
 
   // Sales accounts, laid out like the old system's: Date, Particulars, Vch Type, Vch No (NSK/0427),
   // Debit (credit notes), Credit (sales) and a running Balance over the rows shown, oldest first.
+  // "Show receipts" adds each payment as a debit (Vch Type Receipt), so the balance becomes what is
+  // still owed; off, it is the sales ledger exactly as the old system printed it.
   const [ledgerSearch, setLedgerSearch] = useState("")
+  const [showReceipts, setShowReceipts] = useState(false)
   const ledgerRows = useMemo(() => {
-    const rows: any[] = data?.sales_accounts || []
+    const rows: any[] = showReceipts
+      ? [...(data?.sales_accounts || []), ...(data?.sales_receipts || [])]
+          // Stable: same-day sales and credit notes keep their order, receipts follow them.
+          .map((r, i) => ({ r, i }))
+          .sort((a, b) => String(a.r.date ?? "").localeCompare(String(b.r.date ?? "")) || a.i - b.i)
+          .map(({ r }) => r)
+      : data?.sales_accounts || []
     const q = ledgerSearch.trim().toLowerCase()
     const shown = q
       ? rows.filter((r) =>
@@ -332,7 +342,7 @@ export default function SalesReportPage() {
       balance += Number(r.credit || 0) - Number(r.debit || 0)
       return { ...r, sno: i + 1, balance }
     })
-  }, [data, ledgerSearch])
+  }, [data, ledgerSearch, showReceipts])
   const ledgerTotals = useMemo(() => ({
     debit: ledgerRows.reduce((s, r) => s + Number(r.debit || 0), 0),
     credit: ledgerRows.reduce((s, r) => s + Number(r.credit || 0), 0),
@@ -842,7 +852,7 @@ export default function SalesReportPage() {
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-xs text-muted-foreground">Debit (credit notes)</p>
+                                        <p className="text-xs text-muted-foreground">Debit ({showReceipts ? "credit notes + receipts" : "credit notes"})</p>
                                         <p className="font-semibold text-red-700">{kes(ledgerTotals.debit)}</p>
                                     </div>
                                     <div>
@@ -850,23 +860,29 @@ export default function SalesReportPage() {
                                         <p className="font-semibold text-emerald-700">{kes(ledgerTotals.credit)}</p>
                                     </div>
                                     <div>
-                                        <p className="text-xs text-muted-foreground">Balance</p>
+                                        <p className="text-xs text-muted-foreground">{showReceipts ? "Balance (still owed)" : "Balance"}</p>
                                         <p className="font-semibold">{kes(ledgerTotals.credit - ledgerTotals.debit)}</p>
                                     </div>
                                 </div>
-                                <Input
-                                    value={ledgerSearch}
-                                    onChange={(e) => setLedgerSearch(e.target.value)}
-                                    placeholder="Search customer, Vch No (NSK/0427) or type..."
-                                    className="mb-3 max-w-sm"
-                                />
+                                <div className="mb-3 flex flex-wrap items-center gap-4">
+                                    <Input
+                                        value={ledgerSearch}
+                                        onChange={(e) => setLedgerSearch(e.target.value)}
+                                        placeholder="Search customer, Vch No (NSK/0427) or type..."
+                                        className="max-w-sm"
+                                    />
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <Switch checked={showReceipts} onCheckedChange={setShowReceipts} />
+                                        Show receipts
+                                    </label>
+                                </div>
                                 <DataTable
                                     pageSizeOptions={PAGE_SIZES}
                                     columns={ledgerColumns}
                                     data={ledgerRows}
                                     hideSearch
-                                    exportFileName="sales_accounts"
-                                    exportTitle="Sales Accounts"
+                                    exportFileName={showReceipts ? "sales_accounts_with_receipts" : "sales_accounts"}
+                                    exportTitle={showReceipts ? "Sales Accounts with Receipts" : "Sales Accounts"}
                                     exportSubtitle={periodLabel}
                                     exportFooter={[
                                         ["", "", "", "", "Current Total:", ledgerTotals.debit, ledgerTotals.credit, ""],

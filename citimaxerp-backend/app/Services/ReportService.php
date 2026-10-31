@@ -730,6 +730,54 @@ class ReportService
             ->map(fn ($r) => array_diff_key($r, ['seq' => 1]))
             ->values()->all();
 
+        // Receipts, for the page's "Show receipts" switch: each payment a debit, less any refund,
+        // so the balance becomes what is still owed. A bounced cheque was never money in.
+        $receiptsQuery = DB::table('payments as p')
+            ->leftJoin('invoices as i', 'i.id', '=', 'p.invoice_id')
+            ->leftJoin('orders as o', 'o.id', '=', DB::raw('COALESCE(p.order_id, i.order_id)'))
+            ->leftJoin('customers as c', 'c.id', '=', DB::raw('COALESCE(p.customer_id, i.customer_id, o.customer_id)'))
+            ->where('p.company_id', $this->companyId)
+            ->where('p.status', 'completed')
+            ->whereRaw('p.amount_paid - COALESCE(p.amount_refunded, 0) > 0')
+            ->whereNotIn('p.id', DB::table('cheques')->where('direction', 'received')->where('status', 'bounced')->whereNotNull('payment_id')->select('payment_id'));
+        $paidOn = 'DATE(COALESCE(p.payment_date, p.created_at))';
+        if (isset($filters['date_from'])) {
+            $receiptsQuery->whereRaw("$paidOn >= ?", [$filters['date_from']]);
+        }
+        if (isset($filters['date_to'])) {
+            $receiptsQuery->whereRaw("$paidOn <= ?", [$filters['date_to']]);
+        }
+        if (isset($filters['customer_id'])) {
+            $receiptsQuery->where('c.id', $filters['customer_id']);
+        }
+        if (!empty($filters['sales_rep_id'])) {
+            $filters['sales_rep_id'] === 'unassigned'
+                ? $receiptsQuery->whereNull('o.sales_rep_id')
+                : $receiptsQuery->where('o.sales_rep_id', $filters['sales_rep_id']);
+        }
+        foreach (['region', 'county', 'city'] as $column) {
+            if (!empty($filters[$column])) {
+                $receiptsQuery->whereRaw("LOWER(TRIM(c.{$column})) = ?", [mb_strtolower(trim($filters[$column]))]);
+            }
+        }
+        $salesReceipts = $receiptsQuery
+            ->orderByRaw("$paidOn")->orderBy('p.created_at')
+            ->get([
+                'p.id', 'p.transaction_id', 'p.payment_method', 'p.amount_paid', 'p.amount_refunded',
+                DB::raw("$paidOn as paid_on"),
+                DB::raw("COALESCE(NULLIF(TRIM(c.business_name), ''), c.name) as customer"),
+            ])
+            ->map(fn ($p) => [
+                'date' => substr((string) $p->paid_on, 0, 10),
+                'particulars' => $p->customer,
+                'vch_type' => 'Receipt',
+                // The reference keyed on the receipt (cheque or M-Pesa code), else how it was paid.
+                'vch_no' => trim((string) $p->transaction_id) ?: ucwords(str_replace('_', ' ', (string) $p->payment_method)),
+                'debit' => round((float) $p->amount_paid - (float) $p->amount_refunded, 2),
+                'credit' => 0,
+                'payment_id' => $p->id,
+            ])->values()->all();
+
         // Payment status breakdown - build query with all filters
         $paymentStatusQuery = DB::table('orders')
             ->where('orders.company_id', $this->companyId)
@@ -754,6 +802,7 @@ class ReportService
             'sales_by_rep' => $salesByRep,
             'orders' => $orders,
             'sales_accounts' => $salesAccounts,
+            'sales_receipts' => $salesReceipts,
             'sales_rep_options' => $repOptions,
             'location_options' => [
                 'regions' => $options('region', []),
