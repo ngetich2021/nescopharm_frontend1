@@ -78,7 +78,9 @@ class CreditNoteController extends Controller
                     $query->where('status', $request->status);
                 }
 
-                $creditNotes = $query->orderBy('created_at', 'desc')
+                // By the date chosen on the credit note, not the day it was keyed in.
+                $creditNotes = $query->orderBy('credit_note_date', 'desc')
+                    ->orderBy('created_at', 'desc')
                     ->paginate($request->get('per_page', 15));
 
                 return response()->json($creditNotes);
@@ -854,6 +856,7 @@ class CreditNoteController extends Controller
                 $creditNotes = CreditNote::with(['lineItems', 'createdBy', 'refunds'])
                     ->where('company_id', $companyId)
                     ->where('invoice_id', $invoiceId)
+                    ->orderBy('credit_note_date', 'desc')
                     ->orderBy('created_at', 'desc')
                     ->get();
 

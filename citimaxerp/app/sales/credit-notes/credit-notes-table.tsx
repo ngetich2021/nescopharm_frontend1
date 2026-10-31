@@ -503,17 +503,8 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">
-                      {formatDate(creditNote.created_at || creditNote.credit_note_date)}
-                      {creditNote.created_at && (
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(creditNote.created_at).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    {/* The date chosen on the credit note, never the day it was keyed in. */}
+                    <div className="text-sm">{formatDate(creditNote.credit_note_date)}</div>
                   </TableCell>
                   <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
                     <ActionsDropdown creditNote={creditNote} />
