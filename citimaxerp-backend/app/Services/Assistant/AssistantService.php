@@ -2,6 +2,7 @@
 
 namespace App\Services\Assistant;
 
+use App\Models\CompanySetting;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -19,7 +20,7 @@ class AssistantService
 
     public function reply(User $user, array $history): string
     {
-        $key = config('services.groq.key');
+        $key = $this->apiKey($user);
         if (!$key) {
             return 'The assistant is not set up yet (no Groq API key on the server).';
         }
@@ -67,6 +68,20 @@ class AssistantService
         }
 
         return 'Sorry, that took too many steps. Please ask in a simpler way.';
+    }
+
+    /**
+     * The Groq key: the server's GROQ_API_KEY, or else the company's "groq_api_key" setting
+     * ({"key": "gsk_..."} in company_settings), so it can be set without redeploying.
+     */
+    protected function apiKey(User $user): ?string
+    {
+        if ($key = config('services.groq.key')) {
+            return $key;
+        }
+        $setting = CompanySetting::where('company_id', $user->company_id)
+            ->where('setting_key', 'groq_api_key')->where('is_active', true)->value('setting_value');
+        return is_array($setting) ? ($setting['key'] ?? null) : null;
     }
 
     /**
