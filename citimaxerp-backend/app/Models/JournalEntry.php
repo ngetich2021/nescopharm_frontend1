@@ -138,6 +138,71 @@ class JournalEntry extends Model
      */
     public const LEDGER_STATUSES = ['posted', 'reversed'];
 
+    /** Documents whose number can change after posting, and the column holding it. */
+    protected const NUMBERED_SOURCES = [
+        \App\Models\Invoice::class => 'invoice_number',
+        \App\Models\CreditNote::class => 'credit_note_number',
+    ];
+
+    /**
+     * An invoice given its File No after it was posted (INV-0148 -> NSK/0427), or a credit note renumbered, keeps
+     * its old number in its entries' reference and descriptions, since a re-sync only
+     * compares amounts. Returns fn(JournalEntry, ?string): ?string that swaps the old
+     * number for the document's current one, for display; the entries are not changed.
+     */
+    public static function currentNumberRewriter(iterable $entries): \Closure
+    {
+        $renames = []; // source id => [old number => current number]
+        foreach (self::NUMBERED_SOURCES as $class => $column) {
+            $ids = collect($entries)->where('source_type', $class)->pluck('source_id')->filter()->unique()->values();
+            if ($ids->isEmpty()) {
+                continue;
+            }
+            // Whole models: the printed number can depend on other columns (an invoice's File No).
+            $current = $class::whereIn('id', $ids)->get()->mapWithKeys(fn ($doc) => [$doc->getKey() => $doc->{$column}]);
+            // The numbers each document was posted under (its reversals carry REV- references).
+            self::where('source_type', $class)->whereIn('source_id', $ids)
+                ->where('reference', 'not like', 'REV-%')
+                ->get(['source_id', 'reference'])
+                ->each(function ($e) use ($current, &$renames) {
+                    $now = $current[$e->source_id] ?? null;
+                    if ($now && $e->reference && $e->reference !== $now) {
+                        $renames[$e->source_id][$e->reference] = $now;
+                    }
+                });
+        }
+
+        return static function (self $entry, ?string $text) use ($renames): ?string {
+            if ($text === null || empty($renames[$entry->source_id])) {
+                return $text;
+            }
+            foreach ($renames[$entry->source_id] as $old => $now) {
+                // Whole numbers only: INV-0014 must not touch INV-00145.
+                $text = preg_replace('/(?<![A-Za-z0-9])' . preg_quote($old, '/') . '(?![A-Za-z0-9])/', $now, $text);
+            }
+            return $text;
+        };
+    }
+
+    /**
+     * Same, applied to the loaded entries (and their loaded lines) for a response. Display
+     * only: the entries must not be saved afterwards.
+     */
+    public static function withCurrentNumbers(iterable $entries): iterable
+    {
+        $rewrite = self::currentNumberRewriter($entries);
+        foreach ($entries as $entry) {
+            $entry->reference = $rewrite($entry, $entry->reference);
+            $entry->description = $rewrite($entry, $entry->description);
+            if ($entry->relationLoaded('items')) {
+                foreach ($entry->items as $item) {
+                    $item->description = $rewrite($entry, $item->description);
+                }
+            }
+        }
+        return $entries;
+    }
+
     // Scopes
     public function scopePosted($query)
     {

@@ -110,6 +110,8 @@ class GeneralLedgerController extends Controller
                 return $item->journalEntry->entry_date->toDateString() . $item->account->account_code . $item->journalEntry->created_at?->format('Y-m-d H:i:s.u');
             });
 
+            $currentNumber = \App\Models\JournalEntry::currentNumberRewriter($items->pluck('journalEntry')->unique('id'));
+
             // Group by account and calculate running balances
             $ledgerData = [];
             $accountRunningBalances = [];
@@ -153,8 +155,8 @@ class GeneralLedgerController extends Controller
                     'id' => $item->id,
                     'journal_entry_id' => $item->journal_entry_id,
                     'date' => $item->journalEntry->entry_date->toDateString(),
-                    'reference' => $item->journalEntry->reference,
-                    'description' => $item->description ?: $item->journalEntry->description,
+                    'reference' => $currentNumber($item->journalEntry, $item->journalEntry->reference),
+                    'description' => $currentNumber($item->journalEntry, $item->description ?: $item->journalEntry->description),
                     'entry_type' => $item->journalEntry->entry_type,
                     'debit_amount' => round((float) $item->debit_amount, 2),
                     'credit_amount' => round((float) $item->credit_amount, 2),

@@ -763,6 +763,7 @@ class FinancialStatementService
         $transactions = [];
         $totalDebits = 0;
         $totalCredits = 0;
+        $currentNumber = \App\Models\JournalEntry::currentNumberRewriter($items->pluck('journalEntry')->unique('id'));
 
         foreach ($items as $item) {
             // Update running balance
@@ -775,8 +776,8 @@ class FinancialStatementService
             $transactions[] = [
                 'id' => $item->id,
                 'date' => $item->journalEntry->entry_date,
-                'reference' => $item->journalEntry->reference,
-                'description' => $item->description ?: $item->journalEntry->description,
+                'reference' => $currentNumber($item->journalEntry, $item->journalEntry->reference),
+                'description' => $currentNumber($item->journalEntry, $item->description ?: $item->journalEntry->description),
                 'entry_type' => $item->journalEntry->entry_type,
                 'debit_amount' => round((float) $item->debit_amount, 2),
                 'credit_amount' => round((float) $item->credit_amount, 2),

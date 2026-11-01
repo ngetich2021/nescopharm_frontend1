@@ -71,6 +71,8 @@ class CustomerLedgerService
         $totalDebit = 0.0;
         $totalCredit = 0.0;
         $rows = [];
+        // Invoices given their File No after posting show it (NSK/0427), not the number posted.
+        \App\Models\JournalEntry::withCurrentNumbers($entries);
 
         foreach ($entries as $entry) {
             $receivableChange = 0.0;

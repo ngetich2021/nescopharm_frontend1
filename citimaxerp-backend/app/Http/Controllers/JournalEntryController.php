@@ -98,7 +98,7 @@ class JournalEntryController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Journal entries retrieved successfully.',
-            'entries' => $entries,
+            'entries' => JournalEntry::withCurrentNumbers($entries),
         ]);
     }
 
@@ -115,7 +115,7 @@ class JournalEntryController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Journal entry retrieved successfully.',
-            'entry' => $entry,
+            'entry' => JournalEntry::withCurrentNumbers([$entry])[0],
         ]);
     }
 
