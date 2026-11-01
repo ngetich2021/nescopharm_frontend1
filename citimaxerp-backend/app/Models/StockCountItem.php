@@ -17,6 +17,12 @@ class StockCountItem extends Model
         'stock_count_id',
         'product_id',
         'variant_id',
+        // The batch this line counts; or, for stock found that is in no known batch, the batch
+        // number and expiry it is to be put under (is_new_batch).
+        'batch_id',
+        'batch_number',
+        'expiry_date',
+        'is_new_batch',
         'product_name',
         'product_sku',
         'product_category',
@@ -37,6 +43,9 @@ class StockCountItem extends Model
         'stock_count_id' => 'string',
         'product_id' => 'string',
         'variant_id' => 'string',
+        'batch_id' => 'string',
+        'expiry_date' => 'date:Y-m-d',
+        'is_new_batch' => 'boolean',
         'unit_cost' => 'decimal:2',
         'expected_quantity' => 'integer',
         'counted_quantity' => 'integer',
@@ -63,6 +72,11 @@ class StockCountItem extends Model
     public function variant()
     {
         return $this->belongsTo(ProductVariant::class, 'variant_id');
+    }
+
+    public function batch()
+    {
+        return $this->belongsTo(InventoryBatch::class, 'batch_id');
     }
 
     // Boolean mutators for PostgreSQL compatibility

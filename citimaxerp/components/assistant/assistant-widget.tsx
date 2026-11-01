@@ -1,7 +1,7 @@
 "use client"
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronLeft, Loader2, MessageCircle, Minus, Send, Sparkles, X } from "lucide-react"
+import { ChevronLeft, FileText, ImageIcon, Loader2, MessageCircle, Minus, Paperclip, Send, Sparkles, X } from "lucide-react"
 import Link from "next/link"
 import apiCall from "@/lib/api"
 import { useOptionalAuth } from "@/lib/auth-context"
@@ -13,6 +13,51 @@ import { cn } from "@/lib/utils"
 
 type Mode = "button" | "open" | "tucked"
 type Message = { role: "user" | "assistant"; content: string }
+// A file sent with one question: a photo (as a data URL) or the text of a list, CSV or spreadsheet.
+type Attachment = { type: "image" | "text"; name: string; data: string }
+
+const MAX_FILES = 3
+const MAX_TEXT = 12000
+
+// Photos are scaled down (text stays readable at 2000px) so they upload quickly.
+async function readImage(file: File): Promise<string> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = reject
+      el.src = url
+    })
+    const scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight))
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.round(img.naturalWidth * scale)
+    canvas.height = Math.round(img.naturalHeight * scale)
+    const ctx = canvas.getContext("2d")!
+    ctx.fillStyle = "#fff"
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL("image/jpeg", 0.9)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+// A file as something the assistant can read: photos as images, spreadsheets and lists as text.
+async function readAttachment(file: File): Promise<Attachment> {
+  if (file.type.startsWith("image/")) return { type: "image", name: file.name || "photo", data: await readImage(file) }
+  if (/\.(xlsx|xls)$/i.test(file.name)) {
+    const XLSX = await import("xlsx")
+    const book = XLSX.read(await file.arrayBuffer())
+    const text = book.SheetNames.slice(0, 3)
+      .map((n) => `${n}\n${XLSX.utils.sheet_to_csv(book.Sheets[n], { blankrows: false })}`).join("\n\n")
+    return { type: "text", name: file.name, data: text.slice(0, MAX_TEXT) }
+  }
+  if (/\.(csv|txt|tsv)$/i.test(file.name) || file.type.startsWith("text/")) {
+    return { type: "text", name: file.name, data: (await file.text()).slice(0, MAX_TEXT) }
+  }
+  throw new Error(`${file.name}: only photos, Excel, CSV or text files can be read`)
+}
 
 const MODE_KEY = "assistant-widget-mode"
 const CHAT_KEY = "assistant-widget-chat" // where an earlier version kept the chat; cleared on load
@@ -21,6 +66,7 @@ const SUGGESTIONS = [
   "How do I add a product?",
   "Which products are low on stock or expiring soon?",
   "How much have we spent on expenses this month?",
+  "Find codes for: amoxyclav 1gm, 5ml syringe, NSPV 004",
 ]
 
 const read = <T,>(storage: () => Storage, key: string, fallback: T): T => {
@@ -45,6 +91,10 @@ export function AssistantWidget() {
   const [messages, setMessagesState] = useState<Message[]>(memory.messages)
   const [input, setInput] = useState("")
   const [busy, setBusy] = useState(false)
+  const [files, setFiles] = useState<Attachment[]>([])
+  const [reading, setReading] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const setMessages = (next: Message[]) => {
@@ -77,15 +127,38 @@ export function AssistantWidget() {
     }
   }, [mode, messages, busy])
 
+  const addFiles = async (list: FileList | File[]) => {
+    setFileError(null)
+    const picked = Array.from(list).slice(0, MAX_FILES - files.length)
+    if (!picked.length) return
+    setReading(true)
+    try {
+      const read = await Promise.all(picked.map(readAttachment))
+      setFiles((prev) => [...prev, ...read].slice(0, MAX_FILES))
+    } catch (err: any) {
+      setFileError(err?.message || "Could not read that file")
+    } finally {
+      setReading(false)
+    }
+  }
+
   const ask = async (text: string) => {
-    const question = text.trim()
-    if (!question || busy) return
-    const next = [...messages, { role: "user" as const, content: question }]
+    const attached = files
+    // A file alone is a question too: find what is in it.
+    const question = text.trim() || (attached.length ? "Find these products: their codes, prices and stock." : "")
+    if (!question || busy || reading) return
+    // Only the file names stay in the conversation; the files go with this question only.
+    const shown = attached.length ? `${question}\n${attached.map((a) => `📎 ${a.name}`).join("\n")}` : question
+    const next = [...messages, { role: "user" as const, content: shown }]
     setMessages(next)
     setInput("")
+    setFiles([])
     setBusy(true)
     try {
-      const res = await apiCall<{ reply: string }>("/assistant/chat", "POST", { messages: next.slice(-12) })
+      const res = await apiCall<{ reply: string }>("/assistant/chat", "POST", {
+        messages: next.slice(-12),
+        ...(attached.length ? { attachments: attached } : {}),
+      })
       setMessages([...next, { role: "assistant", content: res.reply }])
     } catch (err: any) {
       setMessages([...next, { role: "assistant", content: err?.message?.includes("429") || /too many/i.test(err?.message ?? "")
@@ -161,16 +234,49 @@ export function AssistantWidget() {
             ))}
             {busy && (
               <div className="flex items-center gap-2 text-xs text-gray-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking that up...
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {messages[messages.length - 1]?.content.includes("📎") ? "Reading the file and looking it up..." : "Looking that up..."}
               </div>
             )}
             <div ref={endRef} />
           </div>
 
+          {(files.length > 0 || reading || fileError) && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t bg-white px-2 pt-2">
+              {files.map((f, i) => (
+                <span key={i} className="flex max-w-[160px] items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-800">
+                  {f.type === "image" ? <ImageIcon className="h-3 w-3 shrink-0" /> : <FileText className="h-3 w-3 shrink-0" />}
+                  <span className="truncate">{f.name}</span>
+                  <button type="button" onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {reading && <span className="flex items-center gap-1 text-xs text-gray-500"><Loader2 className="h-3 w-3 animate-spin" /> Reading file...</span>}
+              {fileError && <span className="text-xs text-red-600">{fileError}</span>}
+            </div>
+          )}
           <form
             className="flex items-end gap-2 border-t bg-white p-2"
             onSubmit={(e) => { e.preventDefault(); ask(input) }}
           >
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept="image/*,.csv,.txt,.tsv,.xlsx,.xls"
+              className="hidden"
+              onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = "" }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={busy || reading || files.length >= MAX_FILES}
+              className="flex h-[38px] w-[30px] items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-green-700 disabled:opacity-40"
+              title="Attach a photo, Excel, CSV or text list"
+              aria-label="Attach a file"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
             <textarea
               ref={inputRef}
               value={input}
@@ -178,14 +284,19 @@ export function AssistantWidget() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(input) }
               }}
+              onPaste={(e) => {
+                // A pasted screenshot is attached as a photo.
+                const images = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"))
+                if (images.length) { e.preventDefault(); addFiles(images) }
+              }}
               rows={1}
-              maxLength={2000}
-              placeholder="Ask anything..."
+              maxLength={4000}
+              placeholder={files.length ? "Ask about the file, or just send" : "Ask anything, or attach a list..."}
               className="max-h-28 min-h-[38px] flex-1 resize-none rounded-md border px-3 py-2 text-sm outline-none focus:border-green-500"
             />
             <button
               type="submit"
-              disabled={busy || !input.trim()}
+              disabled={busy || reading || (!input.trim() && files.length === 0)}
               className="flex h-[38px] w-[38px] items-center justify-center rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
               aria-label="Send"
             >

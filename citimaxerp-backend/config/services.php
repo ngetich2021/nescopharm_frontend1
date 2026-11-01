@@ -48,6 +48,8 @@ return [
         'model' => env('GROQ_MODEL', 'openai/gpt-oss-120b'),
         // Used when the main model is rate limited (Groq counts each model's limit separately).
         'fallback_model' => env('GROQ_FALLBACK_MODEL', 'openai/gpt-oss-20b'),
+        // Reads attached photos (the main model takes text only).
+        'vision_model' => env('GROQ_VISION_MODEL', 'qwen/qwen3.8-27b'),
         'url' => env('GROQ_URL', 'https://api.groq.com/openai/v1/chat/completions'),
     ],
 

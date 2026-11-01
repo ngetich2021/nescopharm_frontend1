@@ -320,6 +320,10 @@ export interface StockCountItem {
   stock_count_id: string;
   product_id: string;
   variant_id: string | null;
+  batch_id?: string | null;
+  batch_number?: string | null;
+  expiry_date?: string | null;
+  is_new_batch?: boolean;
   product_name: string;
   product_sku: string | null;
   product_category: string | null;
@@ -406,7 +410,12 @@ export interface StockCount {
 
 export interface CreateStockCountItem {
   product_id: string;
-  variant_id?: string;
+  variant_id?: string | null;
+  // The batch counted; or, for stock found in no known batch, the batch number and expiry it goes under.
+  batch_id?: string | null;
+  batch_number?: string | null;
+  expiry_date?: string | null;
+  is_new_batch?: boolean;
   expected_quantity: number;
   counted_quantity?: number | null;
   notes?: string;
@@ -423,6 +432,8 @@ export interface CreateStockCountRequest {
   location?: string;
   category_filter?: string;
   assigned_to?: string;
+  // Expand each product into one line per batch holding stock (expected = what the batch holds).
+  by_batch?: boolean;
   items: CreateStockCountItem[];
 }
 

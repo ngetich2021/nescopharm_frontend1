@@ -239,6 +239,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [UserController::class, 'logout']);
 
+    // Before apiResource so "batch-check" is not taken for a stock count id.
+    Route::get('stock-counts/batch-check', [StockCountController::class, 'batchCheck'])->name('stock-counts.batch-check');
     Route::apiResource('stock-counts', StockCountController::class);
 
     // Stock Adjustment routes

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Services\StockCountService;
 
 class StockCountController extends Controller
 {
@@ -382,6 +383,11 @@ class StockCountController extends Controller
                 }
             }
 
+            // Counted per batch: one line for each batch that holds stock (expected = what it holds).
+            if ($request->boolean('by_batch')) {
+                $items = app(StockCountService::class)->batchLines($request->input('company_id'), $request->input('store_id'), $items);
+            }
+
             return DB::transaction(function () use ($request, $user, $items, $productsById, $variantsById) {
                 $countNumber = $this->generateCountNumber($request->input('company_id'), $request->input('store_id'));
 
@@ -438,19 +444,23 @@ class StockCountController extends Controller
                         'stock_count_id' => $stockCount->id,
                         'product_id' => $item['product_id'],
                         'variant_id' => $variantId,
+                        'batch_id' => $item['batch_id'] ?? null,
+                        'batch_number' => $item['batch_number'] ?? null,
+                        'expiry_date' => $item['expiry_date'] ?? null,
+                        'is_new_batch' => ($item['is_new_batch'] ?? false) ? 'true' : 'false',
                         'product_name' => $productName,
                         'product_sku' => $productSku,
                         'product_category' => $product->category ?? null,
-                        'unit_cost' => $unitCost,
+                        'unit_cost' => $item['unit_cost'] ?? $unitCost,
                         'expected_quantity' => $item['expected_quantity'],
-                        'counted_quantity' => $item['counted_quantity'],
-                        'counted_by' => $item['counted_quantity'] ? $user->email : null,
-                        'counted_at' => $item['counted_quantity'] ? $now : null,
-                        'notes' => $item['notes'],
+                        'counted_quantity' => $item['counted_quantity'] ?? null,
+                        'counted_by' => ($item['counted_quantity'] ?? null) ? $user->email : null,
+                        'counted_at' => ($item['counted_quantity'] ?? null) ? $now : null,
+                        'notes' => $item['notes'] ?? null,
                         // Raw bulk insert() bypasses StockCountItem's boolean mutators, which
                         // normally convert to the 'true'/'false' strings this Postgres boolean
                         // column actually needs (see setIsCountedAttribute) - do it here instead.
-                        'is_counted' => !is_null($item['counted_quantity']) ? 'true' : 'false',
+                        'is_counted' => !is_null($item['counted_quantity'] ?? null) ? 'true' : 'false',
                         'requires_recount' => ($item['requires_recount'] ?? false) ? 'true' : 'false',
                         'created_at' => $now,
                         'updated_at' => $now,
@@ -536,6 +546,10 @@ class StockCountController extends Controller
             'items.*.id' => 'sometimes|uuid',
             'items.*.product_id' => 'required|uuid',
             'items.*.variant_id' => 'nullable|uuid',
+            'items.*.batch_id' => 'nullable|uuid',
+            'items.*.batch_number' => 'nullable|string|max:100',
+            'items.*.expiry_date' => 'nullable|date',
+            'items.*.is_new_batch' => 'nullable|boolean',
             'items.*.expected_quantity' => 'required|integer|min:0',
             'items.*.counted_quantity' => 'nullable|integer|min:0',
             'items.*.notes' => 'nullable|string',
@@ -660,15 +674,19 @@ class StockCountController extends Controller
                             'stock_count_id' => $stockCount->id,
                             'product_id' => $item['product_id'],
                             'variant_id' => $variantId,
+                            'batch_id' => $item['batch_id'] ?? null,
+                            'batch_number' => isset($item['batch_number']) ? (trim($item['batch_number']) ?: null) : null,
+                            'expiry_date' => $item['expiry_date'] ?? null,
+                            'is_new_batch' => ($item['is_new_batch'] ?? false) ? 'true' : 'false',
                             'product_name' => $productName,
                             'product_sku' => $productSku,
                             'product_category' => $product->category ?? null,
                             'unit_cost' => $unitCost,
                             'expected_quantity' => $item['expected_quantity'],
-                            'counted_quantity' => $item['counted_quantity'],
-                            'counted_by' => $item['counted_quantity'] ? $user->email : null,
-                            'counted_at' => $item['counted_quantity'] ? now() : null,
-                            'notes' => $item['notes'],
+                            'counted_quantity' => $item['counted_quantity'] ?? null,
+                            'counted_by' => ($item['counted_quantity'] ?? null) ? $user->email : null,
+                            'counted_at' => ($item['counted_quantity'] ?? null) ? now() : null,
+                            'notes' => $item['notes'] ?? null,
                             // String 'true'/'false' (not raw PHP bool) so this works whether it
                             // goes through Eloquent's update() (mutator accepts either form) or
                             // the raw bulk insert() below (which bypasses mutators entirely and
@@ -704,25 +722,10 @@ class StockCountController extends Controller
                         ->delete();
                 }
 
-                // Update stock if approved
+                // Approved: the counted quantities go into the batches (stock is the sum of its
+                // batches), found stock into its batch or a new one, each change as a movement.
                 if ($stockCount->status === 'approved' && $stockCount->wasChanged('status')) {
-                    foreach ($stockCount->items as $item) {
-                        if (!$item->is_variance) {
-                            continue;
-                        }
-                        if ($item->variant_id) {
-                            // Variant-level line: update the variant's own stock, not the parent product's.
-                            $variant = ProductVariant::find($item->variant_id);
-                            if ($variant) {
-                                $variant->stock_quantity = $item->counted_quantity;
-                                $variant->save();
-                            }
-                        } elseif ($item->product && $item->product->track_inventory) {
-                            $product = Product::find($item->product_id);
-                            $product->stock_quantity = $item->counted_quantity;
-                            $product->save();
-                        }
-                    }
+                    app(StockCountService::class)->apply($stockCount, $user->id);
                 }
 
                 // Recalculate metrics after updating items
@@ -755,6 +758,36 @@ class StockCountController extends Controller
      * @param string $id
      * @return \Illuminate\Http\JsonResponse
      */
+    /**
+     * Stock found during a count, entered under a batch number: is that already one of the
+     * product's batches (approval corrects it) or a new batch (approval creates it)?
+     */
+    public function batchCheck(Request $request)
+    {
+        $data = $request->validate([
+            'product_id' => 'required|uuid',
+            'variant_id' => 'nullable|uuid',
+            'batch_number' => 'required|string|max:100',
+        ]);
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_stock_counts', $user->company_id)
+            && !$this->hasPermission($request, 'can_update_stock_counts', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+        $batch = app(StockCountService::class)->findBatch($user->company_id, $data['product_id'], $data['variant_id'] ?? null, $data['batch_number']);
+        return response()->json([
+            'status' => 'success',
+            'exists' => (bool) $batch,
+            'batch' => $batch ? [
+                'id' => $batch->id,
+                'batch_number' => $batch->batch_number,
+                'quantity_available' => (int) $batch->quantity_available,
+                'expiry_date' => optional($batch->expiry_date)->toDateString(),
+                'status' => $batch->status,
+            ] : null,
+        ]);
+    }
+
     public function destroy(Request $request, $id)
     {
         if (!$this->hasPermission($request, 'can_delete_stock_counts')) {

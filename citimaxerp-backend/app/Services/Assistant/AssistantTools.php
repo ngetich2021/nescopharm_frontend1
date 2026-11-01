@@ -23,6 +23,7 @@ class AssistantTools
     protected const ACCESS = [
         'how_to' => ['*'],
         'search_products' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
+        'match_products' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
         'stock_alerts' => ['can_view_inventory_menu'],
         'list_invoices' => ['can_view_sales_menu'],
         'list_orders' => ['can_view_sales_menu'],
@@ -73,6 +74,9 @@ class AssistantTools
                 'query' => ['type' => 'string', 'description' => 'Words of the description, the item number, or a price-list code'],
                 'limit' => ['type' => 'integer', 'description' => 'Max products (default 8, max 20)'],
             ], ['query']],
+            'match_products' => ['Match a list of products (typed, pasted, from an attached file or a photo) to the system, line by line: item no., description, price-list codes and prices, stock. Use it whenever the user gives several products at once.', [
+                'lines' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'One product per line as the user wrote it (description and/or code; quantities may be included)'],
+            ], ['lines']],
             'stock_alerts' => ['Products at or below their reorder level or out of stock, and batches expiring soon.', [
                 'expiring_within_days' => ['type' => 'integer', 'description' => 'Batches expiring within this many days (default 90)'],
             ], []],
@@ -275,6 +279,97 @@ class AssistantTools
             }
             return $row;
         })->values()];
+    }
+
+    /**
+     * Each line of a list matched to one product: by its price-list code when it has one
+     * ("NSPD 001", "nspv-3"), otherwise by the words of its description (all of them, or else the
+     * product sharing the most). Quantities and pack words in the line are ignored.
+     */
+    protected function match_products(array $args): array
+    {
+        $lines = collect($args['lines'] ?? [])->map(fn ($l) => trim((string) $l))->filter()->take(40)->values();
+        $stock = fn ($ids) => DB::table('inventory_batches')->where('company_id', $this->companyId)->whereIn('product_id', $ids)
+            ->groupBy('product_id')->selectRaw('product_id, sum(quantity_available) as qty')->pluck('qty', 'product_id');
+        $describe = function (Product $p, $qty) {
+            return [
+                'item_no' => $p->item_number,
+                'description' => $p->name,
+                'codes' => $p->priceTiers->map(fn ($t) => trim($t->tier_name . ' ' . $t->item_code) . ' = ' . number_format((float) $t->price, 2))->implode('; ') ?: 'none',
+                'stock' => (float) $qty,
+            ];
+        };
+
+        $results = [];
+        foreach ($lines as $line) {
+            $match = null;
+            $how = null;
+            $alternatives = [];
+
+            if (preg_match('/\b(NSP[A-Z])\s*[-\/]?\s*(\d{1,5})\b/i', $line, $m)) {
+                $match = Product::where('company_id', $this->companyId)->whereHas('priceTiers', fn ($t) => $t
+                    ->whereRaw('upper(tier_name) = ?', [strtoupper($m[1])])
+                    ->whereRaw("ltrim(coalesce(item_code, ''), '0') = ?", [ltrim($m[2], '0')]))->with('priceTiers')->first();
+                $how = $match ? 'code' : null;
+            }
+
+            if (!$match) {
+                // Words that identify a product: names and strengths ("amoxyclav", "375mg"), not
+                // quantities, pack words or a stray code.
+                $noise = ['pcs', 'pc', 'pack', 'packs', 'box', 'boxes', 'tabs', 'tablets', 'tablet', 'of', 'and', 'the', 'qty', 'nos', 'units', 'unit', 'each', 'per'];
+                $words = collect(preg_split('/[^a-z0-9.]+/i', strtolower($line)))
+                    ->filter(fn ($w) => strlen($w) >= 3 && preg_match('/[a-z]/', $w) && !in_array($w, $noise, true) && !preg_match('/^nsp[a-z]$/', $w))
+                    ->unique()->values();
+                if ($words->isNotEmpty()) {
+                    // Compared without spaces: "2ml" and "23g" match "2 Ml" and "23 G".
+                    $all = Product::where('company_id', $this->companyId)->where('is_active', true);
+                    foreach ($words as $w) {
+                        $all->whereRaw("replace(lower(name), ' ', '') like ?", ['%' . $w . '%']);
+                    }
+                    $found = $all->with('priceTiers')->orderByRaw('length(name)')->limit(3)->get();
+                    if ($found->isNotEmpty()) {
+                        $match = $found->first();
+                        $how = 'name';
+                        $alternatives = $found->slice(1)->pluck('name')->values()->all();
+                    } else {
+                        // Best partial (typos, extra words): name words count double a strength like
+                        // "500mg", the first word (usually the drug) counts most, compared on the
+                        // first 4 letters of each word.
+                        $terms = $words->values()->map(fn ($w, $i) => [
+                            'stem' => ctype_alpha($w) ? substr($w, 0, 4) : $w,
+                            'weight' => (ctype_alpha($w) ? 2 : 1) + ($i === 0 ? 2 : 0),
+                        ]);
+                        $possible = $terms->sum('weight');
+                        $candidates = Product::where('company_id', $this->companyId)->where('is_active', true)
+                            ->where(fn ($q) => $terms->each(fn ($s) => $q->orWhereRaw("replace(lower(name), ' ', '') like ?", ['%' . $s['stem'] . '%'])))
+                            ->with('priceTiers')->limit(300)->get()
+                            ->map(function ($p) use ($terms, $line) {
+                                $name = str_replace(' ', '', strtolower($p->name));
+                                // Ties go to the name most like the whole line ("...1gm pack of 10" -> "1gm-10's").
+                                similar_text(str_replace(' ', '', strtolower($line)), $name, $likeness);
+                                return ['p' => $p, 'score' => $terms->filter(fn ($s) => str_contains($name, $s['stem']))->sum('weight'), 'like' => $likeness];
+                            })
+                            ->sort(fn ($a, $b) => [$b['score'], $b['like']] <=> [$a['score'], $a['like']])->values();
+                        $best = $candidates->first();
+                        if ($best && $best['score'] * 2 >= $possible) {
+                            $match = $best['p'];
+                            $how = 'partial';
+                        }
+                        $alternatives = $candidates->slice($match ? 1 : 0, 3)->pluck('p.name')->values()->all();
+                    }
+                }
+            }
+
+            $results[] = ['line' => $line, 'matched_by' => $how, 'product' => $match, 'alternatives' => $alternatives];
+        }
+
+        $qty = $stock(collect($results)->pluck('product')->filter()->pluck('id'));
+        return ['matches' => collect($results)->map(fn ($r) => [
+            'line' => $r['line'],
+            'matched_by' => $r['matched_by'] ?? 'no match',
+            'product' => $r['product'] ? $describe($r['product'], $qty[$r['product']->id] ?? 0) : null,
+            'did_you_mean' => $r['alternatives'],
+        ])->all()];
     }
 
     protected function stock_alerts(array $args): array

@@ -360,3 +360,16 @@ export function formatVariance(varianceQuantity: number | null): string {
   return varianceQuantity > 0 ? `+${varianceQuantity}` : `${varianceQuantity}`
 }
 
+
+/**
+ * Stock found during a count, under a batch number: is it one of the product's batches already
+ * (approval corrects that batch) or a new batch (approval creates it)?
+ */
+export async function checkCountBatch(params: { product_id: string; variant_id?: string | null; batch_number: string }): Promise<{
+  exists: boolean
+  batch: { id: string; batch_number: string; quantity_available: number; expiry_date: string | null; status: string } | null
+}> {
+  const qs = new URLSearchParams({ product_id: params.product_id, batch_number: params.batch_number })
+  if (params.variant_id) qs.append("variant_id", params.variant_id)
+  return apiCall(`/stock-counts/batch-check?${qs.toString()}`, "GET", undefined, true)
+}

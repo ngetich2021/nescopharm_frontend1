@@ -317,6 +317,8 @@ export function CreateStockCountSheet({ isOpen, onOpenChange, onStockCountCreate
         status: "draft" as const,
         location: selectedStore.name,
         assigned_to: assigned_to || undefined,
+        // Counted batch by batch: the server lists each batch holding stock as its own line.
+        by_batch: true,
         items,
       }
 

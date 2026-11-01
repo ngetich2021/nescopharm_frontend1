@@ -18,11 +18,17 @@ class AssistantService
 {
     protected const MAX_TOOL_ROUNDS = 5;
 
-    public function reply(User $user, array $history): string
+    public function reply(User $user, array $history, array $attachments = []): string
     {
         $key = $this->apiKey($user);
         if (!$key) {
             return 'The assistant is not set up yet (no Groq API key on the server).';
+        }
+
+        // Files go with the latest question as text: a file's own text, or what the vision
+        // model reads off a photo (the main model takes text only).
+        if ($attachments && ($last = array_key_last($history)) !== null) {
+            $history[$last]['content'] .= $this->attachmentText($key, $attachments, $history[$last]['content']);
         }
 
         $tools = new AssistantTools($user);
@@ -74,6 +80,59 @@ class AssistantService
      * The Groq key: the server's GROQ_API_KEY, or else the company's "groq_api_key" setting
      * ({"key": "gsk_..."} in company_settings), so it can be set without redeploying.
      */
+    /** The attached files as text added to the question. */
+    protected function attachmentText(string $key, array $attachments, string $question): string
+    {
+        $out = '';
+        foreach ($attachments as $i => $file) {
+            $name = $file['name'] ?? ('file ' . ($i + 1));
+            if (($file['type'] ?? '') === 'text') {
+                $out .= "\n\n[Attached file \"{$name}\"]\n" . mb_substr((string) $file['data'], 0, 12000);
+                continue;
+            }
+            $text = $this->readImage($key, (string) $file['data'], $question);
+            $out .= $text !== null
+                ? "\n\n[Attached image \"{$name}\" - its text as read by the system]\n{$text}"
+                : "\n\n[Attached image \"{$name}\" could not be read]";
+        }
+        return $out;
+    }
+
+    /**
+     * The text of a photo or screenshot (a product list, an invoice, a shelf label...), read by the
+     * vision model, one line per item. Null when it cannot be read.
+     */
+    protected function readImage(string $key, string $dataUrl, string $question): ?string
+    {
+        if (!preg_match('#^data:image/(png|jpe?g|webp|gif);base64,#', $dataUrl)) {
+            return null;
+        }
+        try {
+            $response = Http::withToken($key)->timeout(90)->acceptJson()->post(config('services.groq.url'), [
+                'model' => config('services.groq.vision_model'),
+                'temperature' => 0,
+                'max_tokens' => 2000,
+                'messages' => [['role' => 'user', 'content' => [
+                    ['type' => 'text', 'text' => "Transcribe the text in this image exactly as written. For a list or table of products, "
+                        . "give one item per line with its description, strength/size, code and quantity as shown. Do not add anything "
+                        . "that is not in the image. The user asked: " . mb_substr($question, 0, 500)],
+                    ['type' => 'image_url', 'image_url' => ['url' => $dataUrl]],
+                ]]],
+            ]);
+        } catch (ConnectionException $e) {
+            Log::warning('Assistant: image reading unreachable', ['error' => $e->getMessage()]);
+            return null;
+        }
+        if (!$response->successful()) {
+            Log::warning('Assistant: image reading failed', ['status' => $response->status(), 'body' => mb_substr($response->body(), 0, 300)]);
+            return null;
+        }
+        $text = (string) $response->json('choices.0.message.content');
+        // Some models think aloud first.
+        $text = trim(preg_replace('#<think>.*?</think>#s', '', $text));
+        return $text !== '' ? mb_substr($text, 0, 8000) : null;
+    }
+
     protected function apiKey(User $user): ?string
     {
         if ($key = config('services.groq.key')) {
@@ -141,6 +200,7 @@ How to answer:
 - You can only read. You cannot create, change, approve or delete anything; for those, explain how the user does it in the system.
 - If a tool returns "did_you_mean", say nothing matched exactly and offer those names ("Did you mean ...?"); if one is clearly what was meant, look it up with that name.
 - When you mention a screen, link it as markdown with its path, e.g. [Sales > Credit Notes](/sales/credit-notes).
+- When the user gives several products at once (typed, pasted, or in an attached file or photo), call match_products with one line per product, then show a table: their line, Item No., matched product, codes with prices, stock. Mark lines with no match and offer their did_you_mean names. Say "(partial)" for partial matches so they can check them.
 - Money is Kenya Shillings: write it like "KES 74,756.80". Dates like "29 Oct 2026". Invoices are numbered NSK/#### (e.g. NSK/0427).
 - A product's code is its price list and number, e.g. "NSPV 003", "NSPH 012", "NSPD 001" - always give the full code as the tool returns it. Item No. is a different number.
 - For "how do I ..." or "where is ..." questions, call how_to and explain its steps in short numbered steps, naming the menu and buttons. Do not make up screens or buttons.

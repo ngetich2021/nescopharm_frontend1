@@ -26,7 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ArrowLeft, Save, CheckCircle, Search } from "lucide-react"
+import { ArrowLeft, Save, CheckCircle, Search, PackagePlus, Trash2 } from "lucide-react"
+import { FoundStockDialog, type FoundStock } from "../components/found-stock-dialog"
 import { useToast } from "@/hooks/use-toast"
 import {
   getStockCountDetails,
@@ -50,6 +51,7 @@ export default function StockCountDetailsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
+  const [showFoundDialog, setShowFoundDialog] = useState(false)
 
   useEffect(() => {
     fetchStockCount()
@@ -94,12 +96,41 @@ export default function StockCountDetailsPage() {
     )
   }
 
+  // Stock found that is on no line: added as its own line with the batch number on the pack.
+  const handleAddFound = (found: FoundStock) => {
+    setItems((prev) => [...prev, {
+      id: `found-${Date.now()}`,
+      product_id: found.product_id,
+      variant_id: found.variant_id,
+      product_name: found.product_name,
+      product_sku: null,
+      product_category: null,
+      batch_id: null,
+      batch_number: found.batch_number,
+      expiry_date: found.expiry_date,
+      is_new_batch: true,
+      expected_quantity: 0,
+      counted_quantity: found.counted_quantity,
+      is_counted: true,
+      notes: found.existing_batch ? "Found - existing batch" : "Found - new batch",
+      variance_value: null,
+    } as unknown as StockCountItem])
+  }
+
+  const handleRemoveItem = (itemId: string) => setItems((prev) => prev.filter((i) => i.id !== itemId))
+
   const handleSaveItems = async () => {
     try {
       setSaving(true)
       const updatedItems = items.map((item) => ({
-        id: item.id,
+        // Lines added here have no id yet; the server creates them.
+        ...(item.id.startsWith("found-") ? {} : { id: item.id }),
         product_id: item.product_id,
+        variant_id: item.variant_id ?? null,
+        batch_id: item.batch_id ?? null,
+        batch_number: item.batch_number ?? null,
+        expiry_date: item.expiry_date ?? null,
+        is_new_batch: !!item.is_new_batch,
         expected_quantity: item.expected_quantity,
         counted_quantity: item.counted_quantity ?? null,
         is_counted: item.is_counted || false,
@@ -206,6 +237,7 @@ export default function StockCountDetailsPage() {
   const filteredItems = items.filter(
     (item) =>
       item.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.batch_number ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.product_sku && item.product_sku.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
@@ -356,14 +388,21 @@ export default function StockCountDetailsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Items</CardTitle>
+              <div className="flex items-center gap-2">
+                {canEdit && (
+                  <Button variant="outline" size="sm" onClick={() => setShowFoundDialog(true)}>
+                    <PackagePlus className="mr-2 h-4 w-4" /> Add found stock
+                  </Button>
+                )}
               <div className="relative w-64">
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   className="pl-8"
-                  placeholder="Search products..."
+                  placeholder="Search products or batches..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
+              </div>
               </div>
             </div>
           </CardHeader>
@@ -373,13 +412,14 @@ export default function StockCountDetailsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Category</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead>Expiry</TableHead>
                     <TableHead className="text-right">Expected</TableHead>
                     <TableHead className="text-right">Counted</TableHead>
                     <TableHead className="text-right">Variance</TableHead>
                     <TableHead className="text-right">Value</TableHead>
                     <TableHead>Notes</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -390,9 +430,14 @@ export default function StockCountDetailsPage() {
                     
                     return (
                       <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.product_name}</TableCell>
-                        <TableCell>{item.product_sku || "-"}</TableCell>
-                        <TableCell>{item.product_category || "-"}</TableCell>
+                        <TableCell className="font-medium">
+                          {item.product_name}
+                          {item.is_new_batch && (
+                            <Badge variant="outline" className="ml-2 border-amber-300 bg-amber-50 text-[10px] text-amber-800">Found</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{item.batch_number || <span className="text-muted-foreground">No batch</span>}</TableCell>
+                        <TableCell className="whitespace-nowrap">{item.expiry_date ? format(new Date(item.expiry_date), "dd MMM yyyy") : "-"}</TableCell>
                         <TableCell className="text-right">{item.expected_quantity}</TableCell>
                         <TableCell className="text-right">
                           {canEdit ? (
@@ -433,6 +478,13 @@ export default function StockCountDetailsPage() {
                             item.notes || "-"
                           )}
                         </TableCell>
+                        <TableCell>
+                          {canEdit && item.is_new_batch && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Remove" onClick={() => handleRemoveItem(item.id)}>
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     )
                   })}
@@ -442,6 +494,8 @@ export default function StockCountDetailsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <FoundStockDialog open={showFoundDialog} onOpenChange={setShowFoundDialog} onAdd={handleAddFound} />
 
       <AlertDialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
         <AlertDialogContent>
@@ -464,8 +518,9 @@ export default function StockCountDetailsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Approve Stock Count?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will update the actual inventory quantities based on the counted values.
-              This action cannot be undone.
+              Each batch is set to the quantity counted for it, found stock goes into its batch (a new
+              batch is created for a new batch number), and every change is recorded as a stock movement.
+              This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
