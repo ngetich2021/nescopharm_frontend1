@@ -16,9 +16,7 @@ import {
 } from "@/components/ui/table"
 import { 
   ArrowLeft,
-  Download,
   Calendar,
-  Printer,
   CheckCircle,
   AlertTriangle
 } from "lucide-react"
@@ -28,7 +26,9 @@ import {
 } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
-import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
+import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
+import { DownloadButton } from "@/components/download-button"
+import type { ExportCell, TableExport } from "@/lib/table-export"
 
 interface BalanceSheetData {
   report_date: string
@@ -105,52 +105,27 @@ export default function BalanceSheetPage() {
     }
   }
 
-  const exportToPDF = () => {
-    printWithFileName(documentFileName([sessionCompanyName(), `Balance Sheet ${filePeriod(null, asOfDate)}`]))
-  }
-
-  const exportToCSV = () => {
-    if (!balanceSheetData) return
-
-    const headers = ['Account Type', 'Account Code', 'Account Name', 'Balance']
-    const rows: string[][] = []
-
-    // Assets
-    rows.push(['ASSETS', '', '', ''])
-    balanceSheetData.balance_sheet.assets.accounts.forEach(account => {
-      rows.push(['Asset', account.account_code, account.account_name, account.balance])
-    })
-    rows.push(['', '', 'Total Assets', balanceSheetData.balance_sheet.assets.total])
-    rows.push(['', '', '', ''])
-
-    // Liabilities
-    rows.push(['LIABILITIES', '', '', ''])
-    balanceSheetData.balance_sheet.liabilities.accounts.forEach(account => {
-      rows.push(['Liability', account.account_code, account.account_name, account.balance])
-    })
-    rows.push(['', '', 'Total Liabilities', balanceSheetData.balance_sheet.liabilities.total])
-    rows.push(['', '', '', ''])
-
-    // Equity
-    rows.push(['EQUITY', '', '', ''])
-    balanceSheetData.balance_sheet.equity.accounts.forEach(account => {
-      rows.push(['Equity', account.account_code, account.account_name, account.balance])
-    })
-    rows.push(['', '', 'Total Equity', balanceSheetData.balance_sheet.equity.total])
-    rows.push(['', '', '', ''])
-    rows.push(['', '', 'Total Liabilities and Equity', balanceSheetData.balance_sheet.total_liabilities_and_equity])
-
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = documentFileName([sessionCompanyName(), `Balance Sheet ${filePeriod(null, asOfDate)}`], "csv")
-    a.click()
-    window.URL.revokeObjectURL(url)
+  // Assets, then liabilities, then equity: each section's accounts and its total.
+  const buildExport = (): TableExport => {
+    const bs = balanceSheetData!.balance_sheet
+    const rows: ExportCell[][] = []
+    const section = (label: string, data: { accounts: { account_code: string; account_name: string; balance: string }[]; total: string }) => {
+      rows.push(["", label.toUpperCase(), "", null])
+      data.accounts.forEach((a, i) => rows.push([i + 1, a.account_code, a.account_name, Number(a.balance) || 0]))
+      rows.push(["", "", `Total ${label}`, Number(data.total) || 0])
+    }
+    section("Assets", bs.assets)
+    section("Liabilities", bs.liabilities)
+    section("Equity", bs.equity)
+    return {
+      fileName: documentFileName([sessionCompanyName(), `Balance Sheet ${filePeriod(null, asOfDate)}`]),
+      title: "Balance Sheet",
+      subtitle: `As of ${format(new Date(asOfDate), 'dd MMM yyyy')}${bs.is_balanced ? "" : " · OUT OF BALANCE"}`,
+      headers: ["S/No", "Account Code", "Account Name", "Balance"],
+      moneyColumns: [3],
+      rows,
+      footer: [["", "", "Total Liabilities and Equity", Number(bs.total_liabilities_and_equity) || 0]],
+    }
   }
 
   if (isLoading) {
@@ -175,16 +150,7 @@ export default function BalanceSheetPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={exportToPDF} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print PDF
-          </Button>
-        </div>
+        <DownloadButton title="Balance Sheet" build={buildExport} disabled={!balanceSheetData} />
       </div>
 
       {/* Parameters */}

@@ -65,6 +65,10 @@ import { format, formatDistanceToNow } from "date-fns"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { cn } from "@/lib/utils"
+import { useOptionalAuth } from "@/lib/auth-context"
+import { exportTable, type TableExport } from "@/lib/table-export"
+import { documentFileName, sessionCompanyName } from "@/lib/document-names"
+import { DownloadFormatDialog } from "@/components/download-format-dialog"
 
 // Helper function to get entry type badge color
 const getEntryTypeColor = (entryType: string): string => {
@@ -138,8 +142,34 @@ export default function JournalEntryDetailPage() {
   const { toast } = useToast()
   const [entry, setEntry] = useState<JournalEntry | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [downloadOpen, setDownloadOpen] = useState(false)
+  const company = useOptionalAuth()?.userProfile?.company
 
   const entryId = params.id as string
+
+  // The entry's lines with their accounts, and the debit/credit totals.
+  const buildExport = (e: JournalEntry): TableExport => ({
+    fileName: documentFileName([sessionCompanyName(), `Journal Entry ${e.entry_number}`]),
+    title: `Journal Entry ${e.entry_number}`,
+    details: [
+      ["Date", format(new Date(e.entry_date), 'dd MMM yyyy')],
+      ["Reference", e.reference || "-"],
+      ["Type", e.entry_type],
+      ["Status", e.status],
+      ...(e.description ? [["Description", e.description] as [string, string]] : []),
+    ],
+    headers: ["S/No", "Account Code", "Account", "Description", "Debit", "Credit"],
+    moneyColumns: [4, 5],
+    rows: (e.items ?? []).map((item, i) => [
+      i + 1,
+      item.chart_of_account?.account_code ?? "",
+      item.chart_of_account?.account_name ?? "",
+      item.description ?? "",
+      Number(item.debit_amount) > 0 ? Number(item.debit_amount) : null,
+      Number(item.credit_amount) > 0 ? Number(item.credit_amount) : null,
+    ]),
+    footer: [["", "", "", "Totals", Number(e.total_debit) || 0, Number(e.total_credit) || 0]],
+  })
 
   useEffect(() => {
     if (entryId) {
@@ -320,11 +350,8 @@ export default function JournalEntryDetailPage() {
                        </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                       <DropdownMenuItem>
-                          <Printer className="h-4 w-4 mr-2" /> Print Entry
-                       </DropdownMenuItem>
-                       <DropdownMenuItem>
-                          <Download className="h-4 w-4 mr-2" /> Export PDF
+                       <DropdownMenuItem onClick={() => setDownloadOpen(true)}>
+                          <Download className="h-4 w-4 mr-2" /> Download
                        </DropdownMenuItem>
                        {(entry.status === 'draft' || entry.status === 'pending') && (
                           <>
@@ -573,6 +600,12 @@ export default function JournalEntryDetailPage() {
             </TabsContent>
           </Tabs>
 
+          <DownloadFormatDialog
+            open={downloadOpen}
+            onOpenChange={setDownloadOpen}
+            title={entry.entry_number}
+            onDownload={(f) => exportTable(f, buildExport(entry), company)}
+          />
         </div>
       </TooltipProvider>
     </PermissionGuard>

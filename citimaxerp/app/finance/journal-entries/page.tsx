@@ -61,6 +61,9 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format, formatDistanceToNow } from "date-fns"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { DownloadButton } from "@/components/download-button"
+import type { TableExport } from "@/lib/table-export"
+import { documentFileName, filePeriod, sessionCompanyName, todayFileDate } from "@/lib/document-names"
 
 // Helper function to get entry type badge color
 const getEntryTypeColor = (entryType: string): string => {
@@ -178,10 +181,35 @@ export default function JournalEntriesPage() {
     return matchesSearch && matchesStatus && matchesType && matchesDateFrom && matchesDateTo
   })
 
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredEntries.length / rowsPerPage)
-  const startIndex = (currentPage - 1) * rowsPerPage
-  const paginatedEntries = filteredEntries.slice(startIndex, startIndex + rowsPerPage)
+  // Pagination calculations (rowsPerPage 0 = All)
+  const pageSize = rowsPerPage || Math.max(filteredEntries.length, 1)
+  const totalPages = Math.ceil(filteredEntries.length / pageSize)
+  const startIndex = (currentPage - 1) * pageSize
+  const paginatedEntries = filteredEntries.slice(startIndex, startIndex + pageSize)
+
+  // Every entry matching the filters, not just the page shown.
+  const buildExport = (): TableExport => ({
+    fileName: documentFileName([sessionCompanyName(), `Journal Entries ${filePeriod(dateFrom || null, dateTo || null) || todayFileDate()}`]),
+    title: "Journal Entries",
+    subtitle: dateFrom || dateTo ? `${dateFrom ? format(new Date(dateFrom), 'dd MMM yyyy') : "Start"} to ${dateTo ? format(new Date(dateTo), 'dd MMM yyyy') : "today"}` : undefined,
+    headers: ["S/No", "Entry No.", "Date", "Reference", "Description", "Type", "Status", "Debit", "Credit", "Created By"],
+    moneyColumns: [7, 8],
+    rows: filteredEntries.map((e, i) => [
+      i + 1,
+      e.entry_number,
+      format(new Date(e.entry_date), 'dd MMM yyyy'),
+      e.reference ?? "",
+      e.description ?? "",
+      e.entry_type,
+      e.status,
+      Number(e.total_debit) || 0,
+      Number(e.total_credit) || 0,
+      e.creator?.full_name || "System",
+    ]),
+    footer: [["", "", "", "", "", "", "Totals",
+      filteredEntries.reduce((s, e) => s + (Number(e.total_debit) || 0), 0),
+      filteredEntries.reduce((s, e) => s + (Number(e.total_credit) || 0), 0), ""]],
+  })
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -254,6 +282,12 @@ export default function JournalEntriesPage() {
               </p>
             </div>
             <div className="flex gap-2">
+              <DownloadButton
+                title="Journal Entries"
+                build={buildExport}
+                disabled={filteredEntries.length === 0}
+                className="bg-white/5 border-white/20 text-white hover:bg-white/10 hover:text-white"
+              />
               <Link href="/finance/journal-entries/create">
                 <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white border-0 shadow-sm">
                   <Plus className="mr-2 h-4 w-4" />
@@ -507,7 +541,9 @@ export default function JournalEntriesPage() {
            {/* Footer / Pagination */}
            <div className="bg-slate-50 border-t p-3 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
              <div className="flex items-center gap-2">
-                <span>Rows per page</span>
+                <span>
+                  {filteredEntries.length ? `Showing ${startIndex + 1}–${Math.min(startIndex + pageSize, filteredEntries.length)} of ${filteredEntries.length} · ` : ""}Rows per page
+                </span>
                 <Select
                   value={rowsPerPage.toString()}
                   onValueChange={(value) => {
@@ -515,7 +551,7 @@ export default function JournalEntriesPage() {
                     setCurrentPage(1)
                   }}
                 >
-                  <SelectTrigger className="h-7 w-[60px] bg-white text-xs">
+                  <SelectTrigger className="h-7 w-[64px] bg-white text-xs">
                     <SelectValue placeholder={rowsPerPage} />
                   </SelectTrigger>
                   <SelectContent side="top">
@@ -524,6 +560,7 @@ export default function JournalEntriesPage() {
                         {pageSize}
                       </SelectItem>
                     ))}
+                    <SelectItem value="0" className="text-xs">All</SelectItem>
                   </SelectContent>
                 </Select>
              </div>

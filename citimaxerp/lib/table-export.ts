@@ -15,6 +15,7 @@ export interface TableExport {
   rows: ExportCell[][]
   footer?: ExportCell[][] // e.g. totals, bold under the table
   moneyColumns?: number[] // always 2 decimals, even when every amount is whole
+  rightColumns?: number[] // right-aligned though written as text, e.g. "1.50" or "30.0%"
 }
 
 interface Brand {
@@ -68,7 +69,8 @@ type Align = "left" | "center" | "right"
 const SERIAL_HEADER = /^(s\/?\s?no\.?|#|no\.?|item\s?#|item no\.?)$/i
 function columnAlignments(data: TableExport): Align[] {
   const numeric = numericColumns(data)
-  return data.headers.map((h, i) => (SERIAL_HEADER.test(h.trim()) ? "center" : numeric[i] ? "right" : "left"))
+  return data.headers.map((h, i) =>
+    SERIAL_HEADER.test(h.trim()) ? "center" : numeric[i] || data.rightColumns?.includes(i) ? "right" : "left")
 }
 
 function download(blob: Blob, name: string) {

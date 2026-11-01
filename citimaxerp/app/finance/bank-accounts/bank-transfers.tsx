@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import * as XLSX from "xlsx"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,9 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowRightLeft, Download, Loader2, Trash2 } from "lucide-react"
+import { ArrowRightLeft, Loader2, Trash2 } from "lucide-react"
 import apiCall from "@/lib/api"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
+import { DownloadButton } from "@/components/download-button"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
+import type { TableExport } from "@/lib/table-export"
 
 type MoneyAccount = { id: string; code: string; name: string; label: string; balance: number }
 type Transfer = {
@@ -105,25 +107,31 @@ export function BankTransfers({ onChanged }: { onChanged?: () => void }) {
     }
   }
 
-  const download = () => {
-    const rows = (transfers ?? []).map((t, i) => ({
-      "S/No": i + 1,
-      "Transfer No.": t.transfer_number,
-      Date: t.transfer_date,
-      From: t.from_account ?? "",
-      To: t.to_account ?? "",
-      "Amount (KES)": t.amount,
-      "Bank Charges (KES)": t.charges,
-      "Total Out (KES)": t.total_out,
-      Purpose: t.purpose ?? "",
-      Reference: t.reference ?? "",
-      Notes: t.notes ?? "",
-      "Recorded By": t.created_by ?? "",
-    }))
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), "Transfers")
-    XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Bank Withdrawals & Transfers", todayFileDate()], "xlsx"))
+  const buildExport = (): TableExport => {
+    const list = transfers ?? []
+    const sum = (f: (t: Transfer) => number) => list.reduce((s, t) => s + Number(f(t) || 0), 0)
+    return {
+      fileName: documentFileName([sessionCompanyName(), "Bank Withdrawals & Transfers", todayFileDate()]),
+      title: "Bank Withdrawals & Transfers",
+      headers: ["S/No", "Date", "Transfer No.", "From", "To", "Purpose", "Reference", "Amount", "Charges", "Total Out", "Recorded By"],
+      moneyColumns: [7, 8, 9],
+      rows: list.map((t, i) => [
+        i + 1,
+        new Date(t.transfer_date).toLocaleDateString("en-GB"),
+        t.transfer_number,
+        t.from_account ?? "",
+        t.to_account ?? "",
+        t.purpose ?? "",
+        t.reference ?? "",
+        Number(t.amount) || 0,
+        Number(t.charges) || 0,
+        Number(t.total_out) || 0,
+        t.created_by ?? "",
+      ]),
+      footer: [["", "", "", "", "", "", "Totals", sum((t) => t.amount), sum((t) => t.charges), sum((t) => t.total_out), ""]],
+    }
   }
+  const { pageRows, start, pager } = usePaged(transfers ?? [])
 
   const from = accounts.find((a) => a.id === form.from_account_id)
   const amount = Number(form.amount) || 0
@@ -142,9 +150,7 @@ export function BankTransfers({ onChanged }: { onChanged?: () => void }) {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button variant="outline" size="sm" onClick={download} disabled={!transfers?.length}>
-            <Download className="mr-2 h-4 w-4" /> Download
-          </Button>
+          <DownloadButton title="Withdrawals & Transfers" build={buildExport} disabled={!transfers?.length} />
           <Button size="sm" onClick={openForm} disabled={accounts.length < 2}>
             <ArrowRightLeft className="mr-2 h-4 w-4" /> Withdraw / Transfer
           </Button>
@@ -174,9 +180,9 @@ export function BankTransfers({ onChanged }: { onChanged?: () => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transfers.map((t, i) => (
+                {pageRows.map((t, i) => (
                   <TableRow key={t.id}>
-                    <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                    <TableCell className="text-muted-foreground">{start + i + 1}</TableCell>
                     <TableCell className="whitespace-nowrap">{new Date(t.transfer_date).toLocaleDateString("en-GB")}</TableCell>
                     <TableCell className="font-medium">{t.transfer_number}</TableCell>
                     <TableCell>{t.from_account}</TableCell>
@@ -200,6 +206,9 @@ export function BankTransfers({ onChanged }: { onChanged?: () => void }) {
             </Table>
             <p className="px-4 py-2 text-xs text-muted-foreground border-t">Bank charges in this list: KES {money(totalCharges)}</p>
           </div>
+        )}
+        {transfers && transfers.length > 0 && (
+          <TablePager {...pager} />
         )}
       </CardContent>
 

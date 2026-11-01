@@ -9,15 +9,15 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ChartSkeleton } from "@/components/ui/skeletons"
 import { 
-  FileText, 
-  Download, 
-  Printer, 
+  FileText,
   Calendar,
   TrendingUp,
   TrendingDown
 } from "lucide-react"
 import { financeApi, type IncomeStatement } from "@/lib/finance"
-import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
+import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
+import { DownloadButton } from "@/components/download-button"
+import type { ExportCell, TableExport } from "@/lib/table-export"
 
 export default function IncomeStatementPage() {
   const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
@@ -63,45 +63,27 @@ export default function IncomeStatementPage() {
     fetchIncomeStatement()
   }, [fromDate, toDate])
 
-  const handleExport = () => {
-    if (!incomeStatement) return
-    
-    const csvContent = [
-      ['Income Statement', '', ''],
-      [`Period: ${fromDate} to ${toDate}`, '', ''],
-      ['', '', ''],
-      ['Account', 'Amount', 'Percentage'],
-      ['REVENUE', '', ''],
-      ...incomeStatement.revenue.map((item: any) => [
-        `  ${item.accountName}`,
-        item.amount.toLocaleString(),
-        `${((item.amount / incomeStatement.totalRevenue) * 100).toFixed(1)}%`
-      ]),
-      ['Total Revenue', incomeStatement.totalRevenue.toLocaleString(), '100.0%'],
-      ['', '', ''],
-      ['EXPENSES', '', ''],
-      ...incomeStatement.expenses.map((item: any) => [
-        `  ${item.accountName}`,
-        item.amount.toLocaleString(),
-        `${((item.amount / incomeStatement.totalExpenses) * 100).toFixed(1)}%`
-      ]),
-      ['Total Expenses', incomeStatement.totalExpenses.toLocaleString(), '100.0%'],
-      ['', '', ''],
-      ['NET INCOME', incomeStatement.netIncome.toLocaleString(), ''],
-    ]
-
-    const csv = csvContent.map(row => row.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`], "csv")
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handlePrint = () => {
-    printWithFileName(documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`]))
+  // Revenue then expenses, each line with its share of the section, and net income.
+  const buildExport = (): TableExport => {
+    const s = incomeStatement!
+    const rows: ExportCell[][] = []
+    const section = (label: string, items: any[], total: number) => {
+      rows.push(["", label.toUpperCase(), null, ""])
+      items.forEach((item, i) => rows.push([i + 1, item.accountName, Number(item.amount) || 0, `${getPercentage(item.amount, total)}%`]))
+      rows.push(["", `Total ${label}`, total, total ? "100.0%" : ""])
+    }
+    section("Revenue", s.revenue, s.totalRevenue)
+    section("Expenses", s.expenses, s.totalExpenses)
+    return {
+      fileName: documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`]),
+      title: "Income Statement",
+      subtitle: `For the period ${new Date(fromDate).toLocaleDateString("en-GB")} to ${new Date(toDate).toLocaleDateString("en-GB")}`,
+      headers: ["S/No", "Account", "Amount", "% of Section"],
+      moneyColumns: [2],
+      rightColumns: [3],
+      rows,
+      footer: [["", "Net Income", s.netIncome, `${getPercentage(s.netIncome, s.totalRevenue)}% margin`]],
+    }
   }
 
   const formatCurrency = (amount: number) => {
@@ -126,16 +108,7 @@ export default function IncomeStatementPage() {
             Profit and loss statement showing revenues and expenses
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleExport} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={handlePrint} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
+        <DownloadButton title="Income Statement" build={buildExport} disabled={!incomeStatement} />
       </div>
 
       {/* Date Filter */}

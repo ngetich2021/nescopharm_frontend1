@@ -13,8 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { 
-  Download,
+import {
   Calendar,
   CheckCircle,
   AlertTriangle
@@ -28,6 +27,8 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
+import { DownloadButton } from "@/components/download-button"
+import type { ExportCell, TableExport } from "@/lib/table-export"
 
 interface TrialBalanceData {
   accounts: TrialBalance[]
@@ -74,32 +75,23 @@ export default function TrialBalancePage() {
     }
   }
 
-  const exportToCSV = () => {
-    if (!trialBalanceData) return
-
-    const headers = ['Account Code', 'Account Name', 'Account Type', 'Debit Balance', 'Credit Balance']
-    const rows = trialBalanceData.accounts.map(account => [
-      account.account_code,
-      account.account_name,
-      account.account_type,
-      account.debit_balance,
-      account.credit_balance
-    ])
-
-    // Add totals row
-    rows.push(['', '', 'TOTALS', trialBalanceData.totals.total_debits, trialBalanceData.totals.total_credits])
-
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = documentFileName([sessionCompanyName(), `Trial Balance ${filePeriod(null, asOfDate)}`], "csv")
-    a.click()
-    window.URL.revokeObjectURL(url)
+  // Accounts in the same type order as the screen, each with its debit or credit balance.
+  const buildExport = (): TableExport => {
+    const amount = (v: string) => (Number(v) > 0 ? Number(v) : null)
+    const types = [...accountTypeOrder, ...Object.keys(groupedAccounts).filter((t) => !accountTypeOrder.includes(t))]
+    const accounts = types.flatMap((type) => groupedAccounts[type] || [])
+    const totals = trialBalanceData?.totals
+    const footer: ExportCell[][] = [["", "", "", "Totals", Number(totals?.total_debits || 0), Number(totals?.total_credits || 0)]]
+    if (totals && !totals.is_balanced) footer.push(["", "", "", "Difference", Number(totals.difference || 0), null])
+    return {
+      fileName: documentFileName([sessionCompanyName(), `Trial Balance ${filePeriod(null, asOfDate)}`]),
+      title: "Trial Balance",
+      subtitle: `As of ${format(new Date(asOfDate), 'dd MMM yyyy')}`,
+      headers: ["S/No", "Account Code", "Account Name", "Account Type", "Debit Balance", "Credit Balance"],
+      moneyColumns: [4, 5],
+      rows: accounts.map((a, i) => [i + 1, a.account_code, a.account_name, a.account_type, amount(a.debit_balance), amount(a.credit_balance)]),
+      footer,
+    }
   }
 
   // Group accounts by type for better organization
@@ -112,7 +104,7 @@ export default function TrialBalancePage() {
     return groups
   }, {} as Record<string, TrialBalance[]>) || {}
 
-  const accountTypeOrder = ['asset', 'liability', 'equity', 'revenue', 'expense']
+  const accountTypeOrder = ['asset', 'liability', 'equity', 'income', 'revenue', 'expense']
 
   if (isLoading) {
     return (
@@ -132,10 +124,7 @@ export default function TrialBalancePage() {
             Verify that total debits equal total credits
           </p>
         </div>
-        <Button onClick={exportToCSV} variant="outline">
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
-        </Button>
+        <DownloadButton title="Trial Balance" build={buildExport} size="default" disabled={!trialBalanceData?.accounts.length} />
       </div>
 
       {/* Date Filter */}

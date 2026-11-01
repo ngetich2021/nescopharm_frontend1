@@ -10,9 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { ChartSkeleton } from "@/components/ui/skeletons"
 import { Progress } from "@/components/ui/progress"
 import { 
-  Calculator, 
-  Download, 
-  Printer, 
+  Calculator,
   Calendar,
   TrendingUp,
   TrendingDown,
@@ -22,7 +20,9 @@ import {
   BarChart3
 } from "lucide-react"
 import { financeApi, type FinancialRatios } from "@/lib/finance"
-import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
+import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
+import { DownloadButton } from "@/components/download-button"
+import type { ExportCell, TableExport } from "@/lib/table-export"
 
 export default function FinancialRatiosPage() {
   const [financialRatios, setFinancialRatios] = useState<FinancialRatios | null>(null)
@@ -84,48 +84,46 @@ export default function FinancialRatiosPage() {
     fetchFinancialRatios()
   }, [asOfDate, fromDate])
 
-  const handleExport = () => {
-    if (!financialRatios) return
-    
-    const csvContent = [
-      ['Financial Ratios Analysis', ''],
-      [`As of: ${asOfDate}`, ''],
-      [`Period: ${fromDate} to ${asOfDate}`, ''],
-      ['', ''],
-      ['LIQUIDITY RATIOS', ''],
-      ['Current Ratio', Number(financialRatios.liquidityRatios.currentRatio ?? 0).toFixed(2)],
-      ['Quick Ratio', Number(financialRatios.liquidityRatios.quickRatio ?? 0).toFixed(2)],
-      ['Cash Ratio', Number(financialRatios.liquidityRatios.cashRatio ?? 0).toFixed(2)],
-      ['', ''],
-      ['PROFITABILITY RATIOS', ''],
-      ['Gross Profit Margin', `${(financialRatios.profitabilityRatios.grossProfitMargin * 100).toFixed(1)}%`],
-      ['Net Profit Margin', `${(financialRatios.profitabilityRatios.netProfitMargin * 100).toFixed(1)}%`],
-      ['Return on Assets', `${(financialRatios.profitabilityRatios.returnOnAssets * 100).toFixed(1)}%`],
-      ['Return on Equity', `${(financialRatios.profitabilityRatios.returnOnEquity * 100).toFixed(1)}%`],
-      ['', ''],
-      ['LEVERAGE RATIOS', ''],
-      ['Debt to Equity', Number(financialRatios.leverageRatios.debtToEquity ?? 0).toFixed(2)],
-      ['Debt to Assets', `${(financialRatios.leverageRatios.debtToAssets * 100).toFixed(1)}%`],
-      ['Equity Ratio', `${(financialRatios.leverageRatios.equityRatio * 100).toFixed(1)}%`],
-      ['', ''],
-      ['EFFICIENCY RATIOS', ''],
-      ['Asset Turnover', Number(financialRatios.efficiencyRatios.assetTurnover ?? 0).toFixed(2)],
-      ['Inventory Turnover', Number(financialRatios.efficiencyRatios.inventoryTurnover ?? 0).toFixed(2)],
-      ['Receivable Turnover', Number(financialRatios.efficiencyRatios.receivableTurnover ?? 0).toFixed(2)],
+  // Each ratio group with its ratios, as shown on the cards (ratios to 2 places, margins as %).
+  const buildExport = (): TableExport => {
+    const r = financialRatios!
+    const groups: [string, [string, number, "ratio" | "percentage"][]][] = [
+      ["Liquidity Ratios", [
+        ["Current Ratio", r.liquidityRatios.currentRatio, "ratio"],
+        ["Quick Ratio", r.liquidityRatios.quickRatio, "ratio"],
+        ["Cash Ratio", r.liquidityRatios.cashRatio, "ratio"],
+      ]],
+      ["Profitability Ratios", [
+        ["Gross Profit Margin", r.profitabilityRatios.grossProfitMargin, "percentage"],
+        ["Net Profit Margin", r.profitabilityRatios.netProfitMargin, "percentage"],
+        ["Return on Assets", r.profitabilityRatios.returnOnAssets, "percentage"],
+        ["Return on Equity", r.profitabilityRatios.returnOnEquity, "percentage"],
+      ]],
+      ["Leverage Ratios", [
+        ["Debt to Equity", r.leverageRatios.debtToEquity, "ratio"],
+        ["Debt to Assets", r.leverageRatios.debtToAssets, "percentage"],
+        ["Equity Ratio", r.leverageRatios.equityRatio, "percentage"],
+      ]],
+      ["Efficiency Ratios", [
+        ["Asset Turnover", r.efficiencyRatios.assetTurnover, "ratio"],
+        ["Inventory Turnover", r.efficiencyRatios.inventoryTurnover, "ratio"],
+        ["Receivable Turnover", r.efficiencyRatios.receivableTurnover, "ratio"],
+      ]],
     ]
-
-    const csv = csvContent.map(row => row.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = documentFileName([sessionCompanyName(), `Financial Ratios ${filePeriod(null, asOfDate)}`], "csv")
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handlePrint = () => {
-    printWithFileName(documentFileName([sessionCompanyName(), `Financial Ratios ${filePeriod(null, asOfDate)}`]))
+    const rows: ExportCell[][] = []
+    let n = 0
+    for (const [group, ratios] of groups) {
+      rows.push(["", group.toUpperCase(), ""])
+      for (const [name, value, kind] of ratios) rows.push([++n, name, kind === "percentage" ? formatPercentage(value) : formatRatio(value)])
+    }
+    return {
+      fileName: documentFileName([sessionCompanyName(), `Financial Ratios ${filePeriod(null, asOfDate)}`]),
+      title: "Financial Ratios",
+      subtitle: `As of ${new Date(asOfDate).toLocaleDateString("en-GB")} · period from ${new Date(fromDate).toLocaleDateString("en-GB")}`,
+      headers: ["S/No", "Ratio", "Value"],
+      rightColumns: [2],
+      rows,
+    }
   }
 
   const formatPercentage = (value: number) => {
@@ -185,16 +183,7 @@ export default function FinancialRatiosPage() {
             Key financial ratios and performance indicators
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleExport} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={handlePrint} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
+        <DownloadButton title="Financial Ratios" build={buildExport} disabled={!financialRatios} />
       </div>
 
       {/* Date Filter */}

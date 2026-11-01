@@ -9,16 +9,16 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ChartSkeleton } from "@/components/ui/skeletons"
 import { 
-  FileText, 
-  Download, 
-  Printer, 
+  FileText,
   Calendar,
   TrendingUp,
   TrendingDown,
   DollarSign
 } from "lucide-react"
 import { financeApi, type CashFlowStatement } from "@/lib/finance"
-import { documentFileName, filePeriod, printWithFileName, sessionCompanyName } from "@/lib/document-names"
+import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
+import { DownloadButton } from "@/components/download-button"
+import type { ExportCell, TableExport } from "@/lib/table-export"
 
 export default function CashFlowStatementPage() {
   const [cashFlowStatement, setCashFlowStatement] = useState<CashFlowStatement | null>(null)
@@ -65,54 +65,31 @@ export default function CashFlowStatementPage() {
     fetchCashFlowStatement()
   }, [fromDate, toDate])
 
-  const handleExport = () => {
-    if (!cashFlowStatement) return
-    
-    const csvContent = [
-      ['Cash Flow Statement', '', ''],
-      [`Period: ${fromDate} to ${toDate}`, '', ''],
-      ['', '', ''],
-      ['OPERATING ACTIVITIES', '', ''],
-      ...cashFlowStatement.operatingActivities.map((item: any) => [
-        `  ${item.accountName}`,
-        item.amount.toLocaleString(),
-        ''
-      ]),
-      ['Net Cash from Operating Activities', '', ''],
-      ['', '', ''],
-      ['INVESTING ACTIVITIES', '', ''],
-      ...cashFlowStatement.investingActivities.map((item: any) => [
-        `  ${item.accountName}`,
-        item.amount.toLocaleString(),
-        ''
-      ]),
-      ['Net Cash from Investing Activities', '', ''],
-      ['', '', ''],
-      ['FINANCING ACTIVITIES', '', ''],
-      ...cashFlowStatement.financingActivities.map((item: any) => [
-        `  ${item.accountName}`,
-        item.amount.toLocaleString(),
-        ''
-      ]),
-      ['Net Cash from Financing Activities', '', ''],
-      ['', '', ''],
-      ['Net Change in Cash', cashFlowStatement.netCashFlow.toLocaleString(), ''],
-      ['Beginning Cash Balance', cashFlowStatement.beginningCash.toLocaleString(), ''],
-      ['Ending Cash Balance', cashFlowStatement.endingCash.toLocaleString(), ''],
-    ]
-
-    const csv = csvContent.map(row => row.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = documentFileName([sessionCompanyName(), `Cash Flow Statement ${filePeriod(fromDate, toDate)}`], "csv")
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handlePrint = () => {
-    printWithFileName(documentFileName([sessionCompanyName(), `Cash Flow Statement ${filePeriod(fromDate, toDate)}`]))
+  // Operating, investing and financing activities with their net totals, then the cash position.
+  const buildExport = (): TableExport => {
+    const s = cashFlowStatement!
+    const rows: ExportCell[][] = []
+    const section = (label: string, items: any[]) => {
+      rows.push(["", label.toUpperCase(), null])
+      items.forEach((item, i) => rows.push([i + 1, item.accountName, Number(item.amount) || 0]))
+      rows.push(["", `Net Cash from ${label}`, calculateSectionTotal(items)])
+    }
+    section("Operating Activities", s.operatingActivities)
+    section("Investing Activities", s.investingActivities)
+    section("Financing Activities", s.financingActivities)
+    return {
+      fileName: documentFileName([sessionCompanyName(), `Cash Flow Statement ${filePeriod(fromDate, toDate)}`]),
+      title: "Cash Flow Statement",
+      subtitle: `For the period ${new Date(fromDate).toLocaleDateString("en-GB")} to ${new Date(toDate).toLocaleDateString("en-GB")}`,
+      headers: ["S/No", "Account", "Amount"],
+      moneyColumns: [2],
+      rows,
+      footer: [
+        ["", "Net Change in Cash", s.netCashFlow],
+        ["", "Beginning Cash Balance", s.beginningCash],
+        ["", "Ending Cash Balance", s.endingCash],
+      ],
+    }
   }
 
   const formatCurrency = (amount: number) => {
@@ -167,16 +144,7 @@ export default function CashFlowStatementPage() {
             Statement of cash flows from operating, investing, and financing activities
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleExport} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={handlePrint} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
+        <DownloadButton title="Cash Flow Statement" build={buildExport} disabled={!cashFlowStatement} />
       </div>
 
       {/* Date Filter */}

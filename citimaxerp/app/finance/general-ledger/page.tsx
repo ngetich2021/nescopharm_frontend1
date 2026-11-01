@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/select"
 import {
   Search,
-  Filter,
-  Download,
   Calendar,
   Check,
   ChevronsUpDown,
@@ -42,6 +40,10 @@ import {
 } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
+import { DownloadButton } from "@/components/download-button"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
+import type { ExportCell, TableExport } from "@/lib/table-export"
+import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
 
 interface LedgerTransaction {
   id: string
@@ -68,6 +70,122 @@ interface LedgerAccount {
     total_credits: string
     closing_balance: string
   }
+}
+
+const num = (v: string | number | null | undefined) => Number(v) || 0
+
+// S/No, Account, Date, Reference, Description, Debit, Credit, Balance (blank Debit/Credit when nil).
+function ledgerRow(t: LedgerTransaction, index: number, account = ""): ExportCell[] {
+  return [
+    index + 1,
+    account,
+    format(new Date(t.date), 'dd MMM yyyy'),
+    t.reference,
+    t.description,
+    num(t.debit_amount) > 0 ? num(t.debit_amount) : null,
+    num(t.credit_amount) > 0 ? num(t.credit_amount) : null,
+    num(t.running_balance),
+  ]
+}
+
+function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAccount; buildExport: () => TableExport }) {
+  const { pageRows, start, pager } = usePaged(accountData.transactions)
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-center gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-3">
+              <span className="font-mono">{accountData.account.account_code}</span>
+              <span>{accountData.account.account_name}</span>
+              <Badge variant="secondary" className={getAccountTypeColor(accountData.account.account_type)}>
+                {accountData.account.account_type.toUpperCase()}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Opening Balance: {formatCurrency(accountData.opening_balance)}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="text-2xl font-bold">
+                {formatCurrency(accountData.totals.closing_balance)}
+              </div>
+              <div className="text-sm text-muted-foreground">Closing Balance</div>
+            </div>
+            <DownloadButton
+              title={`${accountData.account.account_code} ${accountData.account.account_name}`}
+              build={buildExport}
+              disabled={accountData.transactions.length === 0}
+            />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {accountData.transactions.length > 0 ? (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-14 text-center">S/No</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Debit</TableHead>
+                  <TableHead className="text-right">Credit</TableHead>
+                  <TableHead className="text-right">Running Balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pageRows.map((transaction, i) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell className="text-center text-muted-foreground tabular-nums">{start + i + 1}</TableCell>
+                    <TableCell>{format(new Date(transaction.date), 'MMM dd, yyyy')}</TableCell>
+                    <TableCell className="font-mono">{transaction.reference}</TableCell>
+                    <TableCell>{transaction.description}</TableCell>
+                    <TableCell className="font-mono text-right">
+                      {parseFloat(transaction.debit_amount) > 0 ? formatCurrency(transaction.debit_amount) : '-'}
+                    </TableCell>
+                    <TableCell className="font-mono text-right">
+                      {parseFloat(transaction.credit_amount) > 0 ? formatCurrency(transaction.credit_amount) : '-'}
+                    </TableCell>
+                    <TableCell className="font-mono text-right font-medium">
+                      {formatCurrency(transaction.running_balance)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <TablePager {...pager} />
+
+            {/* Account Totals */}
+            <div className="mt-4 border-t pt-4">
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="font-medium">Total Debits</div>
+                  <div className="font-mono">{formatCurrency(accountData.totals.total_debits)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-medium">Total Credits</div>
+                  <div className="font-mono">{formatCurrency(accountData.totals.total_credits)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-medium">Net Change</div>
+                  <div className="font-mono">
+                    {formatCurrency((parseFloat(accountData.totals.total_debits) - parseFloat(accountData.totals.total_credits)).toString())}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            No transactions found for the selected period
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function GeneralLedgerPage() {
@@ -184,13 +302,43 @@ export default function GeneralLedgerPage() {
       )
     : ledgerData
 
-  const exportToCSV = () => {
-    // Implementation for CSV export
-    toast({
-      title: "Feature Coming Soon",
-      description: "CSV export functionality will be available soon.",
-    })
+  const periodLine = `${format(new Date(dateFrom), 'dd MMM yyyy')} to ${format(new Date(dateTo), 'dd MMM yyyy')}`
+  const customerLine = customerId !== "all" ? ` · ${customerLabel(customerId)}` : ""
+
+  // Every account shown, each opened and closed with its balance, in one table.
+  const buildLedgerExport = (): TableExport => {
+    const rows: ExportCell[][] = []
+    for (const a of filteredLedgerData) {
+      const name = `${a.account.account_code} ${a.account.account_name}`
+      rows.push(["", name, "", "", "Opening balance", null, null, num(a.opening_balance)])
+      a.transactions.forEach((t, i) => rows.push(ledgerRow(t, i, name)))
+      rows.push(["", name, "", "", "Closing balance", num(a.totals.total_debits), num(a.totals.total_credits), num(a.totals.closing_balance)])
+    }
+    return {
+      fileName: documentFileName([sessionCompanyName(), `General Ledger ${filePeriod(dateFrom, dateTo)}`]),
+      title: "General Ledger",
+      subtitle: `${periodLine}${customerLine}`,
+      headers: ["S/No", "Account", "Date", "Reference", "Description", "Debit", "Credit", "Balance"],
+      moneyColumns: [5, 6, 7],
+      rows,
+    }
   }
+
+  const buildAccountExport = (a: LedgerAccount): TableExport => ({
+    fileName: documentFileName([sessionCompanyName(), `Ledger ${a.account.account_code} ${a.account.account_name} ${filePeriod(dateFrom, dateTo)}`]),
+    title: `${a.account.account_code} ${a.account.account_name}`,
+    subtitle: `General Ledger · ${periodLine}${customerLine}`,
+    details: [
+      ["Account type", a.account.account_type],
+      ["Opening balance", formatCurrency(a.opening_balance)],
+      ["Closing balance", formatCurrency(a.totals.closing_balance)],
+      ["Net change", formatCurrency(String(num(a.totals.total_debits) - num(a.totals.total_credits)))],
+    ],
+    headers: ["S/No", "Date", "Reference", "Description", "Debit", "Credit", "Running Balance"],
+    moneyColumns: [4, 5, 6],
+    rows: a.transactions.map((t, i) => { const r = ledgerRow(t, i); return [r[0], ...r.slice(2)] }),
+    footer: [["", "", "", "Totals", num(a.totals.total_debits), num(a.totals.total_credits), num(a.totals.closing_balance)]],
+  })
 
   if (isLoading) {
     return <FinanceTableSkeleton />
@@ -206,10 +354,7 @@ export default function GeneralLedgerPage() {
             View detailed account activity and running balances
           </p>
         </div>
-        <Button onClick={exportToCSV} variant="outline">
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
-        </Button>
+        <DownloadButton title="General Ledger" build={buildLedgerExport} size="default" disabled={filteredLedgerData.length === 0} />
       </div>
 
       {/* Filters */}
@@ -344,90 +489,11 @@ export default function GeneralLedgerPage() {
       {/* Ledger Data */}
       <div className="space-y-6">
         {filteredLedgerData.map((accountData) => (
-          <Card key={accountData.account.id}>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="flex items-center gap-3">
-                    <span className="font-mono">{accountData.account.account_code}</span>
-                    <span>{accountData.account.account_name}</span>
-                    <Badge variant="secondary" className={getAccountTypeColor(accountData.account.account_type)}>
-                      {accountData.account.account_type.toUpperCase()}
-                    </Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    Opening Balance: {formatCurrency(accountData.opening_balance)}
-                  </CardDescription>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(accountData.totals.closing_balance)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Closing Balance</div>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {accountData.transactions.length > 0 ? (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Reference</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Debit</TableHead>
-                        <TableHead>Credit</TableHead>
-                        <TableHead>Running Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {accountData.transactions.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{format(new Date(transaction.date), 'MMM dd, yyyy')}</TableCell>
-                          <TableCell className="font-mono">{transaction.reference}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell className="font-mono text-right">
-                            {parseFloat(transaction.debit_amount) > 0 ? formatCurrency(transaction.debit_amount) : '-'}
-                          </TableCell>
-                          <TableCell className="font-mono text-right">
-                            {parseFloat(transaction.credit_amount) > 0 ? formatCurrency(transaction.credit_amount) : '-'}
-                          </TableCell>
-                          <TableCell className="font-mono text-right font-medium">
-                            {formatCurrency(transaction.running_balance)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  
-                  {/* Account Totals */}
-                  <div className="mt-4 border-t pt-4">
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="font-medium">Total Debits</div>
-                        <div className="font-mono">{formatCurrency(accountData.totals.total_debits)}</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-medium">Total Credits</div>
-                        <div className="font-mono">{formatCurrency(accountData.totals.total_credits)}</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-medium">Net Change</div>
-                        <div className="font-mono">
-                          {formatCurrency((parseFloat(accountData.totals.total_debits) - parseFloat(accountData.totals.total_credits)).toString())}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No transactions found for the selected period
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <LedgerAccountCard
+            key={accountData.account.id}
+            accountData={accountData}
+            buildExport={() => buildAccountExport(accountData)}
+          />
         ))}
         
         {filteredLedgerData.length === 0 && (
