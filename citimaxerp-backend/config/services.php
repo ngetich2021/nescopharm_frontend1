@@ -42,4 +42,13 @@ return [
         'storage_bucket' => env('SUPABASE_STORAGE_BUCKET', 'chat-media'),
     ],
 
+    // In-app AI assistant (Groq's OpenAI-compatible API). The key stays on the server.
+    'groq' => [
+        'key' => env('GROQ_API_KEY'),
+        'model' => env('GROQ_MODEL', 'openai/gpt-oss-120b'),
+        // Used when the main model is rate limited (Groq counts each model's limit separately).
+        'fallback_model' => env('GROQ_FALLBACK_MODEL', 'openai/gpt-oss-20b'),
+        'url' => env('GROQ_URL', 'https://api.groq.com/openai/v1/chat/completions'),
+    ],
+
 ];

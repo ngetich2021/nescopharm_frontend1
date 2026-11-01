@@ -1,6 +1,7 @@
 import type React from "react"
 import { Sidebar } from "@/components/sidebar/sidebar"
 import { TopNav } from "@/components/navigation/top-nav"
+import { AssistantWidget } from "@/components/assistant/assistant-widget"
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -17,6 +18,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-auto bg-gray-50 p-2 sm:p-4 lg:p-6 print:p-0 print:bg-white print:overflow-visible print-content-wrapper">{children}</main>
       </div>
+      <AssistantWidget />
     </div>
   )
 }

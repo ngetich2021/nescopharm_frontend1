@@ -441,6 +441,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Order routes
     Route::get('/search', \App\Http\Controllers\GlobalSearchController::class)->name('search.global');
+    // In-app AI assistant (answers within the user's permissions).
+    Route::post('/assistant/chat', [\App\Http\Controllers\AssistantController::class, 'chat'])
+        ->middleware('throttle:20,1')->name('assistant.chat');
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
