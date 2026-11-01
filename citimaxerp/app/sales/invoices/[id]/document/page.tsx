@@ -3,7 +3,9 @@
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import type { Invoice } from "@/lib/invoices"
+import { invoiceExport, type Invoice } from "@/lib/invoices"
+import { exportTable } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
 import type { Company } from "@/lib/company"
 import type { CustomerProfileData } from "@/lib/customers"
 import { buildBuyerBlock, mergeCustomerSources } from "@/lib/customer-address"
@@ -229,19 +231,13 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleDownloadPDF}
+              <ExportMenu
+                label="Download"
                 disabled={isDownloading}
-              >
-                {isDownloading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                {isDownloading ? 'Generating...' : 'Download PDF'}
-              </Button>
+                onExport={(format) => format === "pdf"
+                  ? handleDownloadPDF()
+                  : exportTable(format, invoiceExport(invoice), company)}
+              />
               <Button variant="outline" size="sm" asChild>
                 <FileLink href={RETURN_POLICY_PDF}>
                   <FileText className="h-4 w-4 mr-2" />

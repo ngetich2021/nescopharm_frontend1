@@ -14,6 +14,9 @@ import { importDeliveryInvoices, getTransporters, Transporter, exportDeliveryInv
 import { getSupplierStatement, SupplierStatement } from "@/lib/suppliers";
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names";
 import { printHtml } from "@/lib/print-frame";
+import { exportTable, type ExportFormat } from "@/lib/table-export";
+import { ExportMenu } from "@/components/export-menu";
+import { useOptionalAuth } from "@/lib/auth-context";
 
 const money = (n: number) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -174,6 +177,7 @@ export function DeliveryInvoicesImport({ onImported }: { onImported: () => void 
  */
 export function TransporterStatement() {
   const { toast } = useToast();
+  const userProfile = useOptionalAuth()?.userProfile;
   const [open, setOpen] = useState(false);
   const [transporters, setTransporters] = useState<Transporter[] | null>(null);
   const [supplierId, setSupplierId] = useState("");
@@ -212,21 +216,17 @@ export function TransporterStatement() {
   const transporter = transporters?.find((t) => t.supplier_id === supplierId);
   const periodLabel = from || to ? `${from ? shortDate(from) : "start"} to ${to ? shortDate(to) : "today"}` : "All time";
 
-  const downloadExcel = () => {
+  const downloadStatement = async (format: ExportFormat) => {
     if (!statement || !transporter) return;
-    const rows = [
-      ["Transporter Statement", transporter.name],
-      ["Period", periodLabel],
-      [],
-      ["S/No.", "Date", "Reference", "Description", "Billed", "Paid", "Balance"],
-      ...statement.entries.map((e, i) => [i + 1, shortDate(e.date), e.reference, e.description, e.billed || "", e.paid || "", e.balance]),
-      ["", "", "", "Total", statement.totals.billed, statement.totals.paid, statement.totals.balance],
-    ];
-    const sheet = XLSX.utils.aoa_to_sheet(rows);
-    sheet["!cols"] = [{ wch: 7 }, { wch: 11 }, { wch: 14 }, { wch: 60 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, "Statement");
-    XLSX.writeFile(book, documentFileName([sessionCompanyName(), transporter.name, "Transporter Statement", todayFileDate()], "xlsx"));
+    await exportTable(format, {
+      fileName: documentFileName([sessionCompanyName(), transporter.name, "Transporter Statement", todayFileDate()]),
+      title: `Transporter Statement - ${transporter.name}`,
+      subtitle: periodLabel,
+      headers: ["S/No.", "Date", "Reference", "Description", "Billed", "Paid", "Balance"],
+      moneyColumns: [4, 5, 6],
+      rows: statement.entries.map((e, i) => [i + 1, shortDate(e.date), e.reference ?? "", e.description ?? "", Number(e.billed) || null, Number(e.paid) || null, Number(e.balance) || 0]),
+      footer: [["", "", "", "Total", Number(statement.totals.billed) || 0, Number(statement.totals.paid) || 0, Number(statement.totals.balance) || 0]],
+    }, userProfile?.company);
   };
 
   const print = () => {
@@ -302,11 +302,9 @@ export function TransporterStatement() {
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={downloadExcel}><Download className="h-4 w-4 mr-2" />Statement (Excel)</Button>
-                  <Button variant="outline" size="sm" onClick={() => exportDeliveryInvoicesToExcel({ supplierId }).catch((e) =>
-                    toast({ title: "Export failed", description: e.message, variant: "destructive" }))}>
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />Their Invoices (Excel)
-                  </Button>
+                  <ExportMenu label="Statement" onExport={downloadStatement} />
+                  {/* Their invoices come as the Excel sheet the delivery invoices import reads back. */}
+                  <ExportMenu label="Their Invoices" formats={["xlsx"]} onExport={() => exportDeliveryInvoicesToExcel({ supplierId })} />
                   <Button variant="outline" size="sm" onClick={print}><Printer className="h-4 w-4 mr-2" />Print</Button>
                 </div>
               </div>

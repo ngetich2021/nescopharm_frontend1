@@ -33,6 +33,7 @@ import { toast } from "@/components/ui/use-toast"
 import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate, declinedDeletesAt, orderEditingOpen } from "@/lib/orders"
 import { matchesDocNumber } from "@/lib/utils"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
 
 interface OrdersTableProps {
   initialOrders?: Order[]
@@ -167,266 +168,28 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
       .join(" ")
   }
 
-  const exportToCSV = () => {
-    const ordersToExport =
-      selectedOrders.length > 0 ? filteredOrders.filter((order) => selectedOrders.includes(order.id)) : filteredOrders
-
-    const headers = ["Order Number", "Customer", "Date", "Status", "Total Amount"]
-    const csvContent = [
-      headers.join(","),
-      ...ordersToExport.map((order) =>
-        [
-          formatOrderNumber(order),
-          (order.customer as any)?.business_name || order.customer?.name || "Unknown",
-          new Date(order.order_date || order.created_at).toLocaleDateString(),
-          formatStatus(order.status),
-          Number.parseFloat(order.final_amount || order.total_amount || "0").toFixed(2),
-        ].join(","),
-      ),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", `orders_export_${new Date().toISOString().split("T")[0]}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    toast({
-      title: "Export Successful",
-      description: `Exported ${ordersToExport.length} orders to CSV`,
-    })
-  }
-
-  const exportToPDF = async () => {
-    const ordersToExport =
-      selectedOrders.length > 0 ? filteredOrders.filter((order) => selectedOrders.includes(order.id)) : filteredOrders
-
-    toast({
-      title: "Preparing PDF",
-      description: "Your PDF is being generated...",
-    })
-
-    try {
-      const iframe = document.createElement("iframe")
-      iframe.style.position = "absolute"
-      iframe.style.top = "-9999px"
-      document.body.appendChild(iframe)
-
-      const doc = iframe.contentDocument
-      if (!doc) throw new Error("Could not create document")
-
-      doc.open()
-      doc.write(`
-      <html>
-        <head>
-          <title>Orders Export</title>
-          <style>
-            body { font-family: Arial, sans-serif; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-            th { background-color: #f3f4f6; font-weight: bold; }
-            .header { margin-bottom: 20px; }
-            .header h1 { color: #1E2764; margin-bottom: 5px; }
-            .header p { color: #666; margin-top: 0; }
-            .badge {
-              display: inline-block;
-              padding: 3px 8px;
-              border-radius: 4px;
-              font-size: 12px;
-            }
-            .badge-pending { border: 1px solid #f59e0b; color: #f59e0b; background-color: #fffbeb; }
-            .badge-paid { border: 1px solid #10b981; color: #10b981; background-color: #ecfdf5; }
-            .badge-failed { border: 1px solid #ef4444; color: #ef4444; background-color: #fef2f2; }
-            .badge-processing { border: 1px solid #3b82f6; color: #3b82f6; background-color: #eff6ff; }
-            .badge-cancelled { border: 1px solid #6b7280; color: #6b7280; background-color: #f3f4f6; }
-            .badge-completed { border: 1px solid #10b981; color: #10b981; background-color: #ecfdf5; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Orders Export</h1>
-            <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Order Number</th>
-                <th>Customer</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Total Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${ordersToExport
-                .map((order) => {
-                  const status = formatStatus(order.status).toLowerCase()
-                  let badgeClass = "badge-pending"
-
-                  if (status.includes("paid") || status.includes("complete")) {
-                    badgeClass = "badge-paid"
-                  } else if (status.includes("fail")) {
-                    badgeClass = "badge-failed"
-                  } else if (status.includes("process")) {
-                    badgeClass = "badge-processing"
-                  } else if (status.includes("cancel")) {
-                    badgeClass = "badge-cancelled"
-                  }
-
-                  return `
-                      <tr>
-                        <td>${formatOrderNumber(order)}</td>
-                        <td>${order.customer?.name || "Unknown"}</td>
-                        <td>${new Date(order.order_date || order.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <span class="badge ${badgeClass}">
-                            ${formatStatus(order.status)}
-                          </span>
-                        </td>
-                        <td>KES ${(Number.parseFloat(order.final_amount || order.total_amount || "0")).toFixed(2)}</td>
-                      </tr>
-                    `
-                })
-                .join("")}
-            </tbody>
-          </table>
-          <div class="footer">
-            <p>Cherry CRM - Orders Export</p>
-          </div>
-        </body>
-      </html>
-    `)
-      doc.close()
-
-      iframe.contentWindow?.focus()
-      iframe.contentWindow?.print()
-
-      setTimeout(() => {
-        document.body.removeChild(iframe)
-      }, 1000)
-
-      toast({
-        title: "Export Successful",
-        description: `Exported ${ordersToExport.length} orders to PDF`,
-      })
-    } catch (error) {
-      toast({
-        title: "Export Failed",
-        description: "There was an error generating the PDF",
-        variant: "destructive",
-      })
+  // The ticked orders, or every order matching the search and status.
+  const exportOrders = useTableExport(() => {
+    const list = selectedOrders.length > 0 ? filteredOrders.filter((order) => selectedOrders.includes(order.id)) : filteredOrders
+    const amount = (order: Order) => Number.parseFloat(order.final_amount || order.total_amount || "0") || 0
+    return {
+      fileName: `orders-${new Date().toISOString().split("T")[0]}`,
+      title: "Orders",
+      subtitle: statusFilter !== "all" ? `Status: ${formatStatus(statusFilter)}` : undefined,
+      headers: ["S/No", "Order Number", "Invoice", "Customer", "Date", "Status", "Total Amount"],
+      moneyColumns: [6],
+      rows: list.map((order, i) => [
+        i + 1,
+        formatOrderNumber(order),
+        order.invoice?.invoice_number || "",
+        (order.customer as any)?.business_name || order.customer?.name || "Unknown",
+        new Date(order.order_date || order.created_at).toLocaleDateString("en-GB"),
+        formatStatus(order.status),
+        amount(order),
+      ]),
+      footer: [["", "", "", "", "", "Total", list.reduce((s, o) => s + amount(o), 0)]],
     }
-  }
-
-  const printOrders = () => {
-    const ordersToPrint =
-      selectedOrders.length > 0 ? filteredOrders.filter((order) => selectedOrders.includes(order.id)) : filteredOrders
-
-    const iframe = document.createElement("iframe")
-    iframe.style.position = "absolute"
-    iframe.style.top = "-9999px"
-    document.body.appendChild(iframe)
-
-    const doc = iframe.contentDocument
-    if (!doc) return
-
-    doc.open()
-    doc.write(`
-    <html>
-      <head>
-        <title>Orders</title>
-        <style>
-          body { font-family: Arial, sans-serif; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-          th { background-color: #f3f4f6; font-weight: bold; }
-          .header { margin-bottom: 20px; }
-          .header h1 { color: primary; margin-bottom: 5px; }
-          .header p { color: #666; margin-top: 0; }
-          .badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-          }
-          .badge-pending { border: 1px solid #f59e0b; color: #f59e0b; background-color: #fffbeb; }
-          .badge-paid { border: 1px solid #10b981; color: #10b981; background-color: #ecfdf5; }
-          .badge-processing { border: 1px solid #3b82f6; color: #3b82f6; background-color: #eff6ff; }
-          .badge-cancelled { border: 1px solid #6b7280; color: #6b7280; background-color: #f3f4f6; }
-          @media print {
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Orders</h1>
-          <p>Printed on ${new Date().toLocaleDateString()}</p>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Order Number</th>
-              <th>Customer</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Total Amount</th>
-            </tr>
-          </thead>
-            <tbody>
-            ${ordersToPrint
-              .map((order) => {
-                const status = formatStatus(order.status).toLowerCase()
-                let badgeClass = "badge-pending"
-
-                if (status.includes("paid") || status.includes("complete")) {
-                  badgeClass = "badge-paid"
-                } else if (status.includes("fail")) {
-                  badgeClass = "badge-failed"
-                } else if (status.includes("process")) {
-                  badgeClass = "badge-processing"
-                } else if (status.includes("cancel")) {
-                  badgeClass = "badge-cancelled"
-                }
-
-                return `
-                    <tr>
-                      <td>${formatOrderNumber(order)}</td>
-                      <td>${(order.customer as any)?.business_name || order.customer?.name || "Unknown"}</td>
-                      <td>${new Date(order.order_date || order.created_at).toLocaleDateString()}</td>
-                      <td>
-                        <span class="badge ${badgeClass}">
-                          ${formatStatus(order.status)}
-                        </span>
-                      </td>
-                      <td>KES ${(Number.parseFloat(order.final_amount || order.total_amount || "0")).toFixed(2)}</td>
-                    </tr>
-                  `
-              })
-              .join("")}
-          </tbody>
-        </table>
-      </body>
-    </html>
-  `)
-    doc.close()
-
-    iframe.contentWindow?.focus()
-    iframe.contentWindow?.print()
-
-    setTimeout(() => {
-      document.body.removeChild(iframe)
-    }, 1000)
-
-    toast({
-      title: "Print Initiated",
-      description: `Printing ${ordersToPrint.length} orders`,
-    })
-  }
+  })
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
@@ -516,28 +279,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
               </Button>
             </CreateOrderModal>
           </PermissionGuard>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="border-gray-800 text-gray-800 hover:bg-gray-100"
-              >
-                <Download className="mr-2 h-4 w-4" /> Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportToCSV}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportToPDF}>
-                <FilePdf className="mr-2 h-4 w-4" /> Export as PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={printOrders}>
-                <Printer className="mr-2 h-4 w-4" /> Print
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu onExport={exportOrders} disabled={filteredOrders.length === 0} />
           <Button
             variant="outline"
             size="sm"

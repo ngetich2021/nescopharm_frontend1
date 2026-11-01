@@ -39,6 +39,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SupplierDetailsSheet } from "./supplier-details-sheet"
 import { CreateSupplierSheet } from "./components/create-supplier-sheet"
 import { Supplier, getSuppliers, deleteSupplier, exportSuppliers, importSuppliers } from "@/lib/suppliers"
+import { ExportMenu } from "@/components/export-menu"
+import type { ExportFormat } from "@/lib/table-export"
 import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -244,24 +246,8 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
     }
   }
 
-  const handleExport = async () => {
-    setIsExporting(true)
-    try {
-      await exportSuppliers()
-      toast({
-        title: "Success",
-        description: "Suppliers exported successfully."
-      })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to export suppliers",
-        variant: "destructive"
-      })
-    } finally {
-      setIsExporting(false)
-    }
-  }
+  // Excel is the sheet the suppliers import reads back; PDF and CSV the same list for reading.
+  const handleExport = (format: ExportFormat) => exportSuppliers(format)
 
   // Blank sheet with the same columns as Export, plus a guide tab, for capturing new suppliers.
   const handleTemplate = async () => {
@@ -386,15 +372,7 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                 Add Supplier
               </Button>
             </PermissionGuard>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExport}
-              disabled={isExporting}
-            >
-              {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-              Export
-            </Button>
+            <ExportMenu onExport={handleExport} />
             <Button variant="outline" size="sm" onClick={handleTemplate}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Template

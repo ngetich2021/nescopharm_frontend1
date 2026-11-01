@@ -266,6 +266,7 @@ export function ProductReceiptPage() {
         
         <ProductReceiptTable
           receipts={paginatedProductReceipts}
+          allReceipts={filteredProductReceipts}
           loading={loading}
           onViewReceipt={handleViewProductReceipt}
           onEditReceipt={handleEditProductReceipt}

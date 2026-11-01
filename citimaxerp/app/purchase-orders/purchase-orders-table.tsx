@@ -38,7 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getPurchaseOrders, getPurchaseOrder, deletePurchaseOrder, approvePurchaseOrder, updatePurchaseOrder, itemLabel, receiveGoodsUrl, purchaseOrderExport, PurchaseOrder } from "@/lib/purchaseorders"
 import { exportTable } from "@/lib/table-export"
-import { DownloadFormatDialog } from "@/components/download-format-dialog"
+import { ExportSubMenu } from "@/components/export-menu"
 import { useRouter } from "next/navigation"
 import {
   AlertDialog,
@@ -89,7 +89,6 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
   const [approveOrder, setApproveOrder] = useState<PurchaseOrder | null>(null)
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
-  const [downloadOrder, setDownloadOrder] = useState<PurchaseOrder | null>(null)
 
   useEffect(() => {
     fetchOrders()
@@ -427,10 +426,13 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDownloadOrder(order); }}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </DropdownMenuItem>
+                        <ExportSubMenu
+                          onExport={async (format) => {
+                            // The full order, so supplier, store and lines are all filled in.
+                            const full = await getPurchaseOrder(order.id)
+                            await exportTable(format, purchaseOrderExport(full), userProfile?.company)
+                          }}
+                        />
                         {isEditable(order) && (
                           <PermissionGuard permissions={["can_update_purchase_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditClick(order); }}>
@@ -566,16 +568,6 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
           setReturnOrder(null)
           fetchOrders()
           if (onDataChanged) onDataChanged()
-        }}
-      />
-      <DownloadFormatDialog
-        open={!!downloadOrder}
-        onOpenChange={(v) => { if (!v) setDownloadOrder(null) }}
-        title={downloadOrder?.order_number ?? "purchase order"}
-        onDownload={async (format) => {
-          // The full order, so supplier, store and lines are all filled in.
-          const full = await getPurchaseOrder(downloadOrder!.id)
-          await exportTable(format, purchaseOrderExport(full), userProfile?.company)
         }}
       />
       {/* Approve Confirmation Dialog */}

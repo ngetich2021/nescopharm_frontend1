@@ -4,9 +4,9 @@ import * as React from "react";
 import { format } from "date-fns";
 import { ProductReceiptDetailsModal } from "./ProductReceiptDetailsModal";
 import { getProductReceipt, productReceiptExport } from "@/lib/productreceipt";
-import { exportTable } from "@/lib/table-export";
+import { exportTable, type ExportFormat } from "@/lib/table-export";
 import { useAuth } from "@/lib/auth-context";
-import { DownloadFormatDialog } from "@/components/download-format-dialog";
+import { ExportMenu, ExportSubMenu, useTableExport } from "@/components/export-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,7 @@ interface ProductReceiptTableProps {
   totalItems: number;
   onRefresh: () => void;
   onCreateNew: () => void;
+  allReceipts?: any[]; // every receipt matching the search, for Export (default: the page shown)
 }
 
 export default function ProductReceiptTable({
@@ -70,11 +71,34 @@ export default function ProductReceiptTable({
   totalItems,
   onRefresh,
   onCreateNew,
+  allReceipts,
 }: ProductReceiptTableProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [downloadReceipt, setDownloadReceipt] = useState<any | null>(null);
   const { userProfile } = useAuth();
+
+  // Every receipt matching the search, not just the page shown.
+  const exportList = useTableExport(() => {
+    const list = allReceipts ?? receipts;
+    const qty = (r: any) => (r.product_receipt_items ?? []).reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
+    return {
+      fileName: `product-receipts-${format(new Date(), "yyyy-MM-dd")}`,
+      title: "Product Receipts",
+      headers: ["S/No", "Receipt #", "Reference", "Date", "Store", "Supplier", "Document Type", "Items", "Total Qty", "Received By"],
+      rows: list.map((r: any, i: number) => [
+        i + 1,
+        r.product_receipt_number || "",
+        r.reference_number || "",
+        r.created_at ? format(new Date(r.created_at), "dd MMM yyyy") : "",
+        r.store?.name || "",
+        r.supplier?.name || "",
+        String(r.document_type || "").replace(/_/g, " "),
+        r.items_count || 0,
+        qty(r),
+        [r.recipient?.first_name, r.recipient?.last_name].filter(Boolean).join(" "),
+      ]),
+    };
+  });
 
   const openDetails = (id: string) => {
     setSelectedId(id);
@@ -121,10 +145,7 @@ export default function ProductReceiptTable({
               <Plus className="mr-2 h-4 w-4" />
               Create Receipt
             </Button>
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            <ExportMenu onExport={exportList} disabled={!(allReceipts ?? receipts).length} />
             <Button variant="outline" size="sm" onClick={onRefresh}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
@@ -253,7 +274,11 @@ export default function ProductReceiptTable({
                         <ActionsDropdown
                           receipt={receipt}
                           onView={() => openDetails(receipt.id)}
-                          onDownload={() => setDownloadReceipt(receipt)}
+                          onDownload={async (format) => {
+                            // The full receipt, so its items are all there.
+                            const { receipt: full } = await getProductReceipt(receipt.id);
+                            await exportTable(format, productReceiptExport(full), userProfile?.company);
+                          }}
                           onEdit={() => onEditReceipt(receipt)}
                           onDelete={() => onDeleteReceipt(receipt)}
                         />
@@ -314,16 +339,6 @@ export default function ProductReceiptTable({
           </div>
         </div>
       </div>
-      <DownloadFormatDialog
-        open={!!downloadReceipt}
-        onOpenChange={(v) => { if (!v) setDownloadReceipt(null); }}
-        title={downloadReceipt?.product_receipt_number || "receipt"}
-        onDownload={async (format) => {
-          // The full receipt, so its items are all there.
-          const { receipt } = await getProductReceipt(downloadReceipt.id);
-          await exportTable(format, productReceiptExport(receipt), userProfile?.company);
-        }}
-      />
       <ProductReceiptDetailsModal
         open={detailsModalOpen}
         onOpenChange={(v: boolean) => { 
@@ -352,7 +367,7 @@ function ActionsDropdown({
 }: {
   receipt: any;
   onView: () => void;
-  onDownload: () => void;
+  onDownload: (format: ExportFormat) => Promise<void>;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -372,9 +387,7 @@ function ActionsDropdown({
         <DropdownMenuItem onClick={onView}>
           <Eye className="h-4 w-4 mr-2" /> View Details
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onDownload}>
-          <Download className="h-4 w-4 mr-2" /> Download
-        </DropdownMenuItem>
+        <ExportSubMenu onExport={onDownload} />
         {canEdit && (
           <DropdownMenuItem onClick={onEdit}>
             <Edit className="h-4 w-4 mr-2" /> Edit Receipt

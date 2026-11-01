@@ -14,6 +14,9 @@ import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-r
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, filePeriod, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 
 function toNumber(amount: string | number | null | undefined): number {
   if (amount === null || amount === undefined) return 0
@@ -69,6 +72,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
+  const company = useOptionalAuth()?.userProfile?.company
   const statementRef = useRef<HTMLDivElement>(null)
 
   const [statement, setStatement] = useState<CustomerStatement | null>(null)
@@ -308,6 +312,36 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     }
   }
 
+  // PDF is the statement as laid out on screen; CSV every section of it; Excel the transaction
+  // statement with the customer, period and totals.
+  const handleDownload = async (format: ExportFormat) => {
+    if (format === "pdf") return handleDownloadPDF()
+    if (format === "csv") return handleDownloadCSV()
+    await exportTable("xlsx", {
+      fileName: fileBase,
+      title: "Statement of Account",
+      subtitle: statement.period.label,
+      details: [
+        ["Customer", customerName],
+        ["Account No.", account?.account_number ?? "-"],
+        ["Statement date", statementDate],
+        ["Total outstanding", `KES ${closing.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+      ],
+      headers: ["S/No", "Date", "Reference", "Description", "Debit", "Credit", "Balance"],
+      moneyColumns: [4, 5, 6],
+      rows: transactions.map((t, i) => [
+        i + 1,
+        formatDate(t.date),
+        t.reference,
+        t.description,
+        t.debit ? toNumber(t.debit) : null,
+        t.credit ? toNumber(t.credit) : null,
+        toNumber(t.balance),
+      ]),
+      footer: [["", "", "", "Totals", totalDebits, totalCredits, closing]],
+    }, company)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
       {/* Narrower page margins than the app default, for fewer printed pages. */}
@@ -364,18 +398,11 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                CSV
-              </Button>
               <Button variant="outline" size="sm" onClick={() => printWithFileName(fileBase)}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadPDF} disabled={isDownloading}>
-                {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                {isDownloading ? "Generating..." : "Download PDF"}
-              </Button>
+              <ExportMenu onExport={handleDownload} label="Download" disabled={isDownloading} />
             </div>
           </div>
         </div>

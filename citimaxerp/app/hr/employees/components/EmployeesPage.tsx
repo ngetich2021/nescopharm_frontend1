@@ -52,6 +52,7 @@ import { EmployeeDetailsSheet } from "./EmployeeDetailsSheet"
 import { EditEmployeeSheet } from "./EditEmployeeSheet"
 import { DeleteEmployeeDialog } from "./DeleteEmployeeDialog"
 import { formatCurrency } from "@/lib/utils"
+import { useTableExport } from "@/components/export-menu"
 
 export function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -229,48 +230,25 @@ export function EmployeesPage() {
     fetchEmployeeStatistics()
   }
 
-  const handleExportExcel = () => {
-    if (employees.length === 0) {
-      toast({
-        title: "No Data",
-        description: "No employees to export.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const headers = ["Employee #", "Name", "Email", "Phone", "Department", "Position", "Employment Type", "Hire Date", "Basic Salary", "Status"]
-    const rows = employees.map(emp => [
+  const handleExportExcel = useTableExport(() => ({
+    fileName: `employees-${new Date().toISOString().slice(0, 10)}`,
+    title: "Employees",
+    headers: ["S/No", "Employee #", "Name", "Email", "Phone", "Department", "Position", "Employment Type", "Hire Date", "Basic Salary", "Status"],
+    moneyColumns: [9],
+    rows: employees.map((emp, i) => [
+      i + 1,
       emp.employee_number || "",
       `${emp.first_name || ""} ${emp.last_name || ""}`.trim(),
       emp.email || "",
-      emp.phone_number || "",
+      (emp as any).phone_number || emp.phone || "",
       emp.department || "",
       emp.position || "",
       emp.employment_type || "",
-      emp.hire_date ? new Date(emp.hire_date).toLocaleDateString() : "",
-      emp.basic_salary ? emp.basic_salary.toLocaleString() : "",
-      emp.termination_date ? "Terminated" : "Active"
-    ])
-
-    let csvContent = headers.map(h => `"${h}"`).join(",") + "\n"
-    rows.forEach(row => {
-      csvContent += row.map(cell => `"${String(cell || "").replace(/"/g, '""')}"`).join(",") + "\n"
-    })
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `employees_${new Date().toISOString().slice(0, 10)}.csv`)
-    link.click()
-    URL.revokeObjectURL(url)
-
-    toast({
-      title: "Success",
-      description: `Exported ${employees.length} employees to Excel.`,
-    })
-  }
+      emp.hire_date ? new Date(emp.hire_date).toLocaleDateString("en-GB") : "",
+      Number(emp.basic_salary) || 0,
+      emp.termination_date ? "Terminated" : "Active",
+    ]),
+  }))
 
   return (
     <div className="space-y-6">

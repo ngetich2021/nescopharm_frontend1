@@ -25,6 +25,9 @@ import {
   type PriceListImportResult,
 } from "@/lib/price-lists"
 import * as XLSX from "xlsx"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
 const OTHER = "__other__"
@@ -70,6 +73,7 @@ const changeBadge = (status: string, priceChanged: boolean) => {
 
 export default function PriceListsPage() {
   const { toast } = useToast()
+  const userProfile = useOptionalAuth()?.userProfile
   const [listChoice, setListChoice] = useState<string>("NSPH")
   const [customList, setCustomList] = useState("")
   const [file, setFile] = useState<File | null>(null)
@@ -109,28 +113,31 @@ export default function PriceListsPage() {
 
   // Downloads the list as it stands now, in the importer's own columns, so prices can be
   // edited in Excel and the same sheet uploaded back.
-  const exportList = async () => {
+  // Excel is that sheet; PDF and CSV are the same rows, headed with the company letterhead.
+  const exportList = async (format: ExportFormat) => {
     if (!listName) return
-    setBusy("export")
-    try {
-      const res = await fetchPriceList(listName)
-      if (res.rows.length === 0) {
-        toast({ title: "Nothing to export", description: res.message })
-        return
-      }
-      const sheet = XLSX.utils.aoa_to_sheet([
-        PRICE_LIST_TEMPLATE_HEADERS,
-        ...res.rows.map((r) => [r.sheet_code, r.description ?? "", r.price, r.unit_of_measure ?? "", r.tax_status]),
-      ])
+    const res = await fetchPriceList(listName)
+    if (res.rows.length === 0) {
+      toast({ title: "Nothing to export", description: res.message })
+      return
+    }
+    const rows = res.rows.map((r) => [r.sheet_code, r.description ?? "", Number(r.price), r.unit_of_measure ?? "", r.tax_status])
+    const fileName = documentFileName([sessionCompanyName(), `${res.list_name} Price List`, todayFileDate()])
+    if (format === "xlsx") {
+      const sheet = XLSX.utils.aoa_to_sheet([PRICE_LIST_TEMPLATE_HEADERS, ...rows])
       const book = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(book, sheet, res.list_name)
-      XLSX.writeFile(book, documentFileName([sessionCompanyName(), `${res.list_name} Price List`, todayFileDate()], "xlsx"))
-      toast({ title: "Downloaded", description: `${res.rows.length} ${res.list_name} prices exported.` })
-    } catch (err: any) {
-      toast({ title: "Export failed", description: err.message || "Could not export the price list.", variant: "destructive" })
-    } finally {
-      setBusy(null)
+      XLSX.writeFile(book, `${fileName}.xlsx`)
+    } else {
+      await exportTable(format, {
+        fileName,
+        title: `${res.list_name} Price List`,
+        headers: ["S/No", ...PRICE_LIST_TEMPLATE_HEADERS],
+        moneyColumns: [3],
+        rows: rows.map((r, i) => [i + 1, ...r]),
+      }, userProfile?.company)
     }
+    toast({ title: "Downloaded", description: `${res.rows.length} ${res.list_name} prices exported.` })
   }
 
   const run = async (dryRun: boolean) => {
@@ -203,10 +210,7 @@ export default function PriceListsPage() {
               <Button type="button" variant="outline" onClick={() => downloadTemplate(listName)}>
                 <Download className="h-4 w-4 mr-2" />Blank template
               </Button>
-              <Button type="button" variant="outline" disabled={!listName || busy !== null} onClick={exportList}>
-                {busy === "export" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
-                Download current {listName || "list"}
-              </Button>
+              <ExportMenu onExport={exportList} size="default" label={`Download current ${listName || "list"}`} disabled={!listName || busy !== null} />
               <Button type="button" variant="outline" disabled={!file || !listName || busy !== null} onClick={() => run(true)}>
                 {busy === "preview" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
                 Preview

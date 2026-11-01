@@ -11,6 +11,9 @@ import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 
 const STATUS_STYLES: Record<string, string> = {
   paid: "bg-green-100 text-green-800",
@@ -22,6 +25,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
   const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
+  const sessionCompany = useOptionalAuth()?.userProfile?.company
   const docRef = useRef<HTMLDivElement>(null)
   const [invoice, setInvoice] = useState<DeliveryInvoice | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -50,6 +54,25 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
           fileDate(invoice.created_at),
         ])
       : "Delivery Invoice"
+
+  // PDF is the delivery invoice as laid out below; Excel and CSV its one line.
+  const handleDownload = async (format: ExportFormat) => {
+    if (format === "pdf") return handleDownloadPDF()
+    if (!invoice) return
+    await exportTable(format, {
+      fileName: fileBase(),
+      title: `Delivery Invoice ${invoice.invoice_number}`,
+      details: [
+        ["Transporter", invoice.transporter_name || "-"],
+        ["Date", new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString("en-GB")],
+        ["Order", invoice.order_dispatch?.order?.order_number || invoice.order_reference || "-"],
+        ["Status", invoice.status],
+      ],
+      headers: ["S/No", "Zone", "Cartons", "Rate per Carton", "Total"],
+      moneyColumns: [3, 4],
+      rows: [[1, invoice.zone, Number(invoice.number_of_cartons) || 0, Number(invoice.rate_per_carton) || 0, Number(invoice.total_amount) || 0]],
+    }, sessionCompany)
+  }
 
   const handleDownloadPDF = async () => {
     if (!docRef.current || !invoice) return
@@ -139,10 +162,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadPDF} disabled={isDownloading}>
-                {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                {isDownloading ? "Generating..." : "Download PDF"}
-              </Button>
+              <ExportMenu label="Download" onExport={handleDownload} disabled={isDownloading} />
             </div>
           </div>
         </div>

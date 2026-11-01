@@ -1,5 +1,6 @@
 "use client";
 
+import { ExportMenu, useTableExport } from "@/components/export-menu";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -197,33 +198,21 @@ export function DeliveryRatesTab() {
     }
   };
 
-  const exportToCSV = () => {
-    const headers = ["#", "Transporter", "Zone", "Rate per Carton", "Status", "Created By", "Created At"];
-    const rows = sortedRates.map((rate, index) => [
-      String(index + 1),
+  const exportRates = useTableExport(() => ({
+    fileName: `delivery-rates-${new Date().toISOString().split("T")[0]}`,
+    title: "Delivery Rates",
+    headers: ["S/No", "Transporter", "Zone", "Rate per Carton", "Status", "Created By", "Created At"],
+    moneyColumns: [3],
+    rows: sortedRates.map((rate, index) => [
+      index + 1,
       rate.transporter_name,
       rate.zone,
-      `${Number(rate.rate_per_carton).toFixed(2)}`,
+      Number(rate.rate_per_carton) || 0,
       rate.status,
-      rate.created_by ? `${rate.created_by.first_name} ${rate.created_by.last_name}` : "",
-      new Date(rate.created_at).toLocaleString(),
-    ]);
-
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `delivery-rates-${new Date().toISOString().split("T")[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+      rate.created_by ? `${(rate.created_by as any).first_name} ${(rate.created_by as any).last_name}` : "",
+      new Date(rate.created_at).toLocaleString("en-GB"),
+    ]),
+  }));
 
   return (
     <div className="space-y-6">
@@ -270,16 +259,7 @@ export function DeliveryRatesTab() {
         >
           {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={exportToCSV}
-          disabled={filteredRates.length === 0}
-          className="gap-2"
-        >
-          <Download className="h-4 w-4" />
-          Download CSV
-        </Button>
+        <ExportMenu onExport={exportRates} disabled={filteredRates.length === 0} />
       </div>
 
       <Card>

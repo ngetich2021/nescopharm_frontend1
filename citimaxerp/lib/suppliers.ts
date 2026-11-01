@@ -1,6 +1,7 @@
 import apiCall from "./api"
 import * as XLSX from "xlsx"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
+import { exportRecords, type ExportFormat } from "@/lib/table-export"
 
 function toQueryString(params: Record<string, any>): string {
   return (
@@ -226,7 +227,7 @@ export async function getSupplierSummaryFromDB(): Promise<SupplierSummary> {
 }
 
 // Export suppliers as Excel
-export async function exportSuppliers(): Promise<void> {
+export async function exportSuppliers(format: ExportFormat = "xlsx"): Promise<void> {
   const suppliers = await getSuppliers()
 
   const rows = suppliers.map((s) => ({
@@ -246,6 +247,9 @@ export async function exportSuppliers(): Promise<void> {
     "Notes": s.notes || "",
     "Active": s.is_active ? "Yes" : "No",
   }))
+  if (format !== "xlsx") {
+    return exportRecords(format, rows.map((r, i) => ({ "S/No": i + 1, ...r })), { fileName: documentFileName([sessionCompanyName(), "Suppliers List", todayFileDate()]), title: "Suppliers" })
+  }
 
   const sheet = XLSX.utils.json_to_sheet(rows)
   sheet["!cols"] = Object.keys(rows[0] ?? {}).map((k) => ({ wch: Math.max(k.length + 2, 18) }))

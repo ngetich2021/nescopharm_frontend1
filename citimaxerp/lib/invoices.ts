@@ -1,4 +1,5 @@
 import apiCall from "./api"
+import type { TableExport } from "./table-export"
 
 export interface Invoice {
   id: string;
@@ -530,6 +531,51 @@ export async function fetchInvoicePaymentHistory(invoiceId: string): Promise<Pay
 }
 
 // Utility function to safely parse invoice amounts
+// The invoice as a document (customer, dates, lines and totals) for an Excel / CSV download;
+// its PDF is the invoice document itself.
+export function invoiceExport(invoice: Invoice): TableExport {
+  const n = parseInvoiceAmount
+  const date = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "")
+  const customer = invoice.customer?.business_name || invoice.customer?.name || ""
+  const lines = invoice.line_items ?? []
+  const lineTotal = (l: InvoiceLineItem) => (l.line_total != null ? n(l.line_total) : n(l.quantity) * n(l.unit_price) - n(l.discount_amount))
+  const total = n(invoice.total_amount)
+  const balance = invoice.balance_amount != null ? n(invoice.balance_amount) : total - n(invoice.amount_paid) - n(invoice.amount_credited ?? 0)
+  return {
+    fileName: [customer, `Invoice ${invoice.invoice_number}`, date(invoice.invoice_date).replace(/\//g, "-")].filter(Boolean).join(" - ").replace(/[\\/:*?"<>|]+/g, " "),
+    title: `Invoice ${invoice.invoice_number}`,
+    details: [
+      ["Customer", customer || "-"],
+      ["Invoice date", date(invoice.invoice_date) || "-"],
+      ["Order", invoice.order?.order_number || "-"],
+      ["Due date", date(invoice.due_date) || "-"],
+      ["Status", invoice.status.replace(/_/g, " ")],
+      ["Payment", invoice.payment_type === "credit" ? `Credit${invoice.credit_terms_days ? ` (${invoice.credit_terms_days} days)` : ""}` : "Cash"],
+    ],
+    headers: ["S/No", "Description", "Batch", "Expiry", "Qty", "Unit Price", "Discount", "VAT %", "Total"],
+    moneyColumns: [5, 6, 8],
+    rows: lines.map((l, i) => [
+      i + 1,
+      l.description,
+      l.batch_number || l.metadata?.batches?.map((b) => b.batch_number).filter(Boolean).join(", ") || "",
+      date(l.expiry_date || l.metadata?.batches?.[0]?.expiry_date),
+      n(l.quantity),
+      n(l.unit_price),
+      n(l.discount_amount),
+      n(l.tax_rate),
+      lineTotal(l),
+    ]),
+    footer: [
+      ["", "", "", "", "", "", "", "Subtotal", n(invoice.subtotal)],
+      ["", "", "", "", "", "", "", "VAT", n(invoice.tax_amount)],
+      ["", "", "", "", "", "", "", "Total", total],
+      ["", "", "", "", "", "", "", "Paid", n(invoice.amount_paid)],
+      ...(n(invoice.amount_credited ?? 0) > 0 ? [["", "", "", "", "", "", "", "Credited", n(invoice.amount_credited)]] : []),
+      ["", "", "", "", "", "", "", "Balance", balance],
+    ],
+  }
+}
+
 export function parseInvoiceAmount(amount: any): number {
   if (amount === null || amount === undefined || amount === '') {
     return 0

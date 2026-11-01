@@ -39,6 +39,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getSupplierPayments, SupplierPayment, exportSupplierPayments, importSupplierPayments } from "@/lib/supplier-payments"
+import { ExportMenu } from "@/components/export-menu"
+import type { ExportFormat } from "@/lib/table-export"
 import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import CreateSupplierPaymentSheet from "./create-supplier-payment-sheet"
@@ -159,13 +161,8 @@ export function SupplierPaymentsTable() {
   }
 
   // Exports what the table shows (search and status filter applied), every page.
-  const handleExport = () => {
-    if (filteredPayments.length === 0) {
-      toast({ title: "Nothing to export", description: "No payments match the current filters." })
-      return
-    }
-    exportSupplierPayments(filteredPayments)
-  }
+  // Excel is the sheet the import reads back; PDF and CSV the same rows for reading.
+  const handleExport = (format: ExportFormat) => exportSupplierPayments(filteredPayments, format)
 
   const handleTemplate = async () => {
     try {
@@ -349,10 +346,7 @@ export function SupplierPaymentsTable() {
               <CreditCard className="mr-2 h-4 w-4" />
               Record Payment
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            <ExportMenu onExport={handleExport} disabled={filteredPayments.length === 0} />
             <Button variant="outline" size="sm" onClick={handleTemplate}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Template

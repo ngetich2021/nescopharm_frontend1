@@ -47,6 +47,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ViewPayslipDialog } from "../components/ViewPayslipDialog";
 import { EditPayslipDialog } from "../components/EditPayslipDialog";
 import { documentFileName, sessionCompanyName } from "@/lib/document-names"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
+import { csvCell, parseCsv } from "@/lib/table-export"
 
 interface Payslip {
   id: string;
@@ -186,12 +188,34 @@ export default function PayrollRunDetailPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const handleExport = (type: 'csv' | 'p10') => {
-    if (!run) return;
+  const payrollFile = async (type: 'csv' | 'p10') => {
     const token = localStorage.getItem("token") ?? "";
     const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+    const r = await fetch(`${base}/payroll-runs/${runId}/export/${type}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error("Export failed");
+    return r;
+  };
+  const payPeriodLabel = () => run ? new Date(run.pay_year, run.pay_month - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" }) : "";
+
+  // The payroll register the server builds (as CSV), offered as Excel, PDF or CSV.
+  const exportPayroll = useTableExport(async () => {
+    const [headers, ...rows] = parseCsv(await (await payrollFile('csv')).text());
+    return {
+      fileName: documentFileName([sessionCompanyName(), `Payroll ${payPeriodLabel()}`]),
+      title: "Payroll",
+      subtitle: payPeriodLabel(),
+      headers: headers ?? [],
+      rows: rows.map((r) => r.map(csvCell)),
+    };
+  });
+
+  // The P10 return stays the CSV KRA's iTax takes.
+  const handleExport = (type: 'p10') => {
+    if (!run) return;
+    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
     const url = `${base}/payroll-runs/${runId}/export/${type}`;
-    const payPeriod = new Date(run.pay_year, run.pay_month - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
+    const token = localStorage.getItem("token") ?? "";
+    const payPeriod = payPeriodLabel();
     const filename = type === 'p10'
       ? documentFileName([sessionCompanyName(), `P10 Return ${payPeriod}`], "csv")
       : documentFileName([sessionCompanyName(), `Payroll ${payPeriod}`], "csv");
@@ -400,10 +424,7 @@ export default function PayrollRunDetailPage() {
               className="h-9 w-full sm:w-[300px]"
             />
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
-                <Download className="h-4 w-4 mr-1.5" />
-                Export CSV
-              </Button>
+              <ExportMenu onExport={exportPayroll} disabled={!run} />
               {run?.status !== "draft" && (
                 <Button variant="outline" size="sm" onClick={() => handleExport('p10')}>
                   <Download className="h-4 w-4 mr-1.5" />

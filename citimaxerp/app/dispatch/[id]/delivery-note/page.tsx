@@ -10,11 +10,17 @@ import { documentFileName, fileDate, printWithFileName } from "@/lib/document-na
 import { DeliveryNoteDocument, type DeliveryNoteLoaded } from "@/components/dispatch/delivery-note-document"
 import { DOCUMENT_COPIES } from "@/components/invoices/invoice-document"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
+import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
+import { sizedName } from "@/lib/product-sizes"
 
 export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
+  const company = useOptionalAuth()?.userProfile?.company
   const docRef = useRef<HTMLDivElement>(null)
 
   const [loaded, setLoaded] = useState<DeliveryNoteLoaded | null>(null)
@@ -38,6 +44,36 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       return () => clearTimeout(timer)
     }
   }, [loaded])
+
+  // PDF is the note as laid out below; Excel and CSV its goods and the pieces handed over.
+  const handleDownload = async (format: ExportFormat) => {
+    if (format === "pdf") return handleDownloadPDF()
+    if (!loaded) return
+    const d = loaded.dispatch
+    const lines = (d.items || []).map((item: any) => {
+      const packs = Number(item.quantity || 0)
+      const perPack = piecesPerPack(dispatchItemUnit(item))
+      return { item, packs, perPack, pieces: perPack ? packs * perPack : packs }
+    })
+    await exportTable(format, {
+      fileName: fileBase(),
+      title: `Delivery Note ${d.dispatch_number}`,
+      details: [
+        ["Customer", buildBuyerBlock(mergeCustomerSources(loaded.customerDetails, d.order?.customer as CustomerAddressSource | null)).name || "-"],
+        ["Date", new Date(d.dispatch_date || d.created_at).toLocaleDateString("en-GB")],
+        ["Order", (d.order as any)?.order_number || "-"],
+      ],
+      headers: ["S/No", "Description of Goods", "Pieces per Pack", "Packs", "Pieces"],
+      rows: lines.map((l, i) => [
+        i + 1,
+        l.item.product ? sizedName(l.item.product.name, l.item.variant?.name) : "Product",
+        l.perPack ?? "",
+        l.packs,
+        l.pieces,
+      ]),
+      footer: [["", "", "", "Total", lines.reduce((s, l) => s + l.pieces, 0)]],
+    }, company)
+  }
 
   const handleDownloadPDF = async () => {
     if (!docRef.current || !loaded) return
@@ -94,10 +130,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadPDF} disabled={isDownloading || !loaded}>
-                {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                {isDownloading ? 'Generating...' : 'Download PDF'}
-              </Button>
+              <ExportMenu label="Download" onExport={handleDownload} disabled={isDownloading || !loaded} />
             </div>
           </div>
         </div>

@@ -30,6 +30,7 @@ import { PermissionGuard } from "@/components/PermissionGuard"
 import { CreateStockCountSheet } from "./components/create-stock-count-sheet"
 import { deleteStockCount, updateStockCountStatus } from "@/lib/stock-counts"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
 
 interface StockCountSummary {
   totalCounts: number
@@ -135,50 +136,24 @@ export function StockCountsTable({
     // Removed checkbox functionality
   }
 
-  const exportToCSV = () => {
-    const countsToExport = filteredAndSortedStockCounts
-
-    const csv = [
-      [
-        "Count Number",
-        "Name",
-        "Location",
-        "Type",
-        "Status",
-        "Created By",
-        "Scheduled Date",
-        "Products Expected",
-        "Products Counted",
-        "Variances",
-      ],
-      ...countsToExport.map((c: StockCount) => [
-        c.count_number,
-        c.name,
-        c.store?.name || c.location || "-",
-        c.count_type,
-        c.status,
-        c.created_by || "System",
-        c.scheduled_date ? format(new Date(c.scheduled_date), "yyyy-MM-dd") : "-",
-        c.total_products_expected.toString(),
-        c.total_products_counted.toString(),
-        c.total_variances.toString(),
-      ]),
-    ]
-      .map((row) => row.join(","))
-      .join("\n")
-
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = documentFileName([sessionCompanyName(), "Stock Counts", todayFileDate()], "csv")
-    a.click()
-
-    toast({
-      title: "Export successful",
-      description: `Exported ${countsToExport.length} stock counts to CSV`,
-    })
-  }
+  const exportCounts = useTableExport(() => ({
+    fileName: documentFileName([sessionCompanyName(), "Stock Counts", todayFileDate()]),
+    title: "Stock Counts",
+    headers: ["S/No", "Count Number", "Name", "Location", "Type", "Status", "Created By", "Scheduled Date", "Products Expected", "Products Counted", "Variances"],
+    rows: filteredAndSortedStockCounts.map((c: StockCount, i: number) => [
+      i + 1,
+      c.count_number,
+      c.name,
+      c.store?.name || c.location || "-",
+      c.count_type,
+      c.status,
+      c.created_by || "System",
+      c.scheduled_date ? format(new Date(c.scheduled_date), "dd MMM yyyy") : "-",
+      Number(c.total_products_expected) || 0,
+      Number(c.total_products_counted) || 0,
+      Number(c.total_variances) || 0,
+    ]),
+  }))
 
   const clearFilters = () => {
     setSearchQuery("")
@@ -436,19 +411,7 @@ export function StockCountsTable({
               New Count
             </Button>
           </PermissionGuard>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={exportToCSV}>
-                Export as CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu onExport={exportCounts} disabled={filteredAndSortedStockCounts.length === 0} />
           
           {onRefresh && (
             <Button variant="outline" size="sm" onClick={onRefresh}>

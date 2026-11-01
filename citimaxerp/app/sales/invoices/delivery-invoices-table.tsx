@@ -42,7 +42,9 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/rbac";
-import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, exportDeliveryInvoicesToExcel, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
+import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
+import { exportTable, type ExportFormat } from "@/lib/table-export";
+import { ExportMenu, ExportSubMenu, useTableExport } from "@/components/export-menu";
 import { DeliveryInvoicesImport, TransporterStatement } from "./delivery-invoices-excel";
 import { ImportHistoryDialog } from "@/components/import-history-dialog";
 
@@ -183,39 +185,54 @@ export function DeliveryInvoicesTable() {
 
   const pendingCount = invoices.filter((i) => i.status === "pending").length;
 
-  const handleDownloadCSV = (invoice: DeliveryInvoice) => {
-    const headers = ["Invoice #", "Order", "Transporter", "Zone", "Cartons", "Rate/Carton", "Total", "Status"];
-    const values = [
-      invoice.invoice_number,
-      orderLabel(invoice),
-      invoice.transporter_name,
-      invoice.zone,
-      invoice.number_of_cartons,
-      invoice.rate_per_carton,
-      invoice.total_amount,
-      invoice.status,
-    ];
+  const exportColumns = ["S/No", "Invoice #", "Date", "Order", "Transporter", "Transporter Inv.", "Zone", "Cartons", "Rate/Carton", "Total", "Status"];
+  const exportRow = (invoice: DeliveryInvoice, i: number) => [
+    i + 1,
+    invoice.invoice_number,
+    shortDate(invoice.invoice_date || invoice.created_at),
+    orderLabel(invoice),
+    invoice.transporter_name,
+    invoice.transporter_invoice_number || "",
+    invoice.zone,
+    Number(invoice.number_of_cartons) || 0,
+    Number(invoice.rate_per_carton) || 0,
+    Number(invoice.total_amount) || 0,
+    invoice.status,
+  ];
 
-    const csvContent = [headers.join(","), values.map((v) => `"${v}"`).join(",")].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `delivery-invoice-${invoice.invoice_number}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleExportToExcel = async () => {
-    try {
-      await exportDeliveryInvoicesToExcel({ search: search || undefined });
-      toast({ title: "Success", description: "Delivery invoices exported to Excel" });
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to export delivery invoices", variant: "destructive" });
+  // Every delivery invoice matching the search (all pages; the API sends at most 100 at a time).
+  const exportList = useTableExport(async () => {
+    const all: DeliveryInvoice[] = [];
+    for (let page = 1; ; page++) {
+      const res = await getDeliveryInvoices({ search: search || undefined, sort_by: sortBy, sort_order: sortOrder, page, per_page: 100 });
+      all.push(...res.data);
+      if (page >= res.pagination.last_page || res.data.length === 0) break;
     }
+    return {
+      fileName: `delivery-invoices-${new Date().toISOString().slice(0, 10)}`,
+      title: "Delivery Invoices",
+      subtitle: search ? `Search: ${search}` : undefined,
+      headers: exportColumns,
+      moneyColumns: [8, 9],
+      rows: all.map(exportRow),
+      footer: [["", "", "", "", "", "", "Total", all.reduce((s, d) => s + (Number(d.number_of_cartons) || 0), 0), null,
+        all.reduce((s, d) => s + (Number(d.total_amount) || 0), 0), ""]],
+    };
+  });
+
+  // PDF is the delivery invoice document itself; Excel and CSV its one line.
+  const handleDownload = async (invoice: DeliveryInvoice, format: ExportFormat) => {
+    if (format === "pdf") {
+      router.push(`/sales/invoices/delivery/${invoice.id}/document?download=1`);
+      return;
+    }
+    await exportTable(format, {
+      fileName: `delivery-invoice-${invoice.invoice_number}`,
+      title: `Delivery Invoice ${invoice.invoice_number}`,
+      headers: exportColumns,
+      moneyColumns: [8, 9],
+      rows: [exportRow(invoice, 0)],
+    }, userProfile?.company);
   };
 
   const toggleSort = (column: string) => {
@@ -270,10 +287,7 @@ export function DeliveryInvoicesTable() {
                   <SelectItem value="100">100 per page</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={handleExportToExcel}>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
+              <ExportMenu onExport={exportList} disabled={invoices.length === 0} />
             </div>
             <div className="flex flex-wrap gap-2">
               <TransporterStatement />
@@ -369,14 +383,7 @@ export function DeliveryInvoicesTable() {
                             View Document
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => router.push(`/sales/invoices/delivery/${invoice.id}/document?download=1`)}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Download PDF
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDownloadCSV(invoice)}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Download CSV
-                          </DropdownMenuItem>
+                          <ExportSubMenu onExport={(format) => handleDownload(invoice, format)} />
                           {canPay && invoice.status === "pending" && (
                             <>
                               <DropdownMenuSeparator />

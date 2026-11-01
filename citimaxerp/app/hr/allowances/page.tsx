@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import * as XLSX from "xlsx"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { format } from "date-fns"
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, Loader2, RefreshCw, Search, Users, Wallet, ListChecks } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -84,26 +84,25 @@ export default function AllowancesPage() {
     }
   }
 
-  const exportExcel = () => {
-    const data = visible.map((r, i) => ({
-      "S/No": i + 1,
-      "Employee #": r.employee_number ?? "",
-      Employee: r.employee_name,
-      Department: r.department ?? "",
-      Position: r.position ?? "",
-      Allowance: r.name,
-      "Amount (KES)": r.amount,
-      Taxable: r.is_taxable ? "Yes" : "No",
-      "Last Updated": r.updated_at ? format(new Date(r.updated_at), "dd MMM yyyy HH:mm") : "",
-    }))
-    data.push({ "S/No": "" as any, "Employee #": "", Employee: "TOTAL", Department: "", Position: "", Allowance: "", "Amount (KES)": total, Taxable: "", "Last Updated": "" })
-
-    const sheet = XLSX.utils.json_to_sheet(data)
-    sheet["!cols"] = [{ wch: 6 }, { wch: 12 }, { wch: 26 }, { wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 9 }, { wch: 18 }]
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, sheet, "Disbursed Allowances")
-    XLSX.writeFile(book, documentFileName([sessionCompanyName(), `Disbursed Allowances ${month}`], "xlsx"))
-  }
+  const exportAllowances = useTableExport(() => ({
+    fileName: documentFileName([sessionCompanyName(), `Disbursed Allowances ${month}`]),
+    title: "Disbursed Allowances",
+    subtitle: month,
+    headers: ["S/No", "Employee #", "Employee", "Department", "Position", "Allowance", "Amount (KES)", "Taxable", "Last Updated"],
+    moneyColumns: [6],
+    rows: visible.map((r, i) => [
+      i + 1,
+      r.employee_number ?? "",
+      r.employee_name,
+      r.department ?? "",
+      r.position ?? "",
+      r.name,
+      Number(r.amount) || 0,
+      r.is_taxable ? "Yes" : "No",
+      r.updated_at ? format(new Date(r.updated_at), "dd MMM yyyy HH:mm") : "",
+    ]),
+    footer: [["", "", "", "", "", "Total", total, "", ""]],
+  }))
 
   return (
     <div className="space-y-6 p-6">
@@ -120,10 +119,7 @@ export default function AllowancesPage() {
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button onClick={exportExcel} disabled={loading || visible.length === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Excel
-          </Button>
+          <ExportMenu onExport={exportAllowances} size="default" disabled={loading || visible.length === 0} />
         </div>
       </div>
 

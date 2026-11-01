@@ -34,7 +34,10 @@ import {
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Invoice, fetchInvoices, deleteInvoice, sendInvoice, parseInvoiceAmount } from "@/lib/invoices"
+import { Invoice, fetchInvoices, fetchInvoiceById, deleteInvoice, sendInvoice, parseInvoiceAmount, invoiceExport } from "@/lib/invoices"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportSubMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 import { getInvoiceStatusColor, getInvoiceStatusLabel } from "@/lib/invoice-status"
 import { useDataCache } from "@/lib/data-cache"
 import { CreateInvoiceModal } from "@/components/modals/create-invoice-modal"
@@ -52,6 +55,7 @@ interface InvoicesTableProps {
 }
 
 export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
+  const userProfile = useOptionalAuth()?.userProfile
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
@@ -250,14 +254,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownloadPDF(invoice.id); }}>
-            <Download className="mr-2 h-4 w-4" />
-            Download PDF
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownloadCSV(invoice); }}>
-            <Download className="mr-2 h-4 w-4" />
-            Download CSV
-          </DropdownMenuItem>
+          <ExportSubMenu onExport={(format) => handleDownload(invoice, format)} />
           <DropdownMenuSeparator />
           {invoice.status === 'draft' && (
             <>
@@ -313,37 +310,14 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
     })
   }
 
-  // The document page builds the PDF (with the customer-named file) itself.
-  const handleDownloadPDF = (invoiceId: string) => {
-    router.push(`/sales/invoices/${invoiceId}/document?download=1`)
-  }
-
-  const handleDownloadCSV = (invoice: Invoice) => {
-    const headers = ['Invoice #', 'Customer', 'Amount', 'Balance', 'Status', 'Date', 'Due Date']
-    const values = [
-      invoice.invoice_number,
-      (invoice.customer as any)?.business_name || invoice.customer?.name || 'N/A',
-      formatCurrency(parseInvoiceAmount(invoice.total_amount)),
-      formatCurrency(getInvoiceBalance(invoice)),
-      invoice.status,
-      formatDate(invoice.invoice_date),
-      formatDate(invoice.due_date),
-    ]
-
-    const csvContent = [
-      headers.join(','),
-      values.map(v => `"${v}"`).join(',')
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', documentFileName([(invoice.customer as any)?.business_name || invoice.customer?.name, `Invoice ${invoice.invoice_number}`, fileDate(invoice.invoice_date)], 'csv'))
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  // PDF is the invoice document itself (its page builds the customer-named file); Excel and CSV
+  // carry the invoice's details, lines and totals.
+  const handleDownload = async (invoice: Invoice, format: ExportFormat) => {
+    if (format === "pdf") {
+      router.push(`/sales/invoices/${invoice.id}/document?download=1`)
+      return
+    }
+    await exportTable(format, invoiceExport(await fetchInvoiceById(invoice.id)), userProfile?.company)
   }
 
   const handleRowClick = (invoiceId: string, event: React.MouseEvent) => {

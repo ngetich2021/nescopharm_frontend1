@@ -1,7 +1,8 @@
 "use client"
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import * as XLSX from "xlsx"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
+import type { ExportCell } from "@/lib/table-export"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -366,27 +367,30 @@ export default function InventoryReportPage() {
   const hasTotals = columns.some((c) => c.total)
   const hasGroups = data.some((r) => r.row_type === "parent")
 
-  const exportReport = () => {
-    const header = columns.map((c) => c.header)
+  const exportReport = useTableExport(() => {
     let rowIndex = 0
     const body = visibleRows.map((r) => {
       const sno = ++rowIndex
-      return columns.map((c) => {
+      return columns.map((c): ExportCell => {
         if (c.key === "_sno") return sno
-        if (c.exportValue) return c.exportValue(r) ?? ""
+        if (c.exportValue) return (c.exportValue(r) ?? "") as ExportCell
         if (c.key === "nearest_expiry") return r.nearest_expiry ?? ""
         if (c.key === "stock_status") return String(r.stock_status ?? "").replace(/_/g, " ")
         if (c.key === "months_of_stock") return r.months_of_stock ?? ""
         const v = r[c.key]
-        return v === null || v === undefined ? "" : v
+        return v === null || v === undefined ? "" : (v as ExportCell)
       })
     })
-    const sheet = XLSX.utils.aoa_to_sheet([header, ...body])
-    sheet["!cols"] = header.map((h) => ({ wch: h === "Item Description" ? 55 : h === "S/No." ? 8 : Math.max(h.length + 2, 12) }))
-    const book = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(book, sheet, "Report")
-    XLSX.writeFile(book, documentFileName([sessionCompanyName(), `${({ balance: "Stock Balance", low_stock: "Low and Out of Stock", movement: "Stock Movement", stock_management: "Stock Management" } as Record<ReportType, string>)[reportType]} Report`, usesDates && (dateFrom || dateTo) ? filePeriod(dateFrom, dateTo) : `as at ${todayFileDate()}`], "xlsx"))
-  }
+    const name = ({ balance: "Stock Balance", low_stock: "Low and Out of Stock", movement: "Stock Movement", stock_management: "Stock Management" } as Record<ReportType, string>)[reportType]
+    const period = usesDates && (dateFrom || dateTo) ? filePeriod(dateFrom, dateTo) : `as at ${todayFileDate()}`
+    return {
+      fileName: documentFileName([sessionCompanyName(), `${name} Report`, period]),
+      title: `${name} Report`,
+      subtitle: period,
+      headers: columns.map((c) => c.header),
+      rows: body,
+    }
+  })
 
   const renderSummary = () => {
     if (!summary) return null
@@ -450,9 +454,7 @@ export default function InventoryReportPage() {
             <Button variant="outline" size="sm" onClick={fetchReport} disabled={loading}>
               <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={exportReport} disabled={loading || visibleRows.length === 0}>
-              <Download className="mr-2 h-4 w-4" /> Export Excel
-            </Button>
+            <ExportMenu onExport={exportReport} disabled={loading || visibleRows.length === 0} />
           </div>
         </div>
 

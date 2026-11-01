@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getProductReceipt, productReceiptExport, ProductReceiptApiResponse } from "@/lib/productreceipt";
 import { exportTable } from "@/lib/table-export";
 import { useAuth } from "@/lib/auth-context";
-import { DownloadFormatDialog } from "@/components/download-format-dialog";
+import { ExportMenu } from "@/components/export-menu";
 import { Package, User, Store, FileText, Calendar, Hash, Eye, Edit, Download } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { DocumentViewerModal } from "./DocumentViewerModal";
@@ -38,7 +38,6 @@ export function ProductReceiptDetailsModal({
   const [data, setData] = useState<ProductReceiptApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [documentViewerOpen, setDocumentViewerOpen] = useState(false);
-  const [downloadOpen, setDownloadOpen] = useState(false);
   const { userProfile } = useAuth();
 
   React.useEffect(() => {
@@ -417,10 +416,11 @@ export function ProductReceiptDetailsModal({
                   >
                     Close
                   </Button>
-                  <Button variant="outline" onClick={() => setDownloadOpen(true)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download
-                  </Button>
+                  <ExportMenu
+                    label="Download"
+                    size="default"
+                    onExport={(format) => exportTable(format, productReceiptExport(receipt), userProfile?.company)}
+                  />
                 </div>
                 {onEdit && (
                   <Button
@@ -436,15 +436,6 @@ export function ProductReceiptDetailsModal({
           )}
         </SheetContent>
       </Sheet>
-
-      {receipt && (
-        <DownloadFormatDialog
-          open={downloadOpen}
-          onOpenChange={setDownloadOpen}
-          title={receipt.product_receipt_number || "receipt"}
-          onDownload={(format) => exportTable(format, productReceiptExport(receipt), userProfile?.company)}
-        />
-      )}
 
       {/* Document Viewer Modal */}
       {receipt && (

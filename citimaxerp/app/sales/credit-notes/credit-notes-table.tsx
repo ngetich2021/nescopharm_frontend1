@@ -53,6 +53,7 @@ import {
   parseCreditNoteAmount,
 } from "@/lib/credit-notes"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
 
 interface CreditNotesTableProps {
   initialCreditNotes?: CreditNote[]
@@ -176,143 +177,25 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
     }
   }
 
-  const exportToCSV = () => {
-    const headers = ["Credit Note #", "Invoice", "Customer", "Date", "Status", "Amount", "Balance"]
-
-    const csvContent = [
-      headers.join(","),
-      ...filteredCreditNotes.map((creditNote) =>
-        [
-          creditNote.credit_note_number,
-          creditNote.invoice?.invoice_number || "",
-          getCustomerDisplayName(creditNote),
-          formatDate(creditNote.credit_note_date),
-          formatStatus(creditNote.status),
-          parseCreditNoteAmount(creditNote.total_amount).toFixed(2),
-          parseCreditNoteAmount(creditNote.balance_amount).toFixed(2),
-        ].join(",")
-      ),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", `credit_notes_${new Date().toISOString().split("T")[0]}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    toast({
-      title: "Export Successful",
-      description: `Exported ${filteredCreditNotes.length} credit notes to CSV`,
-    })
-  }
-
-  const buildPrintHtml = () => {
-    return `
-      <html>
-        <head>
-          <title>Credit Notes</title>
-          <style>
-            body { font-family: Arial, sans-serif; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-            th { background-color: #f3f4f6; font-weight: bold; }
-            .header { margin-bottom: 20px; }
-            .header h1 { color: #111827; margin-bottom: 5px; }
-            .header p { color: #666; margin-top: 0; }
-            .badge {
-              display: inline-block;
-              padding: 3px 8px;
-              border-radius: 4px;
-              font-size: 12px;
-            }
-            .badge-draft { border: 1px solid #6b7280; color: #374151; background-color: #f3f4f6; }
-            .badge-issued { border: 1px solid #2563eb; color: #1d4ed8; background-color: #dbeafe; }
-            .badge-applied { border: 1px solid #059669; color: #047857; background-color: #d1fae5; }
-            .badge-refunded { border: 1px solid #7c3aed; color: #6d28d9; background-color: #ede9fe; }
-            .badge-void { border: 1px solid #dc2626; color: #b91c1c; background-color: #fee2e2; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Credit Notes</h1>
-            <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Credit Note #</th>
-                <th>Invoice</th>
-                <th>Customer</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Amount</th>
-                <th>Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filteredCreditNotes
-                .map((creditNote) => {
-                  const status = (creditNote.status || "draft").toLowerCase()
-                  const badgeClass = `badge-${status}`
-                  return `
-                    <tr>
-                      <td>${creditNote.credit_note_number}</td>
-                      <td>${creditNote.invoice?.invoice_number || "-"}</td>
-                      <td>${getCustomerDisplayName(creditNote)}</td>
-                      <td>${formatDate(creditNote.credit_note_date)}</td>
-                      <td><span class="badge ${badgeClass}">${formatStatus(creditNote.status)}</span></td>
-                      <td>${parseCreditNoteAmount(creditNote.total_amount).toFixed(2)}</td>
-                      <td>${parseCreditNoteAmount(creditNote.balance_amount).toFixed(2)}</td>
-                    </tr>
-                  `
-                })
-                .join("")}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `
-  }
-
-  const printCreditNotes = () => {
-    const iframe = document.createElement("iframe")
-    iframe.style.position = "absolute"
-    iframe.style.top = "-9999px"
-    document.body.appendChild(iframe)
-
-    const doc = iframe.contentDocument
-    if (!doc) {
-      return
-    }
-
-    doc.open()
-    doc.write(buildPrintHtml())
-    doc.close()
-
-    iframe.contentWindow?.focus()
-    iframe.contentWindow?.print()
-
-    setTimeout(() => {
-      document.body.removeChild(iframe)
-    }, 1000)
-
-    toast({
-      title: "Print Initiated",
-      description: `Printing ${filteredCreditNotes.length} credit notes`,
-    })
-  }
-
-  const exportToPDF = () => {
-    toast({
-      title: "Preparing PDF",
-      description: "Your PDF is being generated...",
-    })
-    printCreditNotes()
-  }
+  const exportCreditNotes = useTableExport(() => ({
+    fileName: `credit-notes-${new Date().toISOString().split("T")[0]}`,
+    title: "Credit Notes",
+    headers: ["S/No", "Credit Note #", "Invoice", "Customer", "Date", "Status", "Amount", "Balance"],
+    moneyColumns: [6, 7],
+    rows: filteredCreditNotes.map((creditNote, i) => [
+      i + 1,
+      creditNote.credit_note_number,
+      creditNote.invoice?.invoice_number || "",
+      getCustomerDisplayName(creditNote),
+      formatDate(creditNote.credit_note_date),
+      formatStatus(creditNote.status),
+      parseCreditNoteAmount(creditNote.total_amount),
+      parseCreditNoteAmount(creditNote.balance_amount),
+    ]),
+    footer: [["", "", "", "", "", "Total",
+      filteredCreditNotes.reduce((s, c) => s + parseCreditNoteAmount(c.total_amount), 0),
+      filteredCreditNotes.reduce((s, c) => s + parseCreditNoteAmount(c.balance_amount), 0)]],
+  }))
 
   const ActionsDropdown = ({ creditNote }: { creditNote: CreditNote }) => {
     return (
@@ -405,28 +288,7 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
             New Credit Note
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-gray-800 text-gray-800 hover:bg-gray-100"
-              >
-                <Download className="mr-2 h-4 w-4" /> Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportToCSV}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportToPDF}>
-                <FilePdf className="mr-2 h-4 w-4" /> Export as PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={printCreditNotes}>
-                <Printer className="mr-2 h-4 w-4" /> Print
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu onExport={exportCreditNotes} disabled={filteredCreditNotes.length === 0} />
 
           <Button
             variant="outline"

@@ -1,6 +1,7 @@
 import apiCall from "./api";
 import * as XLSX from "xlsx";
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names";
+import { exportRecords, type ExportFormat } from "@/lib/table-export";
 
 const METHOD_LABELS: Record<string, string> = { bank_transfer: "Bank Transfer", cash: "Cash", mpesa: "M-Pesa", cheque: "Cheque" };
 
@@ -15,7 +16,7 @@ const sheetDate = (value: string) => {
  * Supplier payments as Excel, in the same columns as the import template (plus S/No.), so the file can
  * be edited and uploaded back: a row keeps its Payment No. and updates that payment.
  */
-export function exportSupplierPayments(payments: SupplierPayment[]): void {
+export async function exportSupplierPayments(payments: SupplierPayment[], format: ExportFormat = "xlsx"): Promise<void> {
     const rows = payments.map((p, i) => ({
         "S/No.": i + 1,
         "Payment No.": p.payment_number ?? "",
@@ -28,6 +29,9 @@ export function exportSupplierPayments(payments: SupplierPayment[]): void {
         "Status": p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : "",
         "Notes": p.notes ?? "",
     }));
+    if (format !== "xlsx") {
+        return exportRecords(format, rows, { fileName: documentFileName([sessionCompanyName(), "Supplier Payments", todayFileDate()]), title: "Supplier Payments", moneyColumns: [4] });
+    }
     const sheet = XLSX.utils.json_to_sheet(rows);
     sheet["!cols"] = Object.keys(rows[0] ?? { "S/No.": 1 }).map((k) =>
         ({ wch: k === "S/No." ? 7 : k === "Supplier Name" || k === "Reference" ? 36 : Math.max(k.length + 2, 14) }));

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { fetchOrderById, OrderDetail } from "@/lib/orders"
+import { exportTable, type ExportCell, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
 import { getCompany, Company } from "@/lib/company"
 import { getCustomerProfile, CustomerProfileData } from "@/lib/customers"
 import { buildBuyerBlock, mergeCustomerSources, type CustomerAddressSource } from "@/lib/customer-address"
@@ -198,6 +200,36 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
   const discount = order.discount
   const grandTotal = order.final_amount || order.total_amount
 
+  // PDF is the order as laid out below; Excel and CSV its customer, lines and totals.
+  const handleDownload = async (format: ExportFormat) => {
+    if (format === "pdf") return handleDownloadPDF()
+    const n = (v: unknown) => Number.parseFloat(String(v ?? 0)) || 0
+    const footer: ExportCell[][] = [["", "", "", "Subtotal", n(subtotal)]]
+    if (n(tax) > 0) footer.push(["", "", "", "Tax", n(tax)])
+    if (n(discount) > 0) footer.push(["", "", "", "Discount", -n(discount)])
+    footer.push(["", "", "", "Total", n(grandTotal)])
+    await exportTable(format, {
+      fileName: fileBase(),
+      title: `Order ${order.order_number}`,
+      details: [
+        ["Customer", buyer.name || (order.customer as any)?.business_name || order.customer?.name || "-"],
+        ["Order date", order.order_date ? new Date(order.order_date).toLocaleDateString("en-GB") : "-"],
+        ["Status", String(order.status ?? "-")],
+        ["Delivery", deliveryAddressParts.join(", ") || "-"],
+      ],
+      headers: ["S/No", "Description", "Qty", "Unit Price", "Amount"],
+      moneyColumns: [3, 4],
+      rows: (order.order_items ?? []).map((item, i) => [
+        i + 1,
+        item.product ? sizedName(item.product.name, (item as any).variant?.name || item.variant_name) : "Product",
+        n(item.quantity),
+        n(item.unit_price),
+        n(item.total_price),
+      ]),
+      footer,
+    }, company)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
       {/* Action Bar - Hide on print */}
@@ -213,19 +245,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadPDF}
-                disabled={isDownloading}
-              >
-                {isDownloading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                {isDownloading ? 'Generating...' : 'Download PDF'}
-              </Button>
+              <ExportMenu label="Download" onExport={handleDownload} disabled={isDownloading} />
             </div>
           </div>
         </div>

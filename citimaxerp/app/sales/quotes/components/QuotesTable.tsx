@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { Quote } from "@/lib/quotes"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
 
 interface QuotesTableProps {
   quotes: Quote[]
@@ -86,38 +87,26 @@ export function QuotesTable({
       .join(" ")
   }
 
-  const exportToCSV = () => {
-    const headers = ["Quote Number", "Customer", "Date", "Status", "Signed Copy", "Valid Until", "Total Amount"]
-    const csvContent = [
-      headers.join(","),
-      ...quotes.map((quote) =>
-        [
-          formatQuoteNumber(quote),
-          (quote.customer as any)?.business_name || quote.customer?.name || "Unknown",
-          new Date(quote.created_at).toLocaleDateString(),
-          formatStatus(quote.status),
-          quote.signed_quote_path ? "Yes" : "No",
-          new Date(quote.valid_until).toLocaleDateString(),
-          Number.parseFloat(quote.final_amount || quote.total_amount || "0").toFixed(2),
-        ].join(","),
-      ),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", `quotes_export_${new Date().toISOString().split("T")[0]}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    toast({
-      title: "Export Successful",
-      description: `Exported ${quotes.length} quotes to CSV`,
-    })
-  }
+  const exportQuotes = useTableExport(() => {
+    const amount = (quote: (typeof quotes)[number]) => Number.parseFloat(quote.final_amount || quote.total_amount || "0") || 0
+    return {
+      fileName: `quotes-${new Date().toISOString().split("T")[0]}`,
+      title: "Quotes",
+      headers: ["S/No", "Quote Number", "Customer", "Date", "Status", "Signed Copy", "Valid Until", "Total Amount"],
+      moneyColumns: [7],
+      rows: quotes.map((quote, i) => [
+        i + 1,
+        formatQuoteNumber(quote),
+        (quote.customer as any)?.business_name || quote.customer?.name || "Unknown",
+        new Date(quote.created_at).toLocaleDateString("en-GB"),
+        formatStatus(quote.status),
+        quote.signed_quote_path ? "Yes" : "No",
+        quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-GB") : "",
+        amount(quote),
+      ]),
+      footer: [["", "", "", "", "", "", "Total", quotes.reduce((s, q) => s + amount(q), 0)]],
+    }
+  })
 
   // Actions dropdown component
   const ActionsDropdown = ({ quote }: { quote: Quote }) => {
@@ -222,22 +211,7 @@ export function QuotesTable({
               Convert to Order
             </Button>
           </PermissionGuard>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="border-gray-800 text-gray-800 hover:bg-gray-100"
-              >
-                <Download className="mr-2 h-4 w-4" /> Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportToCSV}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export as CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportMenu onExport={exportQuotes} disabled={quotes.length === 0} />
           <Button
             variant="outline"
             size="sm"

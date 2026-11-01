@@ -13,7 +13,8 @@ import { getCustomers, type Customer } from "@/lib/customers";
 import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/customer-accounts";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
-import * as XLSX from "xlsx";
+import { useTableExport } from "@/components/export-menu";
+import type { ExportCell } from "@/lib/table-export";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionGuard } from "@/components/PermissionGuard";
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
@@ -147,26 +148,20 @@ export function CustomersPage() {
   ];
 
   // Exports the whole (search-filtered) list, not just the page on screen.
-  const handleExport = () => {
-    if (filteredCustomers.length === 0) {
-      toast({ title: "No Data", description: "No customers to export." });
-      return;
-    }
+  const handleExport = useTableExport(() => {
     // Excel rejects cells over 32,767 characters.
-    const cell = (v: unknown) => {
+    const cell = (v: unknown): ExportCell => {
       if (v === null || v === undefined) return "";
       const value = typeof v === "object" ? JSON.stringify(v) : v;
-      return typeof value === "string" ? value.slice(0, 32767) : value;
+      return typeof value === "string" ? value.slice(0, 32767) : (value as number);
     };
-    const rows = [
-      ["S/No", ...EXPORT_COLUMNS.map(([header]) => header)],
-      ...filteredCustomers.map((c, i) => [i + 1, ...EXPORT_COLUMNS.map(([, get]) => cell(get(c)))]),
-    ];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Customers");
-    XLSX.writeFile(workbook, documentFileName([sessionCompanyName(), "Customers List", todayFileDate()], "xlsx"));
-    toast({ title: "Export Successful", description: `Exported ${filteredCustomers.length} customers to Excel.` });
-  };
+    return {
+      fileName: documentFileName([sessionCompanyName(), "Customers List", todayFileDate()]),
+      title: "Customers",
+      headers: ["S/No", ...EXPORT_COLUMNS.map(([header]) => header)],
+      rows: filteredCustomers.map((c, i) => [i + 1, ...EXPORT_COLUMNS.map(([, get]) => cell(get(c)))]),
+    };
+  });
 
   // Event handlers
   const handleViewCustomer = (customer: Customer) => {

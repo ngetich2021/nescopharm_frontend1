@@ -43,6 +43,8 @@ import {
   parseAssetFile,
   importAssets,
 } from "@/lib/assets"
+import { ExportMenu } from "@/components/export-menu"
+import type { ExportFormat } from "@/lib/table-export"
 import { AssetSheet } from "./components/asset-sheet"
 import { AssetDetailsSheet } from "./components/asset-details-sheet"
 import { useToast } from "@/hooks/use-toast"
@@ -195,21 +197,8 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     }
   }
 
-  const handleExport = async () => {
-    setIsExporting(true)
-    try {
-      await exportAssets()
-      toast({ title: "Success", description: "Assets exported successfully." })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to export assets",
-        variant: "destructive",
-      })
-    } finally {
-      setIsExporting(false)
-    }
-  }
+  // Excel is the sheet the assets import reads back; PDF and CSV the same register for reading.
+  const handleExport = (format: ExportFormat) => exportAssets(format)
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -307,10 +296,7 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
                 Add Asset
               </Button>
             </PermissionGuard>
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
-              {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-              Export
-            </Button>
+            <ExportMenu onExport={handleExport} />
             <PermissionGuard permissions={["can_create_assets", "can_manage_assets", "can_manage_system", "can_manage_company"]} hideOnDenied>
               <Button variant="outline" size="sm" onClick={downloadAssetTemplate}>
                 <FileSpreadsheet className="mr-2 h-4 w-4" />

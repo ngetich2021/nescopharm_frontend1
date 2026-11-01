@@ -38,6 +38,8 @@ import {
   Users
 } from "lucide-react";
 import { type Employee } from "@/lib/employees";
+import { ExportMenu } from "@/components/export-menu";
+import type { ExportFormat } from "@/lib/table-export";
 
 interface EmployeesTableProps {
   employees: Employee[];
@@ -56,7 +58,7 @@ interface EmployeesTableProps {
   onRefresh: () => void;
   onCreateNew: () => void;
   onTerminateEmployee?: (employee: Employee) => void;
-  onExportExcel?: () => void;
+  onExportExcel?: (format: ExportFormat) => void | Promise<void>;
 }
 
 export function EmployeesTable({
@@ -137,15 +139,9 @@ export function EmployeesTable({
               <Plus className="mr-2 h-4 w-4" />
               Add Employee
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onExportExcel}
-              className="border-[#1E2764] text-[#1E2764] hover:bg-[#1E2764]/10"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            {onExportExcel && (
+              <ExportMenu onExport={onExportExcel} className="border-[#1E2764] text-[#1E2764] hover:bg-[#1E2764]/10" />
+            )}
             <Button variant="outline" size="sm" onClick={onRefresh}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh

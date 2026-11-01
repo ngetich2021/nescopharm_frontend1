@@ -68,7 +68,7 @@ import { cn } from "@/lib/utils"
 import { useOptionalAuth } from "@/lib/auth-context"
 import { exportTable, type TableExport } from "@/lib/table-export"
 import { documentFileName, sessionCompanyName } from "@/lib/document-names"
-import { DownloadFormatDialog } from "@/components/download-format-dialog"
+import { ExportSubMenu } from "@/components/export-menu"
 
 // Helper function to get entry type badge color
 const getEntryTypeColor = (entryType: string): string => {
@@ -142,7 +142,6 @@ export default function JournalEntryDetailPage() {
   const { toast } = useToast()
   const [entry, setEntry] = useState<JournalEntry | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [downloadOpen, setDownloadOpen] = useState(false)
   const company = useOptionalAuth()?.userProfile?.company
 
   const entryId = params.id as string
@@ -350,9 +349,7 @@ export default function JournalEntryDetailPage() {
                        </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                       <DropdownMenuItem onClick={() => setDownloadOpen(true)}>
-                          <Download className="h-4 w-4 mr-2" /> Download
-                       </DropdownMenuItem>
+                       <ExportSubMenu onExport={(f) => exportTable(f, buildExport(entry), company)} />
                        {(entry.status === 'draft' || entry.status === 'pending') && (
                           <>
                              <DropdownMenuSeparator />
@@ -599,13 +596,6 @@ export default function JournalEntryDetailPage() {
               </Card>
             </TabsContent>
           </Tabs>
-
-          <DownloadFormatDialog
-            open={downloadOpen}
-            onOpenChange={setDownloadOpen}
-            title={entry.entry_number}
-            onDownload={(f) => exportTable(f, buildExport(entry), company)}
-          />
         </div>
       </TooltipProvider>
     </PermissionGuard>

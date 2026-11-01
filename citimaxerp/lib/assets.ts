@@ -1,6 +1,7 @@
 import apiCall from "./api"
 import * as XLSX from "xlsx"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
+import { exportRecords, type ExportFormat } from "@/lib/table-export"
 
 export interface Asset {
   id: string
@@ -143,7 +144,7 @@ function headerToField(header: string): keyof CreateAssetPayload | "sno" | null 
   return null
 }
 
-export async function exportAssets(): Promise<void> {
+export async function exportAssets(format: ExportFormat = "xlsx"): Promise<void> {
   const assets = await getAssets()
   const rows = assets.map((a, idx) => ({
     "S/No": idx + 1,
@@ -154,6 +155,10 @@ export async function exportAssets(): Promise<void> {
     "Qty (Pcs)": a.quantity,
     "Purchase Cost (Ksh)": Number(a.purchase_cost) || 0,
   }))
+  // Excel is the sheet the assets import reads back; PDF and CSV the same rows for reading.
+  if (format !== "xlsx") {
+    return exportRecords(format, rows, { fileName: documentFileName([sessionCompanyName(), "Assets Register", todayFileDate()]), title: "Assets Register", moneyColumns: [6] })
+  }
 
   const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [Object.fromEntries(Object.keys(EXPORT_HEADERS).map((k) => [k, ""]))])
   sheet["!cols"] = Object.keys(EXPORT_HEADERS).map((k) => ({ wch: Math.max(k.length + 2, 18) }))

@@ -27,7 +27,8 @@ import { exportTable, type ExportCell, type ExportFormat } from "@/lib/table-exp
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, FileDown, FileSpreadsheet, FileText, Loader2 } from "lucide-react"
+import { Download } from "lucide-react"
+import { ExportMenu } from "@/components/export-menu"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -89,7 +90,6 @@ export function DataTable<TData, TValue>({
   })
 
   const company = useOptionalAuth()?.userProfile?.company
-  const [exporting, setExporting] = React.useState(false)
 
   // Every row matching the search and sort (not just the page shown), as CSV, Excel or PDF
   // headed with the company letterhead.
@@ -109,19 +109,14 @@ export function DataTable<TData, TValue>({
       // Amounts sent as strings ("1200.50") export as numbers; codes like "0712..." stay text.
       return /^-?\d+\.\d+$/.test(String(v)) ? Number(v) : String(v)
     }
-    setExporting(true)
-    try {
-      await exportTable(format, {
-        fileName: exportFileName,
-        title: exportTitle ?? exportFileName.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-        subtitle: exportSubtitle,
-        headers: cols.map(label),
-        rows: table.getPrePaginationRowModel().rows.map((row) => cols.map((c) => value(row.getValue(c.id)))),
-        footer: exportFooter,
-      }, company)
-    } finally {
-      setExporting(false)
-    }
+    await exportTable(format, {
+      fileName: exportFileName,
+      title: exportTitle ?? exportFileName.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      subtitle: exportSubtitle,
+      headers: cols.map(label),
+      rows: table.getPrePaginationRowModel().rows.map((row) => cols.map((c) => value(row.getValue(c.id)))),
+      footer: exportFooter,
+    }, company)
   }
 
   return (
@@ -144,27 +139,7 @@ export function DataTable<TData, TValue>({
                   Export
                 </Button>
               )}
-              {!hideExport && !onExport && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={exporting}>
-                      {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                      Export
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleExport("xlsx")}>
-                      <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel (.xlsx)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport("pdf")}>
-                      <FileText className="mr-2 h-4 w-4" /> PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport("csv")}>
-                      <FileDown className="mr-2 h-4 w-4" /> CSV
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              {!hideExport && !onExport && <ExportMenu onExport={handleExport} />}
               {!hideColumns && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

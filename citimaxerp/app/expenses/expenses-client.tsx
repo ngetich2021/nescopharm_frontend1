@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DollarSign, Calendar, FileText, Search, ChevronDown, Download, Upload, Plus } from "lucide-react"
-import * as XLSX from "xlsx"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { ExpensesTable } from "./components/expenses-table"
 import { CreateExpenseModal } from "./components/create-expense-modal"
 import { ExpenseDetailsSheet } from "./components/expense-details-sheet"
@@ -105,21 +105,23 @@ export function ExpensesClient() {
     }
   }
 
-  const handleExport = () => {
-    const data = filteredExpenses.map((e) => ({
-      Date: e.expense_date,
-      Description: e.description,
-      Category: e.category?.name || "",
-      Amount: e.amount,
-      Status: e.status,
-      Notes: e.notes || "",
-      "Created By": `${e.created_by?.first_name || ""} ${e.created_by?.last_name || ""}`.trim(),
-    }))
-    const ws = XLSX.utils.json_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Expenses")
-    XLSX.writeFile(wb, documentFileName([sessionCompanyName(), "Expenses", todayFileDate()], "xlsx"))
-  }
+  const handleExport = useTableExport(() => ({
+    fileName: documentFileName([sessionCompanyName(), "Expenses", todayFileDate()]),
+    title: "Expenses",
+    headers: ["S/No", "Date", "Description", "Category", "Amount", "Status", "Notes", "Created By"],
+    moneyColumns: [4],
+    rows: filteredExpenses.map((e, i) => [
+      i + 1,
+      e.expense_date ? new Date(e.expense_date).toLocaleDateString("en-GB") : "",
+      e.description,
+      e.category?.name || "",
+      Number(e.amount) || 0,
+      e.status,
+      e.notes || "",
+      `${e.created_by?.first_name || ""} ${e.created_by?.last_name || ""}`.trim(),
+    ]),
+    footer: [["", "", "", "Total", filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0), "", "", ""]],
+  }))
 
   // Client-side filtering by vendor name and description
   const filteredExpenses = expenses.filter((expense) => {
@@ -253,9 +255,7 @@ export function ExpensesClient() {
                 <Plus className="mr-2 h-4 w-4" /> Add Expense
               </Button>
             </PermissionGuard>
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" /> Export
-            </Button>
+            <ExportMenu onExport={handleExport} disabled={filteredExpenses.length === 0} />
             <Button variant="outline" size="sm">
               <Upload className="mr-2 h-4 w-4" /> Import
             </Button>

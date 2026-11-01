@@ -13,11 +13,15 @@ import { documentCode } from "@/lib/price-codes"
 import { buildBuyerBlock } from "@/lib/customer-address"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const { toast } = useToast()
+  const sessionCompany = useOptionalAuth()?.userProfile?.company
   const quoteRef = useRef<HTMLDivElement>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -49,6 +53,35 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
           fileDate(quote.created_at),
         ])
       : "Quotation"
+
+  // PDF is the quotation as laid out below; Excel and CSV its customer, lines and total.
+  const handleDownload = async (format: ExportFormat) => {
+    if (format === "pdf") return handleDownloadPDF()
+    if (!quote) return
+    const items = quote.quote_items ?? []
+    await exportTable(format, {
+      fileName: fileBase(),
+      title: `Quotation ${quote.quote_number}`,
+      details: [
+        ["Customer", buildBuyerBlock(quote.customer).name || "-"],
+        ["Date", new Date(quote.created_at).toLocaleDateString("en-GB")],
+        ["Valid until", quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-GB") : "-"],
+      ],
+      headers: ["S/No", "Code", "Description", "Pack Size", "Qty", "Unit Price", "VAT %", "Total"],
+      moneyColumns: [5, 7],
+      rows: items.map((item, i) => [
+        i + 1,
+        documentCode(item.price_label, item.item_code || (item.product as any)?.item_number) || "",
+        sizedName(item.product?.name, (item as any).variant?.name || item.variant_name),
+        item.pack_size || "",
+        item.unit_id && item.unit_quantity ? Number(item.unit_quantity) : Number(item.quantity),
+        Number(item.unit_price) || 0,
+        Number(item.tax_rate || 0),
+        Number(item.total_price) || 0,
+      ]),
+      footer: [["", "", "", "", "", "", "Total", Number(quote.final_amount || quote.total_amount) || 0]],
+    }, sessionCompany)
+  }
 
   const handleDownloadPDF = async () => {
     if (!quoteRef.current || !quote) return
@@ -134,10 +167,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
                 <Printer className="h-4 w-4 mr-2" />
                 Print
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDownloadPDF} disabled={isDownloading}>
-                {isDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                {isDownloading ? "Generating..." : "Download PDF"}
-              </Button>
+              <ExportMenu label="Download" onExport={handleDownload} disabled={isDownloading} />
             </div>
           </div>
         </div>

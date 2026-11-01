@@ -25,6 +25,9 @@ import { getBatchStock, type BatchStock } from "@/lib/batches"
 import { ImportProductsDialog } from "./components/import-products-dialog"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import * as XLSX from "xlsx"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useRouter } from "next/navigation"
@@ -195,6 +198,7 @@ export function ProductTable({
   isLoading = false,
   onRefresh,
 }: ProductTableProps) {
+  const userProfile = useOptionalAuth()?.userProfile
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [priceListFilter, setPriceListFilter] = useState<string>(ALL_LISTS)
@@ -323,20 +327,20 @@ export function ProductTable({
     })
   }
 
-  // Exports what the table currently shows, filters included.
-  const handleExport = async (format: "csv" | "excel") => {
-    let stock: StockTotals
-    try {
-      stock = totalStock(await getBatchStock())
-    } catch (error: any) {
-      toast({ title: "Export failed", description: error?.message || "Could not load batch stock", variant: "destructive" })
-      return
-    }
-    if (format === "csv") {
-      downloadCSVTemplate(filteredAndSortedProducts, stock)
-    } else {
-      downloadExcelTemplate(filteredAndSortedProducts, stock)
-    }
+  // Exports what the table currently shows, filters included. Excel and CSV are the sheet the
+  // products import reads back; the PDF is the same list for reading, without the hidden Ref.
+  const handleExport = async (format: ExportFormat) => {
+    const stock = totalStock(await getBatchStock())
+    if (format === "csv") return downloadCSVTemplate(filteredAndSortedProducts, stock)
+    if (format === "xlsx") return downloadExcelTemplate(filteredAndSortedProducts, stock)
+    const [headers, ...rows] = exportSheet(filteredAndSortedProducts, stock)
+    await exportTable("pdf", {
+      fileName: exportFileName(""),
+      title: "Products",
+      headers: headers.slice(0, -1).map(String),
+      moneyColumns: [6],
+      rows: rows.map((r) => r.slice(0, -1)),
+    }, userProfile?.company)
   }
 
   if (isLoading) {
@@ -415,22 +419,7 @@ export function ProductTable({
                 Add Product
               </Button>
             </PermissionGuard>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => handleExport("csv")}>
-                  Export as CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("excel")}>
-                  Export as Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ExportMenu onExport={handleExport} />
             <PermissionGuard permissions={["can_create_products"]}>
               <ImportProductsDialog onImported={onProductUpdated} />
             </PermissionGuard>

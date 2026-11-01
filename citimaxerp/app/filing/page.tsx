@@ -26,6 +26,9 @@ import {
   type FilingData, type FilingImportResult, type FilingInvoice,
 } from "@/lib/filing"
 import { printHtml } from "@/lib/print-frame"
+import { exportTable, type ExportCell, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 
 const kes = (v: unknown) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
@@ -93,6 +96,7 @@ function FileNumberInput({ invoice, max, onSaved }: { invoice: FilingInvoice; ma
  */
 export default function FilingPage() {
   const { toast } = useToast()
+  const userProfile = useOptionalAuth()?.userProfile
   const router = useRouter()
   const [data, setData] = useState<FilingData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -234,6 +238,24 @@ export default function FilingPage() {
     XLSX.writeFile(book, `filing_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
+  // Excel stays the sheet the Import takes back (with its instructions); PDF and CSV are the same
+  // rows headed with the company letterhead.
+  const exportFiling = async (format: ExportFormat) => {
+    if (format === "xlsx") return exportExcel()
+    const rows: ExportCell[][] = []
+    groups.forEach((g) => g.invoices.forEach((i, idx) => rows.push([
+      idx + 1, g.name, i.invoice_number, fmtDate(i.invoice_date), i.order_number ?? "",
+      i.total_amount, i.amount_paid, i.balance_amount, i.status.replace("_", " "), i.file_number ?? "",
+    ])))
+    await exportTable(format, {
+      fileName: `filing_${new Date().toISOString().slice(0, 10)}`,
+      title: "Filing",
+      headers: EXPORT_HEADINGS,
+      moneyColumns: [5, 6, 7],
+      rows,
+    }, userProfile?.company)
+  }
+
   const readImport = async (file: File) => {
     try {
       const book = XLSX.read(await file.arrayBuffer())
@@ -339,7 +361,7 @@ export default function FilingPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh</Button>
-            <Button variant="outline" size="sm" onClick={exportExcel} disabled={!visible.length}><Download className="mr-2 h-4 w-4" /> Export Excel</Button>
+            <ExportMenu onExport={exportFiling} disabled={!visible.length} />
             <PermissionGuard permissions={["can_view_filing", "can_update_invoices", "can_manage_system", "can_manage_company"]} hideOnDenied>
               <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()} disabled={busy}>
                 {busy && importRows ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} Import Excel

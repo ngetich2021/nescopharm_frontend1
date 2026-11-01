@@ -239,7 +239,57 @@ async function exportPdf(data: TableExport, brand: Brand) {
   pdf.save(`${data.fileName}.pdf`)
 }
 
+/** Rows of a CSV file (quoted fields, "" escapes), for re-exporting a server-made CSV in any format. */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let quoted = false
+  const src = text.replace(/^﻿/, "")
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]
+    if (quoted) {
+      if (c === '"' && src[i + 1] === '"') { field += '"'; i++ }
+      else if (c === '"') quoted = false
+      else field += c
+    } else if (c === '"') quoted = true
+    else if (c === ",") { row.push(field); field = "" }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && src[i + 1] === "\n") i++
+      row.push(field); rows.push(row); row = []; field = ""
+    } else field += c
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row) }
+  return rows.filter((r) => r.some((v) => v.trim() !== ""))
+}
+
+/** A CSV cell as a number when it is one ("12,500.00" -> 12500), else the text. Codes with leading zeros stay text. */
+export function csvCell(v: string): ExportCell {
+  const s = v.trim()
+  return /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/.test(s) && !/^0\d/.test(s) ? Number(s.replace(/,/g, "")) : s
+}
+
+// The logged-in user's company as kept in the session, for exports made outside a component.
+function storedCompany(): { id?: string; name?: string } | null {
+  if (typeof window === "undefined") return null
+  try {
+    for (const key of ["company", "user"]) {
+      const parsed = JSON.parse(localStorage.getItem(key) || "null")
+      const c = key === "company" ? parsed : parsed?.company
+      if (c?.id) return { id: c.id, name: c.name }
+    }
+  } catch { /* storage unavailable */ }
+  return null
+}
+
+/** Rows kept as {heading: value} records (as written for Excel), exported in any format. */
+export function exportRecords(format: ExportFormat, records: Record<string, ExportCell>[], meta: Omit<TableExport, "headers" | "rows">) {
+  const headers = Object.keys(records[0] ?? {})
+  return exportTable(format, { ...meta, headers, rows: records.map((r) => headers.map((h) => r[h])) })
+}
+
 export async function exportTable(format: ExportFormat, data: TableExport, company?: { id?: string; name?: string } | null) {
+  company = company?.id ? company : storedCompany() ?? company
   const brand = await getBrand(company?.id, company?.name)
   if (format === "csv") return exportCsv(data, brand)
   if (format === "xlsx") return exportXlsx(data, brand)

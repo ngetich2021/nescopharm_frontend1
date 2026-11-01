@@ -17,6 +17,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import * as XLSX from "xlsx"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { ExportMenu } from "@/components/export-menu"
+import { useOptionalAuth } from "@/lib/auth-context"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { usePermissions } from "@/hooks/use-permissions"
 import { useRouter } from "next/navigation"
@@ -199,6 +202,7 @@ export function BatchTable({
   onSearchChange,
   onStatusChange
 }: BatchTableProps) {
+  const userProfile = useOptionalAuth()?.userProfile
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [sortBy, setSortBy] = useState<"batch_number" | "quantity_available" | "quantity_received" | "quantity_sold" | "received_date">("received_date")
@@ -338,20 +342,20 @@ export function BatchTable({
     })
   }
 
-  const [isExporting, setIsExporting] = useState(false)
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("flat")
 
-  // Handle export - fetches ALL batches from API before exporting
-  const handleExport = async (format: "csv" | "excel") => {
-    setIsExporting(true)
-    try {
-      await fetchAllAndExport(format)
-      toast({ title: "Export complete", description: "All batches exported successfully." })
-    } catch (err: any) {
-      toast({ title: "Export failed", description: err.message || "Could not export batches.", variant: "destructive" })
-    } finally {
-      setIsExporting(false)
-    }
+  // Every batch (not just this page). Excel and CSV are the sheet the batch import reads back;
+  // the PDF is the same list for reading.
+  const handleExport = async (format: ExportFormat) => {
+    if (format !== "pdf") return fetchAllAndExport(format === "xlsx" ? "excel" : "csv")
+    const all = (await getBatches({ per_page: 100000 })).data || []
+    await exportTable("pdf", {
+      fileName: documentFileName([sessionCompanyName(), "Product Batches", todayFileDate()]),
+      title: "Product Batches",
+      headers: ["S/No", ...EXPORT_HEADERS],
+      moneyColumns: [7, 8],
+      rows: all.map((b, i) => [i + 1, ...batchToRow(b).map((v) => (typeof v === "string" && /^\d+(\.\d+)?$/.test(v) ? Number(v) : v))]),
+    }, userProfile?.company)
   }
 
   // Get status icon
@@ -516,22 +520,7 @@ export function BatchTable({
               </Button>
             </div>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={isExporting}>
-                  {isExporting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                  {isExporting ? "Exporting..." : "Export"}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => handleExport("csv")}>
-                  Export All as CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("excel")}>
-                  Export All as Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ExportMenu onExport={handleExport} />
 
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>

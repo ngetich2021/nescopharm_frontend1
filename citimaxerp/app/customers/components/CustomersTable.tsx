@@ -41,6 +41,8 @@ import {
 import { type Customer, getCustomerDisplayName } from "@/lib/customers";
 import { STATUS_META as APPROVAL_STATUS_META } from "@/app/customers/[id]/application-status-section";
 import { PermissionGuard } from "@/components/PermissionGuard";
+import { ExportMenu } from "@/components/export-menu";
+import type { ExportFormat } from "@/lib/table-export";
 
 interface CustomersTableProps {
   customers: Customer[];
@@ -62,7 +64,7 @@ interface CustomersTableProps {
   totalItems: number;
   onRefresh: () => void;
   onCreateNew: () => void;
-  onExport: () => void;
+  onExport: (format: ExportFormat) => void | Promise<void>;
 }
 
 export function CustomersTable({
@@ -155,10 +157,7 @@ export function CustomersTable({
               Add Customer
             </Button>
           </PermissionGuard>
-          <Button variant="outline" size="sm" onClick={onExport} disabled={loading}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
+          <ExportMenu onExport={onExport} disabled={loading} />
           <Button variant="outline" size="sm" onClick={onRefresh}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
