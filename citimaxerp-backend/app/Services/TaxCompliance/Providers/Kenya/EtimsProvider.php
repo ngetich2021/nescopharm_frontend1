@@ -189,8 +189,12 @@ class EtimsProvider implements TaxComplianceProvider
         if ($callbackUrl = $this->callbackUrl($config)) {
             $payload['callback_url'] = $callbackUrl;
         }
+        // Opening stock on eTIMS: what the item holds now. KRA refuses a sale of more than eTIMS
+        // thinks is in stock, so goods already on hand at registration must be declared here.
+        // Stock is the sum of the item's batches; the stored totals are older figures.
         if ($itemTypeCode !== '3') {
             $payload['stock_quantity'] = (float) max(
+                (float) \App\Models\InventoryBatch::where('product_id', $product->id)->where('quantity_available', '>', 0)->sum('quantity_available'),
                 (float) ($product->stock_quantity ?? 0),
                 (float) ($product->on_hand ?? 0),
             );
@@ -664,26 +668,42 @@ class EtimsProvider implements TaxComplianceProvider
         $config = $this->requireConfig($company);
 
         $clientRequestId = (string) Str::uuid();
+
+        // DigiTax adjusts stock by its own item id (PUT /stock/adjust), so the item must be
+        // registered on eTIMS first.
+        $itemId = EtimsItemRegistration::query()
+            ->where('company_id', $company->id)
+            ->where('product_id', $product->id)
+            ->value('digitax_item_id');
+        if (! $itemId) {
+            return ItemRegistrationResult::failed($clientRequestId, 'The item is not registered on eTIMS yet.', null, 0);
+        }
+
+        // KRA stock movement codes: in 02 purchase, 03 return, 06 adjustment; out 16 adjustment.
+        $in = $quantityDelta >= 0;
+        $code = match (true) {
+            $in && $movementType === 'receipt' => '02',
+            $in && $movementType === 'return' => '03',
+            $in => '06',
+            default => '16',
+        };
         $payload = [
-            'kra_pin' => $config->kra_pin,
-            'branch_id' => $config->branch_id,
-            'item_code' => $product->product_code ?? $product->sku ?? $product->id,
-            'movement_type' => $movementType,                  // 'receipt' | 'adjustment'
-            'movement_direction' => $quantityDelta >= 0 ? 'IN' : 'OUT',
+            'item_id' => $itemId,
             'quantity' => abs($quantityDelta),
-            'reference' => $reference,
-            'moved_at' => now()->format('Y-m-d\TH:i:s'),
+            'action' => $in ? 'ADD' : 'DEDUCT',
+            'movement_type' => $code,
         ];
 
         try {
             $response = $this->client->post(
                 config: $config,
-                endpoint: '/stock-movements',
+                endpoint: '/stock/adjust',
                 body: $payload,
                 clientRequestId: $clientRequestId,
                 operation: 'stock.add',
                 subjectType: 'product',
                 subjectId: (string) $product->id,
+                method: 'PUT',
             );
         } catch (\Throwable $e) {
             return ItemRegistrationResult::failed($clientRequestId, $e->getMessage(), null, 0);
@@ -691,7 +711,7 @@ class EtimsProvider implements TaxComplianceProvider
 
         $body = $response->json() ?? [];
         if ($response->successful()) {
-            return ItemRegistrationResult::synced($clientRequestId, $body['data']['movement_id'] ?? $clientRequestId, 0, $body);
+            return ItemRegistrationResult::synced($clientRequestId, $body['id'] ?? $body['data']['id'] ?? $clientRequestId, 0, $body);
         }
 
         return ItemRegistrationResult::failed($clientRequestId, $body['message'] ?? "HTTP {$response->status()}", $response->status(), 0, $body);

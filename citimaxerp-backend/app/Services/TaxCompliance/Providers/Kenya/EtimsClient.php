@@ -44,6 +44,7 @@ class EtimsClient
         string $operation,
         ?string $subjectType = null,
         ?string $subjectId = null,
+        string $method = 'POST', // or 'PUT' (stock adjustments)
     ): Response {
         $this->guardEnv($config);
         $this->rateLimit($config);
@@ -56,7 +57,7 @@ class EtimsClient
         $exception = null;
 
         try {
-            $response = $this->http($config, $clientRequestId)->post($url, $body);
+            $response = $this->http($config, $clientRequestId)->send($method === 'PUT' ? 'PUT' : 'POST', $url, ['json' => $body]);
             $resultStatus = $response->successful() ? EtimsSubmissionLog::OK : EtimsSubmissionLog::FAILED;
         } catch (ConnectionException $e) {
             $exception = $e;
@@ -75,7 +76,7 @@ class EtimsClient
             subjectId: $subjectId,
             clientRequestId: $clientRequestId,
             endpoint: $endpoint,
-            method: 'POST',
+            method: $method === 'PUT' ? 'PUT' : 'POST',
             requestBody: $body,
             response: $response,
             resultStatus: $resultStatus,
