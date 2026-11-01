@@ -60,7 +60,16 @@ function decimalColumns(data: TableExport): boolean[] {
     [...data.rows, ...(data.footer ?? [])].some((r) => typeof r[i] === "number" && !Number.isInteger(r[i] as number)))
 }
 const numericColumns = (data: TableExport) =>
-  data.headers.map((_, i) => data.rows.length > 0 && data.rows.every((r) => r[i] == null || r[i] === "" || typeof r[i] === "number"))
+  data.headers.map((_, i) => data.rows.some((r) => typeof r[i] === "number") &&
+    data.rows.every((r) => r[i] == null || r[i] === "" || typeof r[i] === "number"))
+
+// Heading, values and totals of a column line up: S/No and Item # centred, amounts and counts right, text left.
+type Align = "left" | "center" | "right"
+const SERIAL_HEADER = /^(s\/?\s?no\.?|#|no\.?|item\s?#|item no\.?)$/i
+function columnAlignments(data: TableExport): Align[] {
+  const numeric = numericColumns(data)
+  return data.headers.map((h, i) => (SERIAL_HEADER.test(h.trim()) ? "center" : numeric[i] ? "right" : "left"))
+}
 
 function download(blob: Blob, name: string) {
   const link = document.createElement("a")
@@ -91,7 +100,7 @@ async function exportXlsx(data: TableExport, brand: Brand) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet(data.title.slice(0, 31) || "Sheet1")
   const decimals = decimalColumns(data)
-  const numeric = numericColumns(data)
+  const aligns = columnAlignments(data)
 
   // Width of each column from its longest value.
   const widths = data.headers.map((h, i) =>
@@ -133,7 +142,7 @@ async function exportXlsx(data: TableExport, brand: Brand) {
     c.value = h
     c.font = { bold: true }
     c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } }
-    c.alignment = { horizontal: numeric[i] ? "right" : "left" }
+    c.alignment = { horizontal: aligns[i] }
     c.border = { bottom: { style: "thin" } }
   })
   row += 1
@@ -143,14 +152,9 @@ async function exportXlsx(data: TableExport, brand: Brand) {
     cells.forEach((v, i) => {
       const c = r.getCell(i + 1)
       c.value = v ?? null
-      if (typeof v === "number") {
-        c.numFmt = decimals[i] ? "#,##0.00" : "#,##0"
-        c.alignment = { horizontal: "right" }
-      }
-      if (bold) {
-        c.font = { bold: true }
-        if (typeof v === "string") c.alignment = { horizontal: "right" }
-      }
+      if (typeof v === "number") c.numFmt = decimals[i] ? "#,##0.00" : "#,##0"
+      c.alignment = { horizontal: bold && aligns[i] === "left" && typeof v === "string" ? "right" : aligns[i] }
+      if (bold) c.font = { bold: true }
     })
     if (bold) r.eachCell((c) => { c.border = { top: { style: "thin" } } })
   }
@@ -168,7 +172,6 @@ async function exportPdf(data: TableExport, brand: Brand) {
   const pageWidth = pdf.internal.pageSize.getWidth()
   const margin = 12
   const decimals = decimalColumns(data)
-  const numeric = numericColumns(data)
   const fmt = (v: ExportCell, i: number) =>
     typeof v === "number"
       ? v.toLocaleString(undefined, decimals[i] ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : undefined)
@@ -207,8 +210,7 @@ async function exportPdf(data: TableExport, brand: Brand) {
     y += Math.ceil(data.details.length / 2) * 5 + 2
   }
 
-  const columnStyles: Record<number, { halign: "right" }> = {}
-  numeric.forEach((n, i) => { if (n) columnStyles[i] = { halign: "right" } })
+  const aligns = columnAlignments(data)
   autoTable(pdf, {
     startY: y + 3,
     margin: { left: margin, right: margin },
@@ -218,8 +220,13 @@ async function exportPdf(data: TableExport, brand: Brand) {
     showFoot: "lastPage",
     styles: { fontSize: 8, cellPadding: 1.5 },
     headStyles: { fillColor: [31, 41, 55], textColor: 255 },
-    footStyles: { fillColor: [243, 244, 246], textColor: 20, fontStyle: "bold", halign: "right" },
-    columnStyles,
+    footStyles: { fillColor: [243, 244, 246], textColor: 20, fontStyle: "bold" },
+    // Headings and totals take their column's alignment (autoTable's columnStyles reach the body only);
+    // a totals label in a text column sits right, against the figures.
+    didParseCell: ({ cell, column, section }) => {
+      const align = aligns[column.index]
+      cell.styles.halign = section === "foot" && align === "left" && cell.raw !== "" ? "right" : align
+    },
     didDrawPage: () => {
       const pageHeight = pdf.internal.pageSize.getHeight()
       pdf.setFont("helvetica", "normal").setFontSize(8)
