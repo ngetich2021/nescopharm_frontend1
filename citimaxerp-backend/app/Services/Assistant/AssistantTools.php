@@ -33,8 +33,9 @@ class AssistantTools
         'purchase_orders' => ['can_view_purchase_orders_menu'],
     ];
 
-    // Invoices that count as sales (not drafts, cancelled or voided ones).
-    protected const DEAD_INVOICE = ['draft', 'cancelled', 'void', 'voided'];
+    // Invoices that do not count as sales. Drafts do count: most invoices here stay "draft" after
+    // their order is approved, and the sales reports include them.
+    protected const DEAD_INVOICE = ['cancelled', 'void', 'voided'];
 
     protected string $companyId;
 
@@ -84,7 +85,9 @@ class AssistantTools
                 'search' => ['type' => 'string', 'description' => 'Order number or customer name'],
                 'limit' => ['type' => 'integer', 'description' => 'Max orders (default 5, max 25)'],
             ], []],
-            'sales_summary' => ['Sales totals for a period: invoiced, paid, credited, outstanding, invoice count, top customers and top products.', $range, []],
+            'sales_summary' => ['Sales for a period, overall or for one customer: invoiced, paid, credited, outstanding, invoice count, order totals, top customers and top products. Use it for "sales report for <customer>".', $range + [
+                'customer' => ['type' => 'string', 'description' => 'Optional customer or business name to limit to'],
+            ], []],
             'customer_account' => ['A customer\'s account: what they owe, overdue amount, open invoices and last payment.', [
                 'query' => ['type' => 'string', 'description' => 'Customer or business name'],
             ], ['query']],
@@ -120,11 +123,17 @@ class AssistantTools
         if (!$this->allowed($tool)) {
             return ['error' => 'The user does not have access to this information.'];
         }
+        // Read only, enforced by the database: each lookup runs in a READ ONLY transaction that is
+        // rolled back, so nothing the assistant does can change data.
+        DB::beginTransaction();
         try {
+            DB::statement('SET TRANSACTION READ ONLY');
             return $this->{$tool}($args);
         } catch (\Throwable $e) {
             report($e);
             return ['error' => 'Could not read this data right now.'];
+        } finally {
+            DB::rollBack();
         }
     }
 
@@ -161,6 +170,51 @@ class AssistantTools
             ->where(fn ($q) => $q->whereNull('invoices.type')->orWhereNotIn('invoices.type', ['proforma', 'credit_note']));
     }
 
+    /** Customers whose name, business name or number contains every word typed, in any order. */
+    protected function matchingCustomers(string $term)
+    {
+        $words = collect(preg_split('/\s+/', trim($term)))->filter(fn ($w) => strlen($w) > 1);
+        if ($words->isEmpty()) {
+            return collect();
+        }
+        $q = Customer::where('company_id', $this->companyId);
+        foreach ($words as $w) {
+            $q->where(fn ($c) => $c->where('name', 'ilike', "%{$w}%")->orWhere('business_name', 'ilike', "%{$w}%")
+                ->orWhere('customer_number', 'ilike', "%{$w}%"));
+        }
+        return $q->limit(25)->get(['id', 'name', 'business_name', 'customer_number', 'phone', 'payment_method']);
+    }
+
+    protected function suggestCustomers(string $term): array
+    {
+        return $this->suggest('customers', ['business_name', 'name'], $term);
+    }
+
+    /**
+     * Close matches for a name that found nothing: names sharing the first letters of any word typed
+     * (so "sarra chemist" offers "Sarara Chemist Limited"), best first.
+     */
+    protected function suggest(string $table, array $columns, string $term): array
+    {
+        $stems = collect(preg_split('/[^a-z0-9]+/i', strtolower($term)))->filter(fn ($w) => strlen($w) >= 3)
+            ->map(fn ($w) => substr($w, 0, 3))->unique()->values();
+        if ($stems->isEmpty()) {
+            return [];
+        }
+        $label = count($columns) > 1 ? "coalesce(nullif(trim({$columns[0]}), ''), {$columns[1]})" : $columns[0];
+        $hits = DB::table($table)->where('company_id', $this->companyId)->whereNull('deleted_at')
+            ->where(function ($q) use ($stems, $columns) {
+                foreach ($stems as $s) {
+                    foreach ($columns as $c) {
+                        $q->orWhere($c, 'ilike', "%{$s}%");
+                    }
+                }
+            })
+            ->selectRaw("distinct {$label} as label")->limit(80)->pluck('label');
+        return $hits->sortByDesc(fn ($l) => $stems->filter(fn ($s) => str_contains(strtolower((string) $l), $s))->count())
+            ->take(5)->values()->all();
+    }
+
     protected function canSeeCost(): bool
     {
         return $this->can('can_create_products') || $this->can('can_view_finance_menu') || $this->can('can_view_purchase_orders_menu');
@@ -191,6 +245,10 @@ class AssistantTools
             ->orderBy('item_number')
             ->limit($this->limit($args, 8, 20))
             ->get();
+
+        if ($products->isEmpty()) {
+            return ['products' => [], 'did_you_mean' => $this->suggest('products', ['name'], $term)];
+        }
 
         $stock = DB::table('inventory_batches')->where('company_id', $this->companyId)
             ->whereIn('product_id', $products->pluck('id'))
@@ -271,6 +329,9 @@ class AssistantTools
         }
 
         $invoices = $q->orderByDesc('invoice_date')->orderByDesc('created_at')->limit($this->limit($args, 5, 25))->get();
+        if ($invoices->isEmpty() && $search !== '' && !preg_match('/\d/', $search)) {
+            return ['invoices' => [], 'did_you_mean' => $this->suggestCustomers($search)];
+        }
         return ['invoices' => $invoices->map(fn (Invoice $i) => [
             'number' => $i->invoice_number,
             'date' => optional($i->invoice_date)->toDateString(),
@@ -312,7 +373,20 @@ class AssistantTools
     protected function sales_summary(array $args): array
     {
         [$from, $to] = $this->range($args);
-        $base = fn () => $this->liveInvoices()->whereBetween('invoices.invoice_date', [$from, $to]);
+        $customerIds = null;
+        if (!empty($args['customer'])) {
+            $customerIds = $this->matchingCustomers((string) $args['customer'])->pluck('id');
+            if ($customerIds->isEmpty()) {
+                return ['error' => 'No customer matches "' . $args['customer'] . '".', 'did_you_mean' => $this->suggestCustomers((string) $args['customer'])];
+            }
+        }
+        $base = fn () => $this->liveInvoices()->whereBetween('invoices.invoice_date', [$from, $to])
+            ->when($customerIds, fn ($q) => $q->whereIn('invoices.customer_id', $customerIds));
+        // Order totals by order date, excluding cancelled orders: the dashboard's "Sales" figure.
+        $ordersTotal = Order::where('company_id', $this->companyId)->where('status', '!=', 'cancelled')
+            ->whereBetween(DB::raw('coalesce(order_date, created_at)::date'), [$from, $to])
+            ->when($customerIds, fn ($q) => $q->whereIn('customer_id', $customerIds))
+            ->sum(DB::raw('coalesce(final_amount, total_amount)'));
         $totals = $base()->selectRaw('count(*) as n, coalesce(sum(total_amount),0) as total, coalesce(sum(amount_paid),0) as paid, coalesce(sum(amount_credited),0) as credited, coalesce(sum(balance_amount),0) as balance')->first();
 
         $topCustomers = $base()->join('customers as c', 'c.id', '=', 'invoices.customer_id')
@@ -328,7 +402,9 @@ class AssistantTools
 
         return [
             'period' => ['from' => $from, 'to' => $to],
+            'customer' => $args['customer'] ?? null,
             'invoice_count' => (int) $totals->n,
+            'orders_total' => self::money($ordersTotal),
             'total_invoiced' => self::money($totals->total),
             'paid' => self::money($totals->paid),
             'credited' => self::money($totals->credited),
@@ -341,9 +417,10 @@ class AssistantTools
     protected function customer_account(array $args): array
     {
         $term = trim((string) ($args['query'] ?? ''));
-        $customers = Customer::where('company_id', $this->companyId)
-            ->where(fn ($q) => $q->where('name', 'ilike', "%{$term}%")->orWhere('business_name', 'ilike', "%{$term}%")->orWhere('customer_number', 'ilike', "%{$term}%"))
-            ->limit(5)->get(['id', 'name', 'business_name', 'customer_number', 'phone', 'payment_method']);
+        $customers = $this->matchingCustomers($term)->take(5);
+        if ($customers->isEmpty()) {
+            return ['customers' => [], 'did_you_mean' => $this->suggestCustomers($term)];
+        }
 
         return ['customers' => $customers->map(function (Customer $c) {
             $open = $this->liveInvoices()->where('customer_id', $c->id)->where('balance_amount', '>', 0.005)

@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronLeft, Loader2, MessageCircle, Minus, Send, Sparkles, X } from "lucide-react"
+import Link from "next/link"
 import apiCall from "@/lib/api"
 import { useOptionalAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
@@ -34,25 +35,40 @@ const write = (storage: () => Storage, key: string, value: unknown) => {
   try { storage().setItem(key, JSON.stringify(value)) } catch { /* storage unavailable */ }
 }
 
+// The conversation lives only in this page's memory: it stays while moving between screens (each
+// section mounts its own layout, and so a new widget) and is gone on reload. Nothing is stored.
+const memory: { messages: Message[]; open: boolean } = { messages: [], open: false }
+
 export function AssistantWidget() {
   const firstName = (useOptionalAuth()?.userProfile as any)?.first_name as string | undefined
-  const [mode, setMode] = useState<Mode>("button")
-  const [messages, setMessages] = useState<Message[]>([])
+  const [mode, setMode] = useState<Mode>(memory.open ? "open" : "button")
+  const [messages, setMessagesState] = useState<Message[]>(memory.messages)
   const [input, setInput] = useState("")
   const [busy, setBusy] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const setMessages = (next: Message[]) => {
+    memory.messages = next
+    setMessagesState(next)
+    // An answer can land after a link moved to another section, i.e. to another widget.
+    window.dispatchEvent(new Event("assistant-memory"))
+  }
+  useEffect(() => {
+    const sync = () => setMessagesState(memory.messages)
+    window.addEventListener("assistant-memory", sync)
+    return () => window.removeEventListener("assistant-memory", sync)
+  }, [])
 
-  // Only whether the button is tucked away is remembered. Conversations are just Q&A: they are kept
-  // nowhere (not on the server, not in the browser) and are gone when the page reloads.
+  // Only whether the button is tucked away is remembered in the browser.
   useEffect(() => {
     const saved = read<Mode>(() => localStorage, MODE_KEY, "button")
-    setMode(saved === "open" ? "button" : saved)
+    if (saved === "tucked") setMode("tucked")
     try { sessionStorage.removeItem(CHAT_KEY) } catch { /* storage unavailable */ }
   }, [])
   const changeMode = (next: Mode) => {
     setMode(next)
-    write(() => localStorage, MODE_KEY, next)
+    memory.open = next === "open"
+    write(() => localStorage, MODE_KEY, next === "open" ? "button" : next)
   }
   useEffect(() => {
     if (mode === "open") {
@@ -208,10 +224,31 @@ export function AssistantWidget() {
 // ---- A small, safe Markdown renderer for the assistant's replies: paragraphs, **bold**, `code`,
 // headings, bullet/numbered lists and tables. Built from React elements, never raw HTML.
 
+// A path inside the app ("/sales/credit-notes"), never another site.
+const isAppPath = (p: string) => /^\/[a-z][\w\-/]*(\?[\w=&%\-]*)?$/i.test(p) && !p.startsWith("//")
+const appLink = (key: number, href: string, label: ReactNode) => (
+  <Link key={key} href={href} className="font-medium text-green-700 underline underline-offset-2 hover:text-green-900">{label}</Link>
+)
+
+// Markdown links [Sales > Credit Notes](/sales/credit-notes), `/paths` and bare /paths become links
+// that open the screen; **bold** and `code` are styled.
 function inline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="rounded bg-gray-100 px-1 text-[12px]">{part.slice(1, -1)}</code>
+  const pattern = /(\[[^\]]+\]\([^)\s]+\)|\*\*[^*]+\*\*|`[^`]+`|(?<![\w/.])\/[a-z][\w\-]*(?:\/[\w\-]+)*)/gi
+  return text.split(pattern).map((part, i) => {
+    if (!part) return null
+    const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/)
+    if (link) {
+      const [, label, href] = link
+      if (isAppPath(href)) return appLink(i, href, inline(label))
+      if (/^https?:\/\//.test(href)) return <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="text-green-700 underline">{inline(label)}</a>
+      return <Fragment key={i}>{label}</Fragment>
+    }
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{inline(part.slice(2, -2))}</strong>
+    if (part.startsWith("`") && part.endsWith("`")) {
+      const code = part.slice(1, -1)
+      return isAppPath(code) ? appLink(i, code, code) : <code key={i} className="rounded bg-gray-100 px-1 text-[12px]">{code}</code>
+    }
+    if (part.startsWith("/") && isAppPath(part)) return appLink(i, part, part)
     return <Fragment key={i}>{part}</Fragment>
   })
 }
