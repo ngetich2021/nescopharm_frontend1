@@ -68,7 +68,7 @@ class AssistantTools
             'how_to' => ['Steps for doing something in the system (adding products, making orders, receiving goods, reports, payroll...) and where it is.', [
                 'topic' => ['type' => 'string', 'description' => 'What the user wants to do, e.g. "add a product", "sales report"'],
             ], ['topic']],
-            'search_products' => ['Find products by description, item number or price-list code (e.g. "amoxyclav", "34", "NSPD001"). Returns prices per price list with codes, stock on hand and nearest expiry.', [
+            'search_products' => ['Find products by description, item number or price-list code (e.g. "amoxyclav", "34", "NSPD 001"). Returns prices per price list with codes, stock on hand and nearest expiry.', [
                 'query' => ['type' => 'string', 'description' => 'Words of the description, the item number, or a price-list code'],
                 'limit' => ['type' => 'integer', 'description' => 'Max products (default 8, max 20)'],
             ], ['query']],
@@ -183,8 +183,9 @@ class AssistantTools
                 if (ctype_digit($term)) {
                     $q->orWhere('item_number', (int) $term);
                 }
+                // A code is its list and number, "NSPD 001"; typed with or without the space.
                 $q->orWhereIn('id', DB::table('product_price_tiers')->where('company_id', $this->companyId)
-                    ->whereRaw("upper(replace(item_code, ' ', '')) like ?", ['%' . $compact . '%'])->select('product_id'));
+                    ->whereRaw("upper(replace(tier_name || coalesce(item_code, ''), ' ', '')) like ?", ['%' . $compact . '%'])->select('product_id'));
             })
             ->with(['priceTiers', 'variants'])
             ->orderBy('item_number')
@@ -205,7 +206,7 @@ class AssistantTools
                 'active' => (bool) $p->is_active,
                 'tax' => $p->is_taxable === false ? 'Exempt' : ((float) $p->tax_rate > 0 ? 'VAT ' . (float) $p->tax_rate . '%' : 'Zero rated'),
                 'default_price' => self::money($p->price),
-                'prices' => $p->priceTiers->map(fn ($t) => ['list' => $t->tier_name, 'code' => $t->item_code, 'price' => self::money($t->price)])->values(),
+                'prices' => $p->priceTiers->map(fn ($t) => ['list' => $t->tier_name, 'code' => trim($t->tier_name . ' ' . $t->item_code), 'price' => self::money($t->price)])->values(),
                 'sizes' => $p->variants->map(fn ($v) => ['size' => $v->name, 'price' => self::money($v->price)])->values(),
                 'stock_on_hand' => (float) ($stock[$p->id]->qty ?? 0),
                 'nearest_expiry' => $stock[$p->id]->nearest_expiry ?? null,

@@ -14,7 +14,7 @@ type Mode = "button" | "open" | "tucked"
 type Message = { role: "user" | "assistant"; content: string }
 
 const MODE_KEY = "assistant-widget-mode"
-const CHAT_KEY = "assistant-widget-chat"
+const CHAT_KEY = "assistant-widget-chat" // where an earlier version kept the chat; cleared on load
 const SUGGESTIONS = [
   "What is the latest invoice and its amount?",
   "How do I add a product?",
@@ -43,17 +43,17 @@ export function AssistantWidget() {
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Remembered per browser (tucked away or not) and per tab (the conversation).
+  // Only whether the button is tucked away is remembered. Conversations are just Q&A: they are kept
+  // nowhere (not on the server, not in the browser) and are gone when the page reloads.
   useEffect(() => {
     const saved = read<Mode>(() => localStorage, MODE_KEY, "button")
     setMode(saved === "open" ? "button" : saved)
-    setMessages(read<Message[]>(() => sessionStorage, CHAT_KEY, []))
+    try { sessionStorage.removeItem(CHAT_KEY) } catch { /* storage unavailable */ }
   }, [])
   const changeMode = (next: Mode) => {
     setMode(next)
     write(() => localStorage, MODE_KEY, next)
   }
-  useEffect(() => { write(() => sessionStorage, CHAT_KEY, messages.slice(-40)) }, [messages])
   useEffect(() => {
     if (mode === "open") {
       endRef.current?.scrollIntoView({ block: "end" })
