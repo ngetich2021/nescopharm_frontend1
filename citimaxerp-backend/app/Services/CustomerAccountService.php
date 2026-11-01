@@ -42,7 +42,7 @@ class CustomerAccountService
                 $q->whereNull('type')->orWhere('type', '!=', 'proforma');
             })
             ->tap(fn ($q) => $this->inPaymentOrder($q))
-            ->get(['id', 'order_id', 'invoice_number', 'invoice_date', 'due_date', 'total_amount', 'amount_paid', 'amount_credited', 'balance_amount', 'status']);
+            ->get(['id', 'order_id', 'invoice_number', 'file_number', 'invoice_date', 'due_date', 'total_amount', 'amount_paid', 'amount_credited', 'balance_amount', 'status']);
 
         $open = $invoices->filter(fn (Invoice $i) => $i->outstanding() > 0.005)->values();
 
@@ -128,7 +128,7 @@ class CustomerAccountService
                 'issue_date' => $c->issue_date?->toDateString(),
                 'maturity_date' => $c->maturity_date?->toDateString(),
                 'invoice_number' => $c->invoice?->invoice_number,
-                'allocation_plan' => $c->allocation_plan,
+                'allocation_plan' => Invoice::withCurrentNumbers($c->allocation_plan),
             ])->values(),
         ];
     }

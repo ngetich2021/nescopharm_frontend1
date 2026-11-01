@@ -89,7 +89,7 @@ class EtimsReportsController extends Controller
             ->where('company_id', $companyId)
             ->where('etims_status', 'failed')
             ->whereNotNull('etims_last_error')
-            ->get(['id', 'invoice_number', 'etims_last_error', 'etims_submitted_at']);
+            ->get(['id', 'invoice_number', 'file_number', 'etims_last_error', 'etims_submitted_at']);
 
         $grouped = $rows->groupBy(function ($r) {
             return mb_substr((string) $r->etims_last_error, 0, 64);

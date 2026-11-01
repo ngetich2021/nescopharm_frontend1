@@ -58,6 +58,26 @@ class Invoice extends Model
         return $query;
     }
 
+    /**
+     * Lines that saved an invoice's number with its id (a cheque's allocation plan) show the
+     * number as printed now, e.g. NSK/0427 once the invoice has a File No.
+     */
+    public static function withCurrentNumbers(?array $lines): ?array
+    {
+        $ids = collect($lines ?? [])->pluck('invoice_id')->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return $lines;
+        }
+        $now = self::whereIn('id', $ids)->get(['id', 'invoice_number', 'file_number'])->pluck('invoice_number', 'id');
+
+        return array_map(function ($line) use ($now) {
+            if (is_array($line) && isset($line['invoice_id'], $now[$line['invoice_id']])) {
+                $line['invoice_number'] = $now[$line['invoice_id']];
+            }
+            return $line;
+        }, $lines);
+    }
+
     // INV-853b296e-0074 is INV-0074.
     public static function shortNumber(?string $stored): ?string
     {

@@ -67,7 +67,7 @@ class CustomerCreditTermsResolver
             ->whereNotNull('due_date')
             ->whereDate('due_date', '<', $today)
             ->orderBy('due_date')
-            ->get(['invoice_number', 'due_date', 'balance_amount']);
+            ->get(['invoice_number', 'file_number', 'due_date', 'balance_amount']);
 
         $oldest = $invoices->first();
 

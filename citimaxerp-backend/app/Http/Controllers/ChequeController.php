@@ -112,7 +112,7 @@ class ChequeController extends Controller
                         ->map(fn ($a) => ['invoice_number' => $a->invoice->invoice_number, 'amount' => round((float) $a->amount_allocated, 2)]);
                 }
                 if ($lines->isEmpty() && !empty($cheque->allocation_plan)) {
-                    $lines = collect($cheque->allocation_plan)
+                    $lines = collect(Invoice::withCurrentNumbers($cheque->allocation_plan))
                         ->filter(fn ($l) => !empty($l['invoice_number']))
                         ->map(fn ($l) => ['invoice_number' => $l['invoice_number'], 'amount' => isset($l['amount']) ? round((float) $l['amount'], 2) : null]);
                 }

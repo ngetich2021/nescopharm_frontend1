@@ -35,7 +35,7 @@ class CustomerStatementService
             ->where('customer_id', $customerId)
             ->whereBetween('invoice_date', [$from, $to])
             ->orderBy('invoice_date')
-            ->get(['id', 'order_id', 'invoice_number', 'invoice_date', 'total_amount', 'balance_amount']);
+            ->get(['id', 'order_id', 'invoice_number', 'file_number', 'invoice_date', 'total_amount', 'balance_amount']);
 
         // Every order dated in the period, invoiced or not, so the customer's full trading
         // history (past sales brought across from the old system included) is on the statement.
@@ -91,7 +91,7 @@ class CustomerStatementService
             ->where('balance_amount', '>', 0)
             ->where('invoice_date', '<=', $to)
             ->orderBy('invoice_date')
-            ->get(['id', 'invoice_number', 'invoice_date', 'total_amount', 'balance_amount', 'due_date'])
+            ->get(['id', 'invoice_number', 'file_number', 'invoice_date', 'total_amount', 'balance_amount', 'due_date'])
             ->map(function ($invoice) {
                 $dueDate = $invoice->due_date ? Carbon::parse($invoice->due_date) : Carbon::parse($invoice->invoice_date)->addDays(30);
                 $overdueDays = (int) max(0, $dueDate->copy()->startOfDay()->diffInDays(today(), false));
