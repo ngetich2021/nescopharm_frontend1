@@ -33,11 +33,28 @@ class Invoice extends Model
         return self::shortNumber($stored);
     }
 
-    public static function nextFileNumber(string $companyId): int
+    // Invoices dated from 2 Nov 2026 run from NSK/0432 upwards; earlier ones continue the old series.
+    public const NEW_SERIES_FROM = '2026-11-02';
+    public const NEW_SERIES_START = 432;
+
+    public static function nextFileNumber(string $companyId, $invoiceDate = null): int
     {
-        return 1 + (int) self::where('company_id', $companyId)
-            ->whereRaw("file_number ~ '^[0-9]+$'")
-            ->max(\Illuminate\Support\Facades\DB::raw('file_number::int'));
+        $date = \Illuminate\Support\Carbon::parse($invoiceDate ?? now('Africa/Nairobi'))->toDateString();
+        $newSeries = $date >= self::NEW_SERIES_FROM;
+        $asInt = \Illuminate\Support\Facades\DB::raw('file_number::int');
+        $numbered = fn () => self::where('company_id', $companyId)->whereRaw("file_number ~ '^[0-9]+$'");
+
+        $next = max(
+            $newSeries ? self::NEW_SERIES_START : 1,
+            1 + (int) $numbered()->where('invoice_date', $newSeries ? '>=' : '<', self::NEW_SERIES_FROM)->max($asInt),
+        );
+        // Never a File No another invoice already has (one filed by hand on the Filing page).
+        $taken = $numbered()->where($asInt, '>=', $next)->pluck('file_number')->map(fn ($n) => (int) $n)->flip();
+        while (isset($taken[$next])) {
+            $next++;
+        }
+
+        return $next;
     }
 
     /**
@@ -208,12 +225,12 @@ class Invoice extends Model
             // Set balance amount
             $model->balance_amount = $model->outstanding();
 
-            // An order's invoice is numbered NSK/0429, NSK/0430...: the next File No after the
-            // highest in use (other invoices, e.g. bounced cheque charges, keep their INV number).
-            // It is filed under that number straight away; if the old system already used it, the
-            // number is changed on the Filing page.
+            // An order's invoice is numbered NSK/0429, NSK/0430...: the next File No in its date's
+            // series - from NSK/0432 for invoices dated 2 Nov 2026 on (other invoices, e.g. bounced
+            // cheque charges, keep their INV number). It is filed under that number straight away;
+            // if the old system already used it, the number is changed on the Filing page.
             if ($model->order_id && blank($model->file_number) && $model->company_id) {
-                $model->file_number = (string) self::nextFileNumber($model->company_id);
+                $model->file_number = (string) self::nextFileNumber($model->company_id, $model->invoice_date);
                 $model->filed_at = now();
                 $model->filed_by = auth()->id();
             }
