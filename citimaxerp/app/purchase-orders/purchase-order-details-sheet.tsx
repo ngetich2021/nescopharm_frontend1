@@ -17,9 +17,12 @@ import {
   Store, 
   Package, 
   Coins,
+  Download,
   X
 } from "lucide-react"
-import { getPurchaseOrder, approvePurchaseOrder, itemLabel, receiveGoodsUrl, PurchaseOrder } from "@/lib/purchaseorders"
+import { getPurchaseOrder, approvePurchaseOrder, itemLabel, receiveGoodsUrl, purchaseOrderExport, PurchaseOrder } from "@/lib/purchaseorders"
+import { exportTable } from "@/lib/table-export"
+import { DownloadFormatDialog } from "@/components/download-format-dialog"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { formatDate, formatCurrency } from "@/lib/utils"
@@ -55,6 +58,7 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
   const canApprove = hasExplicitPermission(userProfile, "can_approve_purchase_orders")
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false)
 
   useEffect(() => {
     if (open && orderId) {
@@ -399,7 +403,14 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
                 <X className="h-4 w-4 mr-2" />
                 Close
               </Button>
-              
+
+              {order && (
+                <Button variant="outline" onClick={() => setIsDownloadOpen(true)}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </Button>
+              )}
+
               {order && order.approval_status === "approved" && ["pending", "partial"].includes(order.status) && (
                 <PermissionGuard permissions={["can_create_product_receipts", "can_manage_system", "can_manage_company"]} hideOnDenied>
                   <Button variant="outline" onClick={() => router.push(receiveGoodsUrl(order.id))}>
@@ -448,6 +459,15 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
             </div>
           </div>
         </div>
+
+        {order && (
+          <DownloadFormatDialog
+            open={isDownloadOpen}
+            onOpenChange={setIsDownloadOpen}
+            title={order.order_number}
+            onDownload={(format) => exportTable(format, purchaseOrderExport(order), userProfile?.company)}
+          />
+        )}
 
         {/* Approve Confirmation Dialog */}
         <AlertDialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>

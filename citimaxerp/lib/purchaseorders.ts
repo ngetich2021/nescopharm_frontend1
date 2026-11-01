@@ -1,4 +1,6 @@
 import apiCall from "./api"
+import { formatCurrency, formatDate } from "./utils"
+import type { ExportCell, TableExport } from "./table-export"
 
 export interface PurchaseOrderItem {
   id?: string
@@ -135,6 +137,55 @@ export async function getReceivablePurchaseOrders(): Promise<PurchaseOrder[]> {
 }
 
 export const receiveGoodsUrl = (orderId: string) => `/product-receipt?purchase_order=${encodeURIComponent(orderId)}`
+
+// The order as a document (details + lines + totals) for the PDF / Excel / CSV download.
+export function purchaseOrderExport(order: PurchaseOrder): TableExport {
+  const amount = (v: unknown) => Math.round(Number(v || 0) * 100) / 100
+  const lineTotal = (i: PurchaseOrderItem) => amount(i.subtotal ?? Number(i.unit_price) * i.quantity)
+  const approver = typeof order.approved_by === "object" && order.approved_by
+    ? [order.approved_by.first_name, order.approved_by.last_name].filter(Boolean).join(" ")
+    : ""
+  const sum = (f: (i: PurchaseOrderItem) => number) => order.items.reduce((s, i) => s + f(i), 0)
+  const linesTotal = sum(lineTotal)
+  const total = order.total_amount != null ? amount(order.total_amount) : linesTotal
+  const footer: ExportCell[][] = [[
+    "", "", "Totals", "",
+    sum((i) => i.quantity),
+    sum((i) => i.received_quantity || 0),
+    sum((i) => i.pending_quantity ?? Math.max(0, i.quantity - (i.received_quantity || 0))),
+    linesTotal,
+  ]]
+  if (total !== linesTotal) footer.push(["", "", "Order total", "", null, null, null, total])
+
+  return {
+    fileName: `purchase-order-${order.order_number}`,
+    title: `Purchase Order ${order.order_number}`,
+    details: [
+      ["Supplier", order.supplier?.name || "-"],
+      ["Order date", formatDate(order.order_date)],
+      ["Store", order.store?.name || "-"],
+      ["Expected delivery", order.delivery_date ? formatDate(order.delivery_date) : "-"],
+      ["Status", order.status === "partial" ? "Partially received" : order.status],
+      ["Approval", `${order.approval_status || "pending"}${approver && order.approval_status !== "pending" ? ` by ${approver}` : ""}`],
+      ["Payment", `${order.payment_status || "unpaid"} (${formatCurrency(amount(order.amount_paid))} of ${formatCurrency(total)} paid)`],
+      ...(order.currency_code ? [["Currency", order.currency_code] as [string, string]] : []),
+      ...(order.comments ? [["Comments", order.comments] as [string, string]] : []),
+    ],
+    headers: ["S/No", "Item #", "Description", "Cost", "Ordered", "Received", "Outstanding", "Total"],
+    moneyColumns: [3, 7],
+    rows: order.items.map((i, index) => [
+      index + 1,
+      i.item_number ?? "",
+      itemLabel(i),
+      amount(i.unit_price),
+      i.quantity,
+      i.received_quantity || 0,
+      i.pending_quantity ?? Math.max(0, i.quantity - (i.received_quantity || 0)),
+      lineTotal(i),
+    ]),
+    footer,
+  }
+}
 
 export async function returnPurchaseOrder(
   id: string,

@@ -13,7 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getProductReceipt, ProductReceiptApiResponse } from "@/lib/productreceipt";
+import { getProductReceipt, productReceiptExport, ProductReceiptApiResponse } from "@/lib/productreceipt";
+import { exportTable } from "@/lib/table-export";
+import { useAuth } from "@/lib/auth-context";
+import { DownloadFormatDialog } from "@/components/download-format-dialog";
 import { Package, User, Store, FileText, Calendar, Hash, Eye, Edit, Download } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { DocumentViewerModal } from "./DocumentViewerModal";
@@ -35,6 +38,8 @@ export function ProductReceiptDetailsModal({
   const [data, setData] = useState<ProductReceiptApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [documentViewerOpen, setDocumentViewerOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const { userProfile } = useAuth();
 
   React.useEffect(() => {
     if (open && receiptId) {
@@ -378,7 +383,7 @@ export function ProductReceiptDetailsModal({
                             className="flex items-center gap-2"
                           >
                             <Download className="h-4 w-4" />
-                            Download
+                            Download file
                           </Button>
                           <Button
                             variant="outline"
@@ -405,12 +410,18 @@ export function ProductReceiptDetailsModal({
           {receipt && (
             <SheetFooter className="border-t border-gray-200 pt-4">
               <div className="flex justify-between w-full">
-                <Button
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Close
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button variant="outline" onClick={() => setDownloadOpen(true)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download
+                  </Button>
+                </div>
                 {onEdit && (
                   <Button
                     onClick={handleEdit}
@@ -425,6 +436,15 @@ export function ProductReceiptDetailsModal({
           )}
         </SheetContent>
       </Sheet>
+
+      {receipt && (
+        <DownloadFormatDialog
+          open={downloadOpen}
+          onOpenChange={setDownloadOpen}
+          title={receipt.product_receipt_number || "receipt"}
+          onDownload={(format) => exportTable(format, productReceiptExport(receipt), userProfile?.company)}
+        />
+      )}
 
       {/* Document Viewer Modal */}
       {receipt && (

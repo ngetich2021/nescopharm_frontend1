@@ -3,6 +3,10 @@ import { useState } from "react";
 import * as React from "react";
 import { format } from "date-fns";
 import { ProductReceiptDetailsModal } from "./ProductReceiptDetailsModal";
+import { getProductReceipt, productReceiptExport } from "@/lib/productreceipt";
+import { exportTable } from "@/lib/table-export";
+import { useAuth } from "@/lib/auth-context";
+import { DownloadFormatDialog } from "@/components/download-format-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +73,8 @@ export default function ProductReceiptTable({
 }: ProductReceiptTableProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [downloadReceipt, setDownloadReceipt] = useState<any | null>(null);
+  const { userProfile } = useAuth();
 
   const openDetails = (id: string) => {
     setSelectedId(id);
@@ -247,6 +253,7 @@ export default function ProductReceiptTable({
                         <ActionsDropdown
                           receipt={receipt}
                           onView={() => openDetails(receipt.id)}
+                          onDownload={() => setDownloadReceipt(receipt)}
                           onEdit={() => onEditReceipt(receipt)}
                           onDelete={() => onDeleteReceipt(receipt)}
                         />
@@ -307,8 +314,18 @@ export default function ProductReceiptTable({
           </div>
         </div>
       </div>
-      <ProductReceiptDetailsModal 
-        open={detailsModalOpen} 
+      <DownloadFormatDialog
+        open={!!downloadReceipt}
+        onOpenChange={(v) => { if (!v) setDownloadReceipt(null); }}
+        title={downloadReceipt?.product_receipt_number || "receipt"}
+        onDownload={async (format) => {
+          // The full receipt, so its items are all there.
+          const { receipt } = await getProductReceipt(downloadReceipt.id);
+          await exportTable(format, productReceiptExport(receipt), userProfile?.company);
+        }}
+      />
+      <ProductReceiptDetailsModal
+        open={detailsModalOpen}
         onOpenChange={(v: boolean) => { 
           setDetailsModalOpen(v); 
           if (!v) setSelectedId(null); 
@@ -329,11 +346,13 @@ export default function ProductReceiptTable({
 function ActionsDropdown({ 
   receipt,
   onView,
+  onDownload,
   onEdit,
   onDelete
-}: { 
+}: {
   receipt: any;
   onView: () => void;
+  onDownload: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -352,6 +371,9 @@ function ActionsDropdown({
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         <DropdownMenuItem onClick={onView}>
           <Eye className="h-4 w-4 mr-2" /> View Details
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDownload}>
+          <Download className="h-4 w-4 mr-2" /> Download
         </DropdownMenuItem>
         {canEdit && (
           <DropdownMenuItem onClick={onEdit}>

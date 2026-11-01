@@ -10,9 +10,11 @@ export interface TableExport {
   fileName: string
   title: string
   subtitle?: string
+  details?: [string, string][] // label/value lines under the title, e.g. a document's supplier and dates
   headers: string[]
   rows: ExportCell[][]
   footer?: ExportCell[][] // e.g. totals, bold under the table
+  moneyColumns?: number[] // always 2 decimals, even when every amount is whole
 }
 
 interface Brand {
@@ -54,7 +56,7 @@ function getBrand(companyId?: string, fallbackName?: string) {
 
 // Amount columns (any value with cents) show 2 decimals; counts and S/No stay whole.
 function decimalColumns(data: TableExport): boolean[] {
-  return data.headers.map((_, i) =>
+  return data.headers.map((_, i) => !!data.moneyColumns?.includes(i) ||
     [...data.rows, ...(data.footer ?? [])].some((r) => typeof r[i] === "number" && !Number.isInteger(r[i] as number)))
 }
 const numericColumns = (data: TableExport) =>
@@ -76,7 +78,8 @@ function exportCsv(data: TableExport, brand: Brand) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const lines = [
-    [brand.name], [data.title], ...(data.subtitle ? [[data.subtitle]] : []), [],
+    [brand.name], [data.title], ...(data.subtitle ? [[data.subtitle]] : []),
+    ...(data.details ?? []), [],
     data.headers, ...data.rows, ...(data.footer ?? []),
   ].map((r) => r.map(cell).join(","))
   // BOM so Excel opens it as UTF-8.
@@ -114,6 +117,12 @@ async function exportXlsx(data: TableExport, brand: Brand) {
   row += 1
   if (data.subtitle) {
     ws.getCell(row, 1).value = data.subtitle
+    row += 1
+  }
+  for (const [label, value] of data.details ?? []) {
+    ws.getCell(row, 1).value = label
+    ws.getCell(row, 1).font = { bold: true }
+    ws.getCell(row, 2).value = value
     row += 1
   }
   row += 1
@@ -185,6 +194,17 @@ async function exportPdf(data: TableExport, brand: Brand) {
   if (data.subtitle) {
     pdf.setFont("helvetica", "normal").setFontSize(10).text(data.subtitle, margin, y + 4)
     y += 6
+  }
+  if (data.details?.length) {
+    // Two columns of label: value pairs.
+    const colWidth = (pageWidth - margin * 2) / 2
+    data.details.forEach(([label, value], i) => {
+      const x = margin + (i % 2) * colWidth
+      const lineY = y + 4 + Math.floor(i / 2) * 5
+      pdf.setFont("helvetica", "bold").setFontSize(9).text(`${label}:`, x, lineY)
+      pdf.setFont("helvetica", "normal").text(String(value ?? ""), x + 32, lineY, { maxWidth: colWidth - 34 })
+    })
+    y += Math.ceil(data.details.length / 2) * 5 + 2
   }
 
   const columnStyles: Record<number, { halign: "right" }> = {}

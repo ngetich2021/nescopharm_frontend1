@@ -1,5 +1,7 @@
 
 import apiCall from "./api";
+import { formatDate } from "./utils";
+import type { ExportCell, TableExport } from "./table-export";
 
 // Product Receipt Item interface
 export interface ProductReceiptItem {
@@ -11,6 +13,7 @@ export interface ProductReceiptItem {
   quantity: number;
   unit_price: string;
   expiry_date?: string | null;
+  batch_number?: string | null;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -346,6 +349,57 @@ export interface ApiProductReceiptSummary {
       company_id: string;
     };
     generated_at: string;
+  };
+}
+
+// Import/clearing costs a receipt can carry on top of its items (shown in the details view too).
+const IMPORT_COSTS: [string, string][] = [
+  ["ppb_permit", "PPB Permit"], ["idf", "IDF"], ["railway_levy", "Railway Levy"], ["transport_cost", "Transport Cost"],
+  ["clearing_agency_fee", "Clearing Agency Fee"], ["other_clearing_cost", "Other Clearing Cost"],
+  ["certificate_of_conformity", "Certificate of Conformity"], ["sgs_listing_approval", "SGS Listing & Approval"],
+  ["vat_on_clearing", "VAT on Clearing"], ["vat_on_product", "VAT on Product"], ["import_duty", "Import Duty"],
+  ["excise_duty", "Excise Duty"], ["fob_price", "FOB Price"],
+];
+
+// The receipt as a document (details + items + totals) for the PDF / Excel / CSV download.
+export function productReceiptExport(receipt: ProductReceiptDetails): TableExport {
+  const items = receipt.product_receipt_items ?? [];
+  const lineTotal = (i: ProductReceiptItem) => Math.round(Number(i.unit_price || 0) * i.quantity * 100) / 100;
+  const itemsTotal = items.reduce((s, i) => s + lineTotal(i), 0);
+  const costs = IMPORT_COSTS
+    .map(([key, label]) => [label, Number((receipt as any)[key]) || 0] as const)
+    .filter(([, v]) => v > 0);
+  const importTotal = costs.reduce((s, [, v]) => s + v, 0);
+  const recipient = [receipt.recipient?.first_name, receipt.recipient?.last_name].filter(Boolean).join(" ");
+  const date = (d?: string | null) => (d ? formatDate(d) : "");
+  const footer: ExportCell[][] = [["", "Items total", "", "", "", items.reduce((s, i) => s + i.quantity, 0), "", itemsTotal]];
+  costs.forEach(([label, v]) => footer.push(["", label, "", "", "", null, "", v]));
+  if (importTotal > 0) footer.push(["", "Landed total", "", "", "", null, "", itemsTotal + importTotal]);
+
+  return {
+    fileName: `product-receipt-${receipt.product_receipt_number || receipt.reference_number}`,
+    title: `Product Receipt ${receipt.product_receipt_number || ""}`.trim(),
+    details: [
+      ["Supplier", receipt.supplier?.name || "-"],
+      ["Reference", receipt.reference_number || "-"],
+      ["Store", receipt.store?.name || "-"],
+      ["Document type", (receipt.document_type || "-").replace(/_/g, " ")],
+      ["Received by", recipient || "-"],
+      ["Date", date(receipt.created_at) || "-"],
+    ],
+    headers: ["S/No", "Product", "Variant", "Batch", "Expiry", "Qty", "Unit Cost", "Total"],
+    moneyColumns: [6, 7],
+    rows: items.map((i, index) => [
+      index + 1,
+      i.product?.name || "-",
+      i.variant?.name || "",
+      i.batch_number || "",
+      date(i.expiry_date),
+      i.quantity,
+      Number(i.unit_price || 0),
+      lineTotal(i),
+    ]),
+    footer,
   };
 }
 
