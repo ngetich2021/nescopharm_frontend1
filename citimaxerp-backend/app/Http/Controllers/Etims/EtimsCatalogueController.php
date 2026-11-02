@@ -117,7 +117,8 @@ class EtimsCatalogueController extends Controller
         // Still on its way to KRA: take the next step now (register items, submit, or ask DigiTax
         // whether KRA has signed), at most every 10 seconds. The page asks every 5 seconds while
         // waiting, so the invoice moves on without a queue worker.
-        if ($invoice->etims_requested && in_array($invoice->etims_status, [null, 'registering_items', 'submitted'], true)
+        // Only invoices already on their way: opening the page never sends one (Send to eTIMS does).
+        if (in_array($invoice->etims_status, ['registering_items', 'submitted'], true)
             && \App\Jobs\Etims\SubmitInvoiceToEtimsJob::claimStep((string) $invoice->id)) {
             \App\Jobs\Etims\SubmitInvoiceToEtimsJob::runNow((string) $invoice->id);
         }
