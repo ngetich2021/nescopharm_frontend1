@@ -452,7 +452,11 @@ class ProductController extends Controller
                     continue;
                 }
 
+                $byName = fn () => Product::where('company_id', $companyId)
+                    ->whereRaw("lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = ?", [mb_strtolower($description)])
+                    ->get();
                 $matches = collect();
+                $nameNote = null;
                 if ($itemCode !== null) {
                     $tierOwner = ProductPriceTier::where('company_id', $companyId)->where('tier_name', $listName)->where('item_code', $itemCode)->value('product_id');
                     $matches = $tierOwner
@@ -460,11 +464,21 @@ class ProductController extends Controller
                         : Product::where('company_id', $companyId)
                             ->whereRaw("upper(regexp_replace(coalesce(sku, ''), '\\s+', '', 'g')) = ?", [strtoupper(preg_replace('/\s+/', '', $code))])
                             ->get();
+                    // The sheet names a different item for this code (NSPV 036 "Ceftriaxone 1gm Vial" while
+                    // the code sits on the 500 mg item): the code moves to the item the sheet names.
+                    $owner = $matches->count() === 1 ? $matches->first() : null;
+                    if ($owner && mb_strtolower(preg_replace('/\s+/', ' ', trim($owner->name))) !== mb_strtolower($description)) {
+                        $named = $byName();
+                        if ($named->count() === 1) {
+                            $nameNote = "{$code} moved from \"{$owner->name}\" to the item this sheet names.";
+                            $matches = $named;
+                        } elseif ($named->isEmpty()) {
+                            $nameNote = "{$code} is \"{$owner->name}\" - the sheet's description differs and matches no item, so the price was set on \"{$owner->name}\". Price lists don't rename items: edit the product to rename it.";
+                        }
+                    }
                 }
                 if ($matches->isEmpty()) {
-                    $matches = Product::where('company_id', $companyId)
-                        ->whereRaw("lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = ?", [mb_strtolower($description)])
-                        ->get();
+                    $matches = $byName();
                 }
                 if ($matches->count() > 1) {
                     $summary['errors']++;
@@ -473,7 +487,7 @@ class ProductController extends Controller
                 }
 
                 $product = $matches->first();
-                $notes = [];
+                $notes = $nameNote ? [$nameNote] : [];
                 $oldPrice = null;
                 // A price list only prices products that already exist; it never makes one. A row whose
                 // description matches nothing (often a typo) is reported so the product is created first,
@@ -512,7 +526,7 @@ class ProductController extends Controller
                     ->first();
 
                 if ($tier) {
-                    if ($tier->product_id !== $product->id) {
+                    if ($tier->product_id !== $product->id && !$nameNote) {
                         $notes[] = "{$result['code']} moved here from another product.";
                     }
                     $oldPrice = (float) $tier->price;
