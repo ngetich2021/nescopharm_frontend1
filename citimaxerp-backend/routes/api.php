@@ -653,6 +653,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/purchase-orders/{id}/return', [PurchaseOrderController::class, 'returnItems'])->name('purchase-orders.return');
 
     // Supplier Payment routes
+    Route::get('/supplier-payments/open-invoices/{supplierId}', [SupplierPaymentController::class, 'openInvoices']);
     Route::apiResource('supplier-payments', SupplierPaymentController::class);
 
     // Mpesa config endpoints

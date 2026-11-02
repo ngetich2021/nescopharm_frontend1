@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { SupplierPayment } from "@/lib/supplier-payments"
+import { SupplierPayment, type SupplierInvoicePaid } from "@/lib/supplier-payments"
 import {
   Building2,
   Calendar,
@@ -151,6 +151,58 @@ export default function SupplierPaymentDetailsSheet({
               )}
             </div>
           </div>
+
+          {(() => {
+            const paid = (payment.invoices_paid ?? []) as SupplierInvoicePaid[]
+            const onInvoices = paid.reduce((sum, i) => sum + Number(i.amount || 0), 0)
+            const left = parseFloat(payment.amount) - onInvoices
+            return (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">Invoices Paid</h3>
+                  {paid.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Not put on any invoice - it is on the supplier's account.</p>
+                  ) : (
+                    <div className="rounded border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr className="text-left">
+                            <th className="px-2 py-1.5 w-10">S/No</th>
+                            <th className="px-2 py-1.5">Invoice</th>
+                            <th className="px-2 py-1.5">Date</th>
+                            <th className="px-2 py-1.5 text-right">Paid</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paid.map((inv, i) => (
+                            <tr key={`${inv.type}:${inv.id}`} className="border-t">
+                              <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <div className="font-medium">{inv.number}</div>
+                                <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                  {inv.type === "delivery_invoice" ? "Delivery" : "Bill"}{inv.description ? ` - ${inv.description}` : ""}
+                                  {inv.total != null && Number(inv.amount) < Number(inv.total) ? ` (of ${formatCurrency(inv.total)})` : ""}
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 whitespace-nowrap">{inv.date ? new Date(inv.date).toLocaleDateString("en-GB") : "-"}</td>
+                              <td className="px-2 py-1.5 text-right whitespace-nowrap">{formatCurrency(inv.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {paid.some((i) => !i.applied) && payment.status === "pending" && (
+                    <p className="text-xs text-amber-700">The cheque has not cleared yet: these invoices are paid when it does.</p>
+                  )}
+                  {paid.length > 0 && left > 0.005 && (
+                    <p className="text-xs text-muted-foreground">{formatCurrency(left)} of this payment is not on an invoice (on the supplier's account).</p>
+                  )}
+                </div>
+              </>
+            )
+          })()}
 
           {payment.notes && (
             <>

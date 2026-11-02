@@ -131,9 +131,21 @@ class DeliveryInvoice extends Model
     {
         $date = \Carbon\Carbon::parse($date ?? now())->toDateString();
         $payment = $this->supplier_payment_id ? SupplierPayment::find($this->supplier_payment_id) : null;
+        // A payment that also pays other invoices (one cheque for many) is never rewritten for this one.
+        if ($payment && $payment->allocations()->where('invoice_id', '!=', $this->id)->exists()) {
+            if ($this->status === 'paid') {
+                return $payment;
+            }
+            $payment = null;
+        }
+        // Only what other payments have not already paid on it.
+        $paidElsewhere = (float) SupplierPaymentAllocation::where('invoice_type', SupplierPaymentAllocation::DELIVERY_INVOICE)
+            ->where('invoice_id', $this->id)->whereNotNull('applied_at')
+            ->when($payment, fn ($q) => $q->where('supplier_payment_id', '!=', $payment->id))->sum('amount');
+        $amount = round((float) $this->total_amount - $paidElsewhere, 2);
         $fields = [
             'supplier_id' => $this->supplier_id ?: self::transporterSupplier($this->company_id, $this->transporter_name)->id,
-            'amount' => $this->total_amount,
+            'amount' => $amount,
             'payment_date' => $date,
             'payment_method' => $method,
             'transaction_reference' => trim("Delivery invoice {$this->invoice_number}" . ($reference ? " - {$reference}" : '')),
@@ -144,6 +156,11 @@ class DeliveryInvoice extends Model
             'id' => (string) \Illuminate\Support\Str::uuid(),
             'company_id' => $this->company_id,
         ]);
+        // So the payment shows which invoice it paid (Payments page); marked applied as the invoice is settled just below.
+        SupplierPaymentAllocation::updateOrCreate(
+            ['supplier_payment_id' => $payment->id, 'invoice_type' => SupplierPaymentAllocation::DELIVERY_INVOICE, 'invoice_id' => $this->id],
+            ['company_id' => $this->company_id, 'amount' => $amount, 'applied_at' => now()],
+        );
 
         $this->update([
             'status' => 'paid',

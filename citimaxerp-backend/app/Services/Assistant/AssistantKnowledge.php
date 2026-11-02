@@ -51,7 +51,7 @@ class AssistantKnowledge
         ['Purchase Orders', '/purchase-orders', ['can_view_purchase_orders_menu'],
             '"New Purchase Order": supplier, store, order date, products with quantities and cost. It is approved ("Approve"), then goods are received against it ("Receive goods" creates the product receipt). Row menu: View Details, Download, Return to supplier.'],
         ['Supplier Payments', '/supplier-payments', ['can_view_payments_menu'],
-            '"Record Supplier Payment": supplier, amount, date, method and reference (and the PO if it is for one).'],
+            '"Record Supplier Payment": supplier, amount, date, method and reference (and the PO if it is for one). Picking the supplier lists its unpaid invoices under "Invoices Paid" - its bills and, for a transporter, its delivery invoices - oldest first: tick each invoice this payment pays (it fills the full amount owed, which can be lowered for a part payment; the payment amount follows), or type the amount and click "Pay oldest first". One payment (e.g. one cheque) can pay many invoices. Cash, bank and M-Pesa pay the invoices at once; a cheque pays them only when it is marked cleared. The payments list shows each payment\'s invoices (Invoices / PO column, searchable), and View Details lists them with what was paid on each.'],
         ['Expenses', '/expenses', ['can_view_expenses_menu'],
             '"Add Expense": category, description, amount, date, payment method and receipt; expenses are approved. Categories are managed on the same page. Export gives Excel/PDF/CSV.'],
         ['Filing', '/filing', ['can_view_filing'],

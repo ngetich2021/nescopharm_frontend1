@@ -26,6 +26,7 @@ export async function exportSupplierPayments(payments: SupplierPayment[], format
         "Payment Method": METHOD_LABELS[p.payment_method] ?? p.payment_method ?? "",
         "Reference": p.transaction_reference ?? "",
         "PO Number": p.purchase_order?.order_number ?? "",
+        "Invoices Paid": invoicesPaidLabel(p),
         "Status": p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : "",
         "Notes": p.notes ?? "",
     }));
@@ -168,6 +169,45 @@ export interface CreateSupplierPaymentPayload {
     cheque_number?: string;
     bank_name?: string;
     maturity_date?: string;
+    // The supplier's invoices this payment pays (bills and transporter delivery invoices).
+    allocations?: { type: SupplierInvoiceType; id: string; amount: number }[];
+}
+
+export type SupplierInvoiceType = "bill" | "delivery_invoice";
+
+/** One of a supplier's unpaid invoices, as the payment form lists them (oldest first). */
+export interface OpenSupplierInvoice {
+    type: SupplierInvoiceType;
+    id: string;
+    number: string;
+    date: string | null;
+    due_date: string | null;
+    description: string | null;
+    total: number;
+    paid: number;
+    balance: number;
+}
+
+/** An invoice a payment paid, on the payment itself (invoices_paid). */
+export interface SupplierInvoicePaid {
+    type: SupplierInvoiceType;
+    id: string;
+    number: string;
+    date: string | null;
+    description: string | null;
+    total: number | null;
+    amount: number;
+    applied: boolean;
+}
+
+export async function getOpenSupplierInvoices(supplierId: string): Promise<OpenSupplierInvoice[]> {
+    const response = await apiCall<{ data: OpenSupplierInvoice[] }>(`/supplier-payments/open-invoices/${supplierId}`, "GET");
+    return response.data ?? [];
+}
+
+/** "PUR-131, DI-00012" - the invoices a payment paid, for tables and exports. */
+export function invoicesPaidLabel(payment: SupplierPayment): string {
+    return ((payment.invoices_paid ?? []) as SupplierInvoicePaid[]).map((i) => i.number).join(", ");
 }
 
 export interface SupplierPaymentSummary {

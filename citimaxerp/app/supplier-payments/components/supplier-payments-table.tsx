@@ -38,7 +38,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
-import { getSupplierPayments, SupplierPayment, exportSupplierPayments, importSupplierPayments } from "@/lib/supplier-payments"
+import { getSupplierPayments, SupplierPayment, exportSupplierPayments, importSupplierPayments, invoicesPaidLabel } from "@/lib/supplier-payments"
 import { ExportMenu } from "@/components/export-menu"
 import type { ExportFormat } from "@/lib/table-export"
 import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
@@ -104,7 +104,9 @@ export function SupplierPaymentsTable() {
       (search === "" || 
         (payment.transaction_reference && payment.transaction_reference.toLowerCase().includes(search.toLowerCase())) ||
         (payment.supplier?.name && payment.supplier.name.toLowerCase().includes(search.toLowerCase())) ||
-        (payment.purchase_order?.order_number && payment.purchase_order.order_number.toLowerCase().includes(search.toLowerCase()))
+        (payment.purchase_order?.order_number && payment.purchase_order.order_number.toLowerCase().includes(search.toLowerCase())) ||
+        (payment.payment_number && payment.payment_number.toLowerCase().includes(search.toLowerCase())) ||
+        invoicesPaidLabel(payment).toLowerCase().includes(search.toLowerCase())
       )
   )
 
@@ -386,7 +388,7 @@ export function SupplierPaymentsTable() {
                 </TableHead>
                 <TableHead className="font-semibold">Reference</TableHead>
                 <TableHead className="font-semibold">Supplier</TableHead>
-                <TableHead className="font-semibold">PO #</TableHead>
+                <TableHead className="font-semibold">Invoices / PO</TableHead>
                 <TableHead className="font-semibold">Amount</TableHead>
                 <TableHead className="font-semibold">Method</TableHead>
                 <TableHead className="font-semibold">Date</TableHead>
@@ -429,7 +431,18 @@ export function SupplierPaymentsTable() {
                     </TableCell>
                     <TableCell className="font-medium">{payment.transaction_reference || "N/A"}</TableCell>
                     <TableCell>{payment.supplier?.name || "N/A"}</TableCell>
-                    <TableCell>{payment.purchase_order?.order_number || "N/A"}</TableCell>
+                    <TableCell className="max-w-[220px]">
+                      {(() => {
+                        const invoices = invoicesPaidLabel(payment)
+                        const count = (payment.invoices_paid ?? []).length
+                        if (!invoices) return payment.purchase_order?.order_number || "N/A"
+                        return (
+                          <span className="block truncate" title={invoices}>
+                            {count > 2 ? `${count} invoices: ${invoices}` : invoices}
+                          </span>
+                        )
+                      })()}
+                    </TableCell>
                     <TableCell>Ksh. {parseFloat(payment.amount || "0").toLocaleString()}</TableCell>
                     <TableCell className="capitalize">{payment.payment_method?.replace("_", " ") || "N/A"}</TableCell>
                     <TableCell>{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : "N/A"}</TableCell>

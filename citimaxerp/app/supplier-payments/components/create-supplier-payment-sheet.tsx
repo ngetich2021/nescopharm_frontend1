@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { createSupplierPayment } from "@/lib/supplier-payments"
+import { createSupplierPayment, getOpenSupplierInvoices, type OpenSupplierInvoice } from "@/lib/supplier-payments"
+import { Checkbox } from "@/components/ui/checkbox"
 import { getSuppliers } from "@/lib/suppliers"
 import { getPurchaseOrders } from "@/lib/purchaseorders"
 import { Loader2, CreditCard, Building2, Ticket, FileText, Banknote } from "lucide-react"
@@ -61,6 +62,10 @@ export default function CreateSupplierPaymentSheet({
   const [loadingPOs, setLoadingPOs] = useState(false)
   const [filteredPOs, setFilteredPOs] = useState<PurchaseOrder[]>([])
   const [supplierSearch, setSupplierSearch] = useState("")
+  // The chosen supplier's unpaid invoices and what this payment puts on each (key = "type:id").
+  const [openInvoices, setOpenInvoices] = useState<OpenSupplierInvoice[]>([])
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
+  const [payOn, setPayOn] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     supplier_id: "",
@@ -93,6 +98,47 @@ export default function CreateSupplierPaymentSheet({
       setFilteredPOs(purchaseOrders)
     }
   }, [formData.supplier_id, purchaseOrders])
+
+  useEffect(() => {
+    setPayOn({})
+    setOpenInvoices([])
+    if (!isOpen || !formData.supplier_id) return
+    let cancelled = false
+    setLoadingInvoices(true)
+    getOpenSupplierInvoices(formData.supplier_id)
+      .then((rows) => { if (!cancelled) setOpenInvoices(rows) })
+      .catch(() => { if (!cancelled) setOpenInvoices([]) })
+      .finally(() => { if (!cancelled) setLoadingInvoices(false) })
+    return () => { cancelled = true }
+  }, [formData.supplier_id, isOpen])
+
+  const invoiceKey = (inv: OpenSupplierInvoice) => `${inv.type}:${inv.id}`
+  const allocatedTotal = Object.values(payOn).reduce((sum, v) => sum + (parseFloat(v) || 0), 0)
+
+  // Ticking pays the invoice in full and the payment amount follows the invoices ticked.
+  const setInvoicePay = (inv: OpenSupplierInvoice, value: string | null) => {
+    setPayOn((prev) => {
+      const next = { ...prev }
+      if (value === null) delete next[invoiceKey(inv)]
+      else next[invoiceKey(inv)] = value !== "" && parseFloat(value) > inv.balance ? String(inv.balance) : value
+      const total = Object.values(next).reduce((sum, v) => sum + (parseFloat(v) || 0), 0)
+      setFormData((f) => ({ ...f, amount: total > 0 ? String(Math.round(total * 100) / 100) : f.amount }))
+      return next
+    })
+  }
+
+  // The amount typed first, then spread over the invoices oldest first.
+  const payOldestFirst = () => {
+    let left = parseFloat(formData.amount || "0")
+    const next: Record<string, string> = {}
+    for (const inv of openInvoices) {
+      if (left <= 0) break
+      const put = Math.min(inv.balance, Math.round(left * 100) / 100)
+      next[invoiceKey(inv)] = String(put)
+      left -= put
+    }
+    setPayOn(next)
+  }
 
   const fetchSuppliers = async () => {
     setLoadingSuppliers(true)
@@ -187,8 +233,21 @@ export default function CreateSupplierPaymentSheet({
       return
     }
 
+    if (allocatedTotal > parseFloat(formData.amount || "0") + 0.001) {
+      toast({
+        title: "Error",
+        description: `The invoices ticked add up to ${formatCurrency(allocatedTotal)}, more than the payment amount`,
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
       const isCheque = formData.payment_method === "cheque"
+      const allocations = openInvoices
+        .filter((inv) => parseFloat(payOn[invoiceKey(inv)] || "0") > 0)
+        .map((inv) => ({ type: inv.type, id: inv.id, amount: parseFloat(payOn[invoiceKey(inv)]) }))
       const payload = {
         supplier_id: formData.supplier_id,
         purchase_order_id: formData.purchase_order_id || undefined,
@@ -200,6 +259,7 @@ export default function CreateSupplierPaymentSheet({
         cheque_number: isCheque ? formData.cheque_number : undefined,
         bank_name: isCheque ? formData.bank_name : undefined,
         maturity_date: isCheque && formData.maturity_date ? formData.maturity_date : undefined,
+        allocations: allocations.length ? allocations : undefined,
       }
 
       await createSupplierPayment(payload)
@@ -227,6 +287,7 @@ export default function CreateSupplierPaymentSheet({
   }
 
   const resetForm = () => {
+    setPayOn({})
     setFormData({
       supplier_id: "",
       purchase_order_id: "",
@@ -455,8 +516,8 @@ export default function CreateSupplierPaymentSheet({
                 {formData.payment_method === "cheque" && (
                   <div className="space-y-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                     <p className="text-sm text-amber-800">
-                      A cheque isn't guaranteed money yet - this won't reduce the purchase order balance until
-                      it's marked cleared. The Director/GM will be alerted a week before it matures.
+                      A cheque isn't guaranteed money yet - it won't pay the invoices ticked below or reduce the
+                      purchase order balance until it's marked cleared. The Director/GM will be alerted a week before it matures.
                     </p>
                     <div className="grid grid-cols-2 gap-5">
                       <div className="space-y-2">
@@ -501,6 +562,96 @@ export default function CreateSupplierPaymentSheet({
                 )}
               </CardContent>
             </Card>
+
+            {/* Invoices this payment pays */}
+            {formData.supplier_id && (
+              <Card className="border-0 shadow-sm bg-card/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between gap-2 text-base">
+                    <span className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-blue-600" />
+                      Invoices Paid
+                    </span>
+                    {openInvoices.length > 0 && (
+                      <Button type="button" variant="outline" size="sm" onClick={payOldestFirst} disabled={!parseFloat(formData.amount || "0")}>
+                        Pay oldest first
+                      </Button>
+                    )}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Tick the supplier's invoices (bills and transporter delivery invoices) this payment pays, or type the amount and use
+                    "Pay oldest first".
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {loadingInvoices ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading invoices...</div>
+                  ) : openInvoices.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">This supplier has no unpaid invoices.</p>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto rounded border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr className="text-left">
+                            <th className="px-2 py-2 w-10">S/No</th>
+                            <th className="px-2 py-2 w-8"></th>
+                            <th className="px-2 py-2">Invoice</th>
+                            <th className="px-2 py-2">Date</th>
+                            <th className="px-2 py-2 text-right">Owed</th>
+                            <th className="px-2 py-2 text-right w-32">Pay</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {openInvoices.map((inv, i) => {
+                            const key = invoiceKey(inv)
+                            const ticked = key in payOn
+                            return (
+                              <tr key={key} className="border-t">
+                                <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
+                                <td className="px-2 py-1.5">
+                                  <Checkbox
+                                    checked={ticked}
+                                    onCheckedChange={(v) => setInvoicePay(inv, v ? String(inv.balance) : null)}
+                                    aria-label={`Pay ${inv.number}`}
+                                  />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <div className="font-medium">{inv.number}</div>
+                                  <div className="text-xs text-muted-foreground truncate max-w-[220px]">
+                                    {inv.type === "delivery_invoice" ? "Delivery" : "Bill"}{inv.description ? ` - ${inv.description}` : ""}
+                                  </div>
+                                </td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{inv.date ? new Date(inv.date).toLocaleDateString("en-GB") : "-"}</td>
+                                <td className="px-2 py-1.5 text-right whitespace-nowrap">{formatCurrency(inv.balance)}</td>
+                                <td className="px-2 py-1.5">
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max={inv.balance}
+                                    value={payOn[key] ?? ""}
+                                    onChange={(e) => setInvoicePay(inv, e.target.value === "" ? null : e.target.value)}
+                                    className="h-8 text-right"
+                                    aria-label={`Amount paid on ${inv.number}`}
+                                  />
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {allocatedTotal > 0 && (
+                    <p className={`mt-2 text-xs ${allocatedTotal > parseFloat(formData.amount || "0") + 0.001 ? "text-red-600" : "text-muted-foreground"}`}>
+                      On invoices: {formatCurrency(allocatedTotal)}
+                      {parseFloat(formData.amount || "0") - allocatedTotal > 0.001 &&
+                        ` - ${formatCurrency(parseFloat(formData.amount || "0") - allocatedTotal)} left on the supplier's account`}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Notes Section */}
             <Card className="border-0 shadow-sm bg-card/50">

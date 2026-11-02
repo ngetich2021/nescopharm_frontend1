@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountsPayable;
+use App\Models\DeliveryInvoice;
 use App\Models\SupplierPayment;
+use App\Models\SupplierPaymentAllocation;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\Cheque;
@@ -71,7 +74,8 @@ class SupplierPaymentController extends Controller
 
         // The Supplier Payments page pages and totals on its own, so it asks for every payment (per_page=all).
         $perPage = $request->input('per_page') === 'all' ? max($query->count(), 1) : (int) $request->input('per_page', 20);
-        $payments = $query->orderBy('payment_date', 'desc')->orderBy('payment_number', 'desc')->paginate(max(1, min($perPage, 10000)));
+        $payments = $query->with('allocations')->orderBy('payment_date', 'desc')->orderBy('payment_number', 'desc')->paginate(max(1, min($perPage, 10000)));
+        $this->withInvoicesPaid($payments->getCollection());
 
         return response()->json([
             'status' => 'success',
@@ -98,6 +102,11 @@ class SupplierPaymentController extends Controller
             'payment_method' => 'required|string',
             'transaction_reference' => 'nullable|string',
             'notes' => 'nullable|string',
+            // The supplier's invoices this payment pays (bills and transporter delivery invoices).
+            'allocations' => 'nullable|array',
+            'allocations.*.type' => 'required_with:allocations|in:bill,delivery_invoice',
+            'allocations.*.id' => 'required_with:allocations|uuid',
+            'allocations.*.amount' => 'required_with:allocations|numeric|min:0.01',
             // A cheque isn't guaranteed money until it clears, so it needs
             // enough detail to track to maturity - see the isCheque branch below.
             'cheque_number' => 'required_if:payment_method,cheque|string|max:100',
@@ -115,6 +124,27 @@ class SupplierPaymentController extends Controller
             DB::beginTransaction();
 
             $companyId = $user->company_id;
+
+            // Each invoice paid must be this supplier's and still owe at least what is put on it.
+            $allocations = [];
+            $open = collect($this->openInvoicesFor($companyId, $request->input('supplier_id')))->keyBy(fn ($i) => "{$i['type']}:{$i['id']}");
+            foreach ((array) $request->input('allocations', []) as $a) {
+                $invoice = $open->get("{$a['type']}:{$a['id']}");
+                $amount = round((float) $a['amount'], 2);
+                if (!$invoice) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'One of the invoices is not an unpaid invoice of this supplier. Reload and pick again.'], 422);
+                }
+                if ($amount > $invoice['balance'] + 0.009) {
+                    DB::rollBack();
+                    return response()->json(['message' => "KES " . number_format($amount, 2) . " is more than {$invoice['number']} still owes (KES " . number_format($invoice['balance'], 2) . ').'], 422);
+                }
+                $allocations[] = ['invoice_type' => $a['type'], 'invoice_id' => $a['id'], 'amount' => $amount];
+            }
+            if (round(array_sum(array_column($allocations, 'amount')), 2) > round((float) $request->input('amount'), 2)) {
+                DB::rollBack();
+                return response()->json(['message' => 'The invoices picked add up to more than the payment amount.'], 422);
+            }
             $purchaseOrder = null;
 
             if ($request->filled('purchase_order_id')) {
@@ -149,6 +179,11 @@ class SupplierPaymentController extends Controller
                 'notes' => $request->input('notes'),
                 'status' => $isCheque ? 'pending' : 'completed',
             ]);
+            foreach ($allocations as $a) {
+                $payment->allocations()->create($a + ['company_id' => $companyId]);
+            }
+            // Pays the invoices now; a cheque pays them when it clears (ChequeController::approve).
+            $payment->applyAllocations();
 
             if ($isCheque) {
                 Cheque::create([
@@ -192,7 +227,8 @@ class SupplierPaymentController extends Controller
 
             DB::commit();
 
-            $payment->load(['supplier', 'purchaseOrder']);
+            $payment->load(['supplier', 'purchaseOrder', 'allocations']);
+            $this->withInvoicesPaid(collect([$payment]));
 
             return response()->json([
                 'status' => 'success',
@@ -230,6 +266,66 @@ class SupplierPaymentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $payment->load('allocations');
+        $this->withInvoicesPaid(collect([$payment]));
+
         return response()->json($payment);
+    }
+
+    /** A supplier's unpaid invoices, oldest first, for the payment form to pay. */
+    public function openInvoices(Request $request, $supplierId)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_create_payments', $user->company_id)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        return response()->json(['status' => 'success', 'data' => $this->openInvoicesFor($user->company_id, $supplierId)]);
+    }
+
+    /**
+     * Unpaid supplier bills (not debit notes) and the transporter's delivery invoices, with what each still
+     * owes after payments already put on it. Oldest first, the order payments clear them in.
+     */
+    private function openInvoicesFor(string $companyId, ?string $supplierId): array
+    {
+        if (!$supplierId) {
+            return [];
+        }
+
+        $bills = AccountsPayable::where('company_id', $companyId)->where('vendor_id', $supplierId)
+            ->whereNotIn('status', ['draft', 'cancelled', 'paid'])
+            ->where(fn ($q) => $q->whereNull('metadata')->orWhereRaw("coalesce(metadata::jsonb->>'kind', '') <> 'debit_note'"))
+            ->where('balance_amount', '>', 0)
+            ->get()
+            ->map(fn ($b) => [
+                'type' => SupplierPaymentAllocation::BILL, 'id' => $b->id, 'number' => $b->invoice_number,
+                'date' => $b->invoice_date?->toDateString(), 'due_date' => $b->due_date?->toDateString(),
+                'description' => $b->description, 'total' => round((float) $b->total_amount, 2),
+                'paid' => round((float) $b->paid_amount, 2), 'balance' => round((float) $b->balance_amount, 2),
+            ]);
+
+        $deliveries = DeliveryInvoice::where('company_id', $companyId)->where('supplier_id', $supplierId)
+            ->where('status', 'pending')
+            ->get()
+            ->map(fn ($d) => [
+                'type' => SupplierPaymentAllocation::DELIVERY_INVOICE, 'id' => $d->id, 'number' => SupplierPaymentAllocation::label($d),
+                'date' => $d->invoice_date?->toDateString(), 'due_date' => null,
+                'description' => $d->order_reference ?: $d->orderDispatch?->order?->order_number,
+                'total' => round((float) $d->total_amount, 2), 'paid' => round((float) $d->amount_paid, 2),
+                'balance' => round((float) $d->total_amount - (float) $d->amount_paid, 2),
+            ])
+            ->filter(fn ($d) => $d['balance'] > 0);
+
+        return $bills->concat($deliveries)->sortBy(fn ($i) => ($i['date'] ?? '') . $i['number'])->values()->all();
+    }
+
+    private function withInvoicesPaid($payments): void
+    {
+        SupplierPaymentAllocation::preloadInvoices($payments->flatMap->allocations);
+        foreach ($payments as $payment) {
+            $payment->setAttribute('invoices_paid', $payment->allocationSummary());
+            $payment->unsetRelation('allocations');
+        }
     }
 }
