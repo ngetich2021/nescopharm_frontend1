@@ -1142,6 +1142,11 @@ Route::middleware('auth:sanctum')->prefix('etims')->group(function () {
     Route::patch('/config/activation', [App\Http\Controllers\Etims\EtimsConfigController::class, 'updateActivation']);
     Route::post('/config/regenerate-secret', [App\Http\Controllers\Etims\EtimsConfigController::class, 'regenerateCallbackSecret']);
 
+    // eTIMS page: invoices sent to KRA, and product KRA codes (export, fill in, import back).
+    Route::get('/invoices', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'invoices']);
+    Route::get('/products', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'products']);
+    Route::post('/products/import', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'import']);
+
     Route::get('/items/reference', [App\Http\Controllers\Etims\EtimsItemController::class, 'reference']);
     Route::get('/items', [App\Http\Controllers\Etims\EtimsItemController::class, 'index']);
     Route::get('/items/{productId}', [App\Http\Controllers\Etims\EtimsItemController::class, 'show']);

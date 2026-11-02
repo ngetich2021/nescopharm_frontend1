@@ -127,6 +127,7 @@ function Sidebar() {
     // { name: "Repairs", href: "/repairs", icon: Wrench, permission: "can_view_repairs_menu" },
     { name: "Receipts", href: "/payments", icon: ReceiptText, permission: "can_view_payments_menu" },
     { name: "Filing", href: "/filing", icon: FolderOpen, permission: "can_view_filing" },
+    { name: "eTIMS", href: "/etims", icon: ShieldCheck, permission: "can_view_sales_menu" },
     { name: "Payments", href: "/supplier-payments", icon: Banknote, permission: "can_view_payments_menu" },
     { name: "Suppliers", href: "/suppliers", icon: Truck, permission: "can_view_suppliers_menu" },
     { name: "Purchase Orders", href: "/purchase-orders", icon: Package, permission: "can_view_purchase_orders_menu" },

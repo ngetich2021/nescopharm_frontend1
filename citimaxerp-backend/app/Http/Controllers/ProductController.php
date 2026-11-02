@@ -1582,8 +1582,9 @@ class ProductController extends Controller
         ]);
     }
 
-    // Product / batch imports here, plus the Data Import hub's (DataImportController::recordImport).
-    private const IMPORT_HISTORY_KINDS = ['products', 'batches', 'suppliers', 'supplier_payments', 'delivery_invoices', 'customers', 'opening_stock', 'past_invoices'];
+    // Product / batch imports here, plus the Data Import hub's (DataImportController::recordImport)
+    // and the eTIMS KRA codes import (EtimsCatalogueController::recordImport).
+    private const IMPORT_HISTORY_KINDS = ['products', 'batches', 'suppliers', 'supplier_payments', 'delivery_invoices', 'customers', 'opening_stock', 'past_invoices', 'etims_codes'];
 
     public function importHistory(Request $request)
     {

@@ -194,6 +194,83 @@ export const getEtimsCreditNoteStatus = (creditNoteId: string) =>
 export const retryEtimsCreditNote = (creditNoteId: string) =>
   apiCall<{ queued: boolean }>(`/etims/credit-notes/${creditNoteId}/retry`, "POST", {}, true)
 
+// ─────────── eTIMS page: invoices sent to KRA, product KRA codes ───────────
+
+export interface EtimsInvoiceRow {
+  id: string
+  invoice_number: string
+  invoice_date: string | null
+  customer: string | null
+  total_amount: number
+  etims_status: NonNullable<EtimsInvoiceStatus["etims_status"]>
+  etims_invoice_number: string | null
+  etims_receipt_number: string | null
+  etims_qr_url: string | null
+  etims_submitted_at: string | null
+  etims_synced_at: string | null
+  etims_last_error: string | null
+}
+
+export interface EtimsProductRow {
+  id: string
+  name: string
+  unit: string | null
+  type: "Goods" | "Service"
+  tax_type: string
+  tax_label: string
+  item_class_code: string
+  packaging_unit_code: string
+  quantity_unit_code: string
+  country_of_origin_code: string
+  generic_class_code: boolean
+  kra_status: "not_registered" | "pending" | "synced" | "failed"
+  kra_item_codes: string[]
+  last_error: string | null
+}
+
+export interface EtimsCodesImportRow {
+  row: number
+  key: string
+  name: string
+  unit: string | null
+  status: "updated" | "unchanged" | "error"
+  changes: { field: string; from: string | null; to: string }[]
+  message: string | null
+  reregister: boolean
+}
+
+export interface EtimsCodesImportResult {
+  status: string
+  message: string
+  dry_run: boolean
+  summary: { rows: number; updated: number; unchanged: number; reregistered: number; errors: number }
+  rows: EtimsCodesImportRow[]
+}
+
+export const listEtimsInvoices = (params: { status?: string; search?: string; page?: number; per_page?: number }) => {
+  const q = new URLSearchParams()
+  if (params.status) q.set("status", params.status)
+  if (params.search) q.set("search", params.search)
+  if (params.page) q.set("page", String(params.page))
+  if (params.per_page) q.set("per_page", String(params.per_page))
+  return apiCall<{
+    data: EtimsInvoiceRow[]
+    counts: Record<string, number>
+    current_page: number
+    last_page: number
+    total: number
+  }>(`/etims/invoices${q.size ? `?${q.toString()}` : ""}`, "GET", undefined, true)
+}
+
+export const listEtimsProducts = () => apiCall<{ data: EtimsProductRow[] }>("/etims/products", "GET", undefined, true)
+
+export const importEtimsCodes = (file: File, dryRun: boolean) => {
+  const form = new FormData()
+  form.append("file", file)
+  form.append("dry_run", dryRun ? "1" : "0")
+  return apiCall<EtimsCodesImportResult>("/etims/products/import", "POST", form, true)
+}
+
 // ─────────── Supplier receipts (AP) ───────────
 
 export const listEtimsSupplierReceipts = (params?: { only_unsigned?: boolean; status?: string }) => {
