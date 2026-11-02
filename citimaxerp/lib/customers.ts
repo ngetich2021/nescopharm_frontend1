@@ -473,6 +473,20 @@ export async function updateCustomer(
   }
 }
 
+export interface CustomerDeletionSummary {
+  orders: number
+  invoices: number
+  credit_notes: number
+  receipts: number
+  quotes: number
+}
+
+// What Delete Customer takes with it.
+export async function getCustomerDeletionSummary(id: string): Promise<CustomerDeletionSummary> {
+  const res = await apiCall<{ status: string; data: CustomerDeletionSummary }>(`/customers/${id}/deletion-summary`, "GET")
+  return res.data
+}
+
 export async function deleteCustomer(id: string): Promise<boolean> {
   try {
     const response = await apiCall<{

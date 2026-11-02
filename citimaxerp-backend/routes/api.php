@@ -296,6 +296,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/customers/{customerId}/receipts', [\App\Http\Controllers\CustomerBalanceController::class, 'receipts']);
     Route::post('/customers/{customerId}/receipts/{paymentId}/cancel', [\App\Http\Controllers\CustomerBalanceController::class, 'cancelReceipt']);
     Route::delete('/customers/{customerId}/receipts/{paymentId}',[\App\Http\Controllers\CustomerBalanceController::class, 'deleteReceipt']);
+    Route::get('/customers/{customerId}/deletion-summary', [CustomerController::class, 'deletionSummary']);
     Route::delete('/customers/{customerId}', [CustomerController::class, 'destroy'])->name('customers.destroy');
 
     // Customer notes

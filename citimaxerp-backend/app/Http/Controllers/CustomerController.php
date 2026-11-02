@@ -686,6 +686,19 @@ class CustomerController extends Controller
         ]);
     }
 
+    /** What Delete Customer will take with it, for the confirmation. */
+    public function deletionSummary(Request $request, $customerId)
+    {
+        $customer = Customer::where('company_id', $request->user()->company_id)->find($customerId);
+        if (!$customer) {
+            return response()->json(['status' => 'failed', 'message' => 'Customer not found.'], 404);
+        }
+        if (!$this->hasPermission($request, 'can_delete_customers', $customer->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to delete customers.'], 403);
+        }
+        return response()->json(['status' => 'success', 'data' => app(\App\Services\CustomerDeletionService::class)->summary($customer)]);
+    }
+
     public function destroy(Request $request, $customerId)
     {
         // Use withTrashed to allow for soft-deleted lookup
@@ -704,13 +717,14 @@ class CustomerController extends Controller
             ], 403);
         }
         try {
-            // Only soft delete if not already deleted
-            if (is_null($customer->deleted_at)) {
-                $customer->delete();
-            }
+            // Their orders, invoices, credit notes, receipts and quotes go with them.
+            $deleted = app(\App\Services\CustomerDeletionService::class)->summary($customer);
+            app(\App\Services\CustomerDeletionService::class)->delete($customer);
+            Log::info('Customer deleted with their records', ['user_id' => $request->user()->id, 'customer_id' => $customer->id] + $deleted);
             return response()->json([
                 'status' => 'success',
-                'message' => 'Customer deleted successfully.'
+                'message' => 'Customer deleted successfully.',
+                'deleted' => $deleted,
             ], 200);
         } catch (\Exception $e) {
             Log::error('Failed to delete customer', ['error' => $e->getMessage()]);

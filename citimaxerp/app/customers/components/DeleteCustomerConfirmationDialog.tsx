@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Trash2 } from "lucide-react";
-import { type Customer, deleteCustomer, getCustomerDisplayName } from "@/lib/customers";
+import { type Customer, type CustomerDeletionSummary, deleteCustomer, getCustomerDeletionSummary, getCustomerDisplayName } from "@/lib/customers";
 
 interface DeleteCustomerConfirmationDialogProps {
   open: boolean;
@@ -29,7 +29,15 @@ export function DeleteCustomerConfirmationDialog({
   onSuccess,
 }: DeleteCustomerConfirmationDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  // undefined while loading; null when it could not be read.
+  const [summary, setSummary] = useState<CustomerDeletionSummary | null | undefined>(undefined);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!open || !customer) return;
+    setSummary(undefined);
+    getCustomerDeletionSummary(customer.id).then(setSummary).catch(() => setSummary(null));
+  }, [open, customer]);
 
   const handleDelete = async () => {
     if (!customer) return;
@@ -57,6 +65,18 @@ export function DeleteCustomerConfirmationDialog({
 
   if (!customer) return null;
 
+  const goesWith = summary
+    ? ([
+        [summary.orders, "order"],
+        [summary.invoices, "invoice"],
+        [summary.credit_notes, "credit note"],
+        [summary.receipts, "receipt"],
+        [summary.quotes, "quote"],
+      ] as [number, string][])
+        .filter(([n]) => n > 0)
+        .map(([n, label]) => `${n} ${label}${n === 1 ? "" : "s"}`)
+    : [];
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -69,12 +89,20 @@ export function DeleteCustomerConfirmationDialog({
             <p>
               Are you sure you want to delete <strong>{getCustomerDisplayName(customer)}</strong>?
             </p>
-            {/* Delete is a soft delete (CustomerController::destroy): the customer leaves the lists,
-                their documents stay. */}
-            <p className="text-sm text-gray-600">
-              They will be removed from the customer list. Their orders, invoices and payments
-              already recorded stay in the system.
-            </p>
+            <span className="block text-sm text-gray-700">
+              {summary === undefined ? (
+                <span className="inline-flex items-center gap-2 text-gray-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking their records...
+                </span>
+              ) : summary === null ? (
+                <>Everything recorded for them (orders, invoices, credit notes, receipts, quotes) is deleted with them.</>
+              ) : goesWith.length ? (
+                <>Everything recorded for them is deleted with them: <strong>{goesWith.join(", ")}</strong>. Stock on their orders goes back (except past orders).</>
+              ) : (
+                <>They have no orders, invoices, credit notes, receipts or quotes.</>
+              )}
+            </span>
+            <span className="block text-sm font-semibold text-red-600">This cannot be undone.</span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
