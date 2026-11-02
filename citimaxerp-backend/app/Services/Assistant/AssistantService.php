@@ -34,6 +34,8 @@ class AssistantService
         $tools = new AssistantTools($user);
         $messages = array_merge([['role' => 'system', 'content' => $this->systemPrompt($user, $tools)]], $history);
         $definitions = $tools->definitions();
+        // The screens the guide pointed to, e.g. "[Assets](/assets)", so the answer always links one.
+        $links = [];
 
         for ($round = 0; $round <= self::MAX_TOOL_ROUNDS; $round++) {
             $payload = [
@@ -58,13 +60,17 @@ class AssistantService
             $message = $response->json('choices.0.message') ?? [];
             $calls = $message['tool_calls'] ?? [];
             if (!$calls) {
-                return trim((string) ($message['content'] ?? '')) ?: 'Sorry, I do not have an answer for that.';
+                $answer = trim((string) ($message['content'] ?? ''));
+                return $answer !== '' ? $this->withLink($answer, $links) : 'Sorry, I do not have an answer for that.';
             }
 
             $messages[] = ['role' => 'assistant', 'content' => $message['content'] ?? null, 'tool_calls' => $calls];
             foreach ($calls as $call) {
                 $args = json_decode($call['function']['arguments'] ?? '{}', true) ?: [];
                 $result = $tools->run($call['function']['name'] ?? '', $args);
+                foreach ($result['areas'] ?? [] as $area) {
+                    $links[] = $area['link'];
+                }
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => $call['id'],
@@ -77,9 +83,23 @@ class AssistantService
     }
 
     /**
-     * The Groq key: the server's GROQ_API_KEY, or else the company's "groq_api_key" setting
-     * ({"key": "gsk_..."} in company_settings), so it can be set without redeploying.
+     * A how-to answer that names none of the guide's screens as a link gets the first one added, so
+     * the user can always click through ("Open: [Assets](/assets)").
      */
+    protected function withLink(string $answer, array $links): string
+    {
+        if (!$links) {
+            return $answer;
+        }
+        foreach ($links as $link) {
+            preg_match('/\]\(([^)]+)\)$/', $link, $m);
+            if (str_contains($answer, '](' . $m[1] . ')')) {
+                return $answer;
+            }
+        }
+        return $answer . "\n\nOpen: " . $links[0];
+    }
+
     /** The attached files as text added to the question. */
     protected function attachmentText(string $key, array $attachments, string $question): string
     {
@@ -133,6 +153,10 @@ class AssistantService
         return $text !== '' ? mb_substr($text, 0, 8000) : null;
     }
 
+    /**
+     * The Groq key: the server's GROQ_API_KEY, or else the company's "groq_api_key" setting
+     * ({"key": "gsk_..."} in company_settings), so it can be set without redeploying.
+     */
     protected function apiKey(User $user): ?string
     {
         if ($key = config('services.groq.key')) {
@@ -199,11 +223,14 @@ How to answer:
 - Data is live: call the tool again for each question rather than reusing earlier answers.
 - You can only read. You cannot create, change, approve or delete anything; for those, explain how the user does it in the system.
 - If a tool returns "did_you_mean", say nothing matched exactly and offer those names ("Did you mean ...?"); if one is clearly what was meant, look it up with that name.
-- When you mention a screen, link it as markdown with its path, e.g. [Sales > Credit Notes](/sales/credit-notes).
+- Every screen you mention MUST be a clickable markdown link with its path, e.g. [Sales > Credit Notes](/sales/credit-notes) - never a screen name as plain text, never "→" menu trails without the link. how_to returns each screen's "link": use it exactly, as the first step ("1. Open [HR & Payroll > Employees](/hr/employees)").
 - When the user gives several products at once (typed, pasted, or in an attached file or photo), call match_products with one line per product, then show a table: their line, Item No., matched product, codes with prices, stock. Mark lines with no match and offer their did_you_mean names. Say "(partial)" for partial matches so they can check them.
-- Money is Kenya Shillings: write it like "KES 74,756.80". Dates like "29 Oct 2026". Invoices are numbered NSK/#### (e.g. NSK/0427).
+- Money is Kenya Shillings: write it like "KES 74,756.80". Dates like "29 Oct 2026".
+- Invoices are numbered NSK/#### (e.g. NSK/0427); give the number exactly as list_invoices returns it. For "the latest invoice number" answer with "latest_nsk" (the highest NSK number). An invoice shown as INV-#### has no NSK number (File No) yet: say so, and that it gets one on [Filing](/filing); never present an INV number as the invoice number when asked for NSK.
 - A product's code is its price list and number, e.g. "NSPV 003", "NSPH 012", "NSPD 001" - always give the full code as the tool returns it. Item No. is a different number.
-- For "how do I ..." or "where is ..." questions, call how_to and explain its steps in short numbered steps, naming the menu and buttons. Do not make up screens or buttons.
+- For "how do I ..." or "where is ..." questions, call how_to and explain its steps in short numbered steps, naming the menu and buttons. Use ONLY the screens, tabs, buttons, fields and reports in its text: if something is not there (a tab, a filter, a report, depreciation...), it does not exist - say the system does not have it, never invent it. A follow-up ("how do I do it as an employee", "and for one") is about the previous topic: call how_to with the full topic, e.g. "daily report as employee".
+- Answer for this user's role ("{$role}"): how_to gives only the steps their role can do; when it says their role cannot do an action, tell them who does it (an approver or administrator) instead of giving those steps. Questions in the first person ("my leave", "my daily report", "as an employee") are about their own records: those are in the Employee Portal if they can open it.
+- When the task leads straight into another one, end with one "Next:" line linking it (e.g. after adding an employee: "Next: [Payroll](/hr/payroll) to pay them"). Skip it otherwise; never point an employee to an approver's or manager's screen for their own records.
 - This user can open only: {$areas}. If they ask about anything else ({$closed}), say they don't have access to it and to ask an administrator; do not reveal or guess that data.
 - Be brief and clear. Use short lists or small tables for several items. Reply in the user's language.
 PROMPT;

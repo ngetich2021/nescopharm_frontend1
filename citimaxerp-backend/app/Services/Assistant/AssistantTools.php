@@ -80,7 +80,7 @@ class AssistantTools
             'stock_alerts' => ['Products at or below their reorder level or out of stock, and batches expiring soon.', [
                 'expiring_within_days' => ['type' => 'integer', 'description' => 'Batches expiring within this many days (default 90)'],
             ], []],
-            'list_invoices' => ['Sales invoices, newest first. Use for "latest invoice", an invoice number (NSK/0427), a customer\'s invoices, or unpaid/overdue invoices.', $range + [
+            'list_invoices' => ['Sales invoices, newest first, plus latest_nsk (the highest NSK number issued). Use for "latest invoice number" (answer with latest_nsk), an invoice number (NSK/0427), a customer\'s invoices, or unpaid/overdue invoices.', $range + [
                 'search' => ['type' => 'string', 'description' => 'Invoice number (NSK/0427, 427) or customer name'],
                 'status' => ['type' => 'string', 'enum' => ['any', 'unpaid', 'overdue', 'paid'], 'description' => 'Default any'],
                 'limit' => ['type' => 'integer', 'description' => 'Max invoices (default 5, max 25)'],
@@ -427,8 +427,19 @@ class AssistantTools
         if ($invoices->isEmpty() && $search !== '' && !preg_match('/\d/', $search)) {
             return ['invoices' => [], 'did_you_mean' => $this->suggestCustomers($search)];
         }
-        return ['invoices' => $invoices->map(fn (Invoice $i) => [
+        // The latest NSK number issued: the newest invoice by date may still have no File No
+        // (it then shows as INV-0465), so "the latest invoice number" is the highest NSK one.
+        $latest = $search !== '' ? null : $this->liveInvoices()->with('customer:id,name,business_name')
+            ->whereRaw("invoices.file_number ~ '^[0-9]+$'")->orderByRaw('invoices.file_number::int desc')->first();
+
+        return ['latest_nsk' => $latest ? [
+            'number' => $latest->invoice_number,
+            'date' => optional($latest->invoice_date)->toDateString(),
+            'customer' => self::customerName($latest->customer),
+            'total' => self::money($latest->total_amount),
+        ] : null, 'invoices' => $invoices->map(fn (Invoice $i) => [
             'number' => $i->invoice_number,
+            'has_nsk_number' => str_starts_with((string) $i->invoice_number, Invoice::LEGACY_PREFIX),
             'date' => optional($i->invoice_date)->toDateString(),
             'customer' => self::customerName($i->customer),
             'total' => self::money($i->total_amount),
