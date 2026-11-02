@@ -131,6 +131,17 @@ class AssistantKnowledge
             : ['areas' => $scored->map(fn ($a) => collect($a)->except('score'))->all()];
     }
 
+    /** The path of the screen a text names ("Inventory Reports > Stock Balance" is /reports/inventory), the most specific name first. */
+    public static function pathFor(string $text): ?string
+    {
+        $text = strtolower(str_replace(['→', '›'], '>', $text));
+        return collect(self::AREAS)
+            ->map(fn ($a) => ['label' => strtolower(trim(preg_replace('/\s*\(.*\)$/', '', $a[0]))), 'path' => $a[1]])
+            ->filter(fn ($a) => str_contains($text, $a['label']))
+            ->sortByDesc(fn ($a) => strlen($a['label']))
+            ->first()['path'] ?? null;
+    }
+
     /** Area names this user cannot open, so the assistant can say so instead of guessing. */
     public static function closedAreas(callable $can): array
     {

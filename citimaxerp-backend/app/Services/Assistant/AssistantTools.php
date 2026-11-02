@@ -78,10 +78,8 @@ class AssistantTools
             'match_products' => ['Match a list of products (typed, pasted, from an attached file or a photo) to the system, line by line: item no., description, price-list codes and prices, stock. Use it whenever the user gives several products at once.', [
                 'lines' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'One product per line as the user wrote it (description and/or code; quantities may be included)'],
             ], ['lines']],
-            'stock_on_hand' => ['ALL products holding stock right now (live, so goods just received are included): stock, usable stock, expired stock and nearest expiry per product, plus how many products are in stock in total. Use it for "what stock do we have", "available stock", "stock list". Large lists come in pages: pass next_offset for the next one.', [
+            'stock_on_hand' => ['The whole stock list, as Inventory Reports > Stock Balance shows it (live, so goods just received are included): every line in stock and every line at 0, with totals and notes on expired stock and stock figures that disagree with their batches. Use it for "what stock do we have", "available stock", "stock list", "what is out of stock". The full table is shown to the user automatically.', [
                 'search' => ['type' => 'string', 'description' => 'Optional words of the description to narrow it, e.g. "bandage"'],
-                'offset' => ['type' => 'integer', 'description' => 'Where to continue from (next_offset of the previous call)'],
-                'limit' => ['type' => 'integer', 'description' => 'Products per page (default 40, max 80)'],
             ], []],
             'stock_alerts' => ['Alerts only (not the stock list): products at or below their reorder level or out of stock, batches expiring soon, and expired batches still holding stock.', [
                 'expiring_within_days' => ['type' => 'integer', 'description' => 'Batches expiring within this many days (default 90)'],
@@ -377,46 +375,85 @@ class AssistantTools
     }
 
     /**
-     * Every product holding stock right now, by description, from its batches: what is usable,
-     * what sits in batches past their expiry, and batches whose expiry date is clearly mistyped
-     * (year 0029). Read live on every call, so new receipts show at once.
+     * The whole stock list, line for line as Inventory Reports > Stock Balance shows it (each size
+     * its own line), so the answer and the screen agree: what is in stock, and what is at 0. From
+     * the batches it adds what has passed its expiry or has a mistyped expiry (year 0029), and
+     * lines whose batches do not add up to the stock shown. Read live on every call.
+     *
+     * The full tables are not given to the model (too long for it); they go in "_table", which
+     * AssistantService adds under the answer as they are.
      */
     protected function stock_on_hand(array $args): array
     {
-        $today = now('Africa/Nairobi')->toDateString();
-        $q = DB::table('products as p')->join('inventory_batches as b', 'b.product_id', '=', 'p.id')
-            ->where('p.company_id', $this->companyId)->whereNull('p.deleted_at')->where('b.quantity_available', '>', 0);
-        foreach (preg_split('/\s+/', trim((string) ($args['search'] ?? ''))) as $w) {
-            if (strlen($w) > 1) {
-                $q->where('p.name', 'ilike', "%{$w}%");
+        $tz = 'Africa/Nairobi';
+        $today = now($tz)->toDateString();
+        $words = collect(preg_split('/\s+/', strtolower(trim((string) ($args['search'] ?? '')))))->filter(fn ($w) => strlen($w) > 1);
+
+        $lines = collect(app(\App\Services\ReportService::class)->forCompany($this->companyId)->getStockBalanceReport()['data'])
+            ->where('row_type', '!=', 'parent')
+            ->filter(fn ($r) => $words->every(fn ($w) => str_contains(strtolower($r['name']), $w)))
+            ->sortBy(fn ($r) => strtolower($r['name']))->values();
+
+        // Batches by line: a size by its own batches, an item without sizes by all of its batches.
+        $batches = DB::table('inventory_batches')->where('company_id', $this->companyId)->where('quantity_available', '>', 0)
+            ->whereIn('product_id', $lines->pluck('product_id')->unique())
+            ->selectRaw("product_id, variant_id, sum(quantity_available) as qty,
+                sum(case when expiry_date >= '2000-01-01' and expiry_date < ? then quantity_available else 0 end) as expired,
+                sum(case when expiry_date < '2000-01-01' then quantity_available else 0 end) as bad_date,
+                min(case when expiry_date >= ? then expiry_date end) as nearest_expiry", [$today, $today])
+            ->groupBy('product_id', 'variant_id')->get();
+        $batchesOf = fn ($r) => $batches->where('product_id', $r['product_id'])
+            ->filter(fn ($b) => $r['variant_id'] === null || $b->variant_id === $r['variant_id']);
+
+        $inStock = collect();
+        $atZero = collect();
+        $notes = ['expired' => [], 'wrong_expiry_date' => [], 'batches_do_not_match_stock' => []];
+        foreach ($lines as $r) {
+            $b = $batchesOf($r);
+            $stock = (float) $r['stock_quantity'];
+            $expired = (float) $b->sum('expired');
+            $badDate = (float) $b->sum('bad_date');
+            $name = str_replace('|', '/', $r['name']);
+            if ($expired > 0) {
+                $notes['expired'][] = "{$name}: " . number_format($expired);
+            }
+            if ($badDate > 0) {
+                $notes['wrong_expiry_date'][] = "{$name}: " . number_format($badDate);
+            }
+            if (abs((float) $b->sum('qty') - $stock) > 0.001) {
+                $notes['batches_do_not_match_stock'][] = "{$name}: shows " . number_format($stock) . ', batches hold ' . number_format((float) $b->sum('qty'));
+            }
+            if ($stock > 0) {
+                $expiry = $b->pluck('nearest_expiry')->filter()->min();
+                $inStock->push([$name, $stock, max(0, $stock - $expired - $badDate), $expiry ? Carbon::parse($expiry)->format('j M Y') : '-']);
+            } elseif ($r['is_active']) {
+                // A hidden (inactive) product at 0 is not stock that ran out.
+                $atZero->push($name);
             }
         }
-        $rows = $q->groupBy('p.id', 'p.name', 'p.unit_of_measurement')
-            ->selectRaw("p.name, p.unit_of_measurement as unit, sum(b.quantity_available) as qty,
-                sum(case when b.expiry_date >= '2000-01-01' and b.expiry_date < ? then b.quantity_available else 0 end) as expired,
-                sum(case when b.expiry_date < '2000-01-01' then b.quantity_available else 0 end) as bad_date,
-                min(case when b.expiry_date >= ? then b.expiry_date end) as nearest_expiry", [$today, $today])
-            ->orderBy('p.name')->get();
 
-        $offset = max(0, (int) ($args['offset'] ?? 0));
-        $page = $rows->slice($offset, $this->limit($args, 40, 80))->values();
+        $table = '';
+        if ($inStock->isNotEmpty()) {
+            $table .= "**In stock ({$inStock->count()})**\n\n| S/No | Description | Stock | Usable | Nearest expiry |\n|---|---|---|---|---|\n"
+                . $inStock->values()->map(fn ($l, $i) => '| ' . ($i + 1) . " | {$l[0]} | " . number_format($l[1]) . ' | ' . number_format($l[2]) . " | {$l[3]} |")->implode("\n");
+        }
+        if ($atZero->isNotEmpty()) {
+            $table .= "\n\n**Out of stock - 0 ({$atZero->count()})**\n\n| S/No | Description | Stock |\n|---|---|---|\n"
+                . $atZero->values()->map(fn ($n, $i) => '| ' . ($i + 1) . " | {$n} | 0 |")->implode("\n");
+        }
 
         return [
-            'as_of' => now('Africa/Nairobi')->format('Y-m-d H:i'),
-            'products_in_stock' => $rows->count(),
-            'total_units' => (float) $rows->sum('qty'),
-            'showing' => $page->isEmpty() ? 'none' : ($offset + 1) . '-' . ($offset + $page->count()),
-            'next_offset' => $offset + $page->count() < $rows->count() ? $offset + $page->count() : null,
-            'full_list' => '[Inventory Reports](/reports/inventory) > Stock Balance',
-            'products' => $page->map(fn ($r) => array_filter([
-                'description' => $r->name,
-                'stock' => (float) $r->qty,
-                'unit' => $r->unit,
-                'usable' => (float) ($r->qty - $r->expired - $r->bad_date),
-                'expired_stock' => (float) $r->expired ?: null,
-                'stock_with_wrong_expiry_date' => (float) $r->bad_date ?: null,
-                'nearest_expiry' => $r->nearest_expiry ? substr((string) $r->nearest_expiry, 0, 10) : null,
-            ], fn ($v) => $v !== null)),
+            'as_of' => now($tz)->format('j M Y H:i'),
+            'lines_in_stock' => $inStock->count(),
+            'lines_out_of_stock' => $atZero->count(),
+            'total_units_in_stock' => (float) $inStock->sum(1),
+            'usable_units' => (float) $inStock->sum(2),
+            'notes' => collect($notes)->filter()->map(fn ($n) => count($n) > 15
+                ? array_merge(array_slice($n, 0, 15), ['and ' . (count($n) - 15) . ' more'])
+                : $n)->all(),
+            'full_list_link' => '[Inventory Reports > Stock Balance](/reports/inventory)',
+            'table_shown_to_user' => $table !== '' ? 'The full table of every line is added under your answer automatically.' : 'Nothing matched.',
+            '_table' => $table,
         ];
     }
 

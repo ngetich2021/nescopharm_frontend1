@@ -36,14 +36,15 @@ class AssistantService
         $definitions = $tools->definitions();
         // The screens the guide pointed to, e.g. "[Assets](/assets)", so the answer always links one.
         $links = [];
+        // Tables a tool builds itself (the whole stock list), added under the answer as they are.
+        $tables = [];
 
         for ($round = 0; $round <= self::MAX_TOOL_ROUNDS; $round++) {
             $payload = [
                 'model' => config('services.groq.model'),
                 'messages' => $messages,
                 'temperature' => 0.2,
-                // Room for a 40-line stock table.
-                'max_tokens' => 2500,
+                'max_tokens' => 1500,
             ];
             // On the last round the model must answer with what it has.
             if ($definitions && $round < self::MAX_TOOL_ROUNDS) {
@@ -62,7 +63,10 @@ class AssistantService
             $calls = $message['tool_calls'] ?? [];
             if (!$calls) {
                 $answer = trim((string) ($message['content'] ?? ''));
-                return $answer !== '' ? $this->withLink($answer, $links) : 'Sorry, I do not have an answer for that.';
+                if ($answer === '' && !$tables) {
+                    return 'Sorry, I do not have an answer for that.';
+                }
+                return trim($this->withLink($this->fixLinks($answer), $links) . ($tables ? "\n\n" . implode("\n\n", $tables) : ''));
             }
 
             $messages[] = ['role' => 'assistant', 'content' => $message['content'] ?? null, 'tool_calls' => $calls];
@@ -73,11 +77,15 @@ class AssistantService
                 foreach ($result['areas'] ?? [] as $area) {
                     $links[] = $area['link'];
                 }
+                if (!empty($result['_table'])) {
+                    // Only the latest list of each kind, if the model asked twice.
+                    $tables[$name] = $result['_table'];
+                }
+                unset($result['_table']);
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => $call['id'],
-                    // A stock list page needs more room than the other lookups.
-                    'content' => mb_substr(json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, $name === 'stock_on_hand' ? 14000 : 6000),
+                    'content' => mb_substr(json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 6000),
                 ];
             }
         }
@@ -101,6 +109,23 @@ class AssistantService
             }
         }
         return $answer . "\n\nOpen: " . $links[0];
+    }
+
+    /**
+     * Links the model wrote without a path, e.g. "[full list](Inventory Reports > Stock Balance)":
+     * pointed at the screen they name, or else left as plain text rather than a dead link.
+     */
+    protected function fixLinks(string $answer): string
+    {
+        return preg_replace_callback('/\[([^\]]+)\]\(([^)]*)\)/', function ($m) {
+            [$whole, $label, $target] = $m;
+            if (preg_match('#^(/[a-z]|https?://)#i', trim($target))) {
+                return $whole;
+            }
+            $path = AssistantKnowledge::pathFor($target) ?? AssistantKnowledge::pathFor($label);
+            $text = preg_match('/^(full list|here|link|open|this)$/i', trim($label)) && trim($target) !== '' ? trim($target) : $label;
+            return $path ? "[{$text}]({$path})" : $text;
+        }, $answer);
     }
 
     /** The attached files as text added to the question. */
@@ -229,7 +254,7 @@ How to answer:
 - Every screen you mention MUST be a clickable markdown link with its path, e.g. [Sales > Credit Notes](/sales/credit-notes) - never a screen name as plain text, never "→" menu trails without the link. how_to returns each screen's "link": use it exactly, as the first step ("1. Open [HR & Payroll > Employees](/hr/employees)").
 - Every table starts with an S/No column numbered 1, 2, 3... Never show Item No. (item numbers are not used here): name products by their description, plus their price-list code where relevant.
 - When the user gives several products at once (typed, pasted, or in an attached file or photo), call match_products with one line per product, then show a table: S/No, their line, matched product, codes with prices, stock. Mark lines with no match and offer their did_you_mean names. Say "(partial)" for partial matches so they can check them.
-- For available stock ("what stock do we have", "stock list") call stock_on_hand - never answer it from stock_alerts, which holds only alerts. Start with the totals ("142 products in stock as of 2 Nov 2026 14:05"), then a table: S/No, Description, Stock, Usable, Nearest expiry. List expired stock and wrong expiry dates (e.g. year 0029, a typing slip to correct on the batch) as a note, not as usable stock. When next_offset is set, say which part you showed (e.g. "1-40 of 142"), offer the next page or a search by name, and give the full_list link.
+- For available stock ("what stock do we have", "stock list", "what is out of stock") call stock_on_hand - never answer it from stock_alerts, which holds only alerts. The system adds the complete table of every line (in stock, then those at 0) under your answer, so do NOT write a product table or list yourself, and never mention pages, offsets or a "Next" button. Write only: the totals ("145 lines in stock (3,641,187 units, 3,630,000 usable) and 60 at 0, as of 2 Nov 2026 06:38"), then short notes from "notes": expired stock (not usable - write it off or return it), wrong expiry dates (a typing slip like year 0029, to correct on [Batches](/inventory/batches)), and lines whose batches do not match the stock shown (to correct with a [Stock Count](/inventory/stock-counts)). End with the full_list_link.
 - Money is Kenya Shillings: write it like "KES 74,756.80". Dates like "29 Oct 2026".
 - Invoices are numbered NSK/#### (e.g. NSK/0427); give the number exactly as list_invoices returns it. For "the latest invoice number" answer with "latest_nsk" (the highest NSK number). An invoice shown as INV-#### has no NSK number (File No) yet: say so, and that it gets one on [Filing](/filing); never present an INV number as the invoice number when asked for NSK.
 - A product's code is its price list and number, e.g. "NSPV 003", "NSPH 012", "NSPD 001" - always give the full code as the tool returns it. Item No. is a different number.
