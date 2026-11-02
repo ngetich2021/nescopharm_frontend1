@@ -19,6 +19,9 @@ import {
   fetchPriceListHistory,
   fetchPriceListImportChanges,
   importPriceList,
+  fetchMisfiledPrices,
+  removeMisfiledPrices,
+  type MisfiledPrice,
   type PriceListImportChange,
   PRICE_LIST_TEMPLATE_HEADERS,
   type PriceListImportRecord,
@@ -110,6 +113,31 @@ export default function PriceListsPage() {
   }, [])
 
   useEffect(() => { loadHistory(listName) }, [listName, loadHistory])
+
+  // Prices on this list whose code belongs to another list (e.g. NSPO codes on NSPV).
+  const [misfiled, setMisfiled] = useState<MisfiledPrice[]>([])
+  const [showMisfiled, setShowMisfiled] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const loadMisfiled = useCallback(async (name: string) => {
+    if (!name) { setMisfiled([]); return }
+    try { setMisfiled(await fetchMisfiledPrices(name)) } catch { setMisfiled([]) }
+  }, [])
+  useEffect(() => { loadMisfiled(listName) }, [listName, loadMisfiled])
+
+  const removeMisfiled = async () => {
+    if (!window.confirm(`Remove the ${misfiled.length} ${listName} prices whose codes belong to another list? Then upload the correct ${listName} sheet.`)) return
+    setRemoving(true)
+    try {
+      const res = await removeMisfiledPrices(listName)
+      toast({ title: "Removed", description: `${res.message} Now upload the correct ${listName} sheet.` })
+      setShowMisfiled(false)
+      loadMisfiled(listName)
+    } catch (err: any) {
+      toast({ title: "Could not remove them", description: err.message, variant: "destructive" })
+    } finally {
+      setRemoving(false)
+    }
+  }
 
   // Downloads the list as it stands now, in the importer's own columns, so prices can be
   // edited in Excel and the same sheet uploaded back.
@@ -222,6 +250,55 @@ export default function PriceListsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {misfiled.length > 0 && (
+          <Card className="border-red-200 bg-red-50/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-red-800">
+                {misfiled.length} {listName} price{misfiled.length === 1 ? "" : "s"} carry codes from another list
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p className="text-red-900">
+                These were saved on {listName} with {Array.from(new Set(misfiled.map((m) => m.belongs_to))).join("/")} codes (an{" "}
+                {Array.from(new Set(misfiled.map((m) => m.belongs_to))).join("/")} sheet uploaded as {listName}). Codes from another list are now refused.
+                Remove these, then upload the correct {listName} sheet. The {Array.from(new Set(misfiled.map((m) => m.belongs_to))).join("/")} prices themselves are not touched.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowMisfiled((v) => !v)}>
+                  {showMisfiled ? "Hide" : "Show"} them
+                </Button>
+                <Button variant="destructive" size="sm" onClick={removeMisfiled} disabled={removing}>
+                  {removing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Remove {misfiled.length} misfiled price{misfiled.length === 1 ? "" : "s"}
+                </Button>
+              </div>
+              {showMisfiled && (
+                <div className="max-h-[360px] overflow-auto rounded border bg-white">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-gray-50 text-xs text-gray-600">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">S/No</th>
+                        <th className="px-3 py-2 text-left font-medium">Saved as</th>
+                        <th className="px-3 py-2 text-left font-medium">Item Description</th>
+                        <th className="px-3 py-2 text-right font-medium">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {misfiled.map((m, i) => (
+                        <tr key={m.id} className="border-t">
+                          <td className="px-3 py-1.5 text-gray-500">{i + 1}</td>
+                          <td className="px-3 py-1.5 font-mono text-xs">{m.list} {m.code}</td>
+                          <td className="px-3 py-1.5">{m.description || "-"}</td>
+                          <td className="px-3 py-1.5 text-right">{money(m.price)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {history.length > 0 && (
           <Card>

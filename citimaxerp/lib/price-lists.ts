@@ -35,6 +35,25 @@ export async function importPriceList(file: File, listName: string, dryRun: bool
   return apiCall<PriceListImportResult>("/price-lists/import", "POST", form)
 }
 
+// A price saved under the wrong list: its code belongs to another list (NSPO 001 on NSPV).
+export interface MisfiledPrice {
+  id: string
+  list: string
+  code: string
+  belongs_to: string
+  description: string | null
+  price: number
+}
+
+export async function fetchMisfiledPrices(listName?: string): Promise<MisfiledPrice[]> {
+  const params = listName ? `?list_name=${encodeURIComponent(listName)}` : ""
+  return (await apiCall<{ data: MisfiledPrice[] }>(`/price-lists/misfiled${params}`, "GET")).data
+}
+
+export async function removeMisfiledPrices(listName: string): Promise<{ message: string; removed: number }> {
+  return apiCall<{ message: string; removed: number }>("/price-lists/misfiled/remove", "POST", { list_name: listName })
+}
+
 export const PRICE_LIST_TEMPLATE_HEADERS = ["Item Code", "Item Description", "Price", "Unit of Measure", "Tax Status"]
 
 export interface PriceListExportRow {

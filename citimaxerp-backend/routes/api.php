@@ -523,6 +523,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/price-lists/import', [ProductController::class, 'importPriceList'])->name('price-lists.import');
     Route::get('/price-lists/export', [ProductController::class, 'exportPriceList'])->name('price-lists.export');
+    Route::get('/price-lists/misfiled', [ProductController::class, 'misfiledPrices']);
+    Route::post('/price-lists/misfiled/remove', [ProductController::class, 'removeMisfiledPrices']);
     Route::get('/price-lists/history', [ProductController::class, 'priceListHistory'])->name('price-lists.history');
     Route::get('/price-lists/history/{id}/download', [ProductController::class, 'downloadImportFile'])->name('price-lists.history.download');
     Route::get('/price-lists/history/{id}/changes', [ProductController::class, 'priceListImportChanges'])->name('price-lists.history.changes');

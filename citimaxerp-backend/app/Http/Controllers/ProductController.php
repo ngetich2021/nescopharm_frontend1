@@ -126,6 +126,11 @@ class ProductController extends Controller
             if ($name === '' || $code === '') {
                 continue;
             }
+            if ($foreign = ProductPriceTier::foreignList($name, $code)) {
+                $errors[] = ProductPriceTier::foreignMessage($name, $code, $foreign);
+                continue;
+            }
+            $code = (string) ProductPriceTier::cleanCode($name, $code);
             $key = strtoupper("{$name} {$code}");
             if (isset($seen[$key])) {
                 $errors[] = "{$key} is entered more than once.";
@@ -395,6 +400,13 @@ class ProductController extends Controller
                 $summary['rows']++;
                 $itemCode = $this->priceListItemCode($cell('item_code'), $listName);
                 $result = ['row' => $i + 1, 'code' => trim($listName . ' ' . ($itemCode ?? '')), 'description' => $description];
+
+                // Another list's code (an NSPO code in the NSPV upload) is refused, never saved.
+                if ($foreign = ProductPriceTier::foreignList($listName, $itemCode)) {
+                    $summary['errors']++;
+                    $results[] = ['code' => $cell('item_code')] + $result + ['status' => 'error', 'message' => ProductPriceTier::foreignMessage($listName, $itemCode, $foreign)];
+                    continue;
+                }
 
                 $rawPrice = str_replace([',', ' '], '', preg_replace('/^(KES|KSH|KSHS)\.?/i', '', $cell('price')));
                 if ($description === '' || !is_numeric($rawPrice)) {
@@ -1054,6 +1066,10 @@ class ProductController extends Controller
                     if ($price === null) {
                         continue;
                     }
+                    if ($foreign = ProductPriceTier::foreignList($list, $code)) {
+                        $notes[] = ProductPriceTier::foreignMessage($list, $code, $foreign) . ' Not changed.';
+                        continue;
+                    }
                     if ($code !== null) {
                         $owner = ProductPriceTier::where('company_id', $companyId)->where('tier_name', $list)->where('item_code', $code)
                             ->where('product_id', '!=', $product->id)->first();
@@ -1498,11 +1514,7 @@ class ProductController extends Controller
      */
     private function priceListItemCode(string $raw, string $listName): ?string
     {
-        $value = preg_replace('/\s+/', '', trim($raw));
-        if (stripos($value, $listName) === 0) {
-            $value = substr($value, strlen($listName));
-        }
-        return $value !== '' ? $value : null;
+        return ProductPriceTier::cleanCode($listName, $raw);
     }
 
     /**
@@ -1510,6 +1522,62 @@ class ProductController extends Controller
      * importer reads. A GM/Director downloads this, edits the prices in Excel and re-imports
      * it, so the sheet must round-trip: same columns, same codes.
      */
+    /**
+     * Prices saved under the wrong list: a code belonging to another list (e.g. NSPO 001 sitting on
+     * NSPV, from an NSPO sheet uploaded as NSPV). Listed so they can be removed and the right sheet
+     * uploaded again.
+     */
+    private function misfiledTiers(string $companyId, ?string $list = null)
+    {
+        return ProductPriceTier::with('product:id,name,item_number')
+            ->where('company_id', $companyId)
+            ->when($list, fn ($q) => $q->where('tier_name', $list))
+            ->whereNotNull('item_code')
+            ->get()
+            ->filter(fn ($t) => ProductPriceTier::foreignList($t->tier_name, $t->item_code) !== null)
+            ->sortBy(fn ($t) => [$t->tier_name, $t->item_code])
+            ->values();
+    }
+
+    public function misfiledPrices(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_update_products', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+        $rows = $this->misfiledTiers($user->company_id, $request->filled('list_name') ? strtoupper(trim($request->input('list_name'))) : null)
+            ->map(fn ($t) => [
+                'id' => $t->id,
+                'list' => $t->tier_name,
+                'code' => $t->item_code,
+                'belongs_to' => ProductPriceTier::foreignList($t->tier_name, $t->item_code),
+                'description' => $t->product?->name,
+                'price' => (float) $t->price,
+            ]);
+        return response()->json(['status' => 'success', 'data' => $rows]);
+    }
+
+    /** Removes the misfiled prices on one list (or all lists), so the right sheet can be uploaded clean. */
+    public function removeMisfiledPrices(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_create_products', $user->company_id)
+            || !$this->hasPermission($request, 'can_update_products', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+        $list = $request->filled('list_name') ? strtoupper(trim($request->input('list_name'))) : null;
+        $tiers = $this->misfiledTiers($user->company_id, $list);
+        ProductPriceTier::whereIn('id', $tiers->pluck('id'))->delete();
+        Log::info('Misfiled price-list codes removed', ['user_id' => $user->id, 'list' => $list, 'count' => $tiers->count(),
+            'codes' => $tiers->map(fn ($t) => "{$t->tier_name}:{$t->item_code}")->all()]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Removed {$tiers->count()} misfiled price" . ($tiers->count() === 1 ? '' : 's') . '.',
+            'removed' => $tiers->count(),
+        ]);
+    }
+
     public function exportPriceList(Request $request)
     {
         $validator = Validator::make($request->all(), [
