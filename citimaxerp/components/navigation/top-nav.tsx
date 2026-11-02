@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Bell, Settings, LogOut, User, Loader2, FileText, ChevronDown, Package, ShoppingCart, Truck, ClipboardList, Users, CheckCheck, ClipboardCheck, CircleCheck, CircleX, Landmark, PackageX } from "lucide-react" // Added icons
+import { Search, Bell, Settings, LogOut, User, Loader2, FileText, ChevronDown, Package, ShoppingCart, Truck, ClipboardList, Users, CheckCheck, ClipboardCheck, CircleCheck, CircleX, Landmark, PackageX, HandCoins, Banknote } from "lucide-react" // Added icons
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -313,6 +313,18 @@ export function TopNav() {
                 <DropdownMenuItem onClick={() => router.push("/reports/customers")}>
                   <Users className="mr-2 h-4 w-4" />
                   <span>CRM Reports</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission("can_view_reports_menu") && (
+                <DropdownMenuItem onClick={() => router.push("/finance/aging?tab=receivables")}>
+                  <HandCoins className="mr-2 h-4 w-4" />
+                  <span>Receivables Aging</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission("can_view_reports_menu") && (
+                <DropdownMenuItem onClick={() => router.push("/finance/aging?tab=payables")}>
+                  <Banknote className="mr-2 h-4 w-4" />
+                  <span>Payables Aging</span>
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

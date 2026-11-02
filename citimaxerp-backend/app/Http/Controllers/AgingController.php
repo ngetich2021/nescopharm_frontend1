@@ -26,7 +26,8 @@ class AgingController extends Controller
         if (!$role) {
             return false;
         }
-        foreach (['can_manage_system', 'can_manage_company', 'can_view_finance_menu', 'can_view_financial_reports', $permission] as $p) {
+        // Also listed under Reports (Receivables / Payables Aging).
+        foreach (['can_manage_system', 'can_manage_company', 'can_view_finance_menu', 'can_view_financial_reports', 'can_view_reports_menu', $permission] as $p) {
             if ($role->hasPermission($p)) {
                 return true;
             }
@@ -54,27 +55,69 @@ class AgingController extends Controller
         };
     }
 
-    private function report(array $rows, string $key, string $asOf): array
+    /**
+     * As the collections workbook reads it: the 0-30 / 31-60 / 61-90 / >90 buckets age each invoice
+     * from its invoice date (as Tally does); "not yet due" and "overdue" go by the due date (terms).
+     * $pdCheques: cheques still held (pending), per customer or supplier id.
+     */
+    private function report(array $rows, string $key, string $asOf, array $pdCheques = []): array
     {
+        $asAt = Carbon::parse($asOf)->startOfDay();
         $buckets = $this->emptyBuckets();
         $detail = [];
+        $overdue = 0.0;
         foreach ($rows as $row) {
-            $days = max(0, (int) Carbon::parse($row['due_date'])->startOfDay()->diffInDays(Carbon::parse($asOf)->startOfDay(), false));
-            $bucket = $this->bucketFor($days);
+            $invoiceDate = Carbon::parse($row['invoice_date'])->startOfDay();
+            $dueDate = Carbon::parse($row['due_date'])->startOfDay();
+            $age = max(0, (int) $invoiceDate->diffInDays($asAt, false));
+            $toDue = (int) $asAt->diffInDays($dueDate, false);
+            $daysOverdue = max(0, -$toDue);
+            $bucket = $this->bucketFor($age);
             $buckets[$bucket]['amount'] = round($buckets[$bucket]['amount'] + $row['balance_amount'], 2);
             $buckets[$bucket]['count']++;
-            $detail[] = [$key => $row, 'days_past_due' => $days, 'bucket' => $bucket];
+            if ($daysOverdue > 0) {
+                $overdue += $row['balance_amount'];
+            }
+            $detail[] = [
+                $key => $row,
+                'terms_days' => max(0, (int) $invoiceDate->diffInDays($dueDate, false)),
+                'age_days' => $age,
+                'days_past_due' => $daysOverdue,
+                'days_to_due' => max(0, $toDue),
+                'bucket' => $bucket,
+                'status' => $daysOverdue > 0 ? 'overdue' : ($toDue <= 7 ? 'due_soon' : 'not_yet_due'),
+            ];
         }
+        $total = round(array_sum(array_column($rows, 'balance_amount')), 2);
 
         return [
             'aging_buckets' => $buckets,
             'detail_report' => $detail,
+            'pd_cheques' => array_map(fn ($v) => round((float) $v, 2), $pdCheques),
             'summary' => [
-                'total_outstanding' => round(array_sum(array_column($rows, 'balance_amount')), 2),
+                'total_outstanding' => $total,
                 'total_invoices' => count($rows),
+                'overdue' => round($overdue, 2),
+                'not_yet_due' => round($total - $overdue, 2),
+                'pd_cheques_held' => round(array_sum($pdCheques), 2),
                 'as_of_date' => $asOf,
             ],
         ];
+    }
+
+    /** Post-dated cheques still held - received from customers or issued to suppliers - by party. */
+    private function chequesHeld(string $companyId, string $direction, string $partyColumn): array
+    {
+        return DB::table('cheques')
+            ->where('company_id', $companyId)
+            ->where('direction', $direction)
+            ->where('status', 'pending')
+            ->whereNotNull($partyColumn)
+            ->groupBy($partyColumn)
+            ->select($partyColumn, DB::raw('SUM(amount) as total'))
+            ->pluck('total', $partyColumn)
+            ->map(fn ($v) => (float) $v)
+            ->all();
     }
 
     /** What customers owe: every live sales invoice with a balance, dated on or before the date. */
@@ -102,12 +145,14 @@ class AgingController extends Controller
                 'due_date' => Carbon::parse($inv->due_date ?? $inv->invoice_date)->toDateString(),
                 'total_amount' => round((float) $inv->total_amount, 2),
                 'paid_amount' => round((float) $inv->amount_paid, 2),
+                'credited_amount' => round((float) $inv->amount_credited, 2),
                 'balance_amount' => round((float) $inv->balance_amount, 2),
                 'status' => $inv->status,
             ])
             ->all();
 
-        return response()->json($this->report($rows, 'receivable', $asOf));
+        $companyId = $request->user()->company_id;
+        return response()->json($this->report($rows, 'receivable', $asOf, $this->chequesHeld($companyId, 'received', 'customer_id')));
     }
 
     /**
@@ -213,6 +258,6 @@ class AgingController extends Controller
         }
         usort($rows, fn ($a, $b) => strcmp($a['due_date'], $b['due_date']));
 
-        return response()->json($this->report($rows, 'payable', $asOf));
+        return response()->json($this->report($rows, 'payable', $asOf, $this->chequesHeld($companyId, 'issued', 'supplier_id')));
     }
 }

@@ -176,6 +176,8 @@ function Sidebar() {
     { name: "Logistics Reports", href: "/reports/logistics", icon: Truck, permission: "can_view_reports_menu", extraPermission: "can_view_logistics_reports" },
     { name: "Procurement Reports", href: "/reports/procurement", icon: ClipboardList, permission: "can_view_reports_menu" },
     { name: "CRM Reports", href: "/reports/customers", icon: Users, permission: "can_view_reports_menu" },
+    { name: "Receivables Aging", href: "/finance/aging?tab=receivables", icon: ReceiptText, permission: "can_view_reports_menu" },
+    { name: "Payables Aging", href: "/finance/aging?tab=payables", icon: Banknote, permission: "can_view_reports_menu" },
   ]
 
   // Define HR dropdown items
