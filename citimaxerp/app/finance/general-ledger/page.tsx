@@ -124,7 +124,7 @@ function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAc
       <CardContent>
         {accountData.transactions.length > 0 ? (
           <>
-            <Table>
+            <Table scroll>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-14 text-center">S/No</TableHead>

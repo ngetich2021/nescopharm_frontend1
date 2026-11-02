@@ -992,6 +992,9 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     // Accounts Payable - Specific routes must come before resource routes
     // Aging is built from invoices / goods received (AgingController); the old AR/AP tables were never created.
     Route::get('accounts-payable/aging-report', [\App\Http\Controllers\AgingController::class, 'payables']);
+    Route::get('collection-notes', [\App\Http\Controllers\CollectionNoteController::class, 'index']);
+    Route::post('collection-notes', [\App\Http\Controllers\CollectionNoteController::class, 'store']);
+    Route::patch('collection-notes/{id}', [\App\Http\Controllers\CollectionNoteController::class, 'update']);
     Route::get('accounts-payable-summary', [AccountsPayableController::class, 'getSummary']);
     Route::apiResource('accounts-payable', AccountsPayableController::class);
     Route::post('accounts-payable/{id}/record-payment', [AccountsPayableController::class, 'recordPayment']);

@@ -15,6 +15,7 @@ import { Loader2, RefreshCw, Search, ShieldCheck, Upload, ExternalLink } from "l
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { ALL_ROWS, TablePager, usePaged } from "@/components/ui/table-pager"
 import {
   listEtimsInvoices,
   listEtimsProducts,
@@ -83,7 +84,10 @@ function InvoicesTab() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [retrying, setRetrying] = useState<string | null>(null)
-  const perPage = 50
+  const [viewing, setViewing] = useState<EtimsInvoiceRow | null>(null)
+  const [pageSize, setPageSize] = useState(20)
+  // "All" asks the server for up to 5000 at once.
+  const perPage = pageSize === ALL_ROWS ? 5000 : pageSize
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -98,7 +102,7 @@ function InvoicesTab() {
     } finally {
       setLoading(false)
     }
-  }, [status, query, page])
+  }, [status, query, page, perPage])
 
   useEffect(() => { void load() }, [load])
 
@@ -170,73 +174,90 @@ function InvoicesTab() {
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <Table>
+          <Table scroll>
             <TableHeader>
               <TableRow>
-                <TableHead>S/No</TableHead>
+                <TableHead className="text-center">S/No</TableHead>
                 <TableHead>Invoice No.</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>eTIMS Status</TableHead>
                 <TableHead>KRA Invoice No.</TableHead>
-                <TableHead>KRA Receipt No.</TableHead>
-                <TableHead>Sent</TableHead>
-                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading && rows.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin inline" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin inline" /></TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No invoices have been sent to KRA{status !== "all" || query ? " that match" : " yet"}.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No invoices have been sent to KRA{status !== "all" || query ? " that match" : " yet"}.</TableCell></TableRow>
               ) : rows.map((r, i) => {
                 const s = INVOICE_STATUS[r.etims_status] ?? { label: r.etims_status, className: "" }
-                const canRetry = r.etims_status === "failed" || r.etims_status === "response_invalid"
                 return (
-                  <TableRow key={r.id}>
-                    <TableCell>{(page - 1) * perPage + i + 1}</TableCell>
-                    <TableCell>
-                      <Link href={`/sales/invoices/${r.id}`} className="text-primary hover:underline">{r.invoice_number}</Link>
-                    </TableCell>
-                    <TableCell>{fmtDate(r.invoice_date)}</TableCell>
+                  <TableRow key={r.id} className="cursor-pointer" onClick={() => setViewing(r)}>
+                    <TableCell className="text-center">{(page - 1) * perPage + i + 1}</TableCell>
+                    <TableCell className="font-mono text-primary">{r.invoice_number}</TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtDate(r.invoice_date)}</TableCell>
                     <TableCell>{r.customer ?? "-"}</TableCell>
-                    <TableCell className="text-right">{fmtMoney(r.total_amount)}</TableCell>
-                    <TableCell>
-                      <Badge className={s.className} variant="outline">{s.label}</Badge>
-                      {r.etims_last_error && canRetry && (
-                        <p className="text-xs text-red-600 mt-1 max-w-xs">{r.etims_last_error}</p>
-                      )}
-                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtMoney(r.total_amount)}</TableCell>
+                    <TableCell><Badge className={s.className} variant="outline">{s.label}</Badge></TableCell>
                     <TableCell className="font-mono text-xs">{r.etims_invoice_number ?? "-"}</TableCell>
-                    <TableCell className="font-mono text-xs">{r.etims_receipt_number ?? "-"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{fmtDateTime(r.etims_submitted_at)}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {r.etims_qr_url && (
-                        <a href={r.etims_qr_url} target="_blank" rel="noreferrer" className="inline-flex items-center text-xs text-primary hover:underline mr-2">
-                          KRA <ExternalLink className="h-3 w-3 ml-1" />
-                        </a>
-                      )}
-                      {canRetry && (
-                        <Button size="sm" variant="outline" onClick={() => retry(r.id)} disabled={retrying === r.id}>
-                          {retrying === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Resend"}
-                        </Button>
-                      )}
-                    </TableCell>
                   </TableRow>
                 )
               })}
             </TableBody>
           </Table>
         </div>
-        {lastPage > 1 && (
-          <div className="flex items-center justify-end gap-2 mt-4">
-            <span className="text-sm text-muted-foreground">Page {page} of {lastPage}</span>
-            <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)}>Previous</Button>
-            <Button variant="outline" size="sm" disabled={page >= lastPage || loading} onClick={() => setPage(page + 1)}>Next</Button>
-          </div>
-        )}
+        <TablePager
+          total={total}
+          page={page}
+          pageCount={lastPage}
+          pageSize={pageSize}
+          start={(page - 1) * perPage}
+          shown={rows.length}
+          setPage={setPage}
+          setPageSize={setPageSize}
+        />
       </CardContent>
+
+      <Dialog open={!!viewing} onOpenChange={(o) => { if (!o) setViewing(null) }}>
+        <DialogContent className="max-w-lg">
+          {viewing && (() => {
+            const s = INVOICE_STATUS[viewing.etims_status] ?? { label: viewing.etims_status, className: "" }
+            const canRetry = viewing.etims_status === "failed" || viewing.etims_status === "response_invalid"
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{viewing.invoice_number}</DialogTitle>
+                  <DialogDescription>{viewing.customer ?? "-"} · {fmtDate(viewing.invoice_date)}</DialogDescription>
+                </DialogHeader>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">Amount</dt><dd className="tabular-nums">{fmtMoney(viewing.total_amount)}</dd>
+                  <dt className="text-muted-foreground">eTIMS status</dt><dd><Badge className={s.className} variant="outline">{s.label}</Badge></dd>
+                  <dt className="text-muted-foreground">KRA invoice no.</dt><dd className="font-mono">{viewing.etims_invoice_number ?? "-"}</dd>
+                  <dt className="text-muted-foreground">KRA receipt no.</dt><dd className="font-mono">{viewing.etims_receipt_number ?? "-"}</dd>
+                  <dt className="text-muted-foreground">Sent</dt><dd>{fmtDateTime(viewing.etims_submitted_at)}</dd>
+                  <dt className="text-muted-foreground">Signed</dt><dd>{fmtDateTime(viewing.etims_synced_at)}</dd>
+                </dl>
+                {viewing.etims_last_error && <p className="text-sm text-red-600">{viewing.etims_last_error}</p>}
+                <DialogFooter className="gap-2">
+                  {viewing.etims_qr_url && (
+                    <Button variant="outline" asChild>
+                      <a href={viewing.etims_qr_url} target="_blank" rel="noreferrer">View on KRA <ExternalLink className="h-3 w-3 ml-1" /></a>
+                    </Button>
+                  )}
+                  {canRetry && (
+                    <Button variant="outline" onClick={async () => { await retry(viewing.id); setViewing(null) }} disabled={retrying === viewing.id}>
+                      {retrying === viewing.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Resend to KRA
+                    </Button>
+                  )}
+                  <Button asChild><Link href={`/sales/invoices/${viewing.id}`}>Open invoice</Link></Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
@@ -268,6 +289,8 @@ function ProductCodesTab() {
     return q ? rows.filter((r) => r.name.toLowerCase().includes(q) || r.item_class_code.includes(q)) : rows
   }, [rows, search])
 
+  const paged = usePaged(shown, 20, search)
+  const [viewing, setViewing] = useState<EtimsProductRow | null>(null)
   const genericCount = rows.filter((r) => r.generic_class_code).length
 
   // The headings are the ones the import reads back; Ref ties each row to its product.
@@ -348,50 +371,65 @@ function ProductCodesTab() {
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <Table>
+          <Table scroll>
             <TableHeader>
               <TableRow>
-                <TableHead>S/No</TableHead>
+                <TableHead className="text-center">S/No</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Unit</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Tax</TableHead>
                 <TableHead>Item Class Code</TableHead>
-                <TableHead>Packaging</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Origin</TableHead>
                 <TableHead>KRA Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading && rows.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin inline" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin inline" /></TableCell></TableRow>
               ) : shown.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No products.</TableCell></TableRow>
-              ) : shown.map((r, i) => (
-                <TableRow key={r.id}>
-                  <TableCell>{i + 1}</TableCell>
-                  <TableCell>{r.name}</TableCell>
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No products.</TableCell></TableRow>
+              ) : paged.pageRows.map((r, i) => (
+                <TableRow key={r.id} className="cursor-pointer" onClick={() => setViewing(r)}>
+                  <TableCell className="text-center">{paged.start + i + 1}</TableCell>
+                  <TableCell className="text-primary">{r.name}</TableCell>
                   <TableCell>{r.unit ?? "-"}</TableCell>
-                  <TableCell>{r.type}</TableCell>
-                  <TableCell>{r.tax_label}</TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono text-xs whitespace-nowrap">
                     {r.item_class_code}
                     {r.generic_class_code && <span className="ml-1 text-yellow-700">(general)</span>}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{r.packaging_unit_code}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.quantity_unit_code}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.country_of_origin_code}</TableCell>
                   <TableCell>
                     <Badge className={KRA_STATUS[r.kra_status].className} variant="outline">{KRA_STATUS[r.kra_status].label}</Badge>
-                    {r.kra_status === "failed" && r.last_error && <p className="text-xs text-red-600 mt-1 max-w-xs">{r.last_error}</p>}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
+        <TablePager {...paged.pager} />
       </CardContent>
+
+      <Dialog open={!!viewing} onOpenChange={(o) => { if (!o) setViewing(null) }}>
+        <DialogContent className="max-w-lg">
+          {viewing && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{viewing.name}</DialogTitle>
+                <DialogDescription>{viewing.unit ?? "-"} · {viewing.type} · {viewing.tax_label}</DialogDescription>
+              </DialogHeader>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <dt className="text-muted-foreground">Item class code</dt>
+                <dd className="font-mono">{viewing.item_class_code}{viewing.generic_class_code && <span className="ml-1 font-sans text-yellow-700">(general)</span>}</dd>
+                <dt className="text-muted-foreground">Packaging unit</dt><dd className="font-mono">{viewing.packaging_unit_code}</dd>
+                <dt className="text-muted-foreground">Quantity unit</dt><dd className="font-mono">{viewing.quantity_unit_code}</dd>
+                <dt className="text-muted-foreground">Country of origin</dt><dd className="font-mono">{viewing.country_of_origin_code}</dd>
+                <dt className="text-muted-foreground">KRA status</dt>
+                <dd><Badge className={KRA_STATUS[viewing.kra_status].className} variant="outline">{KRA_STATUS[viewing.kra_status].label}</Badge></dd>
+                <dt className="text-muted-foreground">KRA item codes</dt><dd className="font-mono">{viewing.kra_item_codes.length ? viewing.kra_item_codes.join(", ") : "-"}</dd>
+              </dl>
+              {viewing.last_error && <p className="text-sm text-red-600">{viewing.last_error}</p>}
+              <p className="text-xs text-muted-foreground">To change these codes, export the list, edit them and import it back.</p>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o && !importing) { setPreview(null); setFile(null) } }}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">

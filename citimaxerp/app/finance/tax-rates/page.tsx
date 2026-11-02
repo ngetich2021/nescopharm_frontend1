@@ -51,6 +51,7 @@ import {
 import apiCall from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 
 interface TaxRate {
   id: string
@@ -299,6 +300,8 @@ export default function TaxRatesPage() {
     return <FinanceTableSkeleton />
   }
 
+  const { pageRows, start, pager } = usePaged(filteredTaxRates, 20)
+
   return (
     <PermissionGuard permissions={["can_view_tax_rates"]}>
       <div className="space-y-6">
@@ -380,7 +383,7 @@ export default function TaxRatesPage() {
 
           {/* Table */}
           <CardContent className="p-0">
-            <Table>
+            <Table scroll>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[60px]">S/No</TableHead>
@@ -403,9 +406,9 @@ export default function TaxRatesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTaxRates.map((taxRate, index) => (
+                  pageRows.map((taxRate, index) => (
                     <TableRow key={taxRate.id}>
-                      <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                      <TableCell className="text-muted-foreground">{start + index + 1}</TableCell>
                       <TableCell className="font-mono text-sm">{taxRate.code}</TableCell>
                       <TableCell className="font-medium">{taxRate.name}</TableCell>
                       <TableCell className="font-semibold">
@@ -468,6 +471,7 @@ export default function TaxRatesPage() {
                 )}
               </TableBody>
             </Table>
+            <div className="px-4 pb-3"><TablePager {...pager} /></div>
           </CardContent>
         </Card>
 

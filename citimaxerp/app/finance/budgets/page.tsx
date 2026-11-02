@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import { CheckCircle2, Loader2, Pencil, Plus, Target, Trash2, Wallet, XCircle } from "lucide-react"
 import apiCall from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 
 type Account = { id: string; account_code: string; account_name: string; account_type: string }
 type Period = { id: string; name: string; start_date: string; end_date: string }
@@ -218,6 +219,8 @@ export default function BudgetsPage() {
     </Card>
   )
 
+  const { pageRows: budgetRows, start: budgetStart, pager: budgetPager } = usePaged(budgets ?? [], 20)
+
   return (
     <PermissionGuard permissions={["can_view_budgets", "can_manage_budgets", "can_manage_system", "can_manage_company"]}>
       <div className="space-y-6">
@@ -256,8 +259,8 @@ export default function BudgetsPage() {
             ) : budgets.length === 0 ? (
               <p className="py-12 text-center text-sm text-muted-foreground">No budgets yet. Create one to start tracking spending against it.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
+              <div>
+                <Table scroll>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-12">S/No</TableHead>
@@ -271,9 +274,9 @@ export default function BudgetsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {budgets.map((b, i) => (
+                    {budgetRows.map((b, i) => (
                       <TableRow key={b.id} className="cursor-pointer hover:bg-gray-50" onClick={() => openDetail(b)}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-muted-foreground">{budgetStart + i + 1}</TableCell>
                         <TableCell>
                           <p className="font-medium">{b.name}</p>
                           <p className="text-xs capitalize text-muted-foreground">{b.budget_type.replace("_", " ")} · {b.line_count} account{b.line_count === 1 ? "" : "s"}</p>
@@ -290,6 +293,7 @@ export default function BudgetsPage() {
                     ))}
                   </TableBody>
                 </Table>
+                <TablePager {...budgetPager} />
               </div>
             )}
           </CardContent>

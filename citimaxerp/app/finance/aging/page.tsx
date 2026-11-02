@@ -30,6 +30,9 @@ import { PermissionGuard } from "@/components/PermissionGuard"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { matchesDocNumber } from "@/lib/utils"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
+import { listCollectionNotes, promiseState, PROMISE_META, type CollectionNote } from "@/lib/collection-notes"
+import { PartySheet, type PartyView } from "./party-sheet"
 import { format } from "date-fns"
 
 /* ------------------------------------------------------------------ */
@@ -245,6 +248,18 @@ function AgingContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
+  const [notes, setNotes] = useState<CollectionNote[]>([])
+  // The customer/supplier whose panel is open (and the invoice it was opened from, if any).
+  const [openParty, setOpenParty] = useState<{ key: string; invoiceId: string | null } | null>(null)
+
+  const loadNotes = async (tab: ActiveTab) => {
+    try {
+      setNotes((await listCollectionNotes(tab === "receivables" ? "customer" : "supplier")).data ?? [])
+    } catch {
+      setNotes([])
+    }
+  }
+  useEffect(() => { loadNotes(activeTab) }, [activeTab])
 
   // Following the other Reports link while already here switches the tab.
   const tabParam = searchParams.get("tab")
@@ -327,6 +342,40 @@ function AgingContent() {
     buckets: Object.fromEntries(BUCKET_KEYS.map((k) => [k, sum(shownTracker, (r) => (r.bucket === k ? r.balance : 0))])) as Record<BucketKey, number>,
   }
 
+  // Notes are newest first, so each party's first is its latest.
+  const notesByParty = useMemo(() => {
+    const map = new Map<string, CollectionNote[]>()
+    for (const n of notes) map.set(n.party_id, [...(map.get(n.party_id) ?? []), n])
+    return map
+  }, [notes])
+  const latestPromise = (r: SummaryRow) => (r.partyId ? notesByParty.get(r.partyId)?.find((n) => n.promise_date) : undefined)
+  const latestNote = (r: SummaryRow) => (r.partyId ? notesByParty.get(r.partyId)?.[0] : undefined)
+  const noteText = (r: SummaryRow) => {
+    const n = latestNote(r)
+    if (!n) return ""
+    const p = latestPromise(r)
+    const state = p ? promiseState(p, asOfDate, r.overdue > 0) : null
+    return [p && state ? `${PROMISE_META[state].label} ${day(p.promise_date)}` : "", n.note].filter(Boolean).join(" - ")
+  }
+
+  const summaryPager = usePaged(shownSummary, 20, `${activeTab}|${q}`)
+  const trackerPager = usePaged(shownTracker, 20, `${activeTab}|${q}`)
+
+  const partyKey = (r: { partyId: string | null; party: string }) => r.partyId ?? r.party
+  const openView: PartyView | null = useMemo(() => {
+    if (!openParty) return null
+    const s = summaryRows.find((r) => partyKey(r) === openParty.key)
+    if (!s) return null
+    return {
+      ...s,
+      buckets: BUCKET_KEYS.map((k) => ({ label: BUCKET_META[k].short, amount: s.buckets[k] })),
+      invoices: trackerRows.filter((r) => partyKey(r) === openParty.key).map((r) => ({
+        id: r.id, number: r.number, invoiceDate: r.invoiceDate, dueDate: r.dueDate, balance: r.balance, daysOverdue: r.daysOverdue,
+        statusLabel: STATUS_META[r.status].label, statusClass: STATUS_META[r.status].className,
+      })),
+    }
+  }, [openParty, summaryRows, trackerRows])
+
   /* ---------- export ---------- */
 
   const title = activeTab === "receivables" ? "Receivables" : "Payables"
@@ -337,14 +386,14 @@ function AgingContent() {
         fileName: `${title.toLowerCase()}-ageing-summary-${asOfDate}`,
         title: `${title} Ageing - ${activeTab === "receivables" ? "Collection" : "Supplier"} Summary`,
         subtitle: asAt,
-        headers: ["S/No", partyLabel, "Terms (days)", "Total Balance Due", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action"],
+        headers: ["S/No", partyLabel, "Terms (days)", "Total Balance Due", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Collection Notes / Promise Date"],
         rows: shownSummary.map((r, i) => [
           i + 1, r.party, r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
-          r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action,
+          r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action, noteText(r),
         ]),
         footer: [
-          ["", "TOTAL", "", summaryTotals.balance, summaryTotals.notYetDue, summaryTotals.overdue, summaryTotals.buckets.current, summaryTotals.buckets["31_60"], summaryTotals.buckets["61_90"], summaryTotals.buckets.over_90, "", "", summaryTotals.pdCheques, summaryTotals.overdueNetOfPd, ""],
-          ["", "% of total", "", "", pct(summaryTotals.notYetDue, summaryTotals.balance), pct(summaryTotals.overdue, summaryTotals.balance), ...BUCKET_KEYS.map((k) => pct(summaryTotals.buckets[k], summaryTotals.balance)), "", "", "", "", ""],
+          ["", "TOTAL", "", summaryTotals.balance, summaryTotals.notYetDue, summaryTotals.overdue, summaryTotals.buckets.current, summaryTotals.buckets["31_60"], summaryTotals.buckets["61_90"], summaryTotals.buckets.over_90, "", "", summaryTotals.pdCheques, summaryTotals.overdueNetOfPd, "", ""],
+          ["", "% of total", "", "", pct(summaryTotals.notYetDue, summaryTotals.balance), pct(summaryTotals.overdue, summaryTotals.balance), ...BUCKET_KEYS.map((k) => pct(summaryTotals.buckets[k], summaryTotals.balance)), "", "", "", "", "", ""],
         ],
         moneyColumns: [3, 4, 5, 6, 7, 8, 9, 12, 13],
       }
@@ -441,145 +490,113 @@ function AgingContent() {
   )
 
   const num = "text-right tabular-nums whitespace-nowrap"
+  const rowClick = "cursor-pointer"
 
+  function promiseBadge(r: SummaryRow) {
+    const p = latestPromise(r)
+    const state = p ? promiseState(p, asOfDate, r.overdue > 0) : null
+    if (!p || !state) {
+      const n = latestNote(r)
+      return n ? <span className="text-xs text-muted-foreground line-clamp-1">{n.note}</span> : <span className="text-xs text-muted-foreground">-</span>
+    }
+    return (
+      <Badge variant="outline" className={`whitespace-nowrap ${PROMISE_META[state].className}`}>
+        {PROMISE_META[state].label} · {day(p.promise_date)}
+      </Badge>
+    )
+  }
+
+  // Compact: the rest of a customer's figures and its notes open on click.
   function renderSummaryTable() {
     if (shownSummary.length === 0) return emptyState
     return (
-      <div className="overflow-x-auto">
-        <Table>
+      <>
+        <Table scroll>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[60px]">S/No</TableHead>
+              <TableHead className="w-[60px] text-center">S/No</TableHead>
               <TableHead>{partyLabel}</TableHead>
-              <TableHead className="text-right">Terms (days)</TableHead>
-              <TableHead className="text-right">Total Balance Due</TableHead>
-              <TableHead className="text-right">Not Yet Due</TableHead>
-              <TableHead className="text-right">Total Overdue</TableHead>
-              {BUCKET_KEYS.map((k) => <TableHead key={k} className="text-right">{BUCKET_META[k].short}</TableHead>)}
-              <TableHead className="text-right">Oldest Days Overdue</TableHead>
-              <TableHead>Next Due Date</TableHead>
-              <TableHead className="text-right">PD Cheques Held</TableHead>
-              <TableHead className="text-right">Overdue Net of PD Cheques</TableHead>
+              <TableHead className="text-right">Balance Due</TableHead>
+              <TableHead className="text-right">Overdue</TableHead>
+              <TableHead className="text-right">Oldest Overdue</TableHead>
+              <TableHead>Next Due</TableHead>
+              <TableHead>Promise / Last Note</TableHead>
               <TableHead>Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {shownSummary.map((r, i) => (
-              <TableRow key={r.partyId ?? r.party}>
-                <TableCell className="text-center">{i + 1}</TableCell>
-                <TableCell className="font-medium min-w-[200px]">
-                  {r.party}
-                  <span className="block text-xs text-muted-foreground">{r.invoices} {r.invoices === 1 ? "invoice" : "invoices"}</span>
+            {summaryPager.pageRows.map((r, i) => (
+              <TableRow key={partyKey(r)} className={rowClick} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: null })}>
+                <TableCell className="text-center">{summaryPager.start + i + 1}</TableCell>
+                <TableCell className="font-medium">
+                  <span className="text-primary hover:underline">{r.party}</span>
+                  <span className="block text-xs text-muted-foreground">{r.invoices} {r.invoices === 1 ? "invoice" : "invoices"} · {r.terms} days</span>
                 </TableCell>
-                <TableCell className={num}>{r.terms}</TableCell>
                 <TableCell className={`${num} font-semibold`}>{money(r.balance)}</TableCell>
-                <TableCell className={num}>{money(r.notYetDue)}</TableCell>
                 <TableCell className={`${num} ${r.overdue > 0 ? "text-red-700 font-semibold" : ""}`}>{money(r.overdue)}</TableCell>
-                {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{money(r.buckets[k])}</TableCell>)}
-                <TableCell className={num}>{r.oldestOverdue || "-"}</TableCell>
+                <TableCell className={num}>{r.oldestOverdue ? `${r.oldestOverdue} days` : "-"}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.nextDue)}</TableCell>
-                <TableCell className={num}>{r.pdCheques ? money(r.pdCheques) : "-"}</TableCell>
-                <TableCell className={num}>{r.pdCheques ? money(r.overdueNetOfPd) : "-"}</TableCell>
-                <TableCell className="text-xs min-w-[160px]">{r.action}</TableCell>
+                <TableCell className="max-w-[220px]">{promiseBadge(r)}</TableCell>
+                <TableCell className="text-xs max-w-[180px]">{r.action}</TableCell>
               </TableRow>
             ))}
-            <TableRow className="bg-muted/50 font-bold">
+            <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
-              <TableCell>TOTAL</TableCell>
-              <TableCell />
+              <TableCell>TOTAL ({shownSummary.length})</TableCell>
               <TableCell className={num}>{money(summaryTotals.balance)}</TableCell>
-              <TableCell className={num}>{money(summaryTotals.notYetDue)}</TableCell>
-              <TableCell className={num}>{money(summaryTotals.overdue)}</TableCell>
-              {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{money(summaryTotals.buckets[k])}</TableCell>)}
-              <TableCell />
-              <TableCell />
-              <TableCell className={num}>{money(summaryTotals.pdCheques)}</TableCell>
-              <TableCell className={num}>{money(summaryTotals.overdueNetOfPd)}</TableCell>
-              <TableCell />
-            </TableRow>
-            <TableRow className="text-muted-foreground">
-              <TableCell />
-              <TableCell>% of total</TableCell>
-              <TableCell />
-              <TableCell />
-              <TableCell className={num}>{pct(summaryTotals.notYetDue, summaryTotals.balance)}</TableCell>
-              <TableCell className={num}>{pct(summaryTotals.overdue, summaryTotals.balance)}</TableCell>
-              {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{pct(summaryTotals.buckets[k], summaryTotals.balance)}</TableCell>)}
-              <TableCell colSpan={5} />
+              <TableCell className={num}>{money(summaryTotals.overdue)} <span className="font-normal text-muted-foreground">({pct(summaryTotals.overdue, summaryTotals.balance)})</span></TableCell>
+              <TableCell colSpan={4} />
             </TableRow>
           </TableBody>
         </Table>
-      </div>
+        <TablePager {...summaryPager.pager} />
+      </>
     )
   }
 
   function renderTrackerTable() {
     if (shownTracker.length === 0) return emptyState
     return (
-      <div className="overflow-x-auto">
-        <Table>
+      <>
+        <Table scroll>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[60px]">S/No</TableHead>
+              <TableHead className="w-[60px] text-center">S/No</TableHead>
               <TableHead>{partyLabel}</TableHead>
-              <TableHead>Invoice / Ref</TableHead>
+              <TableHead>Invoice</TableHead>
               <TableHead>Invoice Date</TableHead>
-              <TableHead className="text-right">Terms (days)</TableHead>
               <TableHead>Due Date</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
-              <TableHead className="text-right">Credit Notes</TableHead>
               <TableHead className="text-right">Balance Due</TableHead>
-              <TableHead className="text-right">Invoice Age (days)</TableHead>
               <TableHead className="text-right">Days Overdue</TableHead>
-              <TableHead className="text-right">Days to Due</TableHead>
-              <TableHead className="text-right">Not Yet Due</TableHead>
-              <TableHead className="text-right">Overdue Amount</TableHead>
-              {BUCKET_KEYS.map((k) => <TableHead key={k} className="text-right">{BUCKET_META[k].short}</TableHead>)}
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {shownTracker.map((r, i) => (
-              <TableRow key={r.id}>
-                <TableCell className="text-center">{i + 1}</TableCell>
-                <TableCell className="font-medium min-w-[200px]">{r.party}</TableCell>
+            {trackerPager.pageRows.map((r, i) => (
+              <TableRow key={r.id} className={rowClick} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: r.id })}>
+                <TableCell className="text-center">{trackerPager.start + i + 1}</TableCell>
+                <TableCell className="font-medium"><span className="text-primary hover:underline">{r.party}</span></TableCell>
                 <TableCell className="font-mono whitespace-nowrap">{r.number}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.invoiceDate)}</TableCell>
-                <TableCell className={num}>{r.terms}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.dueDate)}</TableCell>
-                <TableCell className={num}>{money(r.amount)}</TableCell>
-                <TableCell className={num}>{money(r.paid)}</TableCell>
-                <TableCell className={num}>{money(r.credited)}</TableCell>
                 <TableCell className={`${num} font-semibold`}>{money(r.balance)}</TableCell>
-                <TableCell className={num}>{r.age}</TableCell>
-                <TableCell className={`${num} ${r.daysOverdue > 0 ? "text-red-700 font-semibold" : ""}`}>{r.daysOverdue}</TableCell>
-                <TableCell className={num}>{r.daysToDue}</TableCell>
-                <TableCell className={num}>{money(r.notYetDue)}</TableCell>
-                <TableCell className={num}>{money(r.overdue)}</TableCell>
-                {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{r.bucket === k ? money(r.balance) : "-"}</TableCell>)}
+                <TableCell className={`${num} ${r.daysOverdue > 0 ? "text-red-700 font-semibold" : ""}`}>{r.daysOverdue || "-"}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={`whitespace-nowrap ${STATUS_META[r.status].className}`}>{STATUS_META[r.status].label}</Badge>
                 </TableCell>
               </TableRow>
             ))}
-            <TableRow className="bg-muted/50 font-bold">
+            <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
-              <TableCell>TOTAL</TableCell>
-              <TableCell colSpan={4} />
-              <TableCell className={num}>{money(trackerTotals.amount)}</TableCell>
-              <TableCell className={num}>{money(trackerTotals.paid)}</TableCell>
-              <TableCell className={num}>{money(trackerTotals.credited)}</TableCell>
-              <TableCell className={num}>{money(trackerTotals.balance)}</TableCell>
+              <TableCell>TOTAL ({shownTracker.length})</TableCell>
               <TableCell colSpan={3} />
-              <TableCell className={num}>{money(trackerTotals.notYetDue)}</TableCell>
-              <TableCell className={num}>{money(trackerTotals.overdue)}</TableCell>
-              {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{money(trackerTotals.buckets[k])}</TableCell>)}
-              <TableCell />
+              <TableCell className={num}>{money(trackerTotals.balance)}</TableCell>
+              <TableCell colSpan={2} className="text-xs font-normal text-muted-foreground">Overdue {money(trackerTotals.overdue)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>
-      </div>
+        <TablePager {...trackerPager.pager} />
+      </>
     )
   }
 
@@ -689,8 +706,8 @@ function AgingContent() {
                   </CardTitle>
                   <CardDescription>
                     {activeView === "summary"
-                      ? `One line per ${partyLabel.toLowerCase()}, most overdue first. Ageing buckets go by days since invoice date; overdue goes by the credit-terms due date.`
-                      : `Every unpaid invoice, by ${partyLabel.toLowerCase()} and oldest first. Balance is after payments and credit notes; days are counted to ${day(asOfDate)}.`}
+                      ? `One line per ${partyLabel.toLowerCase()}, most overdue first. Click a ${partyLabel.toLowerCase()} for the full breakdown, invoices and collection notes. Export has every column.`
+                      : `Every unpaid invoice, by ${partyLabel.toLowerCase()} and oldest first. Click a line to see its ${partyLabel.toLowerCase()} and add a note. Export has every column.`}
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -700,6 +717,16 @@ function AgingContent() {
             </Card>
           </>
         )}
+
+        <PartySheet
+          view={openView}
+          partyType={activeTab === "receivables" ? "customer" : "supplier"}
+          notes={openView?.partyId ? notesByParty.get(openView.partyId) ?? [] : []}
+          asOf={asOfDate}
+          invoiceId={openParty?.invoiceId}
+          onClose={() => setOpenParty(null)}
+          onChanged={() => loadNotes(activeTab)}
+        />
       </div>
     </PermissionGuard>
   )

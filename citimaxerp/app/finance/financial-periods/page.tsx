@@ -45,6 +45,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import apiCall from "@/lib/api"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 
 interface FinancialPeriod {
   id: string
@@ -218,6 +219,8 @@ export default function FinancialPeriodsPage() {
     return <FinanceTableSkeleton />
   }
 
+  const { pageRows, start, pager } = usePaged(periods, 20)
+
   return (
     <PermissionGuard permissions={["can_view_financial_periods"]}>
       <div className="space-y-6">
@@ -359,7 +362,7 @@ export default function FinancialPeriodsPage() {
             <CardTitle>Periods ({periods.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table scroll>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[60px]">S/No</TableHead>
@@ -380,10 +383,10 @@ export default function FinancialPeriodsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  periods.map((period, index) => (
+                  pageRows.map((period, index) => (
                     <TableRow key={period.id}>
                       <TableCell className="font-medium text-muted-foreground">
-                        {index + 1}
+                        {start + index + 1}
                       </TableCell>
                       <TableCell className="font-medium">{period.name}</TableCell>
                       <TableCell>
@@ -436,6 +439,7 @@ export default function FinancialPeriodsPage() {
                 )}
               </TableBody>
             </Table>
+            <TablePager {...pager} />
           </CardContent>
         </Card>
 

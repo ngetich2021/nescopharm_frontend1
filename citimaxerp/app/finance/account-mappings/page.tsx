@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 
 export default function AccountMappingsPage() {
   const { toast } = useToast()
@@ -222,6 +223,8 @@ export default function AccountMappingsPage() {
   const displayUnmapped = unmappedKeys.length > 0 ? unmappedKeys : missingKeys
 
   const isValid = validation?.is_valid
+
+  const { pageRows: mappingRows, start: mappingStart, pager: mappingPager } = usePaged(mappings, 20)
 
   return (
     <PermissionGuard permissions={["can_manage_accounting_settings"]}>
@@ -451,10 +454,11 @@ export default function AccountMappingsPage() {
                     <Loader2 className="h-6 w-6 animate-spin" />
                   </div>
                 ) : mappings.length > 0 ? (
-                  <div className="rounded-md border">
-                    <Table>
+                  <div>
+                    <Table scroll>
                       <TableHeader className="bg-slate-50">
                         <TableRow>
+                          <TableHead className="w-14 text-center">S/No</TableHead>
                           <TableHead>Mapping Key</TableHead>
                           <TableHead>Account Code</TableHead>
                           <TableHead>Account Name</TableHead>
@@ -463,8 +467,9 @@ export default function AccountMappingsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {mappings.map((m) => (
+                        {mappingRows.map((m, i) => (
                           <TableRow key={m.id}>
+                            <TableCell className="text-center text-muted-foreground">{mappingStart + i + 1}</TableCell>
                             <TableCell className="font-medium font-mono text-xs">{m.mapping_key}</TableCell>
                             <TableCell>{m.account_code}</TableCell>
                             <TableCell>{m.chart_of_account?.account_name || '—'}</TableCell>
@@ -490,6 +495,7 @@ export default function AccountMappingsPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    <TablePager {...mappingPager} />
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-center py-8">No mappings configured yet</p>

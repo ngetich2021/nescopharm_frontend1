@@ -15,6 +15,7 @@ import {
   getEtimsReceiptReconciliation,
   type EtimsSupplierReceipt,
 } from "@/lib/etims"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 
 export default function EtimsSupplierReceiptsPage() {
   const [receipts, setReceipts] = useState<EtimsSupplierReceipt[]>([])
@@ -89,6 +90,8 @@ export default function EtimsSupplierReceiptsPage() {
     }
   }
 
+  const { pageRows, start, pager } = usePaged(receipts, 20)
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -146,9 +149,10 @@ export default function EtimsSupplierReceiptsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table scroll>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-14 text-center">S/No</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>KRA PIN</TableHead>
                 <TableHead>Invoice #</TableHead>
@@ -161,9 +165,10 @@ export default function EtimsSupplierReceiptsPage() {
             </TableHeader>
             <TableBody>
               {receipts.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-6 text-muted-foreground">{loading ? "Loading…" : "No receipts yet."}</TableCell></TableRow>
-              ) : receipts.map((r) => (
+                <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">{loading ? "Loading…" : "No receipts yet."}</TableCell></TableRow>
+              ) : pageRows.map((r, i) => (
                 <TableRow key={r.id}>
+                  <TableCell className="text-center text-muted-foreground">{start + i + 1}</TableCell>
                   <TableCell><StatusBadge status={r.verification_status} /></TableCell>
                   <TableCell className="font-mono text-xs">{r.supplier_kra_pin ?? "-"}</TableCell>
                   <TableCell>{r.trader_invoice_number ?? "-"}</TableCell>
@@ -182,6 +187,7 @@ export default function EtimsSupplierReceiptsPage() {
               ))}
             </TableBody>
           </Table>
+          <TablePager {...pager} />
         </CardContent>
       </Card>
 

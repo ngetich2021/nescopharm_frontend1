@@ -7,15 +7,17 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 
 // Client-side paging for a plain table: rows-per-page choices plus "All".
 export const ALL_ROWS = 0
-const DEFAULT_SIZES = [10, 25, 50, 100]
+const DEFAULT_SIZES = [20, 50, 250]
 
-export function usePaged<T>(rows: T[], initialSize = 10) {
+// `resetKey` (e.g. the search text or tab) goes back to page 1 when it changes.
+export function usePaged<T>(rows: T[], initialSize = 20, resetKey?: unknown) {
   const [pageSize, setPageSize] = useState(initialSize)
   const [page, setPage] = useState(1)
   const size = pageSize === ALL_ROWS ? Math.max(rows.length, 1) : pageSize
   const pageCount = Math.max(1, Math.ceil(rows.length / size))
   // Back to a page that exists when the rows shrink (filters, search).
   useEffect(() => { if (page > pageCount) setPage(pageCount) }, [page, pageCount])
+  useEffect(() => { setPage(1) }, [resetKey])
   const start = (Math.min(page, pageCount) - 1) * size
   return {
     pageRows: rows.slice(start, start + size),

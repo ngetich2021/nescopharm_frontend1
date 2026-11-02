@@ -41,6 +41,7 @@ import {
 } from "lucide-react"
 import { financeApi, type BankAccount } from "@/lib/finance"
 import { BankTransfers } from "./bank-transfers"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 
 export default function BankAccountsPage() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
@@ -102,6 +103,7 @@ export default function BankAccountsPage() {
                          account.account_number.includes(searchTerm)
     return matchesSearch
   })
+  const { pageRows, start, pager } = usePaged(filteredAccounts, 20, searchTerm)
 
   return (
     <div className="space-y-6">
@@ -248,9 +250,11 @@ export default function BankAccountsPage() {
           {loading ? (
             <TableSkeleton columns={7} rows={5} showHeader={false} />
           ) : (
-            <Table>
+            <>
+            <Table scroll>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-14 text-center">S/No</TableHead>
                   <TableHead>Account Details</TableHead>
                   <TableHead>Bank</TableHead>
                   <TableHead>Type</TableHead>
@@ -261,8 +265,9 @@ export default function BankAccountsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAccounts.map((account) => (
+                {pageRows.map((account, i) => (
                   <TableRow key={account.id}>
+                    <TableCell className="text-center text-muted-foreground">{start + i + 1}</TableCell>
                     <TableCell>
                       <div>
                         <p className="font-medium">{account.account_name}</p>
@@ -312,6 +317,8 @@ export default function BankAccountsPage() {
                 ))}
               </TableBody>
             </Table>
+            <TablePager {...pager} />
+            </>
           )}
         </CardContent>
       </Card>
