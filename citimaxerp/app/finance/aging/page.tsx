@@ -31,7 +31,7 @@ import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { matchesDocNumber } from "@/lib/utils"
 import { TablePager, usePaged } from "@/components/ui/table-pager"
-import { listCollectionNotes, promiseState, PROMISE_META, type CollectionNote } from "@/lib/collection-notes"
+import { listCollectionNotes, promiseState, PROMISE_META, type CollectionAction, type CollectionNote } from "@/lib/collection-notes"
 import { PartySheet, type PartyView } from "./party-sheet"
 import { format } from "date-fns"
 
@@ -252,11 +252,16 @@ function AgingContent() {
   // The customer/supplier whose panel is open (and the invoice it was opened from, if any).
   const [openParty, setOpenParty] = useState<{ key: string; invoiceId: string | null } | null>(null)
 
+  const [actions, setActions] = useState<Record<string, CollectionAction>>({})
+
   const loadNotes = async (tab: ActiveTab) => {
     try {
-      setNotes((await listCollectionNotes(tab === "receivables" ? "customer" : "supplier")).data ?? [])
+      const res = await listCollectionNotes(tab === "receivables" ? "customer" : "supplier")
+      setNotes(res.data ?? [])
+      setActions(res.actions ?? {})
     } catch {
       setNotes([])
+      setActions({})
     }
   }
   useEffect(() => { loadNotes(activeTab) }, [activeTab])
@@ -311,7 +316,14 @@ function AgingContent() {
     // Grouped by customer/supplier, oldest invoice first - as the collection tracker reads.
     return rows.sort((a, b) => a.party.localeCompare(b.party) || a.invoiceDate.localeCompare(b.invoiceDate))
   }, [data])
-  const summaryRows = useMemo(() => toSummaryRows(trackerRows, data?.pd_cheques ?? {}), [trackerRows, data])
+  // An Action set by a collector replaces the suggested one; the suggestion is kept for the panel.
+  const summaryRows = useMemo(
+    () => toSummaryRows(trackerRows, data?.pd_cheques ?? {}).map((r) => {
+      const set = r.partyId ? actions[r.partyId] : undefined
+      return { ...r, suggestedAction: r.action, action: set?.action ?? r.action, actionSet: set ?? null }
+    }),
+    [trackerRows, data, actions],
+  )
 
   const q = search.trim().toLowerCase()
   const shownTracker = useMemo(
@@ -547,7 +559,7 @@ function AgingContent() {
                 <TableCell className="whitespace-nowrap">{day(r.nextDue)}</TableCell>
                 <TableCell className={num}>{r.pdCheques ? money(r.pdCheques) : "-"}</TableCell>
                 <TableCell className={num}>{r.pdCheques ? money(r.overdueNetOfPd) : "-"}</TableCell>
-                <TableCell className="text-xs">{r.action}</TableCell>
+                <TableCell className={`text-xs ${r.actionSet ? "font-semibold text-slate-800" : ""}`}>{r.action}</TableCell>
                 <TableCell>{promiseBadge(r)}</TableCell>
               </TableRow>
             ))}

@@ -59,7 +59,61 @@ class CollectionNoteController extends AgingController
                 'created_by' => $n->created_by_name ?: null,
             ]);
 
-        return response()->json(['data' => $notes]);
+        // The Action set for each customer/supplier, keyed by its id.
+        $actions = DB::table('collection_actions as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.updated_by')
+            ->where('a.company_id', $request->user()->company_id)
+            ->where('a.party_type', $type)
+            ->get(['a.party_id', 'a.action', 'a.updated_at', DB::raw("trim(coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) as updated_by_name")])
+            ->mapWithKeys(fn ($a) => [$a->party_id => ['action' => $a->action, 'updated_at' => $a->updated_at, 'updated_by' => $a->updated_by_name ?: null]]);
+
+        return response()->json(['data' => $notes, 'actions' => (object) $actions->all()]);
+    }
+
+    /** Sets the Action for a customer/supplier; an empty one goes back to the page's suggestion. */
+    public function setAction(Request $request)
+    {
+        $type = $this->partyType($request);
+        if (!$this->canView($request, $this->permissionFor($type))) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+        $validator = Validator::make($request->all(), [
+            'party_id' => 'required|uuid',
+            'action' => 'nullable|string|max:255',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()->first()], 422);
+        }
+
+        $companyId = $request->user()->company_id;
+        $key = ['company_id' => $companyId, 'party_type' => $type, 'party_id' => $request->input('party_id')];
+        $action = trim((string) $request->input('action'));
+        if ($action === '') {
+            DB::table('collection_actions')->where($key)->delete();
+            return response()->json(['status' => 'success', 'message' => 'Action cleared.']);
+        }
+
+        $partyExists = DB::table($type === 'supplier' ? 'suppliers' : 'customers')
+            ->where('id', $request->input('party_id'))->where('company_id', $companyId)->exists();
+        if (!$partyExists) {
+            return response()->json(['status' => 'failed', 'message' => ucfirst($type) . ' not found.'], 404);
+        }
+
+        $existing = DB::table('collection_actions')->where($key)->first();
+        if ($existing) {
+            DB::table('collection_actions')->where('id', $existing->id)
+                ->update(['action' => $action, 'updated_by' => $request->user()->id, 'updated_at' => now()]);
+        } else {
+            DB::table('collection_actions')->insert($key + [
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'action' => $action,
+                'updated_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json(['status' => 'success', 'message' => 'Action saved.']);
     }
 
     public function store(Request $request)

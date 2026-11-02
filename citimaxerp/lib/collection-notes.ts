@@ -16,8 +16,19 @@ export interface CollectionNote {
   created_by: string | null
 }
 
+// The Action a collector set for a customer/supplier (none means the page's suggestion).
+export interface CollectionAction {
+  action: string
+  updated_at: string
+  updated_by: string | null
+}
+
 export const listCollectionNotes = (partyType: PartyType) =>
-  apiCall<{ data: CollectionNote[] }>(`/finance/collection-notes?party_type=${partyType}`, "GET")
+  apiCall<{ data: CollectionNote[]; actions: Record<string, CollectionAction> }>(`/finance/collection-notes?party_type=${partyType}`, "GET")
+
+/** Saves the Action; an empty one goes back to the suggested action. */
+export const setCollectionAction = (partyType: PartyType, partyId: string, action: string) =>
+  apiCall<{ message: string }>("/finance/collection-actions", "PUT", { party_type: partyType, party_id: partyId, action })
 
 export const addCollectionNote = (body: {
   party_type: PartyType

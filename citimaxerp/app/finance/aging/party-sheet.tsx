@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import { Loader2, CalendarClock, MessageSquarePlus } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -12,7 +12,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import {
   addCollectionNote,
+  setCollectionAction,
   setPromiseOutcome,
+  type CollectionAction,
   promiseState,
   PROMISE_META,
   type CollectionNote,
@@ -33,6 +35,9 @@ export interface PartyView {
   pdCheques: number
   overdueNetOfPd: number
   action: string
+  // What the page suggests, and the Action a collector set (null when none).
+  suggestedAction: string
+  actionSet: CollectionAction | null
   invoices: {
     id: string
     number: string
@@ -72,6 +77,27 @@ export function PartySheet({ view, partyType, notes, asOf, invoiceId, onClose, o
   const [promiseAmount, setPromiseAmount] = useState("")
   const [saving, setSaving] = useState(false)
   const [marking, setMarking] = useState<string | null>(null)
+  const [actionText, setActionText] = useState("")
+  const [savingAction, setSavingAction] = useState(false)
+
+  // The box starts with the action already set for this customer (empty shows the suggestion).
+  useEffect(() => {
+    setActionText(view?.actionSet?.action ?? "")
+  }, [view?.partyId, view?.actionSet?.action])
+
+  const saveAction = async (text: string) => {
+    if (!view?.partyId) return
+    setSavingAction(true)
+    try {
+      await setCollectionAction(partyType, view.partyId, text.trim())
+      toast({ title: text.trim() ? "Action saved" : "Back to the suggested action" })
+      onChanged()
+    } catch (e: any) {
+      toast({ title: "Could not save the action", description: e?.message, variant: "destructive" })
+    } finally {
+      setSavingAction(false)
+    }
+  }
 
   const reset = () => {
     setNote("")
@@ -145,7 +171,34 @@ export function PartySheet({ view, partyType, notes, asOf, invoiceId, onClose, o
                 </div>
               ))}
             </div>
-            {view.action && <p className="mt-3 text-sm"><span className="font-medium">Action:</span> {view.action}</p>}
+            {/* Action: the collector's own, else the suggestion */}
+            <div className="mt-4 space-y-1">
+              <Label htmlFor="cn-action">Action</Label>
+              {view.partyId ? (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      id="cn-action"
+                      value={actionText}
+                      maxLength={255}
+                      placeholder={view.suggestedAction || "e.g. Hand over to lawyer"}
+                      onChange={(e) => setActionText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveAction(actionText) }}
+                    />
+                    <Button size="sm" className="h-10" onClick={() => saveAction(actionText)} disabled={savingAction || actionText.trim() === (view.actionSet?.action ?? "")}>
+                      {savingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {view.actionSet
+                      ? <>Set{view.actionSet.updated_by ? ` by ${view.actionSet.updated_by}` : ""} {stamp(view.actionSet.updated_at)}{view.suggestedAction ? <> · suggested: {view.suggestedAction} · <button type="button" className="underline" onClick={() => saveAction("")} disabled={savingAction}>Use suggested</button></> : null}</>
+                      : view.suggestedAction ? `Suggested: ${view.suggestedAction}. Type your own to replace it.` : "Type an action to follow up on."}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm">{view.action || "-"}</p>
+              )}
+            </div>
 
             {/* Notes */}
             <div className="mt-6 space-y-3">
