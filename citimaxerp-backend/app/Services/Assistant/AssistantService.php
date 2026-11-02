@@ -42,7 +42,8 @@ class AssistantService
                 'model' => config('services.groq.model'),
                 'messages' => $messages,
                 'temperature' => 0.2,
-                'max_tokens' => 1200,
+                // Room for a 40-line stock table.
+                'max_tokens' => 2500,
             ];
             // On the last round the model must answer with what it has.
             if ($definitions && $round < self::MAX_TOOL_ROUNDS) {
@@ -67,14 +68,16 @@ class AssistantService
             $messages[] = ['role' => 'assistant', 'content' => $message['content'] ?? null, 'tool_calls' => $calls];
             foreach ($calls as $call) {
                 $args = json_decode($call['function']['arguments'] ?? '{}', true) ?: [];
-                $result = $tools->run($call['function']['name'] ?? '', $args);
+                $name = $call['function']['name'] ?? '';
+                $result = $tools->run($name, $args);
                 foreach ($result['areas'] ?? [] as $area) {
                     $links[] = $area['link'];
                 }
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => $call['id'],
-                    'content' => mb_substr(json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 6000),
+                    // A stock list page needs more room than the other lookups.
+                    'content' => mb_substr(json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, $name === 'stock_on_hand' ? 14000 : 6000),
                 ];
             }
         }
@@ -224,7 +227,9 @@ How to answer:
 - You can only read. You cannot create, change, approve or delete anything; for those, explain how the user does it in the system.
 - If a tool returns "did_you_mean", say nothing matched exactly and offer those names ("Did you mean ...?"); if one is clearly what was meant, look it up with that name.
 - Every screen you mention MUST be a clickable markdown link with its path, e.g. [Sales > Credit Notes](/sales/credit-notes) - never a screen name as plain text, never "→" menu trails without the link. how_to returns each screen's "link": use it exactly, as the first step ("1. Open [HR & Payroll > Employees](/hr/employees)").
-- When the user gives several products at once (typed, pasted, or in an attached file or photo), call match_products with one line per product, then show a table: their line, Item No., matched product, codes with prices, stock. Mark lines with no match and offer their did_you_mean names. Say "(partial)" for partial matches so they can check them.
+- Every table starts with an S/No column numbered 1, 2, 3... Never show Item No. (item numbers are not used here): name products by their description, plus their price-list code where relevant.
+- When the user gives several products at once (typed, pasted, or in an attached file or photo), call match_products with one line per product, then show a table: S/No, their line, matched product, codes with prices, stock. Mark lines with no match and offer their did_you_mean names. Say "(partial)" for partial matches so they can check them.
+- For available stock ("what stock do we have", "stock list") call stock_on_hand - never answer it from stock_alerts, which holds only alerts. Start with the totals ("142 products in stock as of 2 Nov 2026 14:05"), then a table: S/No, Description, Stock, Usable, Nearest expiry. List expired stock and wrong expiry dates (e.g. year 0029, a typing slip to correct on the batch) as a note, not as usable stock. When next_offset is set, say which part you showed (e.g. "1-40 of 142"), offer the next page or a search by name, and give the full_list link.
 - Money is Kenya Shillings: write it like "KES 74,756.80". Dates like "29 Oct 2026".
 - Invoices are numbered NSK/#### (e.g. NSK/0427); give the number exactly as list_invoices returns it. For "the latest invoice number" answer with "latest_nsk" (the highest NSK number). An invoice shown as INV-#### has no NSK number (File No) yet: say so, and that it gets one on [Filing](/filing); never present an INV number as the invoice number when asked for NSK.
 - A product's code is its price list and number, e.g. "NSPV 003", "NSPH 012", "NSPD 001" - always give the full code as the tool returns it. Item No. is a different number.

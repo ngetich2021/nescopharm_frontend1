@@ -24,6 +24,7 @@ class AssistantTools
         'how_to' => ['*'],
         'search_products' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
         'match_products' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
+        'stock_on_hand' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
         'stock_alerts' => ['can_view_inventory_menu'],
         'list_invoices' => ['can_view_sales_menu'],
         'list_orders' => ['can_view_sales_menu'],
@@ -70,14 +71,19 @@ class AssistantTools
             'how_to' => ['Steps for doing something in the system (adding products, making orders, receiving goods, reports, payroll...) and where it is.', [
                 'topic' => ['type' => 'string', 'description' => 'What the user wants to do, e.g. "add a product", "sales report"'],
             ], ['topic']],
-            'search_products' => ['Find products by description, item number or price-list code (e.g. "amoxyclav", "34", "NSPD 001"). Returns prices per price list with codes, stock on hand and nearest expiry.', [
-                'query' => ['type' => 'string', 'description' => 'Words of the description, the item number, or a price-list code'],
+            'search_products' => ['Find products by description or price-list code (e.g. "amoxyclav", "NSPD 001"). Returns prices per price list with codes, stock on hand and nearest expiry.', [
+                'query' => ['type' => 'string', 'description' => 'Words of the description, or a price-list code'],
                 'limit' => ['type' => 'integer', 'description' => 'Max products (default 8, max 20)'],
             ], ['query']],
             'match_products' => ['Match a list of products (typed, pasted, from an attached file or a photo) to the system, line by line: item no., description, price-list codes and prices, stock. Use it whenever the user gives several products at once.', [
                 'lines' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'One product per line as the user wrote it (description and/or code; quantities may be included)'],
             ], ['lines']],
-            'stock_alerts' => ['Products at or below their reorder level or out of stock, and batches expiring soon.', [
+            'stock_on_hand' => ['ALL products holding stock right now (live, so goods just received are included): stock, usable stock, expired stock and nearest expiry per product, plus how many products are in stock in total. Use it for "what stock do we have", "available stock", "stock list". Large lists come in pages: pass next_offset for the next one.', [
+                'search' => ['type' => 'string', 'description' => 'Optional words of the description to narrow it, e.g. "bandage"'],
+                'offset' => ['type' => 'integer', 'description' => 'Where to continue from (next_offset of the previous call)'],
+                'limit' => ['type' => 'integer', 'description' => 'Products per page (default 40, max 80)'],
+            ], []],
+            'stock_alerts' => ['Alerts only (not the stock list): products at or below their reorder level or out of stock, batches expiring soon, and expired batches still holding stock.', [
                 'expiring_within_days' => ['type' => 'integer', 'description' => 'Batches expiring within this many days (default 90)'],
             ], []],
             'list_invoices' => ['Sales invoices, newest first, plus latest_nsk (the highest NSK number issued). Use for "latest invoice number" (answer with latest_nsk), an invoice number (NSK/0427), a customer\'s invoices, or unpaid/overdue invoices.', $range + [
@@ -262,7 +268,6 @@ class AssistantTools
 
         return ['products' => $products->map(function (Product $p) use ($stock) {
             $row = [
-                'item_no' => $p->item_number,
                 'description' => $p->name,
                 'unit' => $p->unit_of_measurement,
                 'active' => (bool) $p->is_active,
@@ -293,7 +298,6 @@ class AssistantTools
             ->groupBy('product_id')->selectRaw('product_id, sum(quantity_available) as qty')->pluck('qty', 'product_id');
         $describe = function (Product $p, $qty) {
             return [
-                'item_no' => $p->item_number,
                 'description' => $p->name,
                 'codes' => $p->priceTiers->map(fn ($t) => trim($t->tier_name . ' ' . $t->item_code) . ' = ' . number_format((float) $t->price, 2))->implode('; ') ?: 'none',
                 'stock' => (float) $qty,
@@ -372,6 +376,50 @@ class AssistantTools
         ])->all()];
     }
 
+    /**
+     * Every product holding stock right now, by description, from its batches: what is usable,
+     * what sits in batches past their expiry, and batches whose expiry date is clearly mistyped
+     * (year 0029). Read live on every call, so new receipts show at once.
+     */
+    protected function stock_on_hand(array $args): array
+    {
+        $today = now('Africa/Nairobi')->toDateString();
+        $q = DB::table('products as p')->join('inventory_batches as b', 'b.product_id', '=', 'p.id')
+            ->where('p.company_id', $this->companyId)->whereNull('p.deleted_at')->where('b.quantity_available', '>', 0);
+        foreach (preg_split('/\s+/', trim((string) ($args['search'] ?? ''))) as $w) {
+            if (strlen($w) > 1) {
+                $q->where('p.name', 'ilike', "%{$w}%");
+            }
+        }
+        $rows = $q->groupBy('p.id', 'p.name', 'p.unit_of_measurement')
+            ->selectRaw("p.name, p.unit_of_measurement as unit, sum(b.quantity_available) as qty,
+                sum(case when b.expiry_date >= '2000-01-01' and b.expiry_date < ? then b.quantity_available else 0 end) as expired,
+                sum(case when b.expiry_date < '2000-01-01' then b.quantity_available else 0 end) as bad_date,
+                min(case when b.expiry_date >= ? then b.expiry_date end) as nearest_expiry", [$today, $today])
+            ->orderBy('p.name')->get();
+
+        $offset = max(0, (int) ($args['offset'] ?? 0));
+        $page = $rows->slice($offset, $this->limit($args, 40, 80))->values();
+
+        return [
+            'as_of' => now('Africa/Nairobi')->format('Y-m-d H:i'),
+            'products_in_stock' => $rows->count(),
+            'total_units' => (float) $rows->sum('qty'),
+            'showing' => $page->isEmpty() ? 'none' : ($offset + 1) . '-' . ($offset + $page->count()),
+            'next_offset' => $offset + $page->count() < $rows->count() ? $offset + $page->count() : null,
+            'full_list' => '[Inventory Reports](/reports/inventory) > Stock Balance',
+            'products' => $page->map(fn ($r) => array_filter([
+                'description' => $r->name,
+                'stock' => (float) $r->qty,
+                'unit' => $r->unit,
+                'usable' => (float) ($r->qty - $r->expired - $r->bad_date),
+                'expired_stock' => (float) $r->expired ?: null,
+                'stock_with_wrong_expiry_date' => (float) $r->bad_date ?: null,
+                'nearest_expiry' => $r->nearest_expiry ? substr((string) $r->nearest_expiry, 0, 10) : null,
+            ], fn ($v) => $v !== null)),
+        ];
+    }
+
     protected function stock_alerts(array $args): array
     {
         $days = max(1, min(365, (int) ($args['expiring_within_days'] ?? 90)));
@@ -388,10 +436,15 @@ class AssistantTools
             ->orderBy('b.expiry_date')->limit(40);
         $cols = ['p.item_number', 'p.name', 'b.batch_number', 'b.expiry_date', 'b.quantity_available'];
         $today = now('Africa/Nairobi')->toDateString();
-        $batchRow = fn ($r) => ['item_no' => $r->item_number, 'description' => $r->name, 'batch' => $r->batch_number, 'expiry' => substr((string) $r->expiry_date, 0, 10), 'quantity' => (float) $r->quantity_available];
+        $batchRow = fn ($r) => ['description' => $r->name, 'batch' => $r->batch_number, 'quantity' => (float) $r->quantity_available]
+            // A year like 0029 is a typing slip, not an expired batch.
+            + (substr((string) $r->expiry_date, 0, 4) < '2000'
+                ? ['expiry' => 'wrong date entered (' . substr((string) $r->expiry_date, 0, 10) . ') - correct it on the batch']
+                : ['expiry' => substr((string) $r->expiry_date, 0, 10)]);
 
         return [
-            'low_or_out_of_stock' => $stock->map(fn ($r) => ['item_no' => $r->item_number, 'description' => $r->name, 'stock' => (float) $r->qty, 'reorder_level' => $r->low_stock_threshold]),
+            'note' => 'Only alerts. For all stock available, use stock_on_hand.',
+            'low_or_out_of_stock' => $stock->map(fn ($r) => ['description' => $r->name, 'stock' => (float) $r->qty, 'reorder_level' => $r->low_stock_threshold]),
             'expiring_within_days' => $days,
             'expiring_batches' => $batches()->whereDate('b.expiry_date', '>=', $today)
                 ->whereDate('b.expiry_date', '<=', now('Africa/Nairobi')->addDays($days)->toDateString())->get($cols)->map($batchRow),
