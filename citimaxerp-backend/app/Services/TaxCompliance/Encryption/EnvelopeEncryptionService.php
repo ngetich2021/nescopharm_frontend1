@@ -136,7 +136,11 @@ final class EnvelopeEncryptionService
     /** Returns the active KEK as raw bytes (32 bytes). */
     private function kek(): string
     {
-        $configured = config('tax_compliance.kek.value');
+        // The server's TAX_COMPLIANCE_KEK first. Without it (it can only be set in the Laravel Cloud
+        // dashboard), the copy kept in company_settings 'tax_compliance_kek' {"key": base64}, as the
+        // Groq key is. Moving it into Laravel Cloud's env later keeps everything readable, so long
+        // as the value is the same.
+        $configured = config('tax_compliance.kek.value') ?: $this->storedKek();
 
         if ($configured) {
             $decoded = base64_decode($configured, true);
@@ -168,6 +172,14 @@ final class EnvelopeEncryptionService
             'TAX_COMPLIANCE_KEK is not configured. Set it in Laravel Cloud Secrets Manager '
             . '(base64-encoded 32 bytes) before enabling eTIMS in production.'
         );
+    }
+
+    private function storedKek(): ?string
+    {
+        $value = \App\Models\CompanySetting::where('setting_key', 'tax_compliance_kek')
+            ->where('is_active', true)->value('setting_value');
+
+        return is_array($value) ? ($value['key'] ?? null) : null;
     }
 
     /** Wrap a DEK with the KEK using AES-256-GCM. Returns base64 (iv|tag|ciphertext). */
