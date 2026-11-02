@@ -20,6 +20,7 @@ import { FileLink } from "@/components/file-preview"
 import { listOrderDispatches } from "@/lib/order-dispatches"
 import { DeliveryNoteDocument } from "@/components/dispatch/delivery-note-document"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { addScanMe } from "@/lib/scan-me"
 
 export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -171,6 +172,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       }))
       pdf.addPage()
       pdf.addImage(policy, 'JPEG', 0, 0, pdfWidth, pdfHeight)
+      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
       
       toast({

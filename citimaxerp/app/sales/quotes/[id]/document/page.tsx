@@ -9,13 +9,14 @@ import { getQuoteById, Quote } from "@/lib/quotes"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
-import { documentCode } from "@/lib/price-codes"
+import { documentCode, tidyCode } from "@/lib/price-codes"
 import { buildBuyerBlock } from "@/lib/customer-address"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
+import { addScanMe } from "@/lib/scan-me"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -105,6 +106,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
       const imgX = (pdfWidth - canvas.width * ratio) / 2
 
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", imgX, 10, canvas.width * ratio, canvas.height * ratio)
+      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Quotation PDF downloaded" })
     } catch (err) {
@@ -255,7 +257,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
                     <td className="border border-gray-300 px-2 py-1.5 align-top">{item.pack_size || "-"}</td>
                     <td className="border border-gray-300 px-2 py-1.5 text-right align-top whitespace-nowrap">
                       {formatAmount(Number(item.unit_price) * vatFactor)}
-                      {isPricing && item.price_label && <span className="font-semibold"> @ {item.price_label}</span>}
+                      {isPricing && item.price_label && <span className="font-semibold"> @ {tidyCode(item.price_label)}</span>}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 text-right align-top">{qty.toLocaleString()}</td>
                     <td className="border border-gray-300 px-2 py-1.5 text-right align-top font-semibold">

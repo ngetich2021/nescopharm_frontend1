@@ -17,6 +17,7 @@ import { fixTextOffset } from "@/lib/pdf-capture"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
+import { addScanMe } from "@/lib/scan-me"
 
 function toNumber(amount: string | number | null | undefined): number {
   if (amount === null || amount === undefined) return 0
@@ -302,6 +303,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
         pdf.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 3, { align: "right" })
       }
 
+      await addScanMe(pdf)
       pdf.save(`${fileBase}.pdf`)
       toast({ title: "Success", description: "Statement PDF downloaded successfully" })
     } catch (err) {

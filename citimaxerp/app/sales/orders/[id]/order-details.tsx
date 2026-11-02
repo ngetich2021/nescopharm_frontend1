@@ -41,7 +41,7 @@ import { EditOrderModal } from "@/components/modals/edit-order-modal"
 import { CreateDispatchModal } from "./create-dispatch-modal"
 import apiCall from "@/lib/api"
 import { formatPackagingForDisplay } from "@/lib/packaging-utils"
-import { orderItemUnit, piecesPerPack } from "@/lib/price-codes"
+import { orderItemUnit, piecesPerPack, tidyCode } from "@/lib/price-codes"
 
 // API type definitions
 interface OrderItem {
@@ -1059,7 +1059,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                               {/* Which named price tier this was - staff-only
                                   reference, never shown on a printed order. */}
                               {item.price_label && (
-                                <div className="text-xs text-muted-foreground italic">{item.price_label}</div>
+                                <div className="text-xs text-muted-foreground italic">{tidyCode(item.price_label)}</div>
                               )}
                             </div>
                           </TableCell>

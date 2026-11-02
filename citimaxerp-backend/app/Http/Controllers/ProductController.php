@@ -3483,7 +3483,12 @@ class ProductController extends Controller
                 $tier = ProductPriceTier::where('product_id', $product->id)
                     ->where(fn ($q) => $variant ? $q->where('variant_id', $variant->id) : $q->whereNull('variant_id'))
                     ->get()
-                    ->first(fn ($t) => strtoupper(preg_replace('/\s+/', '', $t->tier_name . ($t->item_code ?? ''))) === $wanted);
+                    // An entry whose item code is a full code ("NSPO181" on NSPV) answers to that code too.
+                    ->sortBy(fn ($t) => strtoupper(preg_replace('/\s+/', '', $t->tier_name . ($t->item_code ?? ''))) === $wanted ? 0 : 1)
+                    ->first(fn ($t) => in_array($wanted, [
+                        strtoupper(preg_replace('/\s+/', '', $t->tier_name . ($t->item_code ?? ''))),
+                        strtoupper(preg_replace('/\s+/', '', (string) $t->item_code)),
+                    ], true));
                 if (!$tier && $wanted !== 'NSPV') {
                     throw new \RuntimeException("Price code {$request->input('price_code')} is not on this item any more.");
                 }

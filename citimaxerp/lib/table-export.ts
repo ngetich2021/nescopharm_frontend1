@@ -1,4 +1,5 @@
 import { getCompany, type Company } from "@/lib/company"
+import { addScanMe, SCAN_ME_SIZE } from "@/lib/scan-me"
 
 // Table exports (CSV, Excel, PDF) headed with the company's letterhead - or its logo, or just its
 // name when it has neither. CSV is plain text, so it carries the name and title only.
@@ -215,7 +216,8 @@ async function exportPdf(data: TableExport, brand: Brand) {
   const aligns = columnAlignments(data)
   autoTable(pdf, {
     startY: y + 3,
-    margin: { left: margin, right: margin },
+    // The bottom leaves room for the Scan me QR in the corner.
+    margin: { left: margin, right: margin, bottom: SCAN_ME_SIZE + 8 },
     head: [data.headers],
     body: data.rows.map((r) => r.map(fmt)),
     foot: data.footer?.map((r) => r.map(fmt)),
@@ -233,9 +235,10 @@ async function exportPdf(data: TableExport, brand: Brand) {
       const pageHeight = pdf.internal.pageSize.getHeight()
       pdf.setFont("helvetica", "normal").setFontSize(8)
       pdf.text(`Printed ${new Date().toLocaleString("en-GB")}`, margin, pageHeight - 6)
-      pdf.text(`Page ${pdf.getNumberOfPages()}`, pageWidth - margin, pageHeight - 6, { align: "right" })
+      pdf.text(`Page ${pdf.getNumberOfPages()}`, pageWidth - margin - SCAN_ME_SIZE, pageHeight - 6, { align: "right" })
     },
   })
+  await addScanMe(pdf)
   pdf.save(`${data.fileName}.pdf`)
 }
 

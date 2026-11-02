@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Plus, Search, ShoppingCart, Trash2, X, Pencil, Wallet, CreditCard as CreditCardIcon } from "lucide-react"
-import { DEFAULT_UNIT, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { DEFAULT_UNIT, tidyCode, defaultPriceOption, describeOption, findByPriceCode, priceCodeHits, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
 import { StockHint, stockCheck } from "@/components/stock-hint"
 import { createPayment } from "@/lib/payments"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
@@ -787,10 +787,10 @@ export function CreateOrderModal({
                               ) : (
                                 <>
                                   <div className="text-sm font-medium text-gray-900 break-words">{item.product_name}</div>
-                                  <SameCodeSizeSelect code={item.price_label} productId={item.product_id} onPick={(p) => handleSwapSize(index, p)} />
+                                  <SameCodeSizeSelect code={tidyCode(item.price_label)} productId={item.product_id} onPick={(p) => handleSwapSize(index, p)} />
                                 </>
                               )}
-                              <div className="text-xs text-gray-500">{[item.price_label, item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
+                              <div className="text-xs text-gray-500">{[tidyCode(item.price_label), item.price_unit || DEFAULT_UNIT].filter(Boolean).join(" | ")}</div>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               {/* Defaults to the price-list price; can be negotiated per order. */}
@@ -871,7 +871,7 @@ export function CreateOrderModal({
                     onOpenChange={(open) => !open && setEditingIndex(null)}
                     product={editingIndex !== null ? products.find((p) => p.id === orderItems[editingIndex]?.product_id) : undefined}
                     variantId={editingIndex !== null ? orderItems[editingIndex]?.variant_id ?? null : null}
-                    priceCode={editingIndex !== null ? orderItems[editingIndex]?.price_label ?? null : null}
+                    priceCode={editingIndex !== null ? tidyCode(orderItems[editingIndex]?.price_label) ?? null : null}
                     onSaved={handleItemEdited}
                   />
                 </div>

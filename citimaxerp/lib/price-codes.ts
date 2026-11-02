@@ -29,7 +29,19 @@ type TierLike = {
   unit_of_measure?: string | null
 }
 
-export const priceCode = (list: string, itemCode?: string | null) => `${list} ${itemCode ?? ""}`.trim()
+// An item code that already names its list ("NSPO181", as some NSPV rows were imported) is that
+// code, "NSPO 181" - not "NSPV NSPO181".
+const FULL_CODE = /^([A-Z]{2,})\s*(\d.*)$/i
+export const priceCode = (list: string, itemCode?: string | null) => {
+  const full = (itemCode ?? "").trim().match(FULL_CODE)
+  return full ? `${full[1].toUpperCase()} ${full[2]}` : `${list} ${itemCode ?? ""}`.trim()
+}
+
+/** A line's saved code as it should read: "NSPV NSPO181" -> "NSPO 181". */
+export function tidyCode(label: string | null | undefined): string | null | undefined {
+  const doubled = label?.trim().match(/^[A-Z]+\s+([A-Z]{2,}\s*\d.*)$/i)
+  return doubled ? priceCode("", doubled[1]) : label
+}
 
 const normalizeCode = (value: string) => value.replace(/\s+/g, "").toUpperCase()
 
@@ -78,7 +90,12 @@ export function priceOptionsFor(product: any, variant?: any): PriceOption[] {
   for (const t of tiers) {
     const price = Number(t.price)
     if (!t.tier_name || !(price > 0)) continue
-    options.push({ code: priceCode(t.tier_name, t.item_code), list: t.tier_name, price, unit: t.unit_of_measure || DEFAULT_UNIT })
+    const option = { code: priceCode(t.tier_name, t.item_code), list: t.tier_name, price, unit: t.unit_of_measure || DEFAULT_UNIT }
+    // One code, one price: an NSPV row carrying "NSPO181" is the NSPO 181 entry again, so the item
+    // offers NSPO 181 once (its own list's row when it has one).
+    const same = options.findIndex((o) => normalizeCode(o.code) === normalizeCode(option.code))
+    if (same === -1) options.push(option)
+    else if (normalizeCode(option.code).startsWith(normalizeCode(option.list))) options[same] = option
   }
   return options.sort((a, b) => listOrder(a.list) - listOrder(b.list))
 }
@@ -116,6 +133,7 @@ export const describeOption = (o: PriceOption) =>
 
 // "Code No." printed on quotes/invoices: the price-list code used (e.g. "NSPD 001"), else the item number.
 export function documentCode(priceLabel: string | null | undefined, itemNumber: number | string | null | undefined): string {
+  priceLabel = tidyCode(priceLabel)
   if (priceLabel && /\d/.test(priceLabel)) return priceLabel
   return itemNumber != null && itemNumber !== "" ? String(itemNumber) : "-"
 }
@@ -143,7 +161,7 @@ export function piecesPerPack(unit: string | null | undefined): number | null {
 // The unit an order line was sold in: its own, else the product's tier for its price code.
 export function orderItemUnit(orderItem: any, product?: any): string | null {
   if (orderItem?.price_unit) return orderItem.price_unit
-  const code = orderItem?.price_label
+  const code = tidyCode(orderItem?.price_label)
   if (!code) return null
   const option = priceOptionsFor(product ?? orderItem?.product).find((o) => o.code === code)
   return option?.unit ?? null
@@ -154,7 +172,7 @@ export const dispatchItemUnit = (item: any): string | null => orderItemUnit(item
 
 // Code for a dispatch line: the one it was sold under (e.g. "NSPH 001"), else the item's own codes.
 export function dispatchItemCode(item: any): string {
-  const sold = item?.order_item?.price_label
+  const sold = tidyCode(item?.order_item?.price_label)
   if (sold && /\d/.test(sold)) return sold
   const codes = priceOptionsFor(item?.product).map((o) => o.code).filter((c) => /\d/.test(c))
   if (codes.length) return codes.join(" / ")

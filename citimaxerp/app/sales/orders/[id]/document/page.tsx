@@ -16,6 +16,7 @@ import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { addScanMe } from "@/lib/scan-me"
 
 export default function OrderDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -130,6 +131,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
       const imgY = 10
 
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
+      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
 
       toast({

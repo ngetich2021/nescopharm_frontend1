@@ -11,6 +11,7 @@ import { PRINT_KEY } from "@/lib/filing"
 import { printWithFileName } from "@/lib/document-names"
 import { InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, type InvoiceDocumentData } from "@/components/invoices/invoice-document"
 import { fixTextOffset } from "@/lib/pdf-capture"
+import { addScanMe } from "@/lib/scan-me"
 
 /**
  * Several invoices, each on its own page, in the same layout as a single printed invoice -
@@ -102,6 +103,7 @@ export default function FilingPrintPage() {
           pdf.addImage(policy, "JPEG", 0, 0, pageW, pageH)
         }
       }
+      await addScanMe(pdf)
       pdf.save(`${fileName()}.pdf`)
     } catch (err: any) {
       toast({ title: "Could not create the PDF", description: "Use Print and choose \"Save as PDF\" instead.", variant: "destructive" })

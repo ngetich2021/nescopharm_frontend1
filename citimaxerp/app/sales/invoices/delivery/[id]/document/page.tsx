@@ -14,6 +14,7 @@ import { fixTextOffset } from "@/lib/pdf-capture"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
+import { addScanMe } from "@/lib/scan-me"
 
 const STATUS_STYLES: Record<string, string> = {
   paid: "bg-green-100 text-green-800",
@@ -96,6 +97,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
       const imgX = (pdfWidth - canvas.width * ratio) / 2
 
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", imgX, 10, canvas.width * ratio, canvas.height * ratio)
+      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Delivery invoice PDF downloaded" })
     } catch (err) {
