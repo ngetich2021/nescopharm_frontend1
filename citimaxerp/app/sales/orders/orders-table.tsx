@@ -30,7 +30,7 @@ import { CreateOrderModal } from "@/components/modals/create-order-modal"
 import { EditOrderModal } from "@/components/modals/edit-order-modal"
 import { DeleteOrderConfirmationDialog } from "./components/DeleteOrderConfirmationDialog"
 import { toast } from "@/components/ui/use-toast"
-import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate, declinedDeletesAt, orderEditingOpen } from "@/lib/orders"
+import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate, declinedDeletesAt } from "@/lib/orders"
 import { matchesDocNumber } from "@/lib/utils"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
@@ -226,14 +226,12 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
             <Eye className="h-4 w-4 mr-2" />
             View Details
           </DropdownMenuItem>
-          {orderEditingOpen() && (
-            <PermissionGuard permissions={["can_update_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditOrder(order.id); }}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Order
-              </DropdownMenuItem>
-            </PermissionGuard>
-          )}
+          <PermissionGuard permissions={["can_update_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditOrder(order.id); }}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Order
+            </DropdownMenuItem>
+          </PermissionGuard>
           <PermissionGuard permissions={["can_delete_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
             <DropdownMenuSeparator />
             <DropdownMenuItem 

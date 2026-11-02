@@ -680,16 +680,6 @@ class OrderController extends Controller
             ], 403);
         }
 
-        // After the deadline the order itself is closed; status/payment updates (e.g. the POS
-        // marking an order paid) still go through.
-        $contentFields = ['customer_id', 'items', 'discount', 'tax', 'order_date', 'notes', 'sales_rep_id', 'delivery_location_id', 'currency', 'payment_type', 'credit_terms_days'];
-        if (!Order::editingOpen() && $request->hasAny($contentFields)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Orders could be edited until ' . \Carbon\Carbon::parse(Order::EDIT_DEADLINE)->format('d-m-Y') . '. Editing is now closed.',
-            ], 400);
-        }
-
         $validator = Validator::make($request->all(), [
             'customer_id' => 'sometimes|uuid|exists:customers,id',
             'discount' => 'sometimes|numeric|min:0|max:9999999999999.99',
