@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { Loader2, RefreshCw, Search, ShieldCheck, Upload, ExternalLink } from "lucide-react"
+import { Loader2, RefreshCw, Search, Settings, ShieldCheck, Upload, ExternalLink } from "lucide-react"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { PermissionGuard } from "@/components/PermissionGuard"
@@ -51,11 +51,19 @@ const fmtDateTime = (d: string | null) =>
 export default function EtimsPage() {
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <ShieldCheck className="h-6 w-6 text-primary" /> eTIMS
-        </h1>
-        <p className="text-muted-foreground mt-1">Invoices sent to KRA, and the KRA codes each product is registered under.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <ShieldCheck className="h-6 w-6 text-primary" /> eTIMS
+          </h1>
+          <p className="text-muted-foreground mt-1">Invoices sent to KRA, and the KRA codes each product is registered under.</p>
+        </div>
+        {/* KRA PIN, DigiTax API key, Test Connection and Enable live under Settings > eTIMS. */}
+        <PermissionGuard permissions={["can_manage_system", "can_manage_company"]} hideOnDenied>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/settings?tab=etims"><Settings className="h-4 w-4 mr-2" /> eTIMS Setup</Link>
+          </Button>
+        </PermissionGuard>
       </div>
       <Tabs defaultValue="invoices">
         <TabsList>

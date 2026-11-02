@@ -37,6 +37,11 @@ export default function SettingsPage() {
   // Renamed from ProfilePage to SettingsPage for clarity
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<ActiveSection>("profile")
+  // /settings?tab=etims opens straight on that tab (the eTIMS page links here).
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab")
+    if (tab) setActiveSection(tab as ActiveSection)
+  }, [])
   const { userProfile, isLoading: authLoading } = useAuth()
   const { hasPermission } = usePermissions()
   const [user, setUser] = useState({
