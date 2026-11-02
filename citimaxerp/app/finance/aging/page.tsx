@@ -497,7 +497,7 @@ function AgingContent() {
     const state = p ? promiseState(p, asOfDate, r.overdue > 0) : null
     if (!p || !state) {
       const n = latestNote(r)
-      return n ? <span className="text-xs text-muted-foreground line-clamp-1">{n.note}</span> : <span className="text-xs text-muted-foreground">-</span>
+      return n ? <span className="text-xs text-muted-foreground line-clamp-2">{n.note}</span> : <span className="text-xs text-muted-foreground">-</span>
     }
     return (
       <Badge variant="outline" className={`whitespace-nowrap ${PROMISE_META[state].className}`}>
@@ -506,7 +506,8 @@ function AgingContent() {
     )
   }
 
-  // Compact: the rest of a customer's figures and its notes open on click.
+  // Every column of the collection workbook; the table scrolls sideways inside its own box
+  // (scrollbar always in view). A click opens the customer's panel with its notes.
   function renderSummaryTable() {
     if (shownSummary.length === 0) return emptyState
     return (
@@ -515,13 +516,18 @@ function AgingContent() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[60px] text-center">S/No</TableHead>
-              <TableHead>{partyLabel}</TableHead>
-              <TableHead className="text-right">Balance Due</TableHead>
-              <TableHead className="text-right">Overdue</TableHead>
-              <TableHead className="text-right">Oldest Overdue</TableHead>
-              <TableHead>Next Due</TableHead>
-              <TableHead>Promise / Last Note</TableHead>
-              <TableHead>Action</TableHead>
+              <TableHead className="min-w-[220px]">{partyLabel}</TableHead>
+              <TableHead className="text-right">Terms (days)</TableHead>
+              <TableHead className="text-right">Total Balance Due</TableHead>
+              <TableHead className="text-right">Not Yet Due</TableHead>
+              <TableHead className="text-right">Total Overdue</TableHead>
+              {BUCKET_KEYS.map((k) => <TableHead key={k} className="text-right whitespace-nowrap">{BUCKET_META[k].short}</TableHead>)}
+              <TableHead className="text-right">Oldest Days Overdue</TableHead>
+              <TableHead>Next Due Date</TableHead>
+              <TableHead className="text-right">PD Cheques Held</TableHead>
+              <TableHead className="text-right">Overdue Net of PD Cheques</TableHead>
+              <TableHead className="min-w-[170px]">Action</TableHead>
+              <TableHead className="min-w-[220px]">Collection Notes / Promise Date</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -530,22 +536,44 @@ function AgingContent() {
                 <TableCell className="text-center">{summaryPager.start + i + 1}</TableCell>
                 <TableCell className="font-medium">
                   <span className="text-primary hover:underline">{r.party}</span>
-                  <span className="block text-xs text-muted-foreground">{r.invoices} {r.invoices === 1 ? "invoice" : "invoices"} · {r.terms} days</span>
+                  <span className="block text-xs text-muted-foreground">{r.invoices} {r.invoices === 1 ? "invoice" : "invoices"}</span>
                 </TableCell>
+                <TableCell className={num}>{r.terms}</TableCell>
                 <TableCell className={`${num} font-semibold`}>{money(r.balance)}</TableCell>
+                <TableCell className={num}>{money(r.notYetDue)}</TableCell>
                 <TableCell className={`${num} ${r.overdue > 0 ? "text-red-700 font-semibold" : ""}`}>{money(r.overdue)}</TableCell>
-                <TableCell className={num}>{r.oldestOverdue ? `${r.oldestOverdue} days` : "-"}</TableCell>
+                {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{money(r.buckets[k])}</TableCell>)}
+                <TableCell className={num}>{r.oldestOverdue || "-"}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.nextDue)}</TableCell>
-                <TableCell className="max-w-[220px]">{promiseBadge(r)}</TableCell>
-                <TableCell className="text-xs max-w-[180px]">{r.action}</TableCell>
+                <TableCell className={num}>{r.pdCheques ? money(r.pdCheques) : "-"}</TableCell>
+                <TableCell className={num}>{r.pdCheques ? money(r.overdueNetOfPd) : "-"}</TableCell>
+                <TableCell className="text-xs">{r.action}</TableCell>
+                <TableCell>{promiseBadge(r)}</TableCell>
               </TableRow>
             ))}
             <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
               <TableCell>TOTAL ({shownSummary.length})</TableCell>
+              <TableCell />
               <TableCell className={num}>{money(summaryTotals.balance)}</TableCell>
-              <TableCell className={num}>{money(summaryTotals.overdue)} <span className="font-normal text-muted-foreground">({pct(summaryTotals.overdue, summaryTotals.balance)})</span></TableCell>
-              <TableCell colSpan={4} />
+              <TableCell className={num}>{money(summaryTotals.notYetDue)}</TableCell>
+              <TableCell className={num}>{money(summaryTotals.overdue)}</TableCell>
+              {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{money(summaryTotals.buckets[k])}</TableCell>)}
+              <TableCell />
+              <TableCell />
+              <TableCell className={num}>{money(summaryTotals.pdCheques)}</TableCell>
+              <TableCell className={num}>{money(summaryTotals.overdueNetOfPd)}</TableCell>
+              <TableCell colSpan={2} />
+            </TableRow>
+            <TableRow className="text-muted-foreground hover:bg-transparent">
+              <TableCell />
+              <TableCell>% of total</TableCell>
+              <TableCell />
+              <TableCell />
+              <TableCell className={num}>{pct(summaryTotals.notYetDue, summaryTotals.balance)}</TableCell>
+              <TableCell className={num}>{pct(summaryTotals.overdue, summaryTotals.balance)}</TableCell>
+              {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{pct(summaryTotals.buckets[k], summaryTotals.balance)}</TableCell>)}
+              <TableCell colSpan={6} />
             </TableRow>
           </TableBody>
         </Table>
@@ -562,12 +590,21 @@ function AgingContent() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[60px] text-center">S/No</TableHead>
-              <TableHead>{partyLabel}</TableHead>
-              <TableHead>Invoice</TableHead>
+              <TableHead className="min-w-[220px]">{partyLabel}</TableHead>
+              <TableHead>Invoice / Ref</TableHead>
               <TableHead>Invoice Date</TableHead>
+              <TableHead className="text-right">Terms (days)</TableHead>
               <TableHead>Due Date</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="text-right">Paid</TableHead>
+              <TableHead className="text-right">Credit Notes</TableHead>
               <TableHead className="text-right">Balance Due</TableHead>
+              <TableHead className="text-right">Invoice Age (days)</TableHead>
               <TableHead className="text-right">Days Overdue</TableHead>
+              <TableHead className="text-right">Days to Due</TableHead>
+              <TableHead className="text-right">Not Yet Due</TableHead>
+              <TableHead className="text-right">Overdue Amount</TableHead>
+              {BUCKET_KEYS.map((k) => <TableHead key={k} className="text-right whitespace-nowrap">{BUCKET_META[k].short}</TableHead>)}
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -578,9 +615,18 @@ function AgingContent() {
                 <TableCell className="font-medium"><span className="text-primary hover:underline">{r.party}</span></TableCell>
                 <TableCell className="font-mono whitespace-nowrap">{r.number}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.invoiceDate)}</TableCell>
+                <TableCell className={num}>{r.terms}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.dueDate)}</TableCell>
+                <TableCell className={num}>{money(r.amount)}</TableCell>
+                <TableCell className={num}>{money(r.paid)}</TableCell>
+                <TableCell className={num}>{money(r.credited)}</TableCell>
                 <TableCell className={`${num} font-semibold`}>{money(r.balance)}</TableCell>
-                <TableCell className={`${num} ${r.daysOverdue > 0 ? "text-red-700 font-semibold" : ""}`}>{r.daysOverdue || "-"}</TableCell>
+                <TableCell className={num}>{r.age}</TableCell>
+                <TableCell className={`${num} ${r.daysOverdue > 0 ? "text-red-700 font-semibold" : ""}`}>{r.daysOverdue}</TableCell>
+                <TableCell className={num}>{r.daysToDue}</TableCell>
+                <TableCell className={num}>{money(r.notYetDue)}</TableCell>
+                <TableCell className={num}>{money(r.overdue)}</TableCell>
+                {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{r.bucket === k ? money(r.balance) : "-"}</TableCell>)}
                 <TableCell>
                   <Badge variant="outline" className={`whitespace-nowrap ${STATUS_META[r.status].className}`}>{STATUS_META[r.status].label}</Badge>
                 </TableCell>
@@ -589,9 +635,16 @@ function AgingContent() {
             <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
               <TableCell>TOTAL ({shownTracker.length})</TableCell>
-              <TableCell colSpan={3} />
+              <TableCell colSpan={4} />
+              <TableCell className={num}>{money(trackerTotals.amount)}</TableCell>
+              <TableCell className={num}>{money(trackerTotals.paid)}</TableCell>
+              <TableCell className={num}>{money(trackerTotals.credited)}</TableCell>
               <TableCell className={num}>{money(trackerTotals.balance)}</TableCell>
-              <TableCell colSpan={2} className="text-xs font-normal text-muted-foreground">Overdue {money(trackerTotals.overdue)}</TableCell>
+              <TableCell colSpan={3} />
+              <TableCell className={num}>{money(trackerTotals.notYetDue)}</TableCell>
+              <TableCell className={num}>{money(trackerTotals.overdue)}</TableCell>
+              {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{money(trackerTotals.buckets[k])}</TableCell>)}
+              <TableCell />
             </TableRow>
           </TableBody>
         </Table>
