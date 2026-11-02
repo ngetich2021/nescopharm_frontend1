@@ -9,7 +9,7 @@ export function ScanMeFooter({ children, className }: { children?: React.ReactNo
       <span aria-hidden />
       <div>{children}</div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/scan-me.jpg" alt="Scan me" width={64} height={64} className="h-16 w-16 justify-self-end" />
+      <img src="/scan-me.jpg" alt="Scan me" width={64} height={64} className="h-16 w-16 print:h-14 print:w-14 justify-self-end" />
     </div>
   )
 }

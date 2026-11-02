@@ -281,7 +281,9 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           </table>
         </div>
 
-        {/* From the totals to the thank-you footer prints as one block, never split across pages. */}
+        {/* The totals and amount in words stay together; the payment details and the declaration
+            with its footer are each kept whole too. They are separate blocks, so whatever fits stays
+            on the page under the items rather than the whole lot jumping to a new page. */}
         <div className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
         {/* Totals Section */}
         <div className="flex justify-end mb-2">
@@ -326,6 +328,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
             <p className="text-sm font-medium text-gray-900">{amountInWords(invoice.total_amount)}</p>
           </div>
           <p className="text-xs text-gray-500 italic whitespace-nowrap">E. &amp; O.E</p>
+        </div>
         </div>
 
         {/* Notes & Payment Terms */}
@@ -380,6 +383,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         })()}
 
         {/* Declaration & Signature */}
+        <div className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
         <div className="mt-2 pt-1.5 border-t border-gray-200 flex justify-between items-end gap-8">
           <div className="max-w-sm">
             <p className="text-xs font-semibold text-gray-700 mb-1">Declaration</p>
