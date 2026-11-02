@@ -5,8 +5,7 @@ use App\Models\Role;
 use Illuminate\Database\Migrations\Migration;
 
 /**
- * Accountants can delete customers directly, limited in CustomerController::destroy to customers
- * with no orders or invoices.
+ * Accountants can delete customers directly (any customer, as the GM and admins can).
  */
 return new class extends Migration
 {

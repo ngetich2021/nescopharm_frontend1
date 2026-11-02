@@ -34,16 +34,6 @@ export function DeleteCustomerConfirmationDialog({
   const handleDelete = async () => {
     if (!customer) return;
 
-    // Check if customer can be deleted
-    if (customer.status === "active" && customer.total_orders > 0) {
-      toast({
-        title: "Cannot Delete Customer",
-        description: "Active customers with existing orders cannot be deleted. Please set the customer to inactive first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsDeleting(true);
     try {
       await deleteCustomer(customer.id);
@@ -67,8 +57,6 @@ export function DeleteCustomerConfirmationDialog({
 
   if (!customer) return null;
 
-  const canDelete = !(customer.status === "active" && customer.total_orders > 0);
-
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -78,52 +66,38 @@ export function DeleteCustomerConfirmationDialog({
             Delete Customer
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-2">
-            {canDelete ? (
-              <>
-                <p>
-                  Are you sure you want to delete <strong>{getCustomerDisplayName(customer)}</strong>?
-                </p>
-                <p className="text-sm text-gray-600">
-                  This action cannot be undone. All customer data, including order history 
-                  and associated records, will be permanently removed.
-                </p>
-              </>
-            ) : (
-              <>
-                <p>
-                  Cannot delete <strong>{getCustomerDisplayName(customer)}</strong> because they are an active customer with existing orders.
-                </p>
-                <p className="text-sm text-gray-600">
-                  Active customers with orders cannot be deleted. Please set the customer status to 
-                  "Inactive" first if you need to remove them from the active customer list.
-                </p>
-              </>
-            )}
+            <p>
+              Are you sure you want to delete <strong>{getCustomerDisplayName(customer)}</strong>?
+            </p>
+            {/* Delete is a soft delete (CustomerController::destroy): the customer leaves the lists,
+                their documents stay. */}
+            <p className="text-sm text-gray-600">
+              They will be removed from the customer list. Their orders, invoices and payments
+              already recorded stay in the system.
+            </p>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>
             Cancel
           </AlertDialogCancel>
-          {canDelete && (
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Customer
-                </>
-              )}
-            </AlertDialogAction>
-          )}
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Customer
+              </>
+            )}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

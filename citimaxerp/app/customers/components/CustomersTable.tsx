@@ -114,9 +114,8 @@ export function CustomersTable({
     return true; // All customers can be edited
   };
 
-  const canDelete = (customer: Customer) => {
-    return customer.status !== "active" || customer.total_orders === 0; // Can't delete active customers with orders
-  };
+  // Whoever has the delete permission (GM, admins, accountants) can delete any customer.
+  const canDelete = (_customer: Customer) => true;
 
   return (
     <div className="space-y-4">

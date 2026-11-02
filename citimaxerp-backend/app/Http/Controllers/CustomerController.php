@@ -688,7 +688,6 @@ class CustomerController extends Controller
 
     public function destroy(Request $request, $customerId)
     {
-        $user = $request->user();
         // Use withTrashed to allow for soft-deleted lookup
         $customer = Customer::withTrashed()->find($customerId);
         if (!$customer) {
@@ -702,14 +701,6 @@ class CustomerController extends Controller
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to delete customers.'
-            ], 403);
-        }
-        // Accountants delete customers straight away, but only ones that never bought anything.
-        if (strtolower(trim((string) $user->role?->name)) === 'accountant'
-            && (Order::where('customer_id', $customer->id)->exists() || Invoice::where('customer_id', $customer->id)->exists())) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'This customer has orders or invoices, so an accountant cannot delete them. Ask the GM or an admin.',
             ], 403);
         }
         try {
