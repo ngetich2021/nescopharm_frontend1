@@ -1158,6 +1158,7 @@ Route::middleware('auth:sanctum')->prefix('etims')->group(function () {
     Route::post('/items/{productId}/sync', [App\Http\Controllers\Etims\EtimsItemController::class, 'sync']);
 
     Route::get('/invoices/{invoiceId}/status', [App\Http\Controllers\Etims\EtimsInvoiceController::class, 'status']);
+    Route::get('/invoices/{invoiceId}/document', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'document']);
     Route::post('/invoices/{invoiceId}/submit', [App\Http\Controllers\Etims\EtimsInvoiceController::class, 'submit']);
     Route::post('/invoices/{invoiceId}/retry', [App\Http\Controllers\Etims\EtimsInvoiceController::class, 'retry']);
     Route::post('/invoices/{invoiceId}/force-unlock', [App\Http\Controllers\Etims\EtimsInvoiceController::class, 'forceUnlock']);

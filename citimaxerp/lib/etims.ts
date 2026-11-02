@@ -185,6 +185,40 @@ export const retryEtimsInvoice = (invoiceId: string) =>
 export const submitEtimsInvoice = (invoiceId: string) =>
   apiCall<{ queued: boolean }>(`/etims/invoices/${invoiceId}/submit`, "POST", {}, true)
 
+// The eTIMS invoice as KRA prints it (sales/invoices/[id]/etims).
+export interface EtimsInvoiceDocument {
+  invoice_id: string
+  invoice_number: string
+  etims_status: EtimsInvoiceStatus["etims_status"]
+  etims_last_error: string | null
+  environment: "test" | "live" | null
+  seller: { pin: string | null; name: string | null }
+  buyer: { pin: string | null; name: string | null }
+  cu_invoice_number: string | null
+  receipt_number: string | null
+  date: string | null
+  scu_id: string | null
+  internal_data: string | null
+  receipt_signature: string | null
+  qr_url: string | null
+  lines: {
+    item_code: string | null
+    description: string
+    quantity: number
+    unit_price: number
+    tax_type: string
+    rate: string
+    amount_excl_tax: number
+    tax_amount: number
+    amount_incl_tax: number
+  }[]
+  tax_summary: { rate: string; taxable: number; tax: number; total: number }[]
+  totals: { taxable: number; tax: number; total: number }
+}
+
+export const getEtimsInvoiceDocument = (invoiceId: string) =>
+  apiCall<EtimsInvoiceDocument>(`/etims/invoices/${invoiceId}/document`, "GET", undefined, true)
+
 export const forceUnlockEtimsInvoice = (invoiceId: string) =>
   apiCall<{ unlocked: boolean }>(`/etims/invoices/${invoiceId}/force-unlock`, "POST", {}, true)
 

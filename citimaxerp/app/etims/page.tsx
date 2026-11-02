@@ -259,7 +259,8 @@ function InvoicesTab() {
                       {retrying === viewing.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Resend to KRA
                     </Button>
                   )}
-                  <Button asChild><Link href={`/sales/invoices/${viewing.id}`}>Open invoice</Link></Button>
+                  <Button variant="outline" asChild><Link href={`/sales/invoices/${viewing.id}`}>Open invoice</Link></Button>
+                  <Button asChild><Link href={`/sales/invoices/${viewing.id}/etims`}>eTIMS invoice</Link></Button>
                 </DialogFooter>
               </>
             )

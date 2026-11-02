@@ -11,7 +11,7 @@ import type { CustomerProfileData } from "@/lib/customers"
 import { buildBuyerBlock, mergeCustomerSources } from "@/lib/customer-address"
 import type { CustomerAccountWithDetails } from "@/lib/customer-accounts"
 import { getEtimsConfig } from "@/lib/etims"
-import { ArrowLeft, Download, FileText, Mail, Printer } from "lucide-react"
+import { ArrowLeft, Download, FileText, Mail, Printer, ShieldCheck } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
@@ -238,6 +238,10 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
                   ? handleDownloadPDF()
                   : exportTable(format, invoiceExport(invoice), company)}
               />
+              <Button variant="outline" size="sm" onClick={() => router.push(`/sales/invoices/${id}/etims`)}>
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                eTIMS Invoice
+              </Button>
               <Button variant="outline" size="sm" asChild>
                 <FileLink href={RETURN_POLICY_PDF}>
                   <FileText className="h-4 w-4 mr-2" />

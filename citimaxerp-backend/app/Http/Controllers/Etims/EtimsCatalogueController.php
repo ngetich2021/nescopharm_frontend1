@@ -102,6 +102,155 @@ class EtimsCatalogueController extends Controller
         ]);
     }
 
+    /**
+     * Everything the eTIMS invoice prints, as KRA lays it out: seller and buyer PINs, the CU
+     * invoice number and date, each line under its KRA item code and tax rate, the SCU
+     * information (SCU ID, internal data, receipt signature, QR link) and the tax summary.
+     */
+    public function document(Request $request, string $invoiceId): JsonResponse
+    {
+        $companyId = $this->resolveActiveCompanyId();
+        $role = $request->user()->role;
+        abort_unless($role && collect(['can_view_invoices', 'can_manage_system', 'can_manage_company'])->contains(fn ($p) => $role->hasPermission($p)), 403, 'Unauthorized');
+
+        $invoice = Invoice::with(['customer', 'lineItems.product', 'company'])
+            ->where('company_id', $companyId)
+            ->findOrFail($invoiceId);
+        $config = CompanyEtimsConfig::query()->where('company_id', $companyId)->notSuperseded()->latest()->first();
+        $registrations = $this->registrationsFor($companyId, $invoice->lineItems->pluck('product_id')->filter());
+
+        // KRA's rows, in the order its invoice prints them.
+        $summaryRows = ['B' => '16%', 'E' => '8%', 'C' => '0%', 'A' => 'Ex.', 'D' => 'Non-VAT'];
+        $summary = array_fill_keys(array_keys($summaryRows), ['taxable' => 0.0, 'tax' => 0.0, 'total' => 0.0]);
+
+        $lines = $invoice->lineItems->map(function ($line) use ($registrations, &$summary) {
+            $type = EtimsTaxType::forLine($line);
+            $profiles = $registrations->get($line->product_id, collect());
+            $registration = $profiles->firstWhere('tax_type_code', $type) ?? $profiles->first();
+            // KRA applies the tax type the item is registered under, so print that one.
+            $type = $registration?->tax_type_code ?: $type;
+            $tax = round((float) $line->tax_amount, 2);
+            $incl = round((float) $line->line_total, 2);
+            $excl = round($incl - $tax, 2);
+            $summary[$type]['taxable'] += $excl;
+            $summary[$type]['tax'] += $tax;
+            $summary[$type]['total'] += $incl;
+
+            return [
+                'item_code' => $registration?->item_code,
+                'description' => $line->description,
+                'quantity' => (float) $line->quantity,
+                'unit_price' => (float) $line->unit_price,
+                'tax_type' => $type,
+                'rate' => match ($type) { 'B' => '16%', 'E' => '8%', 'C' => '0%', 'A' => 'Ex.', default => 'Non-VAT' },
+                'amount_excl_tax' => $excl,
+                'tax_amount' => $tax,
+                'amount_incl_tax' => $incl,
+            ];
+        })->values();
+
+        // Once signed, the lines and tax summary are KRA's own record of the sale (tax class and
+        // KRA item code as KRA holds them), read back from DigiTax; ours only if it can't be reached.
+        $source = 'system';
+        $sale = $invoice->etims_status === 'completed' ? $this->signedSale($config, $invoice) : null;
+        if ($sale && !empty($sale['item_list'])) {
+            $source = 'kra';
+            $summary = array_fill_keys(array_keys($summaryRows), ['taxable' => 0.0, 'tax' => 0.0, 'total' => 0.0]);
+            $descriptions = $invoice->lineItems->pluck('description')->values();
+            $lines = collect($sale['item_list'])->values()->map(function ($item, $i) use (&$summary, $descriptions) {
+                $type = strtoupper((string) ($item['tax_type_code'] ?? 'D'));
+                $tax = round((float) ($item['tax_amount'] ?? 0), 2);
+                $incl = round((float) ($item['total_amount'] ?? 0), 2);
+                $excl = round((float) ($item['taxable_amount'] ?? ($incl - $tax)), 2);
+                if (isset($summary[$type])) {
+                    $summary[$type]['taxable'] += $excl;
+                    $summary[$type]['tax'] += $tax;
+                    $summary[$type]['total'] += $incl;
+                }
+
+                return [
+                    'item_code' => $item['etims_item_code'] ?? null,
+                    'description' => $item['item_description'] ?? $item['description'] ?? $descriptions[$i] ?? '',
+                    'quantity' => (float) ($item['quantity'] ?? 0),
+                    'unit_price' => (float) ($item['unit_price'] ?? 0),
+                    'tax_type' => $type,
+                    'rate' => match ($type) { 'B' => '16%', 'E' => '8%', 'C' => '0%', 'A' => 'Ex.', default => 'Non-VAT' },
+                    'amount_excl_tax' => $excl,
+                    'tax_amount' => $tax,
+                    'amount_incl_tax' => $incl,
+                ];
+            });
+        }
+
+        $summaryOut = [];
+        foreach ($summaryRows as $type => $label) {
+            // Non-VAT only shows when the invoice has such lines; KRA's four rows always show.
+            if ($type === 'D' && $summary['D']['total'] == 0.0) {
+                continue;
+            }
+            $summaryOut[] = ['rate' => $label] + array_map(fn ($v) => round($v, 2), $summary[$type]);
+        }
+
+        $receiptDate = trim(($invoice->etims_receipt_date ?? '').' '.($invoice->etims_receipt_time ?? ''));
+        // KRA prints the CU invoice number as SCU ID / invoice count (KRACU0200099406/423);
+        // DigiTax returns the two apart.
+        $cuNumber = $invoice->etims_invoice_number;
+        if ($cuNumber !== null && !str_contains((string) $cuNumber, '/') && $invoice->etims_serial_number) {
+            $cuNumber = $invoice->etims_serial_number.'/'.$cuNumber;
+        }
+
+        return response()->json([
+            'invoice_id' => $invoice->id,
+            'invoice_number' => $invoice->invoice_number,
+            'etims_status' => $invoice->etims_status,
+            'etims_last_error' => $invoice->etims_last_error,
+            'environment' => $config?->environment,
+            // 'kra': lines and summary as KRA recorded them; 'system': from this invoice.
+            'source' => $source,
+            'seller' => ['pin' => $config?->kra_pin, 'name' => $invoice->company?->name],
+            'buyer' => [
+                'pin' => trim((string) $invoice->customer?->pin_number) ?: null,
+                'name' => $invoice->customer ? ($invoice->customer->business_name ?: $invoice->customer->name) : null,
+            ],
+            'cu_invoice_number' => $cuNumber,
+            'receipt_number' => $invoice->etims_receipt_number,
+            'date' => $receiptDate !== '' ? $receiptDate : ($invoice->etims_synced_at?->format('d/m/Y H:i:s')),
+            'scu_id' => $invoice->etims_serial_number,
+            'internal_data' => $invoice->etims_internal_data,
+            'receipt_signature' => $invoice->etims_signature,
+            'qr_url' => $invoice->etims_qr_url,
+            'lines' => $lines,
+            'tax_summary' => $summaryOut,
+            'totals' => [
+                'taxable' => round(array_sum(array_column($summary, 'taxable')), 2),
+                'tax' => round(array_sum(array_column($summary, 'tax')), 2),
+                'total' => round(array_sum(array_column($summary, 'total')), 2),
+            ],
+        ]);
+    }
+
+    /** The signed sale as DigiTax holds it (GET /sales/{id}), or null when it can't be read. */
+    private function signedSale(?CompanyEtimsConfig $config, Invoice $invoice): ?array
+    {
+        if (!$config || !$invoice->etims_sale_id || !$config->hasApiKey()) {
+            return null;
+        }
+        try {
+            $response = app(\App\Services\TaxCompliance\Providers\Kenya\EtimsClient::class)
+                ->get($config, '/sales/'.$invoice->etims_sale_id, [], 'sale.document');
+            if (!$response->successful()) {
+                return null;
+            }
+            $body = $response->json() ?? [];
+
+            return is_array($body['data'] ?? null) ? $body['data'] : $body;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('eTIMS document: could not read the signed sale', ['invoice' => $invoice->id, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
     public function products(Request $request): JsonResponse
     {
         $companyId = $this->resolveActiveCompanyId();
