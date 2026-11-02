@@ -658,6 +658,72 @@ class EtimsProvider implements TaxComplianceProvider
 
     // ─────────── Phase 5: stock ───────────
 
+    /**
+     * KRA refuses a sale of more than eTIMS holds ("not enough stock for item"). eTIMS only knows
+     * the opening stock declared at registration and later receipts, so an older invoice (goods
+     * since sold) can be short. For each item on the invoice, read its eTIMS stock and add the
+     * shortfall as a stock adjustment (code 06), so the sale goes through and leaves eTIMS where
+     * it was. Returns an error message, or null when every item has enough.
+     */
+    public function ensureSaleStock(Company $company, Invoice $invoice): ?string
+    {
+        $config = $this->requireConfig($company);
+        $invoice->loadMissing('lineItems');
+
+        $registrations = EtimsItemRegistration::query()
+            ->where('company_id', $company->id)
+            ->whereIn('product_id', $invoice->lineItems->pluck('product_id')->filter())
+            ->whereNotNull('digitax_item_id')
+            ->get();
+
+        $needed = [];
+        foreach ($invoice->lineItems as $line) {
+            $type = EtimsTaxType::forLine($line);
+            $profiles = $registrations->where('product_id', $line->product_id);
+            $registration = $profiles->firstWhere('tax_type_code', $type) ?? $profiles->first();
+            if (! $registration || $registration->item_type_code === '3') {
+                continue; // services hold no stock
+            }
+            $needed[$registration->digitax_item_id] = ($needed[$registration->digitax_item_id] ?? 0) + (float) $line->quantity;
+        }
+
+        foreach ($needed as $itemId => $quantity) {
+            try {
+                $item = $this->client->get($config, '/items/'.$itemId, [], 'item.stock')->json() ?? [];
+            } catch (\Throwable $e) {
+                return 'Could not read eTIMS stock: '.$e->getMessage();
+            }
+            $item = $item['data'] ?? $item;
+            if (($item['is_stock_item'] ?? true) === false) {
+                continue;
+            }
+            $shortfall = (int) ceil($quantity - (float) ($item['stock_quantity'] ?? 0));
+            if ($shortfall <= 0) {
+                continue;
+            }
+            $clientRequestId = (string) Str::uuid();
+            try {
+                $response = $this->client->post(
+                    config: $config,
+                    endpoint: '/stock/adjust',
+                    body: ['item_id' => $itemId, 'quantity' => $shortfall, 'action' => 'ADD', 'movement_type' => '06'],
+                    clientRequestId: $clientRequestId,
+                    operation: 'stock.add',
+                    subjectType: 'invoice',
+                    subjectId: (string) $invoice->id,
+                    method: 'PUT',
+                );
+            } catch (\Throwable $e) {
+                return 'Could not add eTIMS stock: '.$e->getMessage();
+            }
+            if (! $response->successful()) {
+                return 'Could not add eTIMS stock: '.($response->json('message') ?? "HTTP {$response->status()}");
+            }
+        }
+
+        return null;
+    }
+
     public function submitStockMovement(
         Company $company,
         Product $product,

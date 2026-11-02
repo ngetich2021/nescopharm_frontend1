@@ -71,7 +71,7 @@ class EtimsInvoiceController extends Controller
             try {
                 $items = $itemSyncService->prepareInvoiceProducts($invoice->company, $invoice);
                 if ($items['status'] === 'ready') {
-                    SubmitInvoiceToEtimsJob::dispatch((string) $invoice->id);
+                    SubmitInvoiceToEtimsJob::runNow((string) $invoice->id);
                 } elseif ($items['status'] === 'failed') {
                     $invoice->update([
                         'etims_status' => 'failed',
@@ -274,9 +274,11 @@ class EtimsInvoiceController extends Controller
             'etims_lock_state' => null,
             'etims_lock_acquired_at' => null,
         ]);
-        SubmitInvoiceToEtimsJob::dispatch((string) $invoice->id)->afterCommit();
+        // First step now (no worker runs the etims queue); the eTIMS invoice page takes the rest.
+        SubmitInvoiceToEtimsJob::claimStep((string) $invoice->id);
+        SubmitInvoiceToEtimsJob::runNow((string) $invoice->id);
 
-        return response()->json(['queued' => true]);
+        return response()->json(['queued' => true, 'etims_status' => $invoice->fresh()->etims_status]);
     }
 
     private function resolveActiveCompanyId(): string

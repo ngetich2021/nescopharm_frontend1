@@ -78,6 +78,7 @@ class InvoiceObserver
             'invoice_id' => $invoice->id,
             'company_id' => $invoice->company_id,
         ]);
-        SubmitInvoiceToEtimsJob::dispatch((string) $invoice->id)->afterCommit();
+        // Straight away once saved (no worker runs the etims queue); the eTIMS invoice page takes it on from there.
+        \Illuminate\Support\Facades\DB::afterCommit(fn () => SubmitInvoiceToEtimsJob::runNow((string) $invoice->id));
     }
 }

@@ -148,11 +148,14 @@ export default function EtimsInvoicePage({ params }: { params: Promise<{ id: str
         {doc && (
           <div ref={docRef} className="mx-auto max-w-[210mm] bg-white p-8 text-[12px] text-black shadow print:shadow-none print:p-6" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
             {/* Header */}
-            <div className="flex items-end justify-between">
-              <div className="text-5xl font-extrabold tracking-tight text-gray-700" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
-                eT<span className="italic">i</span>MS
+            {/* KRA's logo (from kra.go.ke; the largest copy KRA publishes, shown at its own size). */}
+            <div className="flex items-center justify-between gap-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/kra-logo.png" alt="Kenya Revenue Authority" width={152} height={37} className="h-[37px] w-[152px]" />
+              <div className="text-right" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
+                <p className="text-lg font-bold tracking-wide text-gray-800">eTIMS INVOICE</p>
+                {doc.environment === "test" && <span className="mt-1 inline-block rounded border border-gray-400 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600">Test - not a tax invoice</span>}
               </div>
-              {doc.environment === "test" && <span className="rounded border border-gray-400 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600">Test - not a tax invoice</span>}
             </div>
 
             <div className="mt-4 grid grid-cols-3 gap-4">

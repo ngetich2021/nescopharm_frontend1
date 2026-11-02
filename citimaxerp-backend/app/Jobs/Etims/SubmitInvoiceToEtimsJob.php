@@ -27,6 +27,32 @@ class SubmitInvoiceToEtimsJob implements ShouldQueue
     }
 
     /**
+     * One step now, in this request: register the items, submit the sale, or ask DigiTax whether
+     * KRA has signed it. Production has no worker on the etims queue, so Send to eTIMS and the
+     * eTIMS invoice page drive the invoice through these steps themselves. Errors are recorded on
+     * the invoice rather than thrown.
+     */
+    /** True when no step has run for this invoice in the last 10 seconds (and marks one now). */
+    public static function claimStep(string $invoiceId): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Cache::add("etims:advance:{$invoiceId}", 1, 10);
+        } catch (\Throwable) {
+            return true; // no usable cache store: just take the step
+        }
+    }
+
+    public static function runNow(string $invoiceId): void
+    {
+        try {
+            app()->call([new self($invoiceId), 'handle']);
+        } catch (\Throwable $e) {
+            report($e);
+            Invoice::whereKey($invoiceId)->update(['etims_last_error' => 'eTIMS step failed: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Prevent two workers from submitting the same invoice concurrently.
      */
     public function middleware(): array
@@ -85,6 +111,19 @@ class SubmitInvoiceToEtimsJob implements ShouldQueue
             if ($items['retryable']) {
                 $this->release($this->backoff);
             }
+
+            return;
+        }
+
+        // eTIMS must hold enough of each item for KRA to accept the sale (older invoices are short).
+        $provider = app(\App\Services\TaxCompliance\TaxComplianceProviderRegistry::class)->forCompany($company);
+        if (method_exists($provider, 'ensureSaleStock') && ($stockError = $provider->ensureSaleStock($company, $invoice))) {
+            $invoice->update([
+                'etims_status' => 'failed',
+                'etims_lock_state' => null,
+                'etims_lock_acquired_at' => null,
+                'etims_last_error' => $stockError,
+            ]);
 
             return;
         }
