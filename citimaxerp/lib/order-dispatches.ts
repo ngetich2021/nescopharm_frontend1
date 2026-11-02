@@ -123,6 +123,8 @@ export interface OrderDispatch {
     status: string;
     payment_status?: string;
     created_at: string;
+    // Whoever approved the order's invoice (on the dispatch details only).
+    invoice_approver?: { id: string; first_name: string; last_name: string } | null;
     customer: {
       id: string;
       name: string;

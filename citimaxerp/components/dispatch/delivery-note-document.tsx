@@ -68,7 +68,8 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
           const approved = (d.approver_details || [])
             .filter((a) => a.status === 'approved' && a.user)
             .sort((a, b) => b.order - a.order)
-          setApproverName(fullName(approved[0]?.user))
+          // The dispatch's own approver; until that is given, whoever verified the order's invoice.
+          setApproverName(fullName(approved[0]?.user) || fullName(d.order?.invoice_approver))
           if (!cancelled) onLoaded?.({ dispatch: d, customerDetails: profile })
         } catch (err: any) {
           if (!cancelled) onError?.(err.message || "Failed to load dispatch")

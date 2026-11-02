@@ -189,6 +189,7 @@ class OrderDispatchController extends Controller
 
         $dispatch = OrderDispatch::with([
             'order.customer',
+            'order.invoiceApprover:id,first_name,last_name',
             'order.orderItems.product',
             'order.orderItems.variant',
             'items.product.priceTiers',
