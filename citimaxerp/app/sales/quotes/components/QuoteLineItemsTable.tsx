@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useId, useState } from "react"
+import { useEffect, useState } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
-import { Trash2, Loader2, Pencil } from "lucide-react"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Trash2, Loader2, Pencil, Plus } from "lucide-react"
 import { getProducts } from "@/lib/products"
-import { DEFAULT_UNIT, describeOption, findAllByPriceCode, piecesPerPack, priceOptionsFor, type PriceOption } from "@/lib/price-codes"
+import { DEFAULT_UNIT, defaultPriceOption, describeOption, findAllByPriceCode, findByPriceCode, piecesPerPack, priceCodeHits, type PriceOption } from "@/lib/price-codes"
 import { activeSizesOf, sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
@@ -16,16 +16,133 @@ interface Props {
   form: UseFormReturn<any>
   fields: { id: string }[]
   remove: (index: number) => void
+  append: (line: any) => void
   products: any[]
 }
 
 const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const looksLikeCode = (v: string) => /^[a-z]+\s*\d+$/i.test(v.trim())
 
+// Products matching what was typed, searched on the server as orders do (codes without spaces).
+function useProductSearch(text: string, skip: boolean) {
+  const [hits, setHits] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
+  useEffect(() => {
+    const q = text.trim()
+    if (skip || q.length < 2) {
+      setHits([])
+      setSearching(false)
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await getProducts(1, 100, { search: looksLikeCode(q) ? q.replace(/\s+/g, "") : q })
+        if (!cancelled) setHits(data || [])
+      } catch {
+        if (!cancelled) setHits([])
+      } finally {
+        if (!cancelled) setSearching(false)
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [text, skip])
+  return { hits, searching }
+}
+
+// The same list orders show: price codes containing what was typed, then one line per item at its
+// default price (NSPV first). An item's other lists are picked by typing their code.
+function SearchResults({ hits, query, searching, onPick }: { hits: any[]; query: string; searching: boolean; onPick: (product: any, option: PriceOption) => void }) {
+  if (query.trim().length < 2) return <p className="p-2 text-sm text-gray-500">Type at least 2 characters to search products</p>
+  if (searching && hits.length === 0) return <p className="p-2 text-sm text-gray-500">Searching...</p>
+  const codes = priceCodeHits(hits, query)
+  const items = hits.filter((p) => defaultPriceOption(p))
+  if (codes.length === 0 && items.length === 0) return <p className="p-2 text-sm text-gray-500">No products found</p>
+  return (
+    <>
+      {codes.length > 0 && (
+        <div className="py-1">
+          <p className="px-2 py-1 text-xs font-medium text-gray-500">Price codes</p>
+          {codes.map(({ product, option }) => (
+            <button key={`code-${product.id}-${option.code}`} type="button" className="block w-full rounded px-2 py-1.5 text-left hover:bg-gray-100" onClick={() => onPick(product, option)}>
+              <span className="block text-sm font-semibold">{option.code}</span>
+              <span className="block text-xs text-gray-500">{product.name} | {describeOption(option)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {items.length > 0 && (
+        <div className="border-t py-1 first:border-t-0">
+          {items.map((product) => {
+            const option = defaultPriceOption(product)!
+            return (
+              <button key={product.id} type="button" className="block w-full rounded px-2 py-1.5 text-left hover:bg-gray-100" onClick={() => onPick(product, option)}>
+                <span className="block text-sm">{product.name}</span>
+                <span className="block text-xs text-gray-500">
+                  No. {product.item_number ?? "-"} | {describeOption(option)} | {Number(product.stock_quantity ?? 0).toLocaleString()} in stock
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+}
+
+// "Add Product" under the lines, as on orders: search, pick, and the line is added already filled.
+function AddProductPicker({ onAdd }: { onAdd: (product: any, option: PriceOption) => void }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState("")
+  const { hits, searching } = useProductSearch(text, !open)
+
+  const add = (product: any, option: PriceOption) => {
+    onAdd(product, option)
+    setText("")
+    setOpen(false)
+  }
+
+  // Typing a full code such as "NSPD 001" adds that item straight away, as on orders.
+  useEffect(() => {
+    if (!open || searching) return
+    const hit = findByPriceCode(hits, text)
+    if (hit) add(hit.product, hit.option)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hits, searching, text, open])
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setText("") }}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Product
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[26rem] p-0">
+        <div className="relative border-b p-2">
+          <Input
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Search by description, item no. or code (e.g. NSPD 001)..."
+            className="h-9"
+          />
+          {searching && <Loader2 className="absolute right-4 top-4 h-4 w-4 animate-spin text-gray-400" />}
+        </div>
+        <div className="max-h-80 overflow-y-auto p-1">
+          <SearchResults hits={hits} query={text} searching={searching} onPick={add} />
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 // One row per price-list code: the code decides the item, pack size and price; only the quantity is typed.
-export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
-  const listId = useId()
-  const allCodes = products.flatMap((p) => priceOptionsFor(p).filter((o) => o.code !== o.list).map((o) => ({ product: p, option: o })))
+export function QuoteLineItemsTable({ form, fields, remove, append, products }: Props) {
   // Codes typed for products outside the loaded page are fetched by CodeCell; keep those
   // products around so their sizes stay available to the row.
   const [resolved, setResolved] = useState<Record<string, any>>({})
@@ -53,16 +170,24 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
     })
   }
 
+  // A picked item becomes a filled line; an item with sizes asks for its size on the line.
+  const addLine = (product: any, option: PriceOption) => {
+    remember(product)
+    append({
+      product_id: product.id,
+      variant_id: null,
+      description: product.name,
+      quantity: 1,
+      unit_price: option.price,
+      price_label: option.code,
+      price_unit: option.unit,
+    })
+  }
+
   return (
-    // Lines scroll inside a screen-high box so the sideways scrollbar is always in view.
+    <div className="space-y-3">
+    {/* Lines scroll inside a screen-high box so the sideways scrollbar is always in view. */}
     <div className="overflow-auto max-h-[55vh]">
-      <datalist id={listId}>
-        {allCodes.map(({ product, option }) => (
-          <option key={`${product.id}-${option.code}`} value={option.code}>
-            {product.name} - {money(option.price)}{option.unit ? ` (${option.unit})` : ""}
-          </option>
-        ))}
-      </datalist>
       <table className="w-full min-w-[960px] text-sm border-collapse">
         <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b text-xs font-semibold text-gray-700 uppercase tracking-wide">
@@ -95,7 +220,7 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
               <tr key={field.id} className="border-b align-top">
                 <td className="py-2 pr-2 pt-4 text-gray-600">{index + 1}</td>
                 <td className="py-2 pr-2">
-                  <CodeCell form={form} index={index} products={products} listId={listId} onResolved={remember} />
+                  <CodeCell form={form} index={index} products={products} onResolved={remember} />
                   {errors?.product_id && !form.watch(`items.${index}.product_id`) && !form.watch(`items.${index}.price_label`) && (
                     <p className="text-xs text-red-600 mt-1">Enter a valid code</p>
                   )}
@@ -183,6 +308,9 @@ export function QuoteLineItemsTable({ form, fields, remove, products }: Props) {
         onSaved={applyEdit}
       />
     </div>
+    {/* Under the last line so long quotes don't need a scroll back up. */}
+    <AddProductPicker onAdd={addLine} />
+    </div>
   )
 }
 
@@ -258,45 +386,18 @@ function ItemNameCell({ form, index, product, onResolved }: { form: UseFormRetur
   )
 }
 
-function CodeCell({ form, index, products, listId, onResolved }: { form: UseFormReturn<any>; index: number; products: any[]; listId: string; onResolved: (product: any) => void }) {
+function CodeCell({ form, index, products, onResolved }: { form: UseFormReturn<any>; index: number; products: any[]; onResolved: (product: any) => void }) {
   const saved = form.getValues(`items.${index}.price_label`) as string | null
   const [text, setText] = useState(saved && saved !== "Custom" ? saved : "")
   const [looking, setLooking] = useState(false)
   const [notFound, setNotFound] = useState(false)
-  // Typing a name or item number instead of a code lists matching items with their prices, as on orders.
-  const [nameHits, setNameHits] = useState<any[]>([])
-  const [searching, setSearching] = useState(false)
   const [listOpen, setListOpen] = useState(false)
-
-  useEffect(() => {
-    const q = text.trim()
-    if (q.length < 2 || looksLikeCode(q) || q === form.getValues(`items.${index}.price_label`)) {
-      setNameHits([])
-      setSearching(false)
-      return
-    }
-    let cancelled = false
-    setSearching(true)
-    const timer = setTimeout(async () => {
-      try {
-        const { data } = await getProducts(1, 30, { search: q })
-        if (!cancelled) setNameHits(data || [])
-      } catch {
-        if (!cancelled) setNameHits([])
-      } finally {
-        if (!cancelled) setSearching(false)
-      }
-    }, 300)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text])
+  // Changing a line's item searches as orders do: price codes first, then one line per item.
+  const applied = text.trim() !== "" && text.trim() === form.getValues(`items.${index}.price_label`)
+  const { hits, searching } = useProductSearch(text, !listOpen || applied)
 
   const pickFromSearch = (product: any, option: PriceOption) => {
     apply([product], option)
-    setNameHits([])
     setListOpen(false)
   }
 
@@ -358,16 +459,15 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
     }
   }
 
-  const typed = text.trim()
-  const nameSearch = typed.length >= 2 && !looksLikeCode(typed) && typed !== form.getValues(`items.${index}.price_label`)
+  const showList = text.trim().length >= 2 && !applied
 
   return (
-    <Popover open={listOpen && nameSearch} onOpenChange={setListOpen}>
+    <Popover open={listOpen && showList} onOpenChange={setListOpen}>
       <PopoverAnchor asChild>
         <div className="relative">
           <Input
             value={text}
-            list={listId}
+            autoComplete="off"
             placeholder="Code (NSPD 001) or name"
             className={`h-10 ${looksLikeCode(text) ? "font-mono uppercase" : ""} ${notFound ? "border-red-500" : ""}`}
             aria-label={`Code or item name for row ${index + 1}`}
@@ -398,37 +498,7 @@ function CodeCell({ form, index, products, listId, onResolved }: { form: UseForm
         // Picking an item must not take focus from the box first.
         onMouseDown={(e) => e.preventDefault()}
       >
-        {searching && nameHits.length === 0 ? (
-          <p className="p-2 text-sm text-gray-500">Searching...</p>
-        ) : nameHits.length === 0 ? (
-          <p className="p-2 text-sm text-gray-500">No items found</p>
-        ) : (
-          nameHits.map((product) => {
-            const options = priceOptionsFor(product)
-            return (
-              <div key={product.id} className="border-b last:border-b-0 py-1">
-                <p className="px-2 text-sm font-medium text-gray-900">
-                  {product.name}
-                  <span className="ml-1 text-xs font-normal text-gray-500">No. {product.item_number ?? "-"} · {Number(product.stock_quantity ?? 0).toLocaleString()} in stock</span>
-                </p>
-                {options.length === 0 ? (
-                  <p className="px-2 text-xs text-gray-400">No price on any list</p>
-                ) : (
-                  options.map((option) => (
-                    <button
-                      key={option.code}
-                      type="button"
-                      className="block w-full rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-100"
-                      onClick={() => pickFromSearch(product, option)}
-                    >
-                      {describeOption(option)}
-                    </button>
-                  ))
-                )}
-              </div>
-            )
-          })
-        )}
+        <SearchResults hits={hits} query={text} searching={searching} onPick={pickFromSearch} />
       </PopoverContent>
     </Popover>
   )

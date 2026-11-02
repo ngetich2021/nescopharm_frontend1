@@ -76,7 +76,7 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
       currency: 'KES',
       notes: '',
       status: 'pending',
-      items: [{ product_id: '', description: '', quantity: 1, unit_price: 0, price_label: null, price_unit: null }],
+      items: [],
     }
   })
 
@@ -152,16 +152,6 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
     customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
   )
 
-  const addLineItem = () => {
-    append({
-      product_id: '',
-      description: '',
-      quantity: 1,
-      unit_price: 0,
-      price_label: null,
-      price_unit: null,
-    })
-  }
 
 
   // Calculate totals
@@ -268,14 +258,14 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                     // useFieldArray keeps array-level errors (e.g. "at least one item") under .root
                     const itemsMessage = field === 'items' ? error?.message || error?.root?.message : null
                     if (itemsMessage) {
-                      return <li key={field}>• {itemsMessage}</li>
+                      return <li key={field}>â€¢ {itemsMessage}</li>
                     }
                     if (field === 'items' && Array.isArray(error)) {
                       return null // Item-specific errors are shown inline
                     }
                     return (
                       <li key={field}>
-                        • {field.replace('_', ' ')}: {error?.message || 'Invalid value'}
+                        â€¢ {field.replace('_', ' ')}: {error?.message || 'Invalid value'}
                       </li>
                     )
                   })}
@@ -434,19 +424,13 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                     </Button>
                   </div>
                 )}
-                <QuoteLineItemsTable form={form} fields={fields} remove={remove} products={products} />
-
                 {fields.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No items added yet. Click "Add Item" below to get started.
+                  <div className="text-center py-6 text-muted-foreground">
+                    No items added yet. Click "Add Product" below to get started.
                   </div>
                 )}
 
-                {/* Under the last line so long quotes don't need a scroll back up. */}
-                <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
+                <QuoteLineItemsTable form={form} fields={fields} remove={remove} append={append} products={products} />
               </CardContent>
             </Card>
 
