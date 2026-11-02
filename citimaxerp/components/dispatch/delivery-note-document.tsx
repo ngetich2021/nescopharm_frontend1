@@ -12,6 +12,7 @@ import { COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
 import { format } from "date-fns"
 import { Loader2 } from "lucide-react"
+import { ScanMeFooter } from "@/components/scan-me-footer"
 
 export interface DeliveryNoteLoaded {
   dispatch: OrderDispatch
@@ -276,9 +277,9 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
           </div>
         </div>
 
-        <div className="mt-1 text-center text-xs text-gray-700">
+        <ScanMeFooter className="mt-1 text-center text-xs text-gray-700">
           <p>This is a Computer Generated Document</p>
-        </div>
+        </ScanMeFooter>
       </Card>
     )
   },

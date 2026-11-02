@@ -16,7 +16,7 @@ import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
-import { addScanMe } from "@/lib/scan-me"
+import { ScanMeFooter } from "@/components/scan-me-footer"
 
 export default function OrderDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -131,7 +131,6 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
       const imgY = 10
 
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
-      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
 
       toast({
@@ -382,9 +381,9 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
           )}
 
           {/* Footer */}
-          <div className="mt-12 pt-6 border-t border-gray-200 text-center text-xs text-gray-500">
+          <ScanMeFooter className="mt-12 pt-6 border-t border-gray-200 text-center text-xs text-gray-500">
             <p>Thank you for your business!</p>
-          </div>
+          </ScanMeFooter>
         </Card>
       </div>
     </div>

@@ -16,7 +16,7 @@ import { fixTextOffset } from "@/lib/pdf-capture"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
-import { addScanMe } from "@/lib/scan-me"
+import { ScanMeFooter } from "@/components/scan-me-footer"
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -106,7 +106,6 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
       const imgX = (pdfWidth - canvas.width * ratio) / 2
 
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", imgX, 10, canvas.width * ratio, canvas.height * ratio)
-      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Quotation PDF downloaded" })
     } catch (err) {
@@ -307,6 +306,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
               <p>Thank you for considering our quotation.</p>
             )}
           </div>
+          <ScanMeFooter className="mt-4" />
         </Card>
       </div>
     </div>

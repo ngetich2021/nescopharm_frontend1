@@ -11,6 +11,7 @@ import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/custo
 import { INVOICE_PAYMENT_DETAILS, COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { amountInWords } from "@/lib/number-to-words"
 import { documentCode } from "@/lib/price-codes"
+import { ScanMeFooter } from "@/components/scan-me-footer"
 
 export const RETURN_POLICY_LINE = "All goods are subject to the enclosed Non-returnable policy"
 export const RETURN_POLICY_IMAGE = "/company/return-policy.jpg"
@@ -393,9 +394,9 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         </div>
 
         {/* Footer */}
-        <div className="mt-2 pt-1 border-t border-gray-200 text-center text-xs text-gray-500">
+        <ScanMeFooter className="mt-2 pt-1 border-t border-gray-200 text-center text-xs text-gray-500">
           <p>Thank you for your business! · This is a Computer Generated Invoice</p>
-        </div>
+        </ScanMeFooter>
         </div>
       </Card>
 

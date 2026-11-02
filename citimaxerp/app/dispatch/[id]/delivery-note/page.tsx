@@ -15,7 +15,6 @@ import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
 import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
 import { sizedName } from "@/lib/product-sizes"
-import { addScanMe } from "@/lib/scan-me"
 
 export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -91,7 +90,6 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height)
       const imgX = (pdfWidth - canvas.width * ratio) / 2
       pdf.addImage(imgData, 'PNG', imgX, 10, canvas.width * ratio, canvas.height * ratio)
-      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
       toast({ title: "Success", description: "Delivery note PDF downloaded successfully" })
     } catch (err) {

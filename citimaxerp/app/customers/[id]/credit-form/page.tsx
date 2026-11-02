@@ -19,7 +19,7 @@ import { usePermissions } from "@/hooks/use-permissions"
 import { compressImageIfLarge } from "@/lib/image-compression"
 import { documentFileName, todayFileDate, printWithFileName } from "@/lib/document-names"
 import { fixTextOffset } from "@/lib/pdf-capture"
-import { addScanMe } from "@/lib/scan-me"
+import { ScanMeFooter } from "@/components/scan-me-footer"
 
 // The customer profile response includes several Credit Appraisal Form fields
 // that aren't yet part of the shared `CustomerProfileData` type (confirmed live
@@ -339,7 +339,6 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
         heightLeft -= pdfHeight
       }
 
-      await addScanMe(pdf)
       pdf.save(`${fileBase()}.pdf`)
 
       toast({
@@ -885,6 +884,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
               )}
             </div>
           </section>
+          <ScanMeFooter />
         </Card>
       </div>
     </div>
