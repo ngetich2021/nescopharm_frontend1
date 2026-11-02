@@ -321,21 +321,26 @@ export default function DailyReportsPage() {
                                 >
                                   <Edit2 size={14} /> Resubmit
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleApprove(report.id)}
-                                  disabled={approvingId === report.id}
-                                  className="cursor-pointer gap-2 text-green-600"
-                                >
-                                  <Check size={14} /> Approve
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => setShowRejectModal(report.id)}
-                                  disabled={rejectingId === report.id}
-                                  className="cursor-pointer gap-2 text-red-600"
-                                >
-                                  <X size={14} /> Reject
-                                </DropdownMenuItem>
+                                {/* Only Directors approve daily reports */}
+                                {report.canAct && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleApprove(report.id)}
+                                      disabled={approvingId === report.id}
+                                      className="cursor-pointer gap-2 text-green-600"
+                                    >
+                                      <Check size={14} /> Approve
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => setShowRejectModal(report.id)}
+                                      disabled={rejectingId === report.id}
+                                      className="cursor-pointer gap-2 text-red-600"
+                                    >
+                                      <X size={14} /> Reject
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
                               </>
                             )}
                           </DropdownMenuContent>
@@ -431,7 +436,11 @@ export default function DailyReportsPage() {
                 </div>
               )}
 
-              {viewingReport.status === "pending" && (
+              {viewingReport.status === "pending" && !viewingReport.canAct && (
+                <p className="pt-4 border-t text-sm text-muted-foreground">Awaiting approval by a Director.</p>
+              )}
+
+              {viewingReport.status === "pending" && viewingReport.canAct && (
                 <div className="space-y-3 pt-4 border-t">
                   <Label className="font-semibold">Approval Remarks <span className="text-gray-500 text-sm">(Optional - visible to staff)</span></Label>
                   <Textarea
@@ -452,7 +461,7 @@ export default function DailyReportsPage() {
                 >
                   Close
                 </Button>
-                {viewingReport.status === "pending" && (
+                {viewingReport.status === "pending" && viewingReport.canAct && (
                   <>
                     <Button
                       onClick={() => {

@@ -104,7 +104,8 @@ class NotificationService
             return;
         }
 
-        $customer = $order->customer?->name ?: 'a customer';
+        // The business, not the contact person ("Order for Mr. Edward" told approvers nothing).
+        $customer = $order->customer?->business_name ?: ($order->customer?->name ?: 'a customer');
         $this->notifyPermission(
             $order->company_id,
             [],

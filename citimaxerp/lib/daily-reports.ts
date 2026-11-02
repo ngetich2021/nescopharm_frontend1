@@ -18,6 +18,8 @@ export interface DailyWorkReport {
   remarks: string | null;
   status: string;
   approverRole: string | null;
+  /** The signed-in user may approve/reject it: only Directors approve daily reports. */
+  canAct?: boolean;
   approver: string | null;
   approvedBy: string | null;
   approvedAt: string | null;

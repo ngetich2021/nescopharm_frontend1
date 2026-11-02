@@ -46,10 +46,12 @@ class OrderDispatchController extends Controller
             return;
         }
         $orderNumber = $dispatch->order?->order_number;
+        $customer = $dispatch->order?->customer;
+        $customerName = $customer ? ($customer->business_name ?: $customer->name) : null;
         app(\App\Services\NotificationService::class)->notifyUser($next->id, new \App\Notifications\SystemAlert(
             'approval',
             "Dispatch {$dispatch->dispatch_number} awaits your approval",
-            'Dispatch' . ($orderNumber ? " for order {$orderNumber}" : '') . ' is waiting on your approval.',
+            'Dispatch' . ($orderNumber ? " for order {$orderNumber}" : '') . ($customerName ? " ({$customerName})" : '') . ' is waiting on your approval.',
             "/dispatch",
             ['type' => 'dispatch_pending', 'dispatch_id' => $dispatch->id],
         ), $actorId);

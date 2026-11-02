@@ -208,7 +208,7 @@ class EmployeeSelfServiceController extends Controller
         }
 
         // Routing is based on the employee the report is for
-        $routing = $this->resolveDailyReportApprover($employee, $user);
+        $routing = \App\Services\DailyReportRoutingService::resolveApprover($employee, $user);
 
         // Get designation from request, employee position, or user's role
         $designation = $request->input('designation') ?: $employee->position ?: ($user->role?->name ?? null);
@@ -232,8 +232,8 @@ class EmployeeSelfServiceController extends Controller
         $report->load('approver', 'approvedBy');
 
         $routingMessage = $routing['auto_approve']
-            ? 'Your report has been self-certified as you are the Managing Director.'
-            : 'Routed automatically to the GM, or the Managing Director.';
+            ? 'Your report has been self-certified as you are a Director.'
+            : 'Sent to the Directors for approval.';
 
         return response()->json([
             'status' => 'success',
@@ -266,44 +266,6 @@ class EmployeeSelfServiceController extends Controller
             'status' => 'success',
             'message' => 'Daily work report deleted successfully.',
         ], 200);
-    }
-
-    /**
-     * Role-based routing for daily reports (unlike leave/salary, which use
-     * a fixed per-employee approver FK): a worker's report goes to GM, a
-     * GM's own report goes to the Managing Director ("Director" role).
-     * Director has nobody above them in this chain, so their own report is
-     * self-certified/auto-approved on submission rather than left pending
-     * forever. Falls back to whoever holds the can_manage_company/system
-     * bypass if no user literally holds the GM/Director role.
-     */
-    private function resolveDailyReportApprover(Employee $employee, User $submittingUser): array
-    {
-        $submitterRole = optional($submittingUser->role)->name;
-
-        if ($submitterRole && strcasecmp($submitterRole, 'Director') === 0) {
-            return ['role' => null, 'user_id' => null, 'auto_approve' => true];
-        }
-
-        $requiredRole = ($submitterRole && strcasecmp($submitterRole, 'GM') === 0) ? 'Director' : 'GM';
-
-        $approverId = User::where('company_id', $employee->company_id)
-            ->where('id', '!=', $submittingUser->id)
-            ->whereRaw('is_active = true')
-            ->whereHas('role', fn ($q) => $q->where('name', $requiredRole))
-            ->orderBy('created_at')
-            ->value('id');
-
-        if (!$approverId) {
-            $approverId = User::where('company_id', $employee->company_id)
-                ->where('id', '!=', $submittingUser->id)
-                ->whereRaw('is_active = true')
-                ->whereHas('role.permissions', fn ($q) => $q->whereIn('key', ['can_manage_company', 'can_manage_system']))
-                ->orderBy('created_at')
-                ->value('id');
-        }
-
-        return ['role' => $requiredRole, 'user_id' => $approverId, 'auto_approve' => false];
     }
 
     private function resolveEmployee(Request $request): ?Employee

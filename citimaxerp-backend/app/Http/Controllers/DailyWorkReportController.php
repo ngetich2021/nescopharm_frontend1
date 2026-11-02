@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyWorkReport;
+use App\Services\DailyReportRoutingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -27,36 +28,32 @@ class DailyWorkReportController extends Controller
     }
 
     /**
-     * A report can be acted on by anyone holding can_approve_daily_reports
-     * (which already covers the can_manage_company/can_manage_system
-     * bypass via hasPermission()), the specific user the report resolved
-     * to an approver_id for at submission time, or anyone currently
-     * holding the role (GM/Director) it was routed to - so a later hire
-     * into that role can still act on reports submitted before they joined.
+     * Only Directors approve or reject daily reports - any Director in the
+     * report's company, so one hired later can act on older reports. The one
+     * exception is the fallback approver_id given to a report when the
+     * company had no Director. can_approve_daily_reports still lets a role
+     * see every report, but no longer approve them.
      */
     protected function canActOnReport(Request $request, DailyWorkReport $report): bool
     {
-        if ($this->hasPermission($request, 'can_approve_daily_reports', $report->company_id)) {
-            return true;
+        return self::userCanAct($request->user(), $report);
+    }
+
+    public static function userCanAct($user, DailyWorkReport $report): bool
+    {
+        if (!$user || $user->company_id !== $report->company_id) {
+            return false;
         }
 
-        $user = $request->user();
-        if ($report->approver_id === $user->id) {
-            return true;
-        }
-
-        $role = optional($user->role)->name;
-        if ($role && $report->approver_role && strcasecmp($role, $report->approver_role) === 0) {
-            return true;
-        }
-
-        return false;
+        return DailyReportRoutingService::isApproverRole(optional($user->role)->name)
+            || $report->approver_id === $user->id;
     }
 
     public function index(Request $request)
     {
         $user = $request->user();
-        $canViewAll = $this->hasPermission($request, 'can_approve_daily_reports', $user->company_id);
+        $canViewAll = $this->hasPermission($request, 'can_approve_daily_reports', $user->company_id)
+            || DailyReportRoutingService::isApproverRole(optional($user->role)->name);
 
         $query = DailyWorkReport::with(['employee', 'approver', 'approvedBy', 'createdBy.role'])
             ->where('company_id', $user->company_id);
@@ -197,6 +194,8 @@ class DailyWorkReportController extends Controller
             'remarks' => $r->remarks,
             'status' => $r->status,
             'approverRole' => $r->approver_role,
+            // Whether the signed-in user may approve/reject it (Directors only).
+            'canAct' => $r->status === 'pending' && self::userCanAct(auth()->user(), $r),
             'approver' => $approver ? trim($approver->first_name . ' ' . $approver->last_name) : null,
             'approvedBy' => $approvedBy ? trim($approvedBy->first_name . ' ' . $approvedBy->last_name) : null,
             'approvedAt' => $r->approved_at,

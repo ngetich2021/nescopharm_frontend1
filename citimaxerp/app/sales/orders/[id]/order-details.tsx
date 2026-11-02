@@ -1498,7 +1498,11 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Approve order {order.order_number}</DialogTitle>
+            <DialogTitle>
+              Approve order {order.order_number}
+              {((order.customer as any)?.business_name || order.customer?.name) &&
+                ` for ${(order.customer as any)?.business_name || order.customer?.name}`}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-1">
             <Label htmlFor="approval-comment">Comment *</Label>

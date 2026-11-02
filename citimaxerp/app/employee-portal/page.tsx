@@ -61,8 +61,9 @@ export default function EmployeePortalPage() {
   const { hasPermission, user } = useAuth();
   const canApproveLeave = hasPermission("can_approve_leave");
   const canApproveSalary = hasPermission("can_approve_salary_changes");
-  const canApproveDailyReports = hasPermission("can_approve_daily_reports");
-  const isGMOrDirector = user?.role?.name && (user.role.name === 'GM' || user.role.name === 'Director');
+  // Only Directors approve staff daily reports (the permission alone no longer does).
+  const isDirector = user?.role?.name?.trim().toLowerCase() === 'director';
+  const canApproveDailyReports = isDirector;
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
@@ -653,7 +654,7 @@ export default function EmployeePortalPage() {
                 <p className="text-sm font-semibold">Daily Report Approver</p>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Routed automatically to the GM, or the Managing Director if you are the GM.
+                Sent to the Directors for approval.
               </p>
             </div>
           </CardContent>
@@ -980,7 +981,7 @@ export default function EmployeePortalPage() {
             </CardContent>
           </Card>
 
-          {isGMOrDirector && (
+          {isDirector && (
             <Card className="shadow-sm xl:col-span-2">
               <CardHeader>
                 <CardTitle>Pending Staff Reports - Resubmit</CardTitle>

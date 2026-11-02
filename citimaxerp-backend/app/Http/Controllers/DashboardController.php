@@ -675,7 +675,7 @@ class DashboardController extends Controller
                 return [
                     'id' => $order->id,
                     'type' => 'order',
-                    'description' => "New order #{$order->order_number} from " . ($order->customer->name ?? 'Unknown Customer'),
+                    'description' => "New order #{$order->order_number} from " . ($order->customer?->business_name ?: ($order->customer->name ?? 'Unknown Customer')),
                     'amount' => $order->final_amount,
                     'status' => $order->status,
                     'created_at' => $order->created_at,
@@ -691,7 +691,7 @@ class DashboardController extends Controller
                 return [
                     'id' => $payment->id,
                     'type' => 'payment',
-                    'description' => "Payment received from " . ($payment->customer->name ?? 'Unknown Customer'),
+                    'description' => "Payment received from " . ($payment->customer?->business_name ?: ($payment->customer->name ?? 'Unknown Customer')),
                     'amount' => $payment->amount_paid,
                     'status' => $payment->status,
                     'created_at' => $payment->created_at,
