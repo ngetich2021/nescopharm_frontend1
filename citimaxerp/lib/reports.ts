@@ -220,6 +220,32 @@ export async function getProcurementReport(): Promise<any> {
 /**
  * Fetches customer report data.
  */
+export interface CustomerStatsRow {
+  customer_id: string
+  customer: string
+  customer_number: string | null
+  phone: string | null
+  orders: number
+  order_value: number
+  invoices: number
+  invoiced: number
+  paid: number
+  balance: number
+  last_order_date: string | null
+}
+
+export interface CustomerStats {
+  rows: CustomerStatsRow[]
+  summary: { customers: number; with_orders: number; without_orders: number; orders: number; order_value: number; invoiced: number; paid: number; balance: number }
+}
+
+// Every customer with their orders and invoices (0 when none); dates limit what is counted.
+export async function getCustomerStats(params: { date_from?: string; date_to?: string } = {}): Promise<CustomerStats> {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString()
+  const res = await apiCall<{ status: string; data: CustomerStats }>(`/reports/customers/stats${qs ? `?${qs}` : ""}`, "GET")
+  return res.data
+}
+
 export async function getCustomerReport(): Promise<any> {
   try {
     const data = await apiCall<any>("/reports/customers", "GET");

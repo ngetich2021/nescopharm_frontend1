@@ -62,6 +62,8 @@ class AssistantKnowledge
             'Reports > Sales: pick the period, then tabs Sales Accounts (ledger, with "Show receipts"), Orders, Products, Customers, By Region, By County, By Town, By Sales Rep, Daily Log. Every table has Export (Excel/PDF/CSV).'],
         ['Inventory Reports', '/reports/inventory', ['can_view_reports_menu'],
             'Reports > Inventory: Stock Balance, Low and Out of Stock, Stock Movement, Stock Management (closing stock value, gross profit, reorder alerts). Export gives Excel/PDF/CSV.'],
+        ['CRM Reports > Customer Stats', '/reports/customers?tab=stats', ['can_view_reports_menu'],
+            'Reports > CRM Reports (Customer Reports): two tabs. Customer Growth = new customers per day (chart and table). Customer Stats = every customer with S/No, Customer, Customer No., Phone, Orders, Order Value, Invoices, Invoiced, Paid, Balance, Last Order; customers with no orders show 0 and 0.00. Pick From/To dates to count only that period (blank = all time); Search by customer name, number or phone; Show all / with orders / without orders; click a column heading to sort (again to reverse); 20/50/250/All per page; Export gives Excel/PDF/CSV with totals.'],
         ['Procurement / CRM / Logistics Reports', '/reports', ['can_view_reports_menu'],
             'Reports menu: Procurement (purchases by supplier), CRM (customers), Logistics (deliveries), eTIMS Compliance (KRA submissions).'],
         ['HR & Payroll > Employees (add employee)', '/hr/employees', ['can_view_employees_menu'],

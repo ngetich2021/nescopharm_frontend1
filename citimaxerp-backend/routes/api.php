@@ -1124,6 +1124,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/logistics', [ReportController::class, 'logisticsReports']);
         Route::get('/procurement', [ReportController::class, 'procurementReports']);
         Route::get('/customers', [ReportController::class, 'customerReports']);
+        Route::get('/customers/stats', [ReportController::class, 'customerStats']);
     });
 });
 

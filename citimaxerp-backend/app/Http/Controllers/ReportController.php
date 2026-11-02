@@ -208,4 +208,19 @@ class ReportController extends Controller
             return response()->json(['status' => 'failed', 'message' => $e->getMessage()], 500);
         }
     }
+
+    /** CRM Reports > Customer Stats: every customer with their orders and invoices (0 when none). */
+    public function customerStats(Request $request): JsonResponse
+    {
+        $companyId = $request->user()->company_id;
+
+        if (!$this->hasPermission($request, 'can_view_reports', $companyId)
+            && !$this->hasPermission($request, 'can_view_reports_menu', $companyId)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate(['date_from' => 'nullable|date', 'date_to' => 'nullable|date']);
+        $data = $this->reportService->forCompany($companyId)->getCustomerStats($request->only('date_from', 'date_to'));
+        return response()->json(['status' => 'success', 'data' => $data], 200);
+    }
 }

@@ -30,6 +30,7 @@ class AssistantTools
         'list_orders' => ['can_view_sales_menu'],
         'sales_summary' => ['can_view_sales_menu', 'can_view_reports_menu'],
         'customer_account' => ['can_view_customers_menu', 'can_view_sales_menu'],
+        'customer_stats' => ['can_view_reports_menu', 'can_view_customers_menu', 'can_view_sales_menu'],
         'receipts_summary' => ['can_view_payments_menu'],
         'expenses_summary' => ['can_view_expenses_menu', 'can_view_finance_menu'],
         'purchase_orders' => ['can_view_purchase_orders_menu'],
@@ -99,6 +100,13 @@ class AssistantTools
             'customer_account' => ['A customer\'s account: what they owe, overdue amount, open invoices and last payment.', [
                 'query' => ['type' => 'string', 'description' => 'Customer or business name'],
             ], ['query']],
+            'customer_stats' => ['Every customer with their number of orders, order value, invoices, invoiced, paid and balance, and last order date (CRM Reports > Customer Stats). Customers with no orders are included at 0. Use it for "how many orders has <customer> made", "customers with no orders", "best customers", "customer stats". All time unless dates are given. The full table is shown to the user automatically.', [
+                'date_from' => ['type' => 'string', 'description' => 'Optional start date YYYY-MM-DD (default: all time)'],
+                'date_to' => ['type' => 'string', 'description' => 'Optional end date YYYY-MM-DD (default: all time)'],
+                'search' => ['type' => 'string', 'description' => 'Optional customer name to narrow it'],
+                'only' => ['type' => 'string', 'enum' => ['all', 'with_orders', 'without_orders'], 'description' => 'Default all'],
+                'sort' => ['type' => 'string', 'enum' => ['order_value', 'orders', 'balance', 'name'], 'description' => 'Default order_value (highest first)'],
+            ], []],
             'receipts_summary' => ['Money received from customers in a period: total, by payment method, latest receipts.', $range, []],
             'expenses_summary' => ['Expenses (expenditure) in a period: total, by category and status, latest expenses.', $range + [
                 'category' => ['type' => 'string', 'description' => 'Optional category name'],
@@ -634,6 +642,44 @@ class AssistantTools
                 'last_payment' => $lastPayment ? ['amount' => self::money($lastPayment->amount_paid), 'date' => substr((string) $lastPayment->payment_date, 0, 10), 'method' => $lastPayment->payment_method] : null,
             ];
         })->values()];
+    }
+
+    protected function customer_stats(array $args): array
+    {
+        $filters = array_filter(['date_from' => $args['date_from'] ?? null, 'date_to' => $args['date_to'] ?? null]);
+        $stats = app(\App\Services\ReportService::class)->forCompany($this->companyId)->getCustomerStats($filters);
+        $words = collect(preg_split('/\s+/', strtolower(trim((string) ($args['search'] ?? '')))))->filter(fn ($w) => strlen($w) > 1);
+        $only = $args['only'] ?? 'all';
+
+        $rows = collect($stats['rows'])
+            ->filter(fn ($r) => $words->every(fn ($w) => str_contains(strtolower((string) $r['customer']), $w)))
+            ->filter(fn ($r) => $only === 'with_orders' ? $r['orders'] > 0 : ($only === 'without_orders' ? $r['orders'] === 0 : true));
+        $rows = match ($args['sort'] ?? 'order_value') {
+            'orders' => $rows->sortByDesc('orders'),
+            'balance' => $rows->sortByDesc('balance'),
+            'name' => $rows->sortBy(fn ($r) => strtolower((string) $r['customer'])),
+            default => $rows->sortByDesc('order_value'),
+        };
+        $rows = $rows->values();
+
+        $fmt = fn ($v) => number_format((float) $v, 2);
+        $table = $rows->isEmpty() ? '' : "| S/No | Customer | Orders | Order Value | Invoiced | Paid | Balance | Last Order |\n|---|---|---|---|---|---|---|---|\n"
+            . $rows->map(fn ($r, $i) => '| ' . ($i + 1) . ' | ' . str_replace('|', '/', (string) $r['customer']) . " | {$r['orders']} | {$fmt($r['order_value'])} | {$fmt($r['invoiced'])} | {$fmt($r['paid'])} | {$fmt($r['balance'])} | " . ($r['last_order_date'] ?? '-') . ' |')->implode("\n");
+
+        return [
+            'period' => $filters ?: 'all time',
+            'customers_listed' => $rows->count(),
+            'with_orders' => $rows->where('orders', '>', 0)->count(),
+            'without_orders' => $rows->where('orders', 0)->count(),
+            'total_orders' => $rows->sum('orders'),
+            'total_order_value' => self::money($rows->sum('order_value')),
+            'total_invoiced' => self::money($rows->sum('invoiced')),
+            'total_balance' => self::money($rows->sum('balance')),
+            'top' => $rows->take(5)->map(fn ($r) => ['customer' => $r['customer'], 'orders' => $r['orders'], 'order_value' => $r['order_value']])->all(),
+            'full_list_link' => '[CRM Reports > Customer Stats](/reports/customers?tab=stats)',
+            'table_shown_to_user' => $table !== '' ? 'The full table of every customer is added under your answer automatically.' : 'No customer matched.',
+            '_table' => $table,
+        ];
     }
 
     protected function receipts_summary(array $args): array

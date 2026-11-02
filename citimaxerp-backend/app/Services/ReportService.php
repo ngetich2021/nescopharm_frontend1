@@ -983,6 +983,70 @@ class ReportService
     }
 
     /**
+     * Every customer with their orders and invoices: count, value, paid, balance and last order.
+     * Customers with none are listed too, at 0. Cancelled orders and cancelled/void invoices,
+     * proformas and credit notes are left out; draft invoices count, as in the sales reports.
+     * Optional date_from / date_to limit the orders and invoices counted, not the customers.
+     */
+    public function getCustomerStats(array $filters = []): array
+    {
+        $from = $filters['date_from'] ?? null;
+        $to = $filters['date_to'] ?? null;
+
+        $orders = DB::table('orders')->where('company_id', $this->companyId)->whereNull('deleted_at')
+            ->where('status', '!=', 'cancelled')
+            ->when($from, fn ($q) => $q->whereRaw('coalesce(order_date, created_at)::date >= ?', [$from]))
+            ->when($to, fn ($q) => $q->whereRaw('coalesce(order_date, created_at)::date <= ?', [$to]))
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, count(*) as orders, sum(coalesce(final_amount, total_amount)) as order_value, max(coalesce(order_date, created_at)) as last_order');
+
+        $invoices = DB::table('invoices')->where('company_id', $this->companyId)
+            ->whereNotIn('status', ['cancelled', 'void', 'voided'])
+            ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', ['proforma', 'credit_note']))
+            ->when($from, fn ($q) => $q->whereDate('invoice_date', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('invoice_date', '<=', $to))
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, count(*) as invoices, sum(total_amount) as invoiced, sum(amount_paid) as paid, sum(balance_amount) as balance');
+
+        $rows = DB::table('customers as c')
+            ->leftJoinSub($orders, 'o', 'o.customer_id', '=', 'c.id')
+            ->leftJoinSub($invoices, 'i', 'i.customer_id', '=', 'c.id')
+            ->where('c.company_id', $this->companyId)->whereNull('c.deleted_at')
+            ->selectRaw("c.id as customer_id, coalesce(nullif(trim(c.business_name), ''), c.name) as customer, c.customer_number, c.phone,
+                coalesce(o.orders, 0) as orders, coalesce(o.order_value, 0) as order_value, o.last_order,
+                coalesce(i.invoices, 0) as invoices, coalesce(i.invoiced, 0) as invoiced, coalesce(i.paid, 0) as paid, coalesce(i.balance, 0) as balance")
+            ->orderByDesc('order_value')->orderBy('customer')
+            ->get()
+            ->map(fn ($r) => [
+                'customer_id' => $r->customer_id,
+                'customer' => $r->customer,
+                'customer_number' => $r->customer_number,
+                'phone' => $r->phone,
+                'orders' => (int) $r->orders,
+                'order_value' => round((float) $r->order_value, 2),
+                'invoices' => (int) $r->invoices,
+                'invoiced' => round((float) $r->invoiced, 2),
+                'paid' => round((float) $r->paid, 2),
+                'balance' => round((float) $r->balance, 2),
+                'last_order_date' => $r->last_order ? substr((string) $r->last_order, 0, 10) : null,
+            ]);
+
+        return [
+            'rows' => $rows->values()->all(),
+            'summary' => [
+                'customers' => $rows->count(),
+                'with_orders' => $rows->where('orders', '>', 0)->count(),
+                'without_orders' => $rows->where('orders', 0)->count(),
+                'orders' => $rows->sum('orders'),
+                'order_value' => round($rows->sum('order_value'), 2),
+                'invoiced' => round($rows->sum('invoiced'), 2),
+                'paid' => round($rows->sum('paid'), 2),
+                'balance' => round($rows->sum('balance'), 2),
+            ],
+        ];
+    }
+
+    /**
      * Helper methods for filters
      */
 

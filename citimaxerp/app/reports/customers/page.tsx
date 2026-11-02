@@ -9,10 +9,20 @@ import { useToast } from "@/hooks/use-toast"
 import { Loader2, Users, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InteractiveChartCard } from "@/app/dashboard/components/interactive-chart-card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CustomerStatsTab } from "./customer-stats"
 
 export default function CustomerReportPage() {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  // ?tab=stats opens Customer Stats (the assistant links there).
+  const [tab, setTab] = useState("growth")
+  const [statsKey, setStatsKey] = useState(0)
+
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab")
+    if (t === "stats" || t === "growth") setTab(t)
+  }, [])
 
   const { toast } = useToast()
 
@@ -54,11 +64,22 @@ export default function CustomerReportPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Customer Reports</h1>
             <p className="text-sm text-gray-600">Analyze customer growth and acquisition</p>
           </div>
-          <Button onClick={fetchReport} variant="outline" size="sm">
+          <Button onClick={() => { fetchReport(); setStatsKey((k) => k + 1) }} variant="outline" size="sm">
             Refresh
           </Button>
         </div>
 
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="growth">Customer Growth</TabsTrigger>
+            <TabsTrigger value="stats">Customer Stats</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="stats" className="mt-4">
+            <CustomerStatsTab key={statsKey} />
+          </TabsContent>
+
+          <TabsContent value="growth" className="mt-4">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="h-8 w-8 animate-spin" />
@@ -104,6 +125,8 @@ export default function CustomerReportPage() {
             />
           </div>
         )}
+          </TabsContent>
+        </Tabs>
       </div>
     </PermissionGuard>
   )
