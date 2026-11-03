@@ -126,6 +126,27 @@ class SupplierController extends Controller
     }
 
     /**
+     * The supplier's ledger account from the books, in the Tally layout (Dr/Cr, Particulars, Vch Type,
+     * Vch No, Debit, Credit) with opening and closing balances. ?date_from, ?date_to, ?corrections=1.
+     */
+    public function ledger(Request $request, $id)
+    {
+        $supplier = Supplier::find($id);
+        if (!$supplier || $supplier->company_id !== $request->user()->company_id) {
+            return response()->json(['status' => 'failed', 'message' => 'Supplier not found.', 'data' => null], 404);
+        }
+        $allowed = collect(['can_view_suppliers', 'can_view_payments', 'can_view_general_ledger', 'can_view_accounts_payable'])
+            ->contains(fn ($permission) => $this->hasPermission($request, $permission, $supplier->company_id));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view this ledger.', 'data' => null], 403);
+        }
+
+        return response()->json(['status' => 'success', 'data' => app(\App\Services\SupplierLedgerService::class)->ledger(
+            $supplier->company_id, $supplier, $request->input('date_from') ?: null, $request->input('date_to') ?: null, $request->boolean('corrections'),
+        )]);
+    }
+
+    /**
      * The supplier's account, oldest first: bills (and opening balances) raise what is owed, debit
      * notes and payments bring it down. A goods receipt shows as a bill unless one already covers it.
      */

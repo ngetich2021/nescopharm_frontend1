@@ -638,6 +638,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Supplier routes
     Route::get('suppliers/{id}/statement', [SupplierController::class, 'statement']);
+    Route::get('suppliers/{id}/ledger', [SupplierController::class, 'ledger']);
     Route::apiResource('suppliers', SupplierController::class);
 
     // Asset register routes

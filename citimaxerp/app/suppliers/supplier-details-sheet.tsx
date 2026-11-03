@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
+import { SupplierLedger } from "./supplier-ledger"
 import { 
   Building2, 
   Mail, 
@@ -146,7 +147,7 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                     <Button variant="outline" size="sm" asChild>
                       <a href={`/finance/general-ledger?supplier_id=${supplier.id}&date_from=2020-01-01`}>
                         <BookOpen className="h-4 w-4 mr-2" />
-                        Ledger
+                        General Ledger
                       </a>
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)}>
@@ -218,6 +219,9 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                     </CardContent>
                   </Card>
                 )}
+
+                {/* The same account from the books, in the Tally layout with both sides of each entry */}
+                <SupplierLedger supplierId={supplier.id} supplierName={supplier.name} />
 
                 {/* Contact Information */}
                 <Card>

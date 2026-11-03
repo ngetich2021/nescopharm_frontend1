@@ -132,6 +132,45 @@ export interface SupplierStatement {
 }
 
 // Bills, debit notes and payments with the running amount owed to the supplier.
+/** One line of a supplier's ledger, as Tally prints it: Particulars is the other side of the entry. */
+export interface SupplierLedgerRow {
+  id: string
+  date: string | null
+  side: "Dr" | "Cr"
+  particulars: string
+  other_accounts: string[]
+  voucher_type: string
+  voucher_no: string
+  narration: string | null
+  reversed: boolean
+  debit: number
+  credit: number
+  balance: number
+  balance_side: "Dr" | "Cr"
+}
+
+export interface SupplierLedger {
+  supplier: { id: string; name: string }
+  payable_accounts: string[]
+  date_from: string | null
+  date_to: string | null
+  opening_balance: { amount: number; side: "Dr" | "Cr" }
+  rows: SupplierLedgerRow[]
+  totals: { debit: number; credit: number }
+  closing_balance: { amount: number; side: "Dr" | "Cr" }
+}
+
+export async function getSupplierLedger(id: string, period?: { from?: string; to?: string; corrections?: boolean }): Promise<SupplierLedger> {
+  const qs = toQueryString({ date_from: period?.from, date_to: period?.to, corrections: period?.corrections ? 1 : undefined })
+  const response = await apiCall<{ status: string; data: SupplierLedger; message?: string }>(
+    `/suppliers/${id}/ledger${qs ? `?${qs}` : ""}`, "GET", undefined, true
+  )
+  if (response.status === "success" && response.data) {
+    return response.data
+  }
+  throw new Error(response.message || "Failed to fetch supplier ledger")
+}
+
 export async function getSupplierStatement(id: string, period?: { from?: string; to?: string }): Promise<SupplierStatement> {
   const qs = toQueryString({ date_from: period?.from, date_to: period?.to })
   const response = await apiCall<{ status: string; data: SupplierStatement; message?: string }>(
