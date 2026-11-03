@@ -127,6 +127,17 @@ class Product extends Model
         });
     }
 
+    /**
+     * Products people manage: leaves out the eTIMS rounding items (ETIMS-ROUNDING-B etc.), which
+     * the eTIMS sync creates to carry an invoice's leftover cents to KRA. They stay in the
+     * database (KRA and signed invoices refer to them) but not in the products list or counts.
+     */
+    public function scopeCatalogue($query)
+    {
+        return $query->where(fn ($q) => $q->whereNull('product_code')
+            ->orWhere('product_code', 'not like', \App\Services\TaxCompliance\EtimsSaleAmountAllocator::ROUNDING_PRODUCT_PREFIX . '%'));
+    }
+
     // Scopes for PostgreSQL boolean queries
     public function scopeActive($query)
     {

@@ -235,7 +235,7 @@ class ProductController extends Controller
             $companyId = $request->input('company_id');
         }
 
-        $query->where('company_id', $companyId);
+        $query->where('company_id', $companyId)->catalogue();
 
         if ($request->filled('name')) {
             // Every word must appear, so pasted text with doubled or non-breaking spaces still matches.
@@ -2665,7 +2665,7 @@ class ProductController extends Controller
             $storeId = $request->get('store_id');
 
             // Base query for company products
-            $baseQuery = Product::where('company_id', $companyId);
+            $baseQuery = Product::where('company_id', $companyId)->catalogue();
 
             // Filter by store if provided
             if ($storeId) {
@@ -3213,7 +3213,7 @@ class ProductController extends Controller
             ];
 
             // Get product-level inventory summary
-            $productQuery = Product::forCompany($companyId);
+            $productQuery = Product::forCompany($companyId)->catalogue();
             if ($storeId) {
                 $productQuery->where('store_id', $storeId);
             }
