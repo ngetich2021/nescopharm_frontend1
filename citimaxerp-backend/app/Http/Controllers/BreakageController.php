@@ -288,6 +288,15 @@ class BreakageController extends Controller
                         ->where('id', $item['product_id'])
                         ->where('company_id', $companyId)
                         ->update(['inventory_status' => 'damaged']);
+
+                    // KRA's eTIMS stock goes down too (15 discarding), once this is saved.
+                    \App\Observers\InventoryMovementEtimsObserver::send(
+                        (string) $companyId,
+                        (string) $item['product_id'],
+                        -(int) $item['quantity'],
+                        'breakage',
+                        'breakage_item:' . $itemId,
+                    );
                 }
 
                 return $breakage->load('items');

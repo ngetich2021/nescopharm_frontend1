@@ -318,6 +318,8 @@ function ProductCodesTab() {
       i + 1, r.name, r.unit, r.type, r.tax_label, r.item_class_code, r.packaging_unit_code,
       r.quantity_unit_code, r.country_of_origin_code, KRA_STATUS[r.kra_status].label, r.id,
     ]),
+    // Ref stays in the file (the import matches rows by it) but hidden, so it is not edited.
+    hiddenColumns: [10],
   }))
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

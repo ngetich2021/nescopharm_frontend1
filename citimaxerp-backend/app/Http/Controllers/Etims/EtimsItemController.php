@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\Etims\SyncEtimsItemJob;
 use App\Models\Etims\EtimsItemRegistration;
 use App\Models\Product;
+use App\Services\TaxCompliance\EtimsClassCodeSuggester;
 use App\Services\TaxCompliance\EtimsTaxType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -124,6 +125,12 @@ class EtimsItemController extends Controller
             'tax_types' => DB::table('etims_tax_types')->orderBy('code')->get(),
             'payment_types' => DB::table('etims_payment_types')->orderBy('code')->get(),
         ]);
+    }
+
+    /** GET /api/etims/class-codes/suggest?name=... - a suggested KRA class code for a product name, or null. */
+    public function suggestClassCode(Request $request, EtimsClassCodeSuggester $suggester): JsonResponse
+    {
+        return response()->json(['suggestion' => $suggester->suggest($request->query('name'))]);
     }
 
     private function resolveActiveCompanyId(): string

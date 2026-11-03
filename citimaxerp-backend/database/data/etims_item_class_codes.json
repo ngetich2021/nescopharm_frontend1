@@ -1,0 +1,7002 @@
+[
+{
+"code": "10000000",
+"name": "Live Plant and Animal Material and Accessories and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "10100000",
+"name": "Live animals",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "10101500",
+"name": "Livestock",
+"parent_code": "10100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "10110000",
+"name": "Domestic pet products",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "10120000",
+"name": "Animal feed",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "10121600",
+"name": "Bird and fowl food",
+"parent_code": "10120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "10130000",
+"name": "Animal containment and habitats",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "10131600",
+"name": "Animal containment",
+"parent_code": "10130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "10140000",
+"name": "Saddlery and harness goods",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "10150000",
+"name": "Seeds and bulbs and seedlings and cuttings",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "10151600",
+"name": "Cereal seeds",
+"parent_code": "10150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "10160000",
+"name": "Floriculture and silviculture products",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "10170000",
+"name": "Fertilizers and plant nutrients and herbicides",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "10171600",
+"name": "Chemical fertilizers and plant nutrients",
+"parent_code": "10170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "10190000",
+"name": "Pest control products",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "10200000",
+"name": "Live rose bushes",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "10210000",
+"name": "Live plants of high species or variety count flowers",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "10220000",
+"name": "Live plants of low species or variety count flowers",
+"parent_code": "10000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "11000000",
+"name": "Mineral and Textile and Inedible Plant and Animal Materials",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "11100000",
+"name": "Minerals and ores and metals",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "11110000",
+"name": "Earth and stone",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11111600",
+"name": "Stone",
+"parent_code": "11110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11120000",
+"name": "Non edible plant and forestry products",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11121600",
+"name": "Wood",
+"parent_code": "11120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11130000",
+"name": "Non edible animal products",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11131600",
+"name": "Other animal products",
+"parent_code": "11130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11140000",
+"name": "Scrap and waste materials",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11141600",
+"name": "Non metallic waste and scrap",
+"parent_code": "11140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11150000",
+"name": "Fibers and threads and yarns",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11151600",
+"name": "Threads",
+"parent_code": "11150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11160000",
+"name": "Fabrics and leather materials",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11161500",
+"name": "Silk fabrics",
+"parent_code": "11160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11161600",
+"name": "Wool fabrics",
+"parent_code": "11160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11170000",
+"name": "Alloys",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "11171600",
+"name": "Stainless steel alloys",
+"parent_code": "11170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "11180000",
+"name": "Metal oxide",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "11190000",
+"name": "Metal waste scrap and by products",
+"parent_code": "11000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "12000000",
+"name": "Chemicals including Bio Chemicals and Gas Materials",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "12130000",
+"name": "Explosive materials",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "12131600",
+"name": "Pyrotechnics",
+"parent_code": "12130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "12140000",
+"name": "Elements and gases",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "12141600",
+"name": "Rare earth metals",
+"parent_code": "12140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "12160000",
+"name": "Additives",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "12170000",
+"name": "Colorants",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "12171600",
+"name": "Pigments",
+"parent_code": "12170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "12180000",
+"name": "Waxes and oils",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "12181600",
+"name": "Oils",
+"parent_code": "12180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "12190000",
+"name": "Solvents",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "12350000",
+"name": "Compounds and mixtures",
+"parent_code": "12000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "13000000",
+"name": "Resin and Rosin and Rubber and Foam and Film and Elastomeric Materials",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "13100000",
+"name": "Rubber and elastomers",
+"parent_code": "13000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "13101600",
+"name": "Processed and synthetic rubber",
+"parent_code": "13100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "13110000",
+"name": "Resins and rosins and other resin derived materials",
+"parent_code": "13000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "13111000",
+"name": "Resins",
+"parent_code": "13110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "13111100",
+"name": "Rosins",
+"parent_code": "13110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "13111200",
+"name": "Plastic films",
+"parent_code": "13110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "13111300",
+"name": "Foams",
+"parent_code": "13110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "14000000",
+"name": "Paper Materials and Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "14100000",
+"name": "Paper materials",
+"parent_code": "14000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "14110000",
+"name": "Paper products",
+"parent_code": "14000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "14111600",
+"name": "Novelty paper",
+"parent_code": "14110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "14120000",
+"name": "Industrial use papers",
+"parent_code": "14000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "14121600",
+"name": "Tissue papers",
+"parent_code": "14120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "15000000",
+"name": "Fuels and Fuel Additives and Lubricants and Anti corrosive Materials",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "15100000",
+"name": "Fuels",
+"parent_code": "15000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "15101600",
+"name": "Solid and gel fuels",
+"parent_code": "15100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "15110000",
+"name": "Gaseous fuels and additives",
+"parent_code": "15000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "15120000",
+"name": "Lubricants and oils and greases and anti corrosives",
+"parent_code": "15000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "15130000",
+"name": "Fuel for nuclear reactors",
+"parent_code": "15000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "15131600",
+"name": "Fission fuel assemblies",
+"parent_code": "15130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "20000000",
+"name": "Mining and Well Drilling Machinery and Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "20100000",
+"name": "Mining and quarrying machinery and equipment",
+"parent_code": "20000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "20101500",
+"name": "Cutting equipment",
+"parent_code": "20100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "20110000",
+"name": "Well drilling and operation equipment",
+"parent_code": "20000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "20111600",
+"name": "Drilling and operation machinery",
+"parent_code": "20110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "20120000",
+"name": "Oil and gas drilling and exploration equipment",
+"parent_code": "20000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "20121400",
+"name": "Completion tools and equipment",
+"parent_code": "20120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "20121600",
+"name": "Drilling bits",
+"parent_code": "20120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "20130000",
+"name": "Oil and gas drilling and operation materials",
+"parent_code": "20000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "20140000",
+"name": "Oil and gas operating and production equipment",
+"parent_code": "20000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "21000000",
+"name": "Farming and Fishing and Forestry and Wildlife Machinery and Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "21100000",
+"name": "Agricultural and forestry and landscape machinery and equipment",
+"parent_code": "21000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "21101600",
+"name": "Agricultural machinery for planting and seeding",
+"parent_code": "21100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "21110000",
+"name": "Fishing and aquaculture equipment",
+"parent_code": "21000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "21111600",
+"name": "Aquaculture equipment",
+"parent_code": "21110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "22000000",
+"name": "Building and Construction Machinery and Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "22100000",
+"name": "Heavy construction machinery and equipment",
+"parent_code": "22000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "22101600",
+"name": "Paving equipment",
+"parent_code": "22100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23000000",
+"name": "Industrial Manufacturing and Processing Machinery and Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "23100000",
+"name": "Raw materials processing machinery",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23110000",
+"name": "Petroleum processing machinery",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23120000",
+"name": "Textile and fabric machinery and accessories",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23121600",
+"name": "Textile working machinery and equipment and accessories",
+"parent_code": "23120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23130000",
+"name": "Lapidary machinery and equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23131600",
+"name": "Faceting equipment and accessories",
+"parent_code": "23130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23140000",
+"name": "Leatherworking repairing machinery and equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23141600",
+"name": "Leather preparing machinery and accessories",
+"parent_code": "23140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23150000",
+"name": "Industrial process machinery and equipment and supplies",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23151600",
+"name": "Cement and ceramics and glass industry machinery and equipment and supplies",
+"parent_code": "23150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23160000",
+"name": "Foundry machines and equipment and supplies",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23161600",
+"name": "Foundry supplies",
+"parent_code": "23160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23180000",
+"name": "Industrial food and beverage equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23181600",
+"name": "Food cutting machinery",
+"parent_code": "23180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23190000",
+"name": "Mixers and their parts and accessories",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23191000",
+"name": "Batch mixers",
+"parent_code": "23190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23191100",
+"name": "Continuous mixers",
+"parent_code": "23190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23200000",
+"name": "Mass transfer equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23201000",
+"name": "Gas liquid contacting systems",
+"parent_code": "23200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23201200",
+"name": "Industrial drying equipment",
+"parent_code": "23200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23210000",
+"name": "Electronic manufacturing machinery and equipment and accessories",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23220000",
+"name": "Chicken processing machinery and equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23221000",
+"name": "Arrival department machinery and equipment",
+"parent_code": "23220000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23221100",
+"name": "Killing and defeathering department machinery and equipment",
+"parent_code": "23220000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23230000",
+"name": "Sawmilling and lumber processing machinery and equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23231000",
+"name": "Log debarkers and accessories",
+"parent_code": "23230000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23240000",
+"name": "Metal cutting machinery and accessories",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23241400",
+"name": "Metal grinding machines",
+"parent_code": "23240000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23250000",
+"name": "Metal forming machinery and accessories",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23260000",
+"name": "Rapid prototyping machinery and accessories",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23270000",
+"name": "Welding and soldering and brazing machinery and accessories and supplies",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "23271400",
+"name": "Welding machinery",
+"parent_code": "23270000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "23280000",
+"name": "Metal treatment machinery",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23290000",
+"name": "Industrial machine tools",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "23300000",
+"name": "Wire machinery and equipment",
+"parent_code": "23000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "24000000",
+"name": "Material Handling and Conditioning and Storage Machinery and their Accessories and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "24100000",
+"name": "Material handling machinery and equipment",
+"parent_code": "24000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "24101600",
+"name": "Lifting equipment and accessories",
+"parent_code": "24100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "24110000",
+"name": "Containers and storage",
+"parent_code": "24000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "24120000",
+"name": "Packaging materials",
+"parent_code": "24000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "24130000",
+"name": "Industrial refrigeration",
+"parent_code": "24000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "24131600",
+"name": "Industrial freezers",
+"parent_code": "24130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "24140000",
+"name": "Packing supplies",
+"parent_code": "24000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "24141600",
+"name": "Cushioning supplies",
+"parent_code": "24140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25000000",
+"name": "Commercial and Military and Private Vehicles and their Accessories and Components",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "25100000",
+"name": "Motor vehicles",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "25101600",
+"name": "Product and material transport vehicles",
+"parent_code": "25100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25110000",
+"name": "Marine transport",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "25111600",
+"name": "Safety and rescue water craft",
+"parent_code": "25110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25120000",
+"name": "Railway and tramway machinery and equipment",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "25130000",
+"name": "Aircraft",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "25131400",
+"name": "Safety and Rescue Aircraft",
+"parent_code": "25130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25131600",
+"name": "Civilian and commercial rotary wing aircraft",
+"parent_code": "25130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25150000",
+"name": "Spacecraft",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "25160000",
+"name": "Non motorized cycles",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "25170000",
+"name": "Transportation components and systems",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "25171600",
+"name": "Defrosting and defogging systems",
+"parent_code": "25170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25180000",
+"name": "Vehicle bodies and trailers",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "25181600",
+"name": "Automotive chassis",
+"parent_code": "25180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25190000",
+"name": "Transportation services equipment",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "25191600",
+"name": "Space transportation support systems and equipment",
+"parent_code": "25190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "25200000",
+"name": "Aerospace systems and components and equipment",
+"parent_code": "25000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "26000000",
+"name": "Power Generation and Distribution Machinery and Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "26100000",
+"name": "Power sources",
+"parent_code": "26000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "26101100",
+"name": "Electric alternating current AC motors",
+"parent_code": "26100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26101200",
+"name": "Electric direct current DC motors",
+"parent_code": "26100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26101300",
+"name": "Non electric motors",
+"parent_code": "26100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26101400",
+"name": "Motor or generator components",
+"parent_code": "26100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26110000",
+"name": "Batteries and generators and kinetic power transmission",
+"parent_code": "26000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "26111600",
+"name": "Power generators",
+"parent_code": "26110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26120000",
+"name": "Electrical wire and cable and harness",
+"parent_code": "26000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "26121600",
+"name": "Electrical cable and accessories",
+"parent_code": "26120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26130000",
+"name": "Power generation",
+"parent_code": "26000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "26131600",
+"name": "Exhaust structures or screening equipment",
+"parent_code": "26130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "26140000",
+"name": "Atomic and nuclear energy machinery and equipment",
+"parent_code": "26000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "26141600",
+"name": "Subcritical assembly equipment",
+"parent_code": "26140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "27000000",
+"name": "Tools and General Machinery",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "27110000",
+"name": "Hand tools",
+"parent_code": "27000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "27111600",
+"name": "Forming tools",
+"parent_code": "27110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "27120000",
+"name": "Hydraulic machinery and equipment",
+"parent_code": "27000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "27130000",
+"name": "Pneumatic machinery and equipment",
+"parent_code": "27000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "27140000",
+"name": "Automotive specialty tools",
+"parent_code": "27000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "27141000",
+"name": "Body tools",
+"parent_code": "27140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30000000",
+"name": "Structures and Building and Construction and Manufacturing Components and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "30100000",
+"name": "Structural components and basic shapes",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30101500",
+"name": "Angles",
+"parent_code": "30100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30110000",
+"name": "Concrete and cement and plaster",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30111600",
+"name": "Cement and lime",
+"parent_code": "30110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30120000",
+"name": "Roads and landscape",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30121600",
+"name": "Asphalts",
+"parent_code": "30120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30130000",
+"name": "Structural building products",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30131600",
+"name": "Bricks",
+"parent_code": "30130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30140000",
+"name": "Insulation",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "30150000",
+"name": "Exterior finishing materials",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30151600",
+"name": "Roofing accessories",
+"parent_code": "30150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30160000",
+"name": "Interior finishing materials",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30161600",
+"name": "Ceiling materials",
+"parent_code": "30160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30170000",
+"name": "Doors and windows and glass",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30171600",
+"name": "Windows",
+"parent_code": "30170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30180000",
+"name": "Plumbing fixtures",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30181600",
+"name": "Non sanitary residential fixtures",
+"parent_code": "30180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30190000",
+"name": "Construction and maintenance support equipment",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "30191600",
+"name": "Ladders and scaffolding accessories",
+"parent_code": "30190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "30240000",
+"name": "Portable Structure Building Components",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "30250000",
+"name": "Underground mining structures and materials",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "30260000",
+"name": "Structural materials",
+"parent_code": "30000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31000000",
+"name": "Manufacturing Components and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "31100000",
+"name": "Castings and casting assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31110000",
+"name": "Extrusions",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31130000",
+"name": "Forgings",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31140000",
+"name": "Moldings",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31150000",
+"name": "Rope and chain and cable and wire and strap",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "31151600",
+"name": "Chains",
+"parent_code": "31150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31160000",
+"name": "Hardware",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "31161500",
+"name": "Screws",
+"parent_code": "31160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31161600",
+"name": "Bolts",
+"parent_code": "31160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31170000",
+"name": "Bearings and bushings and wheels and gears",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "31171600",
+"name": "Bushings",
+"parent_code": "31170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31180000",
+"name": "Packings glands boots and covers",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31190000",
+"name": "Grinding and polishing and smoothing materials",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "31191600",
+"name": "Abrasive wheels",
+"parent_code": "31190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31200000",
+"name": "Adhesives and sealants",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "31201600",
+"name": "Adhesives",
+"parent_code": "31200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31210000",
+"name": "Paints and primers and finishes",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "31211600",
+"name": "Paint additives",
+"parent_code": "31210000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "31220000",
+"name": "Dyeing and tanning extracts",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31230000",
+"name": "Machined raw stock",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31240000",
+"name": "Industrial optics",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31250000",
+"name": "Pneumatic and hydraulic and electric control systems",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31260000",
+"name": "Housings and cabinets and casings",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31270000",
+"name": "Machine made parts",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31280000",
+"name": "Stampings and sheet components",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31290000",
+"name": "Machined extrusions",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31300000",
+"name": "Machined forgings",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31310000",
+"name": "Fabricated pipe assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31320000",
+"name": "Fabricated bar stock assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31330000",
+"name": "Fabricated structural assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31340000",
+"name": "Fabricated sheet assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31350000",
+"name": "Fabricated tube assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31360000",
+"name": "Fabricated plate assemblies",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31370000",
+"name": "Refractories",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31380000",
+"name": "Magnets and magnetic materials",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31390000",
+"name": "Machinings",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31400000",
+"name": "Gaskets",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31410000",
+"name": "Seals",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "31420000",
+"name": "Sintered parts",
+"parent_code": "31000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "32000000",
+"name": "Electronic Components and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "32100000",
+"name": "Printed circuits and integrated circuits and microassemblies",
+"parent_code": "32000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "32101600",
+"name": "Integrated circuits",
+"parent_code": "32100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "32110000",
+"name": "Discrete semiconductor devices",
+"parent_code": "32000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "32120000",
+"name": "Passive discrete components",
+"parent_code": "32000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "32130000",
+"name": "Electronic hardware and component parts and accessories",
+"parent_code": "32000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "32131000",
+"name": "Electronic component parts and raw materials and accessories",
+"parent_code": "32130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "32140000",
+"name": "Electron tube devices and accessories",
+"parent_code": "32000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "32150000",
+"name": "Automation control devices and components and accessories",
+"parent_code": "32000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "39000000",
+"name": "Electrical Systems and Lighting and Components and Accessories and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "39100000",
+"name": "Lamps and lightbulbs and lamp components",
+"parent_code": "39000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "39101600",
+"name": "Lamps and lightbulbs",
+"parent_code": "39100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39110000",
+"name": "Lighting Fixtures and Accessories",
+"parent_code": "39000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "39111600",
+"name": "Exterior lighting fixtures and accessories",
+"parent_code": "39110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39120000",
+"name": "Electrical equipment and components and supplies",
+"parent_code": "39000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "39121000",
+"name": "Power conditioning equipment",
+"parent_code": "39120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39121100",
+"name": "Distribution and control centers and accessories",
+"parent_code": "39120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39121300",
+"name": "Electrical boxes and enclosures and fittings and accessories",
+"parent_code": "39120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39121400",
+"name": "Electrical lugs plugs and connectors",
+"parent_code": "39120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39121600",
+"name": "Circuit protection devices and accessories",
+"parent_code": "39120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "39130000",
+"name": "Electrical wire management devices and accessories and supplies",
+"parent_code": "39000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "39131600",
+"name": "Wire protection devices",
+"parent_code": "39130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "40000000",
+"name": "Distribution and Conditioning Systems and Equipment and Components",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "40100000",
+"name": "Heating and ventilation and air circulation",
+"parent_code": "40000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "40101500",
+"name": "Ventilation",
+"parent_code": "40100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "40140000",
+"name": "Fluid and gas distribution",
+"parent_code": "40000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "40141600",
+"name": "Valves",
+"parent_code": "40140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "40150000",
+"name": "Industrial pumps and compressors",
+"parent_code": "40000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "40151600",
+"name": "Compressors",
+"parent_code": "40150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "40160000",
+"name": "Industrial filtering and purification",
+"parent_code": "40000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "40161600",
+"name": "Purification",
+"parent_code": "40160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "40170000",
+"name": "Pipe piping and pipe fittings",
+"parent_code": "40000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "40180000",
+"name": "Tubes tubing and tube fittings",
+"parent_code": "40000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "41000000",
+"name": "Laboratory and Measuring and Observing and Testing Equipment",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "41100000",
+"name": "Laboratory and scientific equipment",
+"parent_code": "41000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "41110000",
+"name": "Measuring and observing and testing instruments",
+"parent_code": "41000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "41111600",
+"name": "Length and thickness and distance measuring instruments",
+"parent_code": "41110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "41120000",
+"name": "Laboratory supplies and fixtures",
+"parent_code": "41000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "41121600",
+"name": "Pipette tips",
+"parent_code": "41120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "41150000",
+"name": "Clinical laboratory and toxicology testing systems, components, and supplies",
+"parent_code": "41000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "41151600",
+"name": "Clinical laboratory instruments",
+"parent_code": "41150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "41170000",
+"name": "Diagnostic and microbiological devices",
+"parent_code": "41000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "41171600",
+"name": "Microbiology devices",
+"parent_code": "41170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42000000",
+"name": "Medical Equipment and Accessories and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "42120000",
+"name": "Veterinary equipment and supplies",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42121600",
+"name": "Veterinary products",
+"parent_code": "42120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42130000",
+"name": "Medical apparel and textiles",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42131600",
+"name": "Medical staff clothing and related articles",
+"parent_code": "42130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42140000",
+"name": "Patient care and treatment products and supplies",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42141600",
+"name": "Basins and bedpans and urinals and admission kits",
+"parent_code": "42140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42150000",
+"name": "Dental equipment and supplies",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42151600",
+"name": "Dental and subspecialty instruments and devices",
+"parent_code": "42150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42160000",
+"name": "Dialysis equipment and supplies",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42161600",
+"name": "Extracorporeal hemodialysis equipment and supplies",
+"parent_code": "42160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42170000",
+"name": "Mobile medical services products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42171600",
+"name": "Mobile medical services extricating and immobilizing and transporting products",
+"parent_code": "42170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42180000",
+"name": "Patient exam and monitoring products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42181600",
+"name": "Blood pressure units and related products",
+"parent_code": "42180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42190000",
+"name": "Medical facility products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42191600",
+"name": "Medical facility building systems",
+"parent_code": "42190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42200000",
+"name": "Medical diagnostic imaging and nuclear medicine products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42201600",
+"name": "Medical magnetic resonance imaging MRI products",
+"parent_code": "42200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42210000",
+"name": "Independent living aids for the physically challenged",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "42211600",
+"name": "Bathroom and bathing aids for the physically challenged",
+"parent_code": "42210000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "42220000",
+"name": "Intravenous and arterial administration products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42230000",
+"name": "Clinical nutrition",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42240000",
+"name": "Orthopedic and prosthetic and sports medicine products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42250000",
+"name": "Physical and occupational therapy and rehabilitation products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42260000",
+"name": "Postmortem and mortuary equipment and supplies",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42270000",
+"name": "Respiratory and anesthesia and resuscitation products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42280000",
+"name": "Medical cleaning and sterilization products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42290000",
+"name": "Surgical products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42300000",
+"name": "Medical training and education supplies",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42310000",
+"name": "Wound care products",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "42320000",
+"name": "Orthopedic surgical implants",
+"parent_code": "42000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "43000000",
+"name": "Information Technology Broadcasting and Telecommunications",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "43190000",
+"name": "Communications Devices and Accessories",
+"parent_code": "43000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "43191600",
+"name": "Personal communications device accessories or parts",
+"parent_code": "43190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "43200000",
+"name": "Components for information technology or broadcasting or telecommunications",
+"parent_code": "43000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "43201400",
+"name": "System Cards",
+"parent_code": "43200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "43201600",
+"name": "Chassis components",
+"parent_code": "43200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "43210000",
+"name": "Computer Equipment and Accessories",
+"parent_code": "43000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "43220000",
+"name": "Data Voice or Multimedia Network Equipment or Platforms and Accessories",
+"parent_code": "43000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "43230000",
+"name": "Software",
+"parent_code": "43000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "44000000",
+"name": "Office Equipment and Accessories and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "44100000",
+"name": "Office machines and their supplies and accessories",
+"parent_code": "44000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "44101600",
+"name": "Paper processing machines and accessories",
+"parent_code": "44100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "44110000",
+"name": "Office and desk accessories",
+"parent_code": "44000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "44111600",
+"name": "Cash handling supplies",
+"parent_code": "44110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "44120000",
+"name": "Office supplies",
+"parent_code": "44000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "44121600",
+"name": "Desk supplies",
+"parent_code": "44120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "45000000",
+"name": "Printing and Photographic and Audio and Visual Equipment and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "45100000",
+"name": "Printing and publishing equipment",
+"parent_code": "45000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "45101600",
+"name": "Printing machinery accessories",
+"parent_code": "45100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "45110000",
+"name": "Audio and visual presentation and composing equipment",
+"parent_code": "45000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "45111400",
+"name": "Classroom And Language Laboratory Equipment & Interpretation Systems",
+"parent_code": "45110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "45111600",
+"name": "Projectors and supplies",
+"parent_code": "45110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "45120000",
+"name": "Photographic or filming or video equipment",
+"parent_code": "45000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "45121600",
+"name": "Camera accessories",
+"parent_code": "45120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "45130000",
+"name": "Photographic and recording media",
+"parent_code": "45000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "45131600",
+"name": "Moving picture media",
+"parent_code": "45130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "45140000",
+"name": "Photographic filmmaking supplies",
+"parent_code": "45000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "45141600",
+"name": "Darkroom supplies",
+"parent_code": "45140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46000000",
+"name": "Defense and Law Enforcement and Security and Safety Equipment and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "46100000",
+"name": "Light weapons and ammunition",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46101600",
+"name": "Ammunition",
+"parent_code": "46100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46110000",
+"name": "Conventional war weapons",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "46120000",
+"name": "Missiles",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "46130000",
+"name": "Rockets and subsystems",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "46140000",
+"name": "Launchers",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "46150000",
+"name": "Law enforcement",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46151600",
+"name": "Security and control equipment",
+"parent_code": "46150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46160000",
+"name": "Public safety and control",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46161600",
+"name": "Water safety",
+"parent_code": "46160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46170000",
+"name": "Security surveillance and detection",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46171600",
+"name": "Surveillance and detection equipment",
+"parent_code": "46170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46180000",
+"name": "Personal safety and protection",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46181600",
+"name": "Safety footwear",
+"parent_code": "46180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46190000",
+"name": "Fire protection",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46191600",
+"name": "Fire fighting equipment",
+"parent_code": "46190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46200000",
+"name": "Defense and law enforcement and security and safety training equipment",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "46201000",
+"name": "Public safety training equipment",
+"parent_code": "46200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46201100",
+"name": "Small arms weapons training equipment",
+"parent_code": "46200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "46210000",
+"name": "Workplace safety equipment and supplies and training materials",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "46220000",
+"name": "Military weapon and ammunition disarmament and disposal equipment and related products",
+"parent_code": "46000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "47000000",
+"name": "Cleaning Equipment and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "47100000",
+"name": "Water and wastewater treatment supply and disposal",
+"parent_code": "47000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "47101600",
+"name": "Water treatment consumables",
+"parent_code": "47100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "47110000",
+"name": "Industrial laundry and dry cleaning equipment",
+"parent_code": "47000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "47111600",
+"name": "Ironing equipment",
+"parent_code": "47110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "47120000",
+"name": "Janitorial equipment",
+"parent_code": "47000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "47121600",
+"name": "Floor machines and accessories",
+"parent_code": "47120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "47130000",
+"name": "Cleaning and janitorial supplies",
+"parent_code": "47000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "47131600",
+"name": "Brooms and mops and brushes and accessories",
+"parent_code": "47130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "48000000",
+"name": "Service Industry Machinery and Equipment and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "48100000",
+"name": "Institutional food services equipment",
+"parent_code": "48000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "48101600",
+"name": "Food preparation equipment",
+"parent_code": "48100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "48110000",
+"name": "Vending machines",
+"parent_code": "48000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "48120000",
+"name": "Gambling or wagering equipment",
+"parent_code": "48000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "48130000",
+"name": "Funeral equipment and materials",
+"parent_code": "48000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49000000",
+"name": "Sports and Recreational Equipment and Supplies and Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "49100000",
+"name": "Collectibles and awards",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "49101600",
+"name": "Collectibles",
+"parent_code": "49100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "49120000",
+"name": "Camping and outdoor equipment and accessories",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "49121600",
+"name": "Camping furniture",
+"parent_code": "49120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "49130000",
+"name": "Fishing and hunting equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49140000",
+"name": "Watersports equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49150000",
+"name": "Winter sports equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49160000",
+"name": "Field and court sports equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "49161600",
+"name": "Racquet and court sports equipment",
+"parent_code": "49160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "49170000",
+"name": "Gymnastics and boxing equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "49171600",
+"name": "Boxing equipment",
+"parent_code": "49170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "49180000",
+"name": "Target and table games and equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49200000",
+"name": "Fitness equipment",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "49201600",
+"name": "Weight and resistance training equipment",
+"parent_code": "49200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "49210000",
+"name": "Other sports",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49220000",
+"name": "Sports equipment and accessories",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "49240000",
+"name": "Recreation and playground and swimming and spa equipment and supplies",
+"parent_code": "49000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50000000",
+"name": "Food Beverage and Tobacco Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "50100000",
+"name": "Nuts and seeds",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50110000",
+"name": "Meat and poultry products",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50120000",
+"name": "Seafood",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50130000",
+"name": "Dairy products and eggs",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "50131600",
+"name": "Eggs and egg substitutes",
+"parent_code": "50130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "50150000",
+"name": "Edible oils and fats",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "50151600",
+"name": "Edible animal oils and fats",
+"parent_code": "50150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "50160000",
+"name": "Chocolate and sugars and sweeteners and confectionary products",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50170000",
+"name": "Seasonings and preservatives",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50180000",
+"name": "Bread and bakery products",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50190000",
+"name": "Prepared and preserved foods",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50200000",
+"name": "Beverages",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50210000",
+"name": "Tobacco and smoking products and substitutes",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50220000",
+"name": "Cereal and pulse products",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "50221000",
+"name": "Pulses",
+"parent_code": "50220000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "50221100",
+"name": "Cereals",
+"parent_code": "50220000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "50221300",
+"name": "Flour and milled products",
+"parent_code": "50220000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "50300000",
+"name": "Fresh fruits",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50310000",
+"name": "Organic fresh fruits",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50320000",
+"name": "Dried fruit",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50330000",
+"name": "Dried organic fruit",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50340000",
+"name": "Frozen fruit",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50360000",
+"name": "Canned or jarred fruit",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50370000",
+"name": "Canned or jarred organic fruit",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50380000",
+"name": "Fresh fruit purees",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50400000",
+"name": "Fresh vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50410000",
+"name": "Organic fresh vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50420000",
+"name": "Dried vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50430000",
+"name": "Dried organic vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50440000",
+"name": "Frozen vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50450000",
+"name": "Frozen organic vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50460000",
+"name": "Canned or jarred vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50470000",
+"name": "Canned or jarred organic vegetables",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "50500000",
+"name": "Nutritional supplements",
+"parent_code": "50000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51000000",
+"name": "Drugs and Pharmaceutical Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "51100000",
+"name": "Amebicides and trichomonacides and antiprotozoals",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51101600",
+"name": "Amebicides and Trichomonacides and Antiprotozoals",
+"parent_code": "51100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51110000",
+"name": "Antineoplastic agents",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51111600",
+"name": "Antimetabolites",
+"parent_code": "51110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51120000",
+"name": "Antiarrythmics and antianginals and cardioplegics and drugs for heart failure",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51130000",
+"name": "Hematolic drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51131600",
+"name": "Anticoagulants",
+"parent_code": "51130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51140000",
+"name": "Central nervous system drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51150000",
+"name": "Autonomic nervous system drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51151600",
+"name": "Cholinergic blocking agents",
+"parent_code": "51150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51160000",
+"name": "Drugs affecting the respiratory tract",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51170000",
+"name": "Drugs affecting the gastrointestinal system",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51171600",
+"name": "Laxatives",
+"parent_code": "51170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51180000",
+"name": "Hormones and hormone antagonists",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51181600",
+"name": "Thyroid and antithyroid drugs",
+"parent_code": "51180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51190000",
+"name": "Agents affecting water and electrolytes",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51191600",
+"name": "Electrolytes",
+"parent_code": "51190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51200000",
+"name": "Immunomodulating drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51201600",
+"name": "Vaccines and antigens and toxoids",
+"parent_code": "51200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51240000",
+"name": "Drugs affecting the ears, eye, nose and skin",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "51241100",
+"name": "Ophthalmic agents",
+"parent_code": "51240000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51241200",
+"name": "Dermatologic agents",
+"parent_code": "51240000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "51260000",
+"name": "Adrenergic blocking agents",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51270000",
+"name": "Anaesthetic drugs and related adjuncts and analeptics",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51280000",
+"name": "Antibacterials",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51290000",
+"name": "Antidepressants",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51300000",
+"name": "Antifungal drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51310000",
+"name": "Antihistamines or H1 blockers",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51320000",
+"name": "Antihyperlipidemic and hypocholesterolemic agents",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51330000",
+"name": "Antipsychotics",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51340000",
+"name": "Antiviral drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51350000",
+"name": "Estrogens and progestins and internal contraceptives",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51360000",
+"name": "Hypnotics",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51370000",
+"name": "Controlled substance analgesics",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51380000",
+"name": "Nonsteroidal anti inflammatory drugs NSAIDs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51390000",
+"name": "Sympathomimetic or adrenergic drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51400000",
+"name": "Tranquilizers and antimanic and antianxiety drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51410000",
+"name": "Vasodilators",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51420000",
+"name": "Corticosteroids",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51430000",
+"name": "Antihypertensive drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51440000",
+"name": "Radiopharmaceuticals and contrast media",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51450000",
+"name": "Anthelmintics",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51460000",
+"name": "Herbal drugs",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "51470000",
+"name": "Antiseptics",
+"parent_code": "51000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "52000000",
+"name": "Domestic Appliances and Supplies and Consumer Electronic Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "52100000",
+"name": "Floor coverings",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "52120000",
+"name": "Bedclothes and table and kitchen linen and towels",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "52121600",
+"name": "Table and kitchen linen and accessories",
+"parent_code": "52120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "52130000",
+"name": "Window treatments",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "52131600",
+"name": "Blinds and shades",
+"parent_code": "52130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "52140000",
+"name": "Domestic appliances",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "52141600",
+"name": "Domestic laundry appliances and supplies",
+"parent_code": "52140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "52150000",
+"name": "Domestic kitchenware and kitchen supplies",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "52151600",
+"name": "Domestic kitchen tools and utensils",
+"parent_code": "52150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "52160000",
+"name": "Consumer electronics",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "52161600",
+"name": "Audio visual equipment accessories",
+"parent_code": "52160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "52170000",
+"name": "Domestic wall treatments",
+"parent_code": "52000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "53000000",
+"name": "Apparel and Luggage and Personal Care Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "53100000",
+"name": "Clothing",
+"parent_code": "53000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "53101600",
+"name": "Shirts and blouses",
+"parent_code": "53100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "53110000",
+"name": "Footwear",
+"parent_code": "53000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "53111600",
+"name": "Shoes",
+"parent_code": "53110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "53120000",
+"name": "Luggage and handbags and packs and cases",
+"parent_code": "53000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "53121600",
+"name": "Purses and handbags and bags",
+"parent_code": "53120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "53130000",
+"name": "Personal care products",
+"parent_code": "53000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "53131600",
+"name": "Bath and body",
+"parent_code": "53130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "53140000",
+"name": "Sewing supplies and accessories",
+"parent_code": "53000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "53141600",
+"name": "Miscellaneous sewing supplies",
+"parent_code": "53140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "54000000",
+"name": "Timepieces and Jewelry and Gemstone Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "54100000",
+"name": "Jewelry",
+"parent_code": "54000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "54110000",
+"name": "Timepieces",
+"parent_code": "54000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "54111600",
+"name": "Clocks",
+"parent_code": "54110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "54120000",
+"name": "Gemstones",
+"parent_code": "54000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "55000000",
+"name": "Published Products",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "55100000",
+"name": "Printed media",
+"parent_code": "55000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "55110000",
+"name": "Electronic reference material",
+"parent_code": "55000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "55120000",
+"name": "Signage and accessories",
+"parent_code": "55000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "55121600",
+"name": "Labels",
+"parent_code": "55120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "56000000",
+"name": "Furniture and Furnishings",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "56100000",
+"name": "Accommodation furniture",
+"parent_code": "56000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "56101600",
+"name": "Outdoor furniture",
+"parent_code": "56100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "56110000",
+"name": "Commercial and industrial furniture",
+"parent_code": "56000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "56111600",
+"name": "Panel systems",
+"parent_code": "56110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "56120000",
+"name": "Classroom and instructional and institutional furniture and fixtures",
+"parent_code": "56000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "56121000",
+"name": "Library furnishings",
+"parent_code": "56120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "56121400",
+"name": "Cafeteria and lunchroom furnishings",
+"parent_code": "56120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "56130000",
+"name": "Merchandising furniture and accessories",
+"parent_code": "56000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "56140000",
+"name": "Decorative adornments",
+"parent_code": "56000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "57000000",
+"name": "Humanitarian Relief Items, Kits, or Accessories",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "57010000",
+"name": "Survival supplies",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57010100",
+"name": "Rapid response kits",
+"parent_code": "57010000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57020000",
+"name": "Services related to humanitarian relief actions",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57020100",
+"name": "Humanitarian operational services",
+"parent_code": "57020000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57030000",
+"name": "Humanitarian health supplies",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57030100",
+"name": "Health emergency kits",
+"parent_code": "57030000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57030200",
+"name": "Emergency latrine facility",
+"parent_code": "57030000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57030300",
+"name": "Water, sanitation and hygiene kits",
+"parent_code": "57030000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57030400",
+"name": "Personal protective equipment",
+"parent_code": "57030000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57040000",
+"name": "Educational or recreational items",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57040100",
+"name": "Educational kits",
+"parent_code": "57040000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57040200",
+"name": "Recreational kits",
+"parent_code": "57040000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57040300",
+"name": "Early childhood development",
+"parent_code": "57040000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57050000",
+"name": "Humanitarian relief food",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57050100",
+"name": "Emergency nutritional kits",
+"parent_code": "57050000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57050200",
+"name": "Food emergency rations",
+"parent_code": "57050000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57050300",
+"name": "Food emergency kits",
+"parent_code": "57050000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57060000",
+"name": "Shelter and relief items",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57060100",
+"name": "Emergency clothing kits",
+"parent_code": "57060000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57060200",
+"name": "Shelter emergency kits",
+"parent_code": "57060000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57060300",
+"name": "Office emergency kits",
+"parent_code": "57060000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57060400",
+"name": "Multipurpose emergency kits",
+"parent_code": "57060000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57070000",
+"name": "Humanitarian logistics supplies",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57070100",
+"name": "Logistics emergency kits",
+"parent_code": "57070000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57080000",
+"name": "Humanitarian IT equipment",
+"parent_code": "57000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "57080100",
+"name": "Emergency IT equipment kits",
+"parent_code": "57080000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "57111100",
+"name": "Rapid response kits",
+"parent_code": "57000000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60000000",
+"name": "Musical Instruments and Games and Toys and Arts and Crafts and Educational Equipment and Materials and Accessories and Supplies",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "60100000",
+"name": "Developmental and professional teaching aids and materials and accessories and supplies",
+"parent_code": "60000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "60110000",
+"name": "Classroom decoratives and supplies",
+"parent_code": "60000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "60120000",
+"name": "Arts and crafts equipment and accessories and supplies",
+"parent_code": "60000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "60121300",
+"name": "Art and craft cutting products",
+"parent_code": "60120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60121600",
+"name": "Studio aids",
+"parent_code": "60120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60130000",
+"name": "Musical Instruments and parts and accessories",
+"parent_code": "60000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "60131000",
+"name": "Keyboard instruments",
+"parent_code": "60130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60131100",
+"name": "Brass instruments",
+"parent_code": "60130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60131200",
+"name": "Woodwind instruments",
+"parent_code": "60130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60131300",
+"name": "String instruments",
+"parent_code": "60130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60131400",
+"name": "Percussion instruments",
+"parent_code": "60130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60131600",
+"name": "Musical instrument sets",
+"parent_code": "60130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60140000",
+"name": "Toys and games",
+"parent_code": "60000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "60141000",
+"name": "Toys",
+"parent_code": "60140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "60141100",
+"name": "Games",
+"parent_code": "60140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "64000000",
+"name": "Financial Instruments, Products, Contracts and Agreements",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "64100000",
+"name": "Bank offered products",
+"parent_code": "64000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "64110000",
+"name": "Securities",
+"parent_code": "64000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "64120000",
+"name": "Insurable interest contracts",
+"parent_code": "64000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "64140000",
+"name": "Governmental property right conferrals",
+"parent_code": "64000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "70000000",
+"name": "Farming and Fishing and Forestry and Wildlife Contracting Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "70100000",
+"name": "Fisheries and aquaculture",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70101500",
+"name": "Fisheries operations",
+"parent_code": "70100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70110000",
+"name": "Horticulture",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70111600",
+"name": "Flowering plants",
+"parent_code": "70110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70120000",
+"name": "Livestock services",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70121600",
+"name": "Livestock industry",
+"parent_code": "70120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70130000",
+"name": "Land and soil preparation and management and protection",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70131600",
+"name": "Land and soil preparation",
+"parent_code": "70130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70140000",
+"name": "Crop production and management and protection",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70141600",
+"name": "Crop protection",
+"parent_code": "70140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70150000",
+"name": "Forestry",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70151600",
+"name": "Forestry industry",
+"parent_code": "70150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70160000",
+"name": "Wildlife and flora",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70161600",
+"name": "Flora",
+"parent_code": "70160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70170000",
+"name": "Water resources development and oversight",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70171600",
+"name": "Water quality management services",
+"parent_code": "70170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "70190000",
+"name": "Agricultural machinery and equipment assembly and installation services",
+"parent_code": "70000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "70190100",
+"name": "Training services for users of agricultural machinery and equipment",
+"parent_code": "70190000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "71000000",
+"name": "Mining and oil and gas services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "71100000",
+"name": "Mining services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "71110000",
+"name": "Oil and gas exploration services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "71120000",
+"name": "Well drilling and construction services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "71130000",
+"name": "Oil and gas extraction and production enhancement services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "71140000",
+"name": "Oil and gas restoration and reclamation services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "71141100",
+"name": "Well plugging and abandonment services",
+"parent_code": "71140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "71150000",
+"name": "Oil and gas data management and processing services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "71151100",
+"name": "Oilfield data management services",
+"parent_code": "71150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "71160000",
+"name": "Oil and gas well project management services",
+"parent_code": "71000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "71161000",
+"name": "Oilfield modeling services",
+"parent_code": "71160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "71161600",
+"name": "Other oilfield support services",
+"parent_code": "71160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72000000",
+"name": "Building and Facility Construction and Maintenance Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "72100000",
+"name": "Building and facility maintenance and repair services",
+"parent_code": "72000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "72110000",
+"name": "Residential building construction services",
+"parent_code": "72000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "72111000",
+"name": "Single family dwelling construction services",
+"parent_code": "72110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72111100",
+"name": "Multiple unit dwelling construction services",
+"parent_code": "72110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72120000",
+"name": "Nonresidential building construction services",
+"parent_code": "72000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "72121000",
+"name": "New industrial building and warehouse construction services",
+"parent_code": "72120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72121100",
+"name": "Commercial and office building construction services",
+"parent_code": "72120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72121200",
+"name": "Agricultural building construction services",
+"parent_code": "72120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72121300",
+"name": "Automotive garage and service station construction services",
+"parent_code": "72120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72121400",
+"name": "Specialized public building construction services",
+"parent_code": "72120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72140000",
+"name": "Heavy construction services",
+"parent_code": "72000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "72141000",
+"name": "Highway and road construction services",
+"parent_code": "72140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72141100",
+"name": "Infrastructure building and surfacing and paving services",
+"parent_code": "72140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72141200",
+"name": "Marine construction services",
+"parent_code": "72140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72141400",
+"name": "Detention facility construction and repair services",
+"parent_code": "72140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72141600",
+"name": "Mass transit system construction services",
+"parent_code": "72140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72150000",
+"name": "Specialized trade construction and maintenance services",
+"parent_code": "72000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "72151000",
+"name": "Boiler and furnace construction and maintenance services",
+"parent_code": "72150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72151100",
+"name": "Plumbing construction services",
+"parent_code": "72150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72151200",
+"name": "Heating and cooling and air conditioning HVAC construction and maintenance services",
+"parent_code": "72150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72151300",
+"name": "Painting and paper hanging services",
+"parent_code": "72150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72151400",
+"name": "Wall covering construction services",
+"parent_code": "72150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "72151600",
+"name": "Specialized communication system services",
+"parent_code": "72150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73000000",
+"name": "Industrial Production and Manufacturing Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "73100000",
+"name": "Plastic and chemical industries",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73101600",
+"name": "Chemicals and fertilizers production",
+"parent_code": "73100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73110000",
+"name": "Wood and paper industries",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "73120000",
+"name": "Metal and mineral industries",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "73130000",
+"name": "Food and beverage industries",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73131600",
+"name": "Meat and poultry and seafood processing",
+"parent_code": "73130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73140000",
+"name": "Fibers and textiles and fabric industries",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73141600",
+"name": "Thread and yarn processing",
+"parent_code": "73140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73150000",
+"name": "Manufacturing support services",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73151600",
+"name": "Packaging services",
+"parent_code": "73150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73160000",
+"name": "Machinery and transport equipment manufacture",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73161600",
+"name": "Manufacture of transport equipment",
+"parent_code": "73160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73170000",
+"name": "Manufacture of electrical goods and precision instruments",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73171600",
+"name": "Manufacture of precision instruments",
+"parent_code": "73170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "73180000",
+"name": "Machining and processing services",
+"parent_code": "73000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "73181100",
+"name": "Coating services",
+"parent_code": "73180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "76000000",
+"name": "Industrial Cleaning Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "76100000",
+"name": "Decontamination services",
+"parent_code": "76000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "76101600",
+"name": "Hazardous material decontamination",
+"parent_code": "76100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "76110000",
+"name": "Cleaning and janitorial services",
+"parent_code": "76000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "76111600",
+"name": "Building component cleaning services",
+"parent_code": "76110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "76120000",
+"name": "Refuse disposal and treatment",
+"parent_code": "76000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "76121600",
+"name": "Nonhazardous waste disposal",
+"parent_code": "76120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "76130000",
+"name": "Toxic and hazardous waste cleanup",
+"parent_code": "76000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "76131600",
+"name": "Toxic spill cleanup",
+"parent_code": "76130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "77000000",
+"name": "Environmental Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "77100000",
+"name": "Environmental management",
+"parent_code": "77000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "77101600",
+"name": "Environmental planning",
+"parent_code": "77100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "77110000",
+"name": "Environmental protection",
+"parent_code": "77000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "77111600",
+"name": "Environmental rehabilitation",
+"parent_code": "77110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "77120000",
+"name": "Pollution tracking and monitoring and rehabilitation",
+"parent_code": "77000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "77121600",
+"name": "Soil pollution",
+"parent_code": "77120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "77130000",
+"name": "Pollutants tracking and monitoring and rehabilitation services",
+"parent_code": "77000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "77131600",
+"name": "Noise pollution",
+"parent_code": "77130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "77140000",
+"name": "Environmental laboratory services",
+"parent_code": "77000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "78000000",
+"name": "Transportation and Storage and Mail Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "78100000",
+"name": "Mail and cargo transport",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78101600",
+"name": "Rail cargo transport",
+"parent_code": "78100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "78110000",
+"name": "Passenger transport",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78111600",
+"name": "Passenger railway transportation",
+"parent_code": "78110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "78120000",
+"name": "Material packing and handling",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78121600",
+"name": "Material handling services",
+"parent_code": "78120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "78130000",
+"name": "Storage",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78131600",
+"name": "General goods storage",
+"parent_code": "78130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "78140000",
+"name": "Transport services",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78141600",
+"name": "Inspection",
+"parent_code": "78140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "78180000",
+"name": "Transportation repair or maintenance services",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78181600",
+"name": "Panel and paint services",
+"parent_code": "78180000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "78200000",
+"name": "Aviation-Related Services And Consultancy",
+"parent_code": "78000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "78201000",
+"name": "Airport Maintenance",
+"parent_code": "78200000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80000000",
+"name": "Management and Business Professionals and Administrative Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "80100000",
+"name": "Management advisory services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80101500",
+"name": "Business and corporate management consultation services",
+"parent_code": "80100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80110000",
+"name": "Human resources services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80111600",
+"name": "Temporary personnel services",
+"parent_code": "80110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80120000",
+"name": "Legal services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80121600",
+"name": "Business law services",
+"parent_code": "80120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80130000",
+"name": "Real estate services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80131600",
+"name": "Sale of property and building",
+"parent_code": "80130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80140000",
+"name": "Marketing and distribution",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80141400",
+"name": "Fundraising Services",
+"parent_code": "80140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80141600",
+"name": "Sales and business promotion activities",
+"parent_code": "80140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80150000",
+"name": "Trade policy and services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80151600",
+"name": "International trade services",
+"parent_code": "80150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80160000",
+"name": "Business administration services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80161500",
+"name": "Management support services",
+"parent_code": "80160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80161600",
+"name": "Business facilities oversight",
+"parent_code": "80160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "80170000",
+"name": "Public relations and professional communications services",
+"parent_code": "80000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "80171600",
+"name": "Publicity and marketing support services",
+"parent_code": "80170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81000000",
+"name": "Engineering and Research and Technology Based Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "81100000",
+"name": "Professional engineering services",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81101600",
+"name": "Mechanical engineering",
+"parent_code": "81100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81110000",
+"name": "Computer services",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81111600",
+"name": "Computer programmers",
+"parent_code": "81110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81120000",
+"name": "Economics",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81121600",
+"name": "Monetary systems and issues",
+"parent_code": "81120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81130000",
+"name": "Statistics",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "81140000",
+"name": "Manufacturing technologies",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81141600",
+"name": "Supply chain management",
+"parent_code": "81140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81150000",
+"name": "Earth science services",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81151600",
+"name": "Cartography",
+"parent_code": "81150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81160000",
+"name": "Information Technology Service Delivery",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81161600",
+"name": "Electronic mail and messaging services",
+"parent_code": "81160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "81170000",
+"name": "Biological science services",
+"parent_code": "81000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "81171600",
+"name": "Ecological science services",
+"parent_code": "81170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82000000",
+"name": "Editorial and Design and Graphic and Fine Art Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "82100000",
+"name": "Advertising",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "82101600",
+"name": "Broadcast advertising",
+"parent_code": "82100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82110000",
+"name": "Writing and translations",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "82111400",
+"name": "Language Specific Editorial and Writing Services",
+"parent_code": "82110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82111600",
+"name": "Non technical writing",
+"parent_code": "82110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82120000",
+"name": "Reproduction services",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "82121600",
+"name": "Engraving",
+"parent_code": "82120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82130000",
+"name": "Photographic services",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "82131600",
+"name": "Photographers and cinematographers",
+"parent_code": "82130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82140000",
+"name": "Graphic design",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "82141600",
+"name": "Graphic display services",
+"parent_code": "82140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "82150000",
+"name": "Professional artists and performers",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "82160000",
+"name": "Film and theater production support services",
+"parent_code": "82000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "83000000",
+"name": "Public Utilities and Public Sector Related Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "83100000",
+"name": "Utilities",
+"parent_code": "83000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "83101600",
+"name": "Oil and gas utilities",
+"parent_code": "83100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "83110000",
+"name": "Telecommunications media services",
+"parent_code": "83000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "83111600",
+"name": "Mobile communications services",
+"parent_code": "83110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "83120000",
+"name": "Information services",
+"parent_code": "83000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "83121600",
+"name": "Information centers",
+"parent_code": "83120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "84000000",
+"name": "Financial and Insurance Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "84100000",
+"name": "Development finance",
+"parent_code": "84000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "84101600",
+"name": "Aid financing",
+"parent_code": "84100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "84110000",
+"name": "Accounting and bookkeeping services",
+"parent_code": "84000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "84111600",
+"name": "Audit services",
+"parent_code": "84110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "84120000",
+"name": "Banking and investment",
+"parent_code": "84000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "84121600",
+"name": "Funds transfer and clearance and exchange services",
+"parent_code": "84120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "84130000",
+"name": "Insurance and retirement services",
+"parent_code": "84000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "84131600",
+"name": "Life and health and accident insurance",
+"parent_code": "84130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "84140000",
+"name": "Credit agencies",
+"parent_code": "84000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "84141600",
+"name": "Personal credit agencies",
+"parent_code": "84140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85000000",
+"name": "Healthcare Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "85100000",
+"name": "Comprehensive health services",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85101600",
+"name": "Healthcare provider support persons",
+"parent_code": "85100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85110000",
+"name": "Disease prevention and control",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85111600",
+"name": "Non contagious disease prevention and control",
+"parent_code": "85110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85120000",
+"name": "Medical practice",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85121600",
+"name": "Medical doctor specialist services",
+"parent_code": "85120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85130000",
+"name": "Medical science research and experimentation",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85131600",
+"name": "Medical ethics",
+"parent_code": "85130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85140000",
+"name": "Alternative and holistic medicine",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85141600",
+"name": "Herbal treatments",
+"parent_code": "85140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85150000",
+"name": "Food and nutrition services",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85151600",
+"name": "Nutrition issues",
+"parent_code": "85150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85160000",
+"name": "Medical Surgical Equipment Maintenance Refurbishment and Repair Services",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "85170000",
+"name": "Death and dying support services",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "85171600",
+"name": "Hospice care",
+"parent_code": "85170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "85210000",
+"name": "Diagnoses of infectious and parasitic diseases-part a",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "85260000",
+"name": "Diagnoses of endocrine, nutritional and metabolic diseases",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "85270000",
+"name": "Diagnoses of mental and behavioral disorders",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "85380000",
+"name": "Diagnoses of certain conditions originating in the perinatal period",
+"parent_code": "85000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "86000000",
+"name": "Education and Training Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "86100000",
+"name": "Vocational training",
+"parent_code": "86000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "86101400",
+"name": "Aviation Specific Training",
+"parent_code": "86100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "86101600",
+"name": "Scientific vocational training services",
+"parent_code": "86100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "86110000",
+"name": "Alternative educational systems",
+"parent_code": "86000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "86111600",
+"name": "Adult education",
+"parent_code": "86110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "86120000",
+"name": "Educational institutions",
+"parent_code": "86000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "86121600",
+"name": "Junior colleges",
+"parent_code": "86120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "86130000",
+"name": "Specialized educational services",
+"parent_code": "86000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "86131600",
+"name": "Music and drama",
+"parent_code": "86130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "86140000",
+"name": "Educational facilities",
+"parent_code": "86000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "86141600",
+"name": "Students organizations",
+"parent_code": "86140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "90000000",
+"name": "Travel and Food and Lodging and Entertainment Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "90100000",
+"name": "Restaurants and catering",
+"parent_code": "90000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "90110000",
+"name": "Hotels and lodging and meeting facilities",
+"parent_code": "90000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "90111600",
+"name": "Meeting facilities",
+"parent_code": "90110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "90120000",
+"name": "Travel facilitation",
+"parent_code": "90000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "90121600",
+"name": "Travel document assistance",
+"parent_code": "90120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "90130000",
+"name": "Performing arts",
+"parent_code": "90000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "90140000",
+"name": "Commercial sports",
+"parent_code": "90000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "90150000",
+"name": "Entertainment services",
+"parent_code": "90000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "91000000",
+"name": "Personal and Domestic Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "91100000",
+"name": "Personal appearance",
+"parent_code": "91000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "91110000",
+"name": "Domestic and personal assistance",
+"parent_code": "91000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "91111600",
+"name": "Household assistance and care",
+"parent_code": "91110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "92000000",
+"name": "National Defense and Public Order and Security and Safety Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "92100000",
+"name": "Public order and safety",
+"parent_code": "92000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "92101600",
+"name": "Fire services",
+"parent_code": "92100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "92110000",
+"name": "Military services and national defense",
+"parent_code": "92000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "92111600",
+"name": "Disarmament",
+"parent_code": "92110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "92120000",
+"name": "Security and personal safety",
+"parent_code": "92000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "92121600",
+"name": "Detective services",
+"parent_code": "92120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93000000",
+"name": "Politics and Civic Affairs Services",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "93100000",
+"name": "Political systems and institutions",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93101600",
+"name": "Political officials",
+"parent_code": "93100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93110000",
+"name": "Socio political conditions",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93111600",
+"name": "Political representation and participation",
+"parent_code": "93110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93120000",
+"name": "International relations",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93121600",
+"name": "International relations and cooperation",
+"parent_code": "93120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93130000",
+"name": "Humanitarian aid and relief",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93131600",
+"name": "Food and nutrition policy planning and programs",
+"parent_code": "93130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93140000",
+"name": "Community and social services",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93141600",
+"name": "Population",
+"parent_code": "93140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93150000",
+"name": "Public administration and finance services",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93151600",
+"name": "Public finance",
+"parent_code": "93150000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93160000",
+"name": "Taxation",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93161600",
+"name": "Taxes other than income tax",
+"parent_code": "93160000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "93170000",
+"name": "Trade policy and regulation",
+"parent_code": "93000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "93171600",
+"name": "International trade",
+"parent_code": "93170000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "94000000",
+"name": "Organizations and Clubs",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "94100000",
+"name": "Work related organizations",
+"parent_code": "94000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "94110000",
+"name": "Religious organizations",
+"parent_code": "94000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "94120000",
+"name": "Clubs",
+"parent_code": "94000000",
+"level": 2,
+"is_leaf": true
+},
+{
+"code": "94130000",
+"name": "Civic organizations and associations and movements",
+"parent_code": "94000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "94131600",
+"name": "Charity organizations",
+"parent_code": "94130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "95000000",
+"name": "Land and Buildings and Structures and Thoroughfares",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "95100000",
+"name": "Land parcels",
+"parent_code": "95000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "95101600",
+"name": "Commercial land parcels",
+"parent_code": "95100000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "95110000",
+"name": "Thoroughfares",
+"parent_code": "95000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "95111600",
+"name": "Open traffic thoroughfares",
+"parent_code": "95110000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "95120000",
+"name": "Permanent buildings and structures",
+"parent_code": "95000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "95121600",
+"name": "Transport buildings and structures",
+"parent_code": "95120000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "95130000",
+"name": "Portable buildings and structures",
+"parent_code": "95000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "95131600",
+"name": "Portable commercial and industrial buildings and structures",
+"parent_code": "95130000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "95140000",
+"name": "Prefabricated buildings and structures",
+"parent_code": "95000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "95141600",
+"name": "Prefabricated residential buildings and structures",
+"parent_code": "95140000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "99000000",
+"name": "VAT Act",
+"parent_code": null,
+"level": 1,
+"is_leaf": false
+},
+{
+"code": "99010000",
+"name": "Goods",
+"parent_code": "99000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "99011000",
+"name": "Exempt Goods (Paragraph 1 - 99)",
+"parent_code": "99010000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99011001",
+"name": "Bovine Semen of tariff number 05111000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011002",
+"name": "Fish eggs and roes of tariff number 0511990110",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011003",
+"name": "Animal semen other than of bovine of tariff number 0511999010",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011004",
+"name": "Soya beans whether or not broken of tariff numbers 12011000 and 12019000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011005",
+"name": "Groundnuts not roasted or otherwise cooked In shell of tariff number 12024100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011006",
+"name": "Groundnuts not roasted or otherwise cooked Shelled whether or not broken of tariff number 12024200",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011007",
+"name": "Copra of tariff number 12030000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011008",
+"name": "Linseed whether or not broken of tariff number 12040000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011009",
+"name": "Low erucic acid rape or colza seed of tariff number 12051000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011010",
+"name": "Other rape or colza seed of tariff number 12059000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011011",
+"name": "Sunflower seeds whether or not broken of tariff number 12060000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011012",
+"name": "Cotton seeds whether or not broken Seed of tariff numbers 12072100 and 12072900",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011013",
+"name": "Sesamum seeds whether or not broken of tariff number 12074000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011014",
+"name": "Mustard seeds whether or not broken of tariff number 12075000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011015",
+"name": "Safflower seeds whether or not broken 12076000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011016",
+"name": "Other oil seeds and oleaginous fruits whether or not broken of tariff number 12079900",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011017",
+"name": "Sugarcane of tariff number 1212990300;Sugarcane of tariff number 1212990300;Unprocessed produce of plant species camellia sinensis",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011018",
+"name": "Live animals of chapter 1",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011019",
+"name": "Meat and edible offals of chapter 2 excluding those of heading 0209 and 0210",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011020",
+"name": "Fish and crustaceans molluscs and other aquatic invertebrates of chapter 3 excluding those of tariff heading 0305 0306 and 0307",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011021",
+"name": "Unprocessed milk",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011022",
+"name": "Fresh birds eggs in shell",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011023",
+"name": "Edible Vegetables and certain roots and tubers of Chapter 7 excluding those of tariff heading 0711",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011024",
+"name": "Edible fruits and nuts peal of citrus fruits or melon of chapter 8 excluding those of tariff heading 0811 0812 0813 and 0814",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011025",
+"name": "Cereals of chapter 10 excluding seeds of tariff heading 1002",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011032",
+"name": "Syringes with or without needles of tarrif no 90183100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011035",
+"name": "Tubular metal needles and needles for sutures of tariff number 90183200",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011036",
+"name": "Catheters cannulae and the like of tariff number 90183900",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011037",
+"name": "Blood bags",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011038",
+"name": "Blood and fluid infusion sets",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011039",
+"name": "Materials articles and equipment including motor vehicles listed under the first schedule paragraph 39 of the VAT Act.",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011040",
+"name": "Madeup fishing nets of manmade textile material of tariff number 56081100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011041",
+"name": "Mosquito nets of tariff No 6304990110",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011043",
+"name": "Materials waste residues and by products whether or not in the form of pellets and preparations of a kind used in animal feeding of tariff numbers as listed in Part 1 of the first schedule of VAT Act 2013",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011044",
+"name": "Unprocessed green tea",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011048",
+"name": "Inputs or raw materials supplied to solar equipment manufacturers for manufacture of solar equipment or deep cycle sealed batteries which exclusively use or store solar power",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011049",
+"name": "Aircraft parts of heading 8803 excluding parts of goods of heading 8801",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011051",
+"name": "Taxable goods imported or purchased for direct and exclusive use in the implementation of official aid funded projects upon approval by the Cabinet Secretary responsible for the National Treasury",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011054",
+"name": "Goods imported or purchased locally for use by the local film producers and local filming agents upon recommendation by the Kenya Film Commission subject to approval by CS TNT",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011056",
+"name": "Inputs or raw materials locally purchased or imported by manufacturers of agricultural machinery and implements upon approval by the Cabinet Secretary responsible for industrialization",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011057",
+"name": "All goods including material supplies equipment machinery and motor vehicles for official use by the Kenya Defence Forces and the National Police Service",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011058",
+"name": "Direction finding compasses instruments and appliances for aircraft",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011059",
+"name": "Wheat seeds of tariff numbers 10011100 and 1001990100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011062",
+"name": "Taxable goods for direct and exclusive use for the construction of tourism facilities recreational parks of fifty acres or more convention and conference facilities upon recommendation by the Cabinet Secretary responsible for matters relating to recreational parks",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011063",
+"name": "Taxable goods equipment and apparatus for the direct and exclusive use for construction of specialized hospitals with a minimum bed capacity of fifty with accommodation facilities upon the recommendation by the Cabinet Secretary responsible for health who shall issue guidelines for the criteria to be used to determine eligibility for the exemption provided that notwithstanding this subparagraph any approval granted by the cabinet Secretary before the commencement thereof in respect of the supply of taxable goods and which is in supply of taxable goods and which is in force at such commencement shall continue to apply of the exempted taxable goods is made in full",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011066",
+"name": "Inputs or raw materials locally purchased or imported by manufacturers of clean cook stoves approved by the CS TNT upon recommendation by the CS responsible for energy",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011068",
+"name": "Super absorbent polymer SAP of tariff number 39069000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011069",
+"name": "Carrier tissue white 1 ply 14 point 5 GSM 47032100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011070",
+"name": "IP super soft fluff pulp for fluff 310 treated pulp 488 times 125 mm cellose of tariff number 47032100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011071",
+"name": "Perforated PE film 15 to 22 gsm of tariff number 3990219000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011072",
+"name": "Spunbound nonwoven 15 to 25 gsm of tariff number 56031100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011073",
+"name": "Airlid paper with super absorbent polymer 180gsm67 of tariff number 48030000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011074",
+"name": "Airlid paper with super absorbent polymer 80gsm67 of tariff number 48030000",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011077",
+"name": "Pressure sensitive adhesive of tariff number 3506990100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011078",
+"name": "Plain polythene filmLPDE of tariff number 399021199010",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011079",
+"name": "Plain polythene filmPE of tariff number 399021199010",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011080",
+"name": "PE white 25 to 40 gsm release paper of tarrif number 48114900",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011081",
+"name": "ADL 25 to 40 gsm of tariff number 56031100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011082",
+"name": "Elasticized side tape of tariff number 54024400",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011083",
+"name": "12 to 16 gsm spunbound piyropo nonwoven coverstock 12gsm spunbound PP nonwoven SMS hydrophobic leg cuffs of tariff number 56031100",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011084",
+"name": "Polymetric elastic 2 over 3 strands of tariff number 3990199010",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011089",
+"name": "Any other aircraft spare parts imported by aircraft operators or persons engaged in the business of aircraft maintenance upon recommendation by the competent authority responsible for civil aviation",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011090",
+"name": "Inputs for the manufacture of pesticides upon recommendation by the Cabinet Secretary for the time being responsible for matters relating to agriculture",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011091",
+"name": "Locally assembled motor vehicles for transportation of tourists purchased before clearance through Customs following conditions as specified in the VAT Act 2013 1st Schedule Section A no9901",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011095",
+"name": "The supply of natural water excluding bottled water by a NG, CGor any political subdivision thereof or a person approved by the CS responsible for water development for domestic or for industrial use",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011096",
+"name": "Articles of apparel clothing accessories and equipment specially designed for safety or protective purposes for use in registered hospitals and clinics or by CG or LA in firefighting",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011099",
+"name": "Goods imported by passengers arriving from places outside Kenya as specified in the VAT Act 2013 First Schedule section A no 99",
+"parent_code": "99011000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011100",
+"name": "Exempt Goods (Paragraph 100 - 146)",
+"parent_code": "99010000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99011101",
+"name": "Alcoholic or non alcoholic beverages supplied to the Kenya Defence Forces Canteen Organization",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011103",
+"name": "Hearing aids excluding parts and accessories of tariff Number 90214000",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011105",
+"name": "Locally manufactured motherboards",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011106",
+"name": "Inputs for the manufacture of motherboards approved by the Cabinet Secretary responsible for information communication technology",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011107",
+"name": "Plant machinery and equipment used in the construction of a plastics recycling plant",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011108",
+"name": "The supply of maize corn flour cassava flour wheat or meslin flour and maize flour containing cassava flour by more than ten percent in weight provided that this paragra",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011109",
+"name": "Goods imported or purchased locally for the direct and exclusive use in the construction of houses under an affordable housing scheme approved by the CS on the recommendation of the CS responsible for matters relating to housing",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011110",
+"name": "Musical instruments and other musical equipment imported or purchased locally for exclusive use by educational institutions upon recommendation by the Cabinet Secretary responsible for Education",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011111",
+"name": "Maize corn seeds of tariff no 10051000",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011112",
+"name": "Taxable good excl. motor vehicle imported or purchased for direct exclusive use in geothermal, oil, mining prospecting, exploration, product sharing as per the Energy Act 2019, Petroleum Act 2019, the Mining Act 2016 upon recommendation by the CS",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011113",
+"name": "Specialized equipment for the development and generation of solar and wind energy upon recommendation to the commissioner by the cabinet secretary responsible for matters relating to energy",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011114",
+"name": "Taxable goods supplied to persons that had a contract with the government prior to 25-04-2020 and contract provided for exemption from VAT provided that this exemption shall apply to the unexpired period of contract upon recommendation by CS Energy",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011115",
+"name": "Medical ventilators and the inputs for the manufacture of medical ventilators upon recommendation by the cabinet secretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011116",
+"name": "Physiotherapy accessories treadmills for cardiology therapy and treatment of tariff number 9506990100 for use by licensed hospitals upon approval by the cabinet secretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011117",
+"name": "Dexpanthenol of tariff number 33049900 used for medical nappy rash treatment by licensed hospitals upon approval by the cabinet secretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011118",
+"name": "Medicaments of tariff number 30034100 30034200 30034300 30034900 30036000 excluding goods of heading 3002 3005 or 3006 consisting of two or more constituents which have been mixed together for theraputic or prophylactic uses",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011119",
+"name": "Diagnostic or laboratory reagents of tariff number 38220000 on a backing prepared diagnostic or laboratory reagents whether or not on a backing other than those of heading 3002 or 3006 certified reference materials upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011120",
+"name": "Electrodiagnostic apparatus of tariff numbers 90181100 90181200 90181300 90181400 90181900 90182000 90189000 upon approval by the cabinet secretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011121",
+"name": "Other instruments and appliances of tariff number 90184100 used in dental sciences dental drill engines whether or not combined on a single base with other dental equipment upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011122",
+"name": "Other instruments and appliances including surgical blades of tariff number 90184900 90185000 90189000 used in dental sciences dental drill engines whether or not combined on a single base with other dental equipment upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011123",
+"name": "Ozone therapy Oxygen therapy aerosol therapy artificial respiration or other theraputic respiration apapratus upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011124",
+"name": "Other breathing appliances and gas masks excluding protective masks having neither mechanical parts nor replaceable filters upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011125",
+"name": "Artificial teeth and dental fittings of tariff number 90212100 90212900 and artificial parts of the body of tariff number 90213100 90213900 90215000 and 90219000 upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011126",
+"name": "Apparatus based on the use of x rays whether or not for medical surgical or dental of tariff numbers 90221200 90221300 90221400 and 90221900 upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011127",
+"name": "Apparatus based on the use of alpha beta or gamma radiations whether or not medical surgical or dental of tariff numbers 90222100 90222900 90223000 and 90229000 upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011128",
+"name": "Discs tape solid-state nonvolatile storage devices smart cards and other media for the recording of sound or of other phenomena whether or not recorded of tariff number 85238010 but excluding products of chapter 37 software upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011129",
+"name": "Weighing machinery excluding balances of a sensitivity of 5 cg or better of tariff number 84233100 including weight operated counting or checking machines weighing machine weights of all kinds upon approval by CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011130",
+"name": "Fetal Doppler Pocket Wgd002 Pc and pulse oximeter finger held Gima band Pc of tariff number 90181900 upon approval by the cabinet sectretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011131",
+"name": "Sterilizer Dry Heat Wgd001Grx05A Pc autoclave steam tables tops of tariff number 8419902000 upon approval by the cabinet sectretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011132",
+"name": "Needle holders and urine bags of tariff heading 399026",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011133",
+"name": "Tourniquets of tariff number 3990269099 for use by licensed hospitals upon approval by the cabinet sectretary responsible for matters relating to health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011134",
+"name": "Taxable supplies incl. fish feeding and handling water operations cold storage fish cages pond construction, maintenance, fish processing and handling imported or purchased for direct exclusive use on the recommendation of the relevant State Dept",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011135",
+"name": "Pre fabricated biogas digesters",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011136",
+"name": "Biogas",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011137",
+"name": "Sustainable fuel briquettes and pellets for household and commercial use",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011138",
+"name": "The supply of denatured ethanol of tariff number 22072000",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011139",
+"name": "Tractors other than road tractors for semitrailers",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011140",
+"name": "Plant and machinery of chapter 84 and 85 imported by manufacturers of pharmaceutical products or investors in the manufacture of pharmaceutical products upon the recommendation of CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011141",
+"name": "Medical oxygen supplied to registered hospitals",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011142",
+"name": "Urine bags adult diapers artificial breasts colostomy or ileostomy bags for medical use",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011143",
+"name": "Inputs and raw materials used in the manufacture of passenger motor vehicle",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011144",
+"name": "Locally manufactured passenger motor vehicles: vehicles for the transportation of passengers whose ex-factory value comprises at least 30 percent of parts designed and manufactured in Kenya by an original equipment manufacturer operating in Kenya.",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011145",
+"name": "Taxable goods inputs and raw materials imported or locally purchased by company under SOFA manufacturing human vaccines with a capital investment of atleast 10Bn shillings subject to approval of CS TNT upon recommendation of CS Health",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99011146",
+"name": "Such capital goods the exemption of which the Cabinet Secretary may determine to promote investment in the manufacturing sector provided that the value of such investment is not less than two billion shillings",
+"parent_code": "99011100",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012000",
+"name": "Zero Rated Goods - D2",
+"parent_code": "99010000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99012003",
+"name": "Shipstores supplied to international sea or air carriers on international voyage or flight",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012004",
+"name": "The supply of coffee and tea for export to coffee or tea auction centers",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012005",
+"name": "Transportation of passengers by air carriers on international flight",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012009",
+"name": "Goods purchased from duty free shops by passengers departing to places outside Kenya",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012011",
+"name": "Inputs or raw materials either produced locally or imported supplied to pharmaceutical manufacturers in Kenya for manufacturing medicaments as approved from time to time by the Cabinet Secretary in consultation with CS Health",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012013",
+"name": "The supply of ordinary bread",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012015",
+"name": "Milk and cream not concentrated nor containing added sugar or other sweetening matter of tariff numbers 04011000 04012000 04014000 04015000",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012016",
+"name": "All inputs and raw materials whether produced locally or imported supplied to manufacturers of agricultural pest control products upon recommendation by CS Agriculture",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012019",
+"name": "Agricultural pest control products",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012022",
+"name": "The supply of maize corn flour cassava flour wheat or meslin flour and maize flour containing cassava flour by more than ten percent in weight",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012024",
+"name": "The Fertilizers of chapter 31",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99012025",
+"name": "Inputs of raw materials locally purchased or imported by manufacturers of fertilizer as approved from time to time by the Cabinet Secretary responsible for Agriculture",
+"parent_code": "99012000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99013000",
+"name": "Other Rate Goods (8%)",
+"parent_code": "99010000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99013001",
+"name": "Petroleum Products",
+"parent_code": "99013000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99020000",
+"name": "Services",
+"parent_code": "99000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "99021000",
+"name": "Exempt Service",
+"parent_code": "99020000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99021001",
+"name": "Financial Services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021002",
+"name": "Insurance & reinsurance services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021003",
+"name": "Education services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021004",
+"name": "Medical veterinary dental Ambulance and nursing services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021005",
+"name": "Agricultural animal husbandry and horticultural services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021006",
+"name": "Burial and cremation services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021007",
+"name": "Transportation of passengers by any means of conveyance excluding international air transport or where the means of conveyance is hired or chartered",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021008",
+"name": "Supply by way of sale renting leasing hiring letting of land or residential premises residential premises means land or a building occupied or capable of being occupied as a residence excluding hotel and holiday accomodation and subject to the provi",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021009",
+"name": "Community social and welfare services provided by National Government County Government or any political subdivision thereof",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021010",
+"name": "Tea and coffee brokerage services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021011",
+"name": "Services rendered by educational, political, religious, welfare & other philanthropic associations to their members and social welfare services provided by charitable organizations.",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021012",
+"name": "Entertainment Services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021013",
+"name": "Accommodation and Restaurant Services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021014",
+"name": "Conference services conducted for educational institutions as part of learning where such institutions are approved by the Ministry for the time being responsible for Education",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021015",
+"name": "Car park services provided by National Government County Government anypolitical subdivision therefore by an employer to his employees on the premises of the employer",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021016",
+"name": "The supply of airtime by any person other than by a provider of cellular mobile telephone services or wireless telephone services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021017",
+"name": "Betting gaming and lotteries services",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021018",
+"name": "Hiring leasing and chartering of aircrafts excluding helicopters of tariff 88021100 and 88021200",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021020",
+"name": "Taxable services for direct and exclusive use in the implementation of official aid funded projects upon approval by the Cabinet Secretary to the National Treasury",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021021",
+"name": "Services imported or procured locally for use by the local film producers or local film agents upon recommendation by the Kenya Film Commission subject to approval by the Cabinet Secretary for the National Treasury",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021023",
+"name": "Supply of sewerage services by the national government a county government any political subdivision thereof or a person approved by the Cabinet Secretary for the time being responsible for water development",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021024",
+"name": "Entry fees into the national parks and national reserves",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021025",
+"name": "The services of tour operators excluding inhouse supplies",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021026",
+"name": "Taxable services for direct and exclusive use for the construction of tourism facilities recreational parks of 50 acres or more convention and conference facilities upon the recommendation by the CS responsible for recreational park",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021027",
+"name": "Taxable services for direct and exclusive use for the construction of specialized hospitals with accommodation facilities upon recommendation by CS Health who shall issue guidelines for the criteria to determine the eligibility for the exemption",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021029",
+"name": "Postal services provide through the supply of postage stamps including rental post boxes or mail bags and subsidiary services thereto",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99021033",
+"name": "The transfer of assets and other transactions related to the transfer of asets into real estate investment trusts and asset backed securities",
+"parent_code": "99021000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99022000",
+"name": "Zero Rated Service - D1",
+"parent_code": "99020000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99022006",
+"name": "The supply of taxable services to international sea or air carriers on international voyage or flight",
+"parent_code": "99022000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99022010",
+"name": "Supply of taxable services in respect of goods in transit",
+"parent_code": "99022000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99022020",
+"name": "The transportation of goods originating from Kenya to a place outside Kenya",
+"parent_code": "99022000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99022021",
+"name": "Transportation of sugarcane from farms to miling factories",
+"parent_code": "99022000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99022023",
+"name": "The exportation of taxable services in respect of business process outsourcing",
+"parent_code": "99022000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99030000",
+"name": "Goods or Services",
+"parent_code": "99000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "99031000",
+"name": "Exempt Goods or Services",
+"parent_code": "99030000",
+"level": 3,
+"is_leaf": true
+},
+{
+"code": "99032000",
+"name": "Zero Rated Goods or Services - D1",
+"parent_code": "99030000",
+"level": 3,
+"is_leaf": false
+},
+{
+"code": "99032002",
+"name": "The supply of goods or taxable services to an export processing zone business as specified in the Export Processing Zones Act Cap 517 as being eligible forduty and tax free importation",
+"parent_code": "99032000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99032004",
+"name": "Supply to international and regional organizations",
+"parent_code": "99032000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99032005",
+"name": "Supply to the War Graves Commission",
+"parent_code": "99032000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99032008",
+"name": "Supply to National Red Cross Society and St John Ambulance",
+"parent_code": "99032000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99032012",
+"name": "The supply of goods or taxable services to a special economic zone enterprise",
+"parent_code": "99032000",
+"level": 4,
+"is_leaf": true
+},
+{
+"code": "99040000",
+"name": "Government Undertaking",
+"parent_code": "99000000",
+"level": 2,
+"is_leaf": false
+},
+{
+"code": "99042000",
+"name": "Zero Rated Government Undertaking - D1",
+"parent_code": "99040000",
+"level": 3,
+"is_leaf": true
+}
+]

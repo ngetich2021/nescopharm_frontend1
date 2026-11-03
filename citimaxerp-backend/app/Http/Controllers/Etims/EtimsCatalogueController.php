@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Etims;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\Etims\SyncEtimsItemJob;
 use App\Models\ActivityLog;
 use App\Models\CompanyEtimsConfig;
 use App\Models\Etims\EtimsItemRegistration;
 use App\Models\Invoice;
 use App\Models\Product;
+use App\Services\TaxCompliance\EtimsProductCodeService;
 use App\Services\TaxCompliance\EtimsTaxType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -381,7 +381,7 @@ class EtimsCatalogueController extends Controller
                     continue;
                 }
 
-                $reregister = $this->applyCodes($companyId, $product, $profiles, array_filter($codes, fn ($v) => $v !== null));
+                $reregister = app(EtimsProductCodeService::class)->apply($companyId, $product, array_filter($codes, fn ($v) => $v !== null), $profiles);
                 $results[] = ['status' => 'updated', 'changes' => $changes, 'reregister' => $reregister] + $result;
                 $summary['updated']++;
                 if ($reregister) {
@@ -398,7 +398,7 @@ class EtimsCatalogueController extends Controller
 
         if (! $dryRun) {
             $this->recordImport($request, $user, $summary, $results);
-            $this->queueRegistrations($companyId, $toSync);
+            app(EtimsProductCodeService::class)->queue($companyId, $toSync);
         }
 
         return response()->json([
@@ -455,50 +455,6 @@ class EtimsCatalogueController extends Controller
             'quantity_unit_code' => $main?->quantity_unit_code ?: 'U',
             'country_of_origin_code' => $main?->country_of_origin_code ?: 'KE',
         ];
-    }
-
-    /**
-     * Writes the codes to the product and every eTIMS profile it has (one is created when it has
-     * none, so the codes are used at its first registration). Returns whether a profile already
-     * registered with KRA has to be registered again.
-     */
-    private function applyCodes(string $companyId, Product $product, Collection $profiles, array $codes): bool
-    {
-        if (isset($codes['item_class_code'])) {
-            $product->etims_item_class_code = $codes['item_class_code'];
-            $product->save();
-        }
-
-        if ($profiles->isEmpty()) {
-            $profiles = collect([EtimsItemRegistration::firstOrCreate(
-                ['company_id' => $companyId, 'product_id' => $product->id, 'tax_type_code' => EtimsTaxType::forProduct($product)],
-                ['sync_status' => EtimsItemRegistration::STATUS_PENDING],
-            )]);
-        }
-
-        $reregister = false;
-        foreach ($profiles as $registration) {
-            $registration->fill($codes);
-            if (! $registration->isDirty()) {
-                continue;
-            }
-            if (filled($registration->digitax_item_id)) {
-                $reregister = true;
-                $registration->forceFill([
-                    'digitax_item_id' => null,
-                    'item_code' => null,
-                    'client_request_id' => null,
-                    'sync_status' => EtimsItemRegistration::STATUS_PENDING,
-                    'synced_at' => null,
-                    'last_attempt_at' => null,
-                    'last_error' => null,
-                    'attempts' => 0,
-                ]);
-            }
-            $registration->save();
-        }
-
-        return $reregister;
     }
 
     /** Each code as written in the sheet (upper case), null when left blank, or the first invalid one. */
@@ -617,25 +573,6 @@ class EtimsCatalogueController extends Controller
                     : array_merge($r['changes'], $r['reregister'] ? [['field' => 'KRA', 'from' => null, 'to' => 'registered again under the new codes']] : []),
             ], array_filter($results, fn ($r) => $r['status'] !== 'unchanged'))),
         ]);
-    }
-
-    /** Registers the products again now rather than at their next invoice, when eTIMS is switched on. */
-    private function queueRegistrations(string $companyId, array $productIds): void
-    {
-        if ($productIds === []) {
-            return;
-        }
-        $enabled = CompanyEtimsConfig::query()
-            ->where('company_id', $companyId)
-            ->notSuperseded()
-            ->whereRaw('enabled = true')
-            ->exists();
-        if (! $enabled) {
-            return;
-        }
-        foreach ($productIds as $productId) {
-            SyncEtimsItemJob::dispatch($companyId, $productId);
-        }
     }
 
     private function resolveActiveCompanyId(): string

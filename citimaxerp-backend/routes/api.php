@@ -1158,6 +1158,8 @@ Route::middleware('auth:sanctum')->prefix('etims')->group(function () {
     Route::post('/products/import', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'import']);
 
     Route::get('/items/reference', [App\Http\Controllers\Etims\EtimsItemController::class, 'reference']);
+    // Optional class code on the product form: a suggestion from the product's name.
+    Route::get('/class-codes/suggest', [App\Http\Controllers\Etims\EtimsItemController::class, 'suggestClassCode']);
     Route::get('/items', [App\Http\Controllers\Etims\EtimsItemController::class, 'index']);
     Route::get('/items/{productId}', [App\Http\Controllers\Etims\EtimsItemController::class, 'show']);
     Route::patch('/items/{productId}', [App\Http\Controllers\Etims\EtimsItemController::class, 'update']);

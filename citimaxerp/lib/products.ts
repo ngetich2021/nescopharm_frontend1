@@ -171,6 +171,7 @@ export interface ProductData {
   is_taxable?: boolean
   tax_rate?: number
   hs_code?: string
+  etims_item_class_code?: string // optional KRA item class code (eTIMS)
   // Packaging fields
   has_packaging?: boolean
   base_unit?: string
@@ -225,6 +226,7 @@ export interface Product {
   is_taxable?: boolean
   tax_rate?: number | string | null
   hs_code?: string | null
+  etims_item_class_code?: string | null
   weight?: string | null
   length?: string | null
   width?: string | null
@@ -589,6 +591,7 @@ export async function createProduct(productData: ProductData) {
       is_taxable: productData.is_taxable !== undefined ? productData.is_taxable : true,
       tax_rate: productData.tax_rate || null,
       hs_code: productData.hs_code?.trim() || null,
+      etims_item_class_code: productData.etims_item_class_code || null,
       weight: productData.weight || null,
       length: productData.dimensions.length ? Number.parseFloat(productData.dimensions.length) : null,
       width: productData.dimensions.width ? Number.parseFloat(productData.dimensions.width) : null,

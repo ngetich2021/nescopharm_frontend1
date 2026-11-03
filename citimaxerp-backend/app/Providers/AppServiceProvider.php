@@ -14,6 +14,7 @@ use App\Observers\InvoiceObserver;
 use App\Observers\LedgerSyncObserver;
 use App\Observers\CompanyAccountingObserver;
 use App\Observers\ProductReceiptItemObserver;
+use App\Observers\InventoryMovementEtimsObserver;
 use App\Observers\ProductPriceObserver;
 use App\Observers\ProductVariantPriceObserver;
 use App\Observers\ProductPackagingUnitPriceObserver;
@@ -64,6 +65,8 @@ class AppServiceProvider extends ServiceProvider
 
         Invoice::observe(InvoiceObserver::class);
         ProductReceiptItem::observe(ProductReceiptItemObserver::class);
+        // Adjustments, damage/expiry and supplier returns reach eTIMS too.
+        \App\Models\InventoryMovement::observe(InventoryMovementEtimsObserver::class);
 
         // General ledger: every financial document posts (and re-posts on
         // change) through LedgerPostingService.

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import type { ProductCategory } from "@/lib/product-categories"
 import type { Supplier } from "@/lib/suppliers"
 import type { Store } from "@/lib/stores"
+import { EtimsClassCodeField } from "@/components/etims/class-code-field"
 
 interface Dimensions {
   length: string
@@ -48,6 +49,7 @@ const EMPTY_FORM = {
   isTaxable: true,
   taxRate: "",
   hsCode: "",
+  etimsItemClassCode: "",
 }
 
 interface CreateProductSheetProps {
@@ -412,6 +414,7 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
         is_taxable: formData.isTaxable,
         tax_rate: formData.taxRate ? parseFloat(formData.taxRate) : undefined,
         hs_code: formData.hsCode?.trim() || undefined,
+        etims_item_class_code: formData.etimsItemClassCode || undefined,
         weight: formData.weight ? parseFloat(formData.weight) : undefined,
         dimensions: {
           length: formData.dimensions.length || "",
@@ -624,6 +627,11 @@ export function CreateProductSheet({ open, onOpenChange, onProductCreated }: Cre
                       Used for customs and international trade classification
                     </p>
                   </div>
+                  <EtimsClassCodeField
+                    value={formData.etimsItemClassCode}
+                    onChange={(code) => handleInputChange("etimsItemClassCode", code)}
+                    productName={formData.name}
+                  />
                 </div>
               </CardContent>
             </Card>

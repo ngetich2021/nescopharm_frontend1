@@ -15,9 +15,8 @@ use Illuminate\Support\Facades\DB;
  *     DigiTax exposes ~50/~40 codes total. Full list must be imported from
  *     DigiTax docs (https://ke.docs.digitax.tech/) into etims_packaging_units.csv
  *     and etims_quantity_units.csv before going live. See TODO in this file.
- *   - item_class_codes: STARTER hierarchy only. The full KRA UNSPSC/CPC list has
- *     ~3000 leaf codes - this seeder ships the top-level CPC families so the
- *     picker is functional in dev. Production go-live requires the full import.
+ *   - item_class_codes: COMPLETE - KRA's 1,000 codes from database/data/etims_item_class_codes.json
+ *     (DigiTax's "Items: Item Classification Table").
  *
  * Idempotent: uses insertOrIgnore so re-runs are safe.
  */
@@ -70,41 +69,13 @@ class EtimsReferenceDataSeeder extends Seeder
             array_map(fn($r) => ['code' => $r[0], 'name' => $r[1], 'created_at' => $now, 'updated_at' => $now], $quantity),
         );
 
-        // ─────────── Item class codes (STARTER - top-level CPC families) ───────────
-        // TODO: replace this hand-rolled set with a full DigiTax CPC CSV import
-        // before production go-live (~3000 leaf codes). See `etims:import-item-classes`
-        // command (Phase 8 reconcile/import command family).
-        $classes = [
-            // Level 1 - divisions
-            ['0', 'Agriculture, forestry, fishery products', null, 1, false],
-            ['1', 'Ores and minerals; electricity, gas and water', null, 1, false],
-            ['2', 'Food products, beverages and tobacco; textiles, apparel and leather products', null, 1, false],
-            ['3', 'Other transportable goods, except metal products, machinery and equipment', null, 1, false],
-            ['4', 'Metal products, machinery and equipment', null, 1, false],
-            ['5', 'Constructions and construction services', null, 1, false],
-            ['6', 'Distributive trade services; accommodation; food and beverage services', null, 1, false],
-            ['7', 'Financial and related services; real estate services', null, 1, false],
-            ['8', 'Business and production services', null, 1, false],
-            ['9', 'Community, social and personal services', null, 1, false],
-
-            // A few representative leaves so the picker is usable in dev
-            ['22120', 'Liquid milk, processed', '2', 5, true],
-            ['23110', 'Bread', '2', 5, true],
-            ['24110', 'Spirits, distilled alcoholic beverages', '2', 5, true],
-            ['43210', 'Mobile phones', '4', 5, true],
-            ['82310', 'Computer programming services', '8', 5, true],
-            ['85120', 'Maintenance and repair services of office machinery', '8', 5, true],
-            ['93210', 'Hairdressing services', '9', 5, true],
-        ];
-        DB::table('etims_item_class_codes')->insertOrIgnore(
-            array_map(
-                fn($r) => [
-                    'code' => $r[0], 'name' => $r[1], 'parent_code' => $r[2],
-                    'level' => $r[3], 'is_leaf' => DB::raw($r[4] ? 'TRUE' : 'FALSE'),
-                    'created_at' => $now, 'updated_at' => $now,
-                ],
-                $classes,
-            ),
-        );
+        // ─────────── Item class codes: KRA's list (database/data, from DigiTax's classification table) ───────────
+        foreach (array_chunk(json_decode(file_get_contents(database_path('data/etims_item_class_codes.json')), true), 200) as $chunk) {
+            DB::table('etims_item_class_codes')->insertOrIgnore(array_map(fn ($r) => [
+                'code' => $r['code'], 'name' => $r['name'], 'parent_code' => $r['parent_code'],
+                'level' => $r['level'], 'is_leaf' => DB::raw($r['is_leaf'] ? 'TRUE' : 'FALSE'),
+                'created_at' => $now, 'updated_at' => $now,
+            ], $chunk));
+        }
     }
 }

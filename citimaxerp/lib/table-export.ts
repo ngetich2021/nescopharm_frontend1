@@ -17,6 +17,9 @@ export interface TableExport {
   footer?: ExportCell[][] // e.g. totals, bold under the table
   moneyColumns?: number[] // always 2 decimals, even when every amount is whole
   rightColumns?: number[] // right-aligned though written as text, e.g. "1.50" or "30.0%"
+  // Kept in the Excel file but hidden (e.g. the Ref an import reads back), left out of the PDF.
+  // CSV cannot hide a column, so it keeps them.
+  hiddenColumns?: number[]
 }
 
 interface Brand {
@@ -109,12 +112,12 @@ async function exportXlsx(data: TableExport, brand: Brand) {
   const widths = data.headers.map((h, i) =>
     Math.min(50, Math.max(h.length, ...[...data.rows, ...(data.footer ?? [])].map((r) =>
       r[i] == null ? 0 : (typeof r[i] === "number" && decimals[i] ? (r[i] as number).toFixed(2).length + 4 : String(r[i]).length)))) + 2)
-  ws.columns = widths.map((width) => ({ width }))
+  ws.columns = widths.map((width, i) => ({ width, hidden: !!data.hiddenColumns?.includes(i) }))
 
   let row = 1
   if (brand.image) {
     // Letterhead across the table, about 20px a row.
-    const tableWidthPx = Math.min(900, widths.reduce((s, w) => s + w * 7, 0))
+    const tableWidthPx = Math.min(900, widths.reduce((s, w, i) => s + (data.hiddenColumns?.includes(i) ? 0 : w * 7), 0))
     const heightPx = tableWidthPx * brand.image.height / brand.image.width
     const id = wb.addImage({ base64: brand.image.dataUrl, extension: brand.image.type === "PNG" ? "png" : "jpeg" })
     ws.addImage(id, { tl: { col: 0, row: 0 }, ext: { width: tableWidthPx, height: heightPx } })
@@ -169,6 +172,16 @@ async function exportXlsx(data: TableExport, brand: Brand) {
 }
 
 async function exportPdf(data: TableExport, brand: Brand) {
+  if (data.hiddenColumns?.length) {
+    const keep = (_: unknown, i: number) => !data.hiddenColumns!.includes(i)
+    const drop = (r: ExportCell[]) => r.filter(keep)
+    const kept = data.headers.map((_, i) => i).filter((i) => !data.hiddenColumns!.includes(i))
+    const remap = (cols?: number[]) => cols?.filter((c) => kept.includes(c)).map((c) => kept.indexOf(c))
+    data = {
+      ...data, headers: data.headers.filter(keep), rows: data.rows.map(drop), footer: data.footer?.map(drop),
+      moneyColumns: remap(data.moneyColumns), rightColumns: remap(data.rightColumns), hiddenColumns: undefined,
+    }
+  }
   const { jsPDF } = await import("jspdf")
   const autoTable = (await import("jspdf-autotable")).default
   const pdf = new jsPDF({ orientation: data.headers.length > 6 ? "landscape" : "portrait", unit: "mm", format: "a4" })

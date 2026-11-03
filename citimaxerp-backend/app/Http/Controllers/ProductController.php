@@ -1925,6 +1925,8 @@ class ProductController extends Controller
             'is_taxable' => 'nullable|boolean',
             'tax_rate' => 'nullable|numeric|min:0|max:100',
             'hs_code' => 'nullable|string|max:20',
+            // Optional: KRA item class code for eTIMS (empty = KRA's general code until one is set).
+            'etims_item_class_code' => 'nullable|digits:8|exists:etims_item_class_codes,code',
             'track_inventory' => 'nullable',
             'store_id' => 'nullable|uuid|exists:stores,id',
             'on_hand' => 'nullable|integer|min:0',
@@ -2172,6 +2174,11 @@ class ProductController extends Controller
             $this->syncPriceTiers($product, $request->input('price_tiers'));
             $product->load('priceTiers');
 
+            if ($request->filled('etims_item_class_code')) {
+                // Not registered with KRA yet, so it is used from the product's first eTIMS sale.
+                $product->forceFill(['etims_item_class_code' => $request->input('etims_item_class_code')])->save();
+            }
+
             $response = [
                 'status' => 'success',
                 'message' => 'Product created successfully.',
@@ -2245,6 +2252,8 @@ class ProductController extends Controller
             'is_taxable' => 'nullable|boolean',
             'tax_rate' => 'nullable|numeric|min:0|max:100',
             'hs_code' => 'nullable|string|max:20',
+            // Optional: KRA item class code for eTIMS (empty = KRA's general code until one is set).
+            'etims_item_class_code' => 'nullable|digits:8|exists:etims_item_class_codes,code',
             'track_inventory' => 'nullable',
             'store_id' => 'nullable|uuid|exists:stores,id',
             'on_hand' => 'nullable|integer|min:0',
@@ -2565,6 +2574,19 @@ class ProductController extends Controller
                 $this->syncPriceTiers($product, $request->input('price_tiers'));
             }
             $product->load('priceTiers');
+
+            // A changed KRA class code: a product already registered with KRA is registered again.
+            if ($request->has('etims_item_class_code')
+                && (string) $request->input('etims_item_class_code') !== (string) $product->etims_item_class_code) {
+                $codes = app(\App\Services\TaxCompliance\EtimsProductCodeService::class);
+                if ($request->filled('etims_item_class_code')) {
+                    if ($codes->apply($product->company_id, $product, ['item_class_code' => $request->input('etims_item_class_code')])) {
+                        $codes->queue($product->company_id, [(string) $product->id]);
+                    }
+                } else {
+                    $product->forceFill(['etims_item_class_code' => null])->save();
+                }
+            }
 
             $response = [
                 'status' => 'success',

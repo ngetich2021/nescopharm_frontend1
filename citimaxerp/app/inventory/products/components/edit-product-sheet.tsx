@@ -25,6 +25,7 @@ import type { Product, PackagingUnit } from "@/lib/products"
 import type { Supplier } from "@/lib/suppliers"
 import type { Store } from "@/lib/stores"
 import { ProductKraTab } from "@/components/etims/product-kra-tab"
+import { EtimsClassCodeField } from "@/components/etims/class-code-field"
 import { ProductSizesFields } from "./product-sizes-fields"
 import { sizeRowsFor, sizesForSave, type SizeRow } from "@/lib/product-sizes"
 
@@ -64,7 +65,8 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
     baseUnit: "",
     isTaxable: true,
     taxRate: "",
-    hsCode: ""
+    hsCode: "",
+    etimsItemClassCode: ""
   })
 
   // Sizes (variants kept purely to split stock - price always comes from the item's price code)
@@ -247,7 +249,8 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
       baseUnit: product.base_unit || "",
       isTaxable: product.is_taxable ?? true,
       taxRate: product.tax_rate !== null && product.tax_rate !== undefined ? parseFloat(product.tax_rate.toString()).toString() : "",
-      hsCode: product.hs_code || ""
+      hsCode: product.hs_code || "",
+      etimsItemClassCode: (product as any).etims_item_class_code || ""
     })
 
     const existingSizes = sizeRowsFor(product)
@@ -409,6 +412,7 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
         is_taxable: formData.isTaxable,
         tax_rate: formData.taxRate ? parseFloat(formData.taxRate) : null,
         hs_code: formData.hsCode.trim() || null,
+        etims_item_class_code: formData.etimsItemClassCode || null,
         packaging_units: formData.hasPackaging && packagingUnits.length > 0
           ? packagingUnits.map(unit => ({
               unit_name: unit.unit_name.trim(),
@@ -676,6 +680,12 @@ export function EditProductSheet({ open, onOpenChange, product, onProductUpdated
                     </div>
                   </div>
                 )}
+                {/* Every product goes to KRA, taxable or not. */}
+                <EtimsClassCodeField
+                  value={formData.etimsItemClassCode}
+                  onChange={(code) => handleInputChange("etimsItemClassCode", code)}
+                  productName={formData.name}
+                />
               </CardContent>
             </Card>
             

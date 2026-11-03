@@ -745,12 +745,15 @@ class EtimsProvider implements TaxComplianceProvider
             return ItemRegistrationResult::failed($clientRequestId, 'The item is not registered on eTIMS yet.', null, 0);
         }
 
-        // KRA stock movement codes: in 02 purchase, 03 return, 06 adjustment; out 16 adjustment.
+        // KRA stock movement codes: in 02 purchase, 03 return, 06 adjustment; out 12 return (to a
+        // supplier), 15 discarding (breakage, damage, expiry), 16 adjustment.
         $in = $quantityDelta >= 0;
         $code = match (true) {
             $in && $movementType === 'receipt' => '02',
             $in && $movementType === 'return' => '03',
             $in => '06',
+            $movementType === 'supplier_return' => '12',
+            $movementType === 'breakage' => '15',
             default => '16',
         };
         $payload = [

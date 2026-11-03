@@ -145,6 +145,12 @@ export const regenerateEtimsSecret = () =>
 
 export const getEtimsReference = () => apiCall<EtimsReference>("/etims/items/reference", "GET", undefined, true)
 
+// A suggested KRA item class code for a product name (EtimsClassCodeSuggester), or null.
+export const suggestEtimsClassCode = (name: string) =>
+  apiCall<{ suggestion: { code: string; name: string } | null }>(
+    `/etims/class-codes/suggest?name=${encodeURIComponent(name)}`, "GET", undefined, true,
+  ).then((r) => r.suggestion)
+
 export const listEtimsItems = (status?: "pending" | "synced" | "failed") =>
   apiCall<{ data: { data: EtimsItemRegistration[]; current_page: number; last_page: number; total: number } }>(
     `/etims/items${status ? `?status=${status}` : ""}`,
