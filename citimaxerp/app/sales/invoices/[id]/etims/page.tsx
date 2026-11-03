@@ -93,6 +93,16 @@ export default function EtimsInvoicePage({ params }: { params: Promise<{ id: str
     }
   }
 
+  // ?download=pdf (the eTIMS list's "Download eTIMS receipt"): save the PDF once it is shown.
+  const autoDownloaded = useRef(false)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("download") !== "pdf" || !signed || (!qr && !!doc?.qr_url) || autoDownloaded.current) return
+    autoDownloaded.current = true
+    // Let the document (and its QR image) paint before it is captured.
+    const t = setTimeout(() => { void downloadPdf() }, 600)
+    return () => clearTimeout(t)
+  })
+
   if (loading && !doc) {
     return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
   }

@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { Loader2, RefreshCw, Search, Settings, ShieldCheck, Upload, ExternalLink } from "lucide-react"
+import { Download, Loader2, RefreshCw, Search, Settings, ShieldCheck, Upload, ExternalLink } from "lucide-react"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { PermissionGuard } from "@/components/PermissionGuard"
@@ -260,6 +260,11 @@ function InvoicesTab() {
                     </Button>
                   )}
                   <Button variant="outline" asChild><Link href={`/sales/invoices/${viewing.id}`}>Open invoice</Link></Button>
+                  {viewing.etims_status === "completed" && (
+                    <Button variant="outline" asChild>
+                      <Link href={`/sales/invoices/${viewing.id}/etims?download=pdf`}><Download className="h-4 w-4 mr-1" /> Download eTIMS receipt</Link>
+                    </Button>
+                  )}
                   <Button asChild><Link href={`/sales/invoices/${viewing.id}/etims`}>eTIMS invoice</Link></Button>
                 </DialogFooter>
               </>
