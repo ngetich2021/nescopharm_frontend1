@@ -326,7 +326,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
 
   // Credit is held back by days (invoices past their due date), never by the KES credit limit.
   const creditOverage = 0
-  const overdueBlock = paymentOption === 'credit' ? overdueCreditMessage(creditTerms) : null
+  const overdueWarning = paymentOption === 'credit' ? overdueCreditMessage(creditTerms) : null
 
   const onSubmit: SubmitHandler<InvoiceFormData> = async (data) => {
     if (paymentOption === 'instant' && !paymentMethod) {
@@ -344,11 +344,6 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
         description: "This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.",
         variant: "destructive",
       })
-      return
-    }
-
-    if (overdueBlock) {
-      toast({ title: "Cannot sell on credit", description: overdueBlock, variant: "destructive" })
       return
     }
 
@@ -685,7 +680,7 @@ export function CreateInvoiceModal({ open, onClose, onSuccess }: CreateInvoiceMo
                         <p className="font-medium text-purple-900">
                           Approved terms: Net {creditTerms.credit_days} ({creditTerms.credit_days} days)
                         </p>
-                        {overdueBlock && <p className="mt-1 font-medium text-red-700">Cannot sell on credit: {overdueBlock}</p>}
+                        {overdueWarning && <p className="mt-1 font-medium text-amber-700">Overdue: {overdueWarning}</p>}
                         {creditTerms.has_pending_change && (
                           <p className="text-amber-700 mt-1">Note: a terms change is pending GM approval and not yet in effect.</p>
                         )}

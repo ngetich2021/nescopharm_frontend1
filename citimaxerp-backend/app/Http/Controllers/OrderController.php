@@ -380,12 +380,8 @@ class OrderController extends Controller
                 );
             }
 
-            // Credit is held back by days, not by the KES limit: a customer with credit
-            // invoices past their due date can't take more on credit (past sales aside).
-            if ($orderCredit['payment_type'] === 'credit' && !$isHistorical && $customer
-                && ($blocker = $this->creditTermsResolver->overdueBlocker($customer))) {
-                return response()->json(['status' => 'failed', 'message' => $blocker], 400);
-            }
+            // Overdue credit invoices no longer stop a credit order: the order form shows them as a
+            // warning (CustomerController::creditTerms 'overdue'), and the sale goes ahead.
 
             // Validate delivery location if provided
             if ($request->has('delivery_location_id')) {

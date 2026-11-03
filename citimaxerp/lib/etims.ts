@@ -145,6 +145,27 @@ export const regenerateEtimsSecret = () =>
 
 export const getEtimsReference = () => apiCall<EtimsReference>("/etims/items/reference", "GET", undefined, true)
 
+// Invoice lines not on a live product (eTIMS > Lines to link). Linking never moves stock.
+export interface UnlinkedInvoiceLine {
+  id: string
+  description: string
+  quantity: number
+  unit_price: number
+  invoice_id: string
+  invoice_number: string | null
+  invoice_date: string | null
+  customer: string | null
+  past_dated: boolean
+  etims_status: string | null
+}
+export interface LinkableProduct { product_id: string; variant_id: string | null; name: string }
+
+export const listUnlinkedLines = () =>
+  apiCall<{ data: UnlinkedInvoiceLine[]; products: LinkableProduct[] }>("/etims/unlinked-lines", "GET", undefined, true)
+
+export const linkUnlinkedLine = (lineId: string, body: { product_id: string; variant_id: string | null; same_text: boolean }) =>
+  apiCall<{ message: string; linked: number }>(`/etims/unlinked-lines/${lineId}/link`, "POST", body, true)
+
 // A suggested KRA item class code for a product name (EtimsClassCodeSuggester), or null.
 export const suggestEtimsClassCode = (name: string) =>
   apiCall<{ suggestion: { code: string; name: string } | null }>(

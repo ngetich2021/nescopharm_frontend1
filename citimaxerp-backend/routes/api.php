@@ -1156,6 +1156,9 @@ Route::middleware('auth:sanctum')->prefix('etims')->group(function () {
     Route::get('/invoices', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'invoices']);
     Route::get('/products', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'products']);
     Route::post('/products/import', [App\Http\Controllers\Etims\EtimsCatalogueController::class, 'import']);
+    // Invoice lines not on a live product: pick the product (no stock moves).
+    Route::get('/unlinked-lines', [App\Http\Controllers\Etims\EtimsUnlinkedLinesController::class, 'index']);
+    Route::post('/unlinked-lines/{lineId}/link', [App\Http\Controllers\Etims\EtimsUnlinkedLinesController::class, 'link']);
 
     Route::get('/items/reference', [App\Http\Controllers\Etims\EtimsItemController::class, 'reference']);
     // Optional class code on the product form: a suggestion from the product's name.

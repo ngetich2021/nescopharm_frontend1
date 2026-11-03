@@ -40,6 +40,7 @@ class RelinkInvoiceLineProducts extends Command
         $this->info(($apply ? 'Linking' : 'Preview:') . " {$lines->count()} invoice lines with no live product");
         $linked = 0;
         $unresolved = [];
+        $unresolvedByCompany = [];
         $mergeInto = []; // ETIMS-AUTO product id => real product id
 
         DB::beginTransaction();
@@ -51,6 +52,7 @@ class RelinkInvoiceLineProducts extends Command
                 [$product, $variant] = $resolver->resolve($line, (string) $line->invoice->company_id);
                 if (!$product) {
                     $unresolved[$line->description] = ($unresolved[$line->description] ?? 0) + 1;
+                    $unresolvedByCompany[$line->invoice->company_id] = ($unresolvedByCompany[$line->invoice->company_id] ?? 0) + 1;
                     continue;
                 }
                 if ($autoIds->contains($line->product_id)) {
@@ -75,6 +77,12 @@ class RelinkInvoiceLineProducts extends Command
         $this->info("Linked {$linked} lines; merged " . count($mergeInto) . ' eTIMS-made products into the real ones.');
         foreach ($mergeInto as $autoId => $realId) {
             $this->line('  ' . Product::withTrashed()->withoutGlobalScope('company')->find($autoId)?->name . ' -> ' . Product::withoutGlobalScope('company')->find($realId)?->name);
+        }
+        if ($apply) {
+            // Ask those who edit invoices to link what is left (eTIMS > Lines to link).
+            foreach ($unresolvedByCompany as $companyId => $count) {
+                app(\App\Services\NotificationService::class)->invoiceLinesToLink((string) $companyId, $count);
+            }
         }
         if ($unresolved) {
             arsort($unresolved);

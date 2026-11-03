@@ -389,7 +389,7 @@ export function CreateOrderModal({
   // terms, so no approved terms are asked for. Credit is held back by days (invoices past
   // their due date), never by the KES credit limit.
   const creditChecks = !isPastSale && paymentOption === 'credit'
-  const overdueBlock = creditChecks ? overdueCreditMessage(creditTerms) : null
+  const overdueWarning = creditChecks ? overdueCreditMessage(creditTerms) : null
 
   const handleCreateOrder = async () => {
     // Validation
@@ -405,11 +405,6 @@ export function CreateOrderModal({
 
     if (creditChecks && !creditTerms?.credit_days) {
       toast.error("This customer has no GM-approved credit terms. Get credit terms approved, or switch to instant payment.")
-      return
-    }
-
-    if (overdueBlock) {
-      toast.error(`Cannot sell on credit: ${overdueBlock}`)
       return
     }
 
@@ -964,7 +959,7 @@ export function CreateOrderModal({
                   {creditTerms.has_pending_change && (
                     <p className="text-amber-700 mt-1">Note: a terms change is pending GM approval and not yet in effect.</p>
                   )}
-                  {overdueBlock && <p className="mt-1 font-medium text-red-700">Cannot sell on credit: {overdueBlock}</p>}
+                  {overdueWarning && <p className="mt-1 font-medium text-amber-700">Overdue: {overdueWarning}</p>}
                 </div>
               ) : (
                 <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
@@ -1113,7 +1108,6 @@ export function CreateOrderModal({
                 loading ||
                 shortLines.length > 0 ||
                 (creditChecks && !creditTerms?.credit_days) ||
-                !!overdueBlock ||
                 (paymentOption === 'instant' && (amountPaid < calculateTotal() || !instantPaymentMethod))
               }
             >

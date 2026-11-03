@@ -79,19 +79,6 @@ class CustomerCreditTermsResolver
         ];
     }
 
-    /** Why a new credit sale can't go ahead, or null if it can. */
-    public function overdueBlocker(Customer $customer): ?string
-    {
-        $o = $this->overdue($customer);
-        if ($o['count'] === 0) {
-            return null;
-        }
-
-        return "This customer has {$o['count']} credit invoice(s) past their credit days (KES "
-            . number_format($o['amount'], 2) . " overdue; oldest {$o['oldest_invoice']}, {$o['oldest_days']} days late). "
-            . 'Collect payment first, or sell on instant payment.';
-    }
-
     /**
      * How much of this customer's credit limit is still unused - null if
      * they have no credit limit set at all (credit isn't meaningful for

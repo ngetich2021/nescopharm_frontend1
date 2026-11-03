@@ -80,6 +80,41 @@ class NotificationService
     }
 
     /**
+     * Invoice lines not on a live product hold their invoice back from eTIMS: ask those who edit
+     * invoices to link them (eTIMS > Lines to link). Once per invoice (or once for a summary, when
+     * $invoice is null); linking never moves stock.
+     */
+    public function invoiceLinesToLink(string $companyId, int $lineCount, ?\App\Models\Invoice $invoice = null): void
+    {
+        $key = $invoice ? (string) $invoice->id : 'summary';
+        try {
+            $already = DatabaseNotification::query()
+                ->whereRaw("data::jsonb->>'type' = ?", ['etims_unlinked_lines'])
+                ->whereRaw("data::jsonb->>'invoice_id' = ?", [$key])
+                ->exists();
+        } catch (\Throwable $e) {
+            $already = false;
+        }
+        if ($already || $lineCount < 1) {
+            return;
+        }
+
+        $what = $lineCount === 1 ? '1 invoice line' : "{$lineCount} invoice lines";
+        $this->notifyPermission(
+            $companyId,
+            ['can_update_invoices'],
+            new SystemAlert(
+                'action',
+                $invoice ? "{$invoice->invoice_number} was not sent to eTIMS" : "{$what} need linking to a product",
+                ($invoice ? "{$what} on it" : 'They') . ' are not linked to a product in the system. Open eTIMS > Lines to link and pick the right product for each'
+                    . ' - an old, past-dated invoice keeps its stock as it is; linking does not move stock.',
+                '/etims?tab=lines',
+                ['type' => 'etims_unlinked_lines', 'invoice_id' => $key],
+            ),
+        );
+    }
+
+    /**
      * A new order must be signed off before it can be invoiced. Approval is role-based
      * (Order::INVOICE_APPROVER_ROLES), so the approvers are named by role, not permission.
      * Cleared automatically once invoice_approved_at is set (see AppServiceProvider).

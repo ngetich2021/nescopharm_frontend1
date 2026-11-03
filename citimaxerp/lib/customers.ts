@@ -519,11 +519,11 @@ export interface CustomerCreditTerms {
   overdue?: { count: number; amount: number; oldest_invoice: string | null; oldest_days: number }
 }
 
-// Why a new credit sale can't go ahead (customer has invoices past their credit days), or null.
+// A warning that the customer has credit invoices past their credit days, or null. It no longer stops the sale.
 export function overdueCreditMessage(terms: CustomerCreditTerms | null | undefined): string | null {
   const o = terms?.overdue
   if (!o || o.count === 0) return null
-  return `${o.count} credit invoice${o.count === 1 ? "" : "s"} past due (KES ${Number(o.amount).toLocaleString()}; oldest ${o.oldest_invoice}, ${o.oldest_days} days late). Collect payment first, or sell on instant payment.`
+  return `${o.count} credit invoice${o.count === 1 ? "" : "s"} past due (KES ${Number(o.amount).toLocaleString()}; oldest ${o.oldest_invoice}, ${o.oldest_days} days late). The order can still go ahead; remember to follow up the payment.`
 }
 
 export async function fetchCustomerCreditTerms(customerId: string): Promise<CustomerCreditTerms> {

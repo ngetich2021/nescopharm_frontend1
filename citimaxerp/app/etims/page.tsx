@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import { Download, Loader2, RefreshCw, Search, Settings, ShieldCheck, Upload, ExternalLink } from "lucide-react"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
+import { UnlinkedLinesTab } from "@/components/etims/unlinked-lines-tab"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { ALL_ROWS, TablePager, usePaged } from "@/components/ui/table-pager"
 import {
@@ -49,6 +50,14 @@ const fmtDateTime = (d: string | null) =>
   d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"
 
 export default function EtimsPage() {
+  const [tab, setTab] = useState("invoices")
+  const [unlinkedCount, setUnlinkedCount] = useState(0)
+  // The "lines to link" alert opens /etims?tab=lines.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab")
+    if (t === "lines" || t === "codes") setTab(t)
+  }, [])
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -65,16 +74,24 @@ export default function EtimsPage() {
           </Button>
         </PermissionGuard>
       </div>
-      <Tabs defaultValue="invoices">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="codes">Product Codes</TabsTrigger>
+          <TabsTrigger value="lines">
+            Lines to link
+            {unlinkedCount > 0 && <Badge className="ml-2 h-5 px-1.5 bg-amber-100 text-amber-900" variant="outline">{unlinkedCount}</Badge>}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="invoices" className="mt-4">
           <InvoicesTab />
         </TabsContent>
         <TabsContent value="codes" className="mt-4">
           <ProductCodesTab />
+        </TabsContent>
+        {/* Mounted always, so the tab shows how many lines are waiting. */}
+        <TabsContent value="lines" className="mt-4" forceMount hidden={tab !== "lines"}>
+          <UnlinkedLinesTab onCount={setUnlinkedCount} />
         </TabsContent>
       </Tabs>
     </div>

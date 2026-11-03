@@ -110,11 +110,14 @@ class EtimsItemSyncService
 
         $missingProductLines = $invoice->lineItems->filter(fn ($line) => ! $line->product_id || ! $line->product);
         if ($unlinked || $missingProductLines->isNotEmpty()) {
+            $lines = $unlinked ?: $missingProductLines->pluck('description')->all();
+            app(\App\Services\NotificationService::class)->invoiceLinesToLink((string) $company->id, count($lines), $invoice);
+
             return [
                 'status' => 'failed',
                 'message' => 'These lines are not linked to a product in the system, so the invoice was not sent: '
-                    .implode('; ', $unlinked ?: $missingProductLines->pluck('description')->all())
-                    .'. Edit the invoice and pick the product for each.',
+                    .implode('; ', $lines)
+                    .'. Link each to the right product on eTIMS > Lines to link (no stock moves), then send it again.',
                 'retryable' => false,
             ];
         }
