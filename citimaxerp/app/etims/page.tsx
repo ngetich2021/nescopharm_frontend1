@@ -248,7 +248,8 @@ function InvoicesTab() {
                   <dt className="text-muted-foreground">Signed</dt><dd>{fmtDateTime(viewing.etims_synced_at)}</dd>
                 </dl>
                 {viewing.etims_last_error && <p className="text-sm text-red-600">{viewing.etims_last_error}</p>}
-                <DialogFooter className="gap-2">
+                {/* Two buttons a row so all of them fit the dialog. */}
+                <DialogFooter className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:space-x-0 [&>*]:w-full">
                   {viewing.etims_qr_url && (
                     <Button variant="outline" asChild>
                       <a href={viewing.etims_qr_url} target="_blank" rel="noreferrer">View on KRA <ExternalLink className="h-3 w-3 ml-1" /></a>
