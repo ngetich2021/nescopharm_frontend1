@@ -42,6 +42,8 @@ export interface Order {
   invoice_approver?: { id: string; first_name: string; last_name: string } | null
   // Whether the logged-in user may approve this order (set by the order details endpoint).
   can_approve_invoice?: boolean
+  // Why this user may not approve (e.g. an accountant who raised the order), from the server.
+  invoice_approval_block?: string | null
   // Set when the approver rejected or cancelled the order (deleted after 1h / 24h).
   rejected_at?: string | null
   rejection_reason?: string | null

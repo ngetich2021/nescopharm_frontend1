@@ -717,6 +717,8 @@ class QuoteController extends Controller
             'delivery_location_id' => 'nullable|uuid|exists:delivery_locations,id',
             'delivery_instructions' => 'nullable|string',
             'sales_rep_id' => 'nullable|uuid|exists:users,id',
+            // One-time customer's quote: the customer in the system the order goes under.
+            'customer_id' => 'nullable|uuid|exists:customers,id',
         ]);
 
         if ($validator->fails()) {
@@ -777,14 +779,23 @@ class QuoteController extends Controller
     {
         $user = $request->user();
 
-        // An order needs an account to bill: a one-time customer is registered first.
+        // An order needs an account to bill: a one-time customer's quote is merged into a customer
+        // in the system as it is converted (customer_id). The typed name stays on the quote as a record.
         if (!$quote->customer_id) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => $quote->isOneTimeCustomer()
-                    ? "{$quote->one_time_customer_name} is a one-time customer. Register them under Customers, then Edit this quote and pick them before converting it to an order."
-                    : 'Pick a customer on this quote (Edit) before converting it to an order.',
-            ], 422);
+            $customer = $request->filled('customer_id')
+                ? Customer::where('company_id', $quote->company_id)->find($request->input('customer_id'))
+                : null;
+            if (!$customer) {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => $quote->isOneTimeCustomer()
+                        ? "{$quote->one_time_customer_name} is a one-time customer: pick the customer in the system to put this order under."
+                        : 'Pick the customer to put this order under.',
+                ], 422);
+            }
+            // Saved with the quote's accepted status below.
+            $quote->customer_id = $customer->id;
+            $quote->setRelation('customer', $customer);
         }
 
                 // Validate delivery location if provided
@@ -836,6 +847,7 @@ class QuoteController extends Controller
                     'id' => (string) Str::uuid(),
                     'order_number' => $orderNumber,
                     'customer_id' => $quote->customer_id,
+                    'created_by' => $user->id,
                     // Falls back to whoever originally submitted the quote (the
                     // rep) so orders converted from a rep's POS quote are
                     // attributed to them for their own "my orders" history,

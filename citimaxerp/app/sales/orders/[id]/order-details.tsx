@@ -105,7 +105,7 @@ interface OrderDetailsProps {
 }
 
 // Only these roles may sign an order off for invoicing (mirrors Order::INVOICE_APPROVER_ROLES).
-const INVOICE_APPROVER_ROLES = ["gm", "general manager", "director", "directors", "managing director", "warehouse manager"]
+const INVOICE_APPROVER_ROLES = ["gm", "general manager", "director", "directors", "managing director", "warehouse manager", "accountant"]
 
 export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   const router = useRouter()
@@ -782,6 +782,12 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
         </div>
       </div>
 
+      {/* An accountant who raised the order waits for another approver. */}
+      {order.invoice_approval_block && !isInvoiceApproved && !isDeclined && !isLoadingInvoice && !orderInvoice && (
+        <div className="border rounded-lg p-3 sm:p-4 text-xs sm:text-sm bg-gray-50 border-gray-200 text-gray-700">
+          {order.invoice_approval_block}
+        </div>
+      )}
       {/* Approvers see the pending sign-off up front, not only under the Invoices tab. */}
       {canApproveInvoice && !isInvoiceApproved && !isDeclined && !isLoadingInvoice && !orderInvoice && (
         <div className="border rounded-lg p-3 sm:p-4 text-xs sm:text-sm bg-amber-50 border-amber-200 flex flex-wrap items-center justify-between gap-2">

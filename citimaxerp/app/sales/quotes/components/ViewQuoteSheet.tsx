@@ -354,7 +354,7 @@ export function ViewQuoteSheet({
                     <span className="text-sm">{paymentPeriodLabel(quote.payment_days)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Not in the system. To convert this quote to an order, register them under Customers, then Edit the quote and pick them.
+                    Not in the system. "Convert to Order" asks which customer in the system the order goes under.
                   </p>
                 </CardContent>
               </Card>

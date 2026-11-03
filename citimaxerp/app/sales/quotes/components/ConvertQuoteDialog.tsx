@@ -1,18 +1,21 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { sizedName } from "@/lib/product-sizes"
 import { Quote, isOneTimeQuote, quoteCustomerName } from "@/lib/quotes"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { AlertCircle, FileText, User, Calendar, DollarSign, Package, CheckCircle2, XCircle } from "lucide-react"
-import { getCustomerDisplayName } from "@/lib/customers"
+import { getCustomers, getCustomerDisplayName } from "@/lib/customers"
+import { Input } from "@/components/ui/input"
 
 interface ConvertQuoteDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   quote: Quote | null
-  onConfirm: () => void
+  // customerId: for a one-time customer's quote, the customer in the system the order goes under.
+  onConfirm: (customerId?: string) => void
   isConverting: boolean
 }
 
@@ -23,13 +26,32 @@ export function ConvertQuoteDialog({
   onConfirm,
   isConverting
 }: ConvertQuoteDialogProps) {
+  const oneTime = !!quote && isOneTimeQuote(quote)
+  const [customers, setCustomers] = useState<any[]>([])
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [mergeCustomerId, setMergeCustomerId] = useState("")
+
+  useEffect(() => {
+    if (!open || !oneTime) return
+    setMergeCustomerId("")
+    setCustomerSearch(quote?.one_time_customer_name || "")
+    getCustomers().then((list) => setCustomers(list || [])).catch(() => setCustomers([]))
+  }, [open, oneTime, quote?.id])
+
   if (!quote) return null
 
-  // Check if quote can be converted
-  // A one-time customer has no account to bill: they are registered (and picked on the quote) first.
-  const oneTime = isOneTimeQuote(quote)
+  const search = customerSearch.trim().toLowerCase()
+  // Every word typed must appear in the name, business name, email or phone.
+  const matches = customers.filter((c) => {
+    const text = `${c.business_name || ""} ${c.name || ""} ${c.email || ""} ${c.phone || ""}`.toLowerCase()
+    return search.split(/\s+/).every((w) => text.includes(w))
+  }).slice(0, 50)
+  const mergeCustomer = customers.find((c) => c.id === mergeCustomerId)
+
+  // Check if quote can be converted. A one-time customer's order goes under a customer in the
+  // system, picked here.
   const canConvert = !quote.converted_to_order_id &&
-                     !oneTime &&
+                     (!oneTime || !!mergeCustomerId) &&
                      !quote.requires_approval &&
                      quote.status !== "rejected" &&
                      quote.status !== "expired"
@@ -84,8 +106,8 @@ export function ConvertQuoteDialog({
                     {quote.status === "expired" && (
                       <li>Expired quotes cannot be converted</li>
                     )}
-                    {oneTime && (
-                      <li>{quote.one_time_customer_name} is a one-time customer: register them under Customers, then Edit this quote and pick them</li>
+                    {oneTime && !mergeCustomerId && (
+                      <li>Pick below the customer in the system this order goes under</li>
                     )}
                   </ul>
                 </div>
@@ -99,6 +121,43 @@ export function ConvertQuoteDialog({
               <p className="text-sm text-green-800 font-medium">
                 This quote is ready to be converted to an order
               </p>
+            </div>
+          )}
+
+          {oneTime && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+              <p className="text-sm font-medium text-blue-900">
+                {quote.one_time_customer_name} is a one-time customer. Which customer in the system is this order for?
+              </p>
+              <Input
+                placeholder="Search customers by name, email or phone..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+              />
+              <div className="max-h-44 overflow-y-auto rounded border bg-white">
+                {matches.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-gray-500">
+                    No customer matches. Register them under Customers first, then convert.
+                  </p>
+                ) : (
+                  matches.map((c) => (
+                    <button
+                      type="button"
+                      key={c.id}
+                      onClick={() => setMergeCustomerId(c.id)}
+                      className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 ${c.id === mergeCustomerId ? "bg-blue-100 font-medium" : ""}`}
+                    >
+                      {getCustomerDisplayName(c)}
+                      {c.phone && <span className="text-xs text-gray-500"> · {c.phone}</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+              {mergeCustomer && (
+                <p className="text-xs text-blue-800">
+                  The order (and this quote) will be under <strong>{getCustomerDisplayName(mergeCustomer)}</strong>.
+                </p>
+              )}
             </div>
           )}
 
@@ -221,7 +280,7 @@ export function ConvertQuoteDialog({
           </Button>
           <Button
             type="button"
-            onClick={() => onConfirm()}
+            onClick={() => onConfirm(oneTime ? mergeCustomerId : undefined)}
             disabled={isConverting || !canConvert}
             className={!canConvert ? "opacity-50 cursor-not-allowed" : ""}
           >

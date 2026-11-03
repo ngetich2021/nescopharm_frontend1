@@ -35,7 +35,7 @@ export function ConvertQuoteWithSelectionDialog({
   }
 
   // Filter quotes that can be converted
-  // (a one-time customer's quote waits until they are registered and picked on it)
+  // (a one-time customer's quote is converted from its own row, where the customer is picked)
   const eligibleQuotes = quotes.filter(quote =>
     !quote.converted_to_order_id &&
     !isOneTimeQuote(quote) &&

@@ -97,6 +97,8 @@ class NotificationService
             $approverIds = User::where('company_id', $order->company_id)
                 ->whereRaw('users.is_active = true')
                 ->whereHas('role', fn ($r) => $r->whereRaw("LOWER(TRIM(name)) IN ({$placeholders})", \App\Models\Order::INVOICE_APPROVER_ROLES))
+                // Whoever raised the order is never asked to approve it (Accountant A raises, B approves).
+                ->when($order->created_by, fn ($q) => $q->where('id', '!=', $order->created_by))
                 ->pluck('id')
                 ->all();
         } catch (\Throwable $e) {

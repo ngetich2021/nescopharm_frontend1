@@ -104,6 +104,7 @@ class Order extends Model
         'created_at',
         'updated_at',
         'order_date',
+        'created_by',
         'invoice_approved_by',
         'invoice_approved_at',
         'invoice_approval_comment',
@@ -166,12 +167,31 @@ class Order extends Model
         return !empty($date) && \Carbon\Carbon::parse($date)->toDateString() < self::HISTORICAL_CUTOFF;
     }
 
-    // Only the GM, a Director or the Warehouse Manager may sign an order off for invoicing.
-    public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director', 'warehouse manager'];
+    // Only the GM, a Director, the Warehouse Manager or an Accountant may sign an order off for invoicing.
+    public const INVOICE_APPROVER_ROLES = ['gm', 'general manager', 'director', 'directors', 'managing director', 'warehouse manager', 'accountant'];
 
     public static function canApproveInvoices(?User $user): bool
     {
         return in_array(strtolower(trim((string) $user?->role?->name)), self::INVOICE_APPROVER_ROLES, true);
+    }
+
+    /** Accountants check each other: one never approves what they raised themselves. */
+    public static function isAccountant(?User $user): bool
+    {
+        return strtolower(trim((string) $user?->role?->name)) === 'accountant';
+    }
+
+    /** Why $user may not approve this order, or null when they may. */
+    public function invoiceApprovalBlock(?User $user): ?string
+    {
+        if (!self::canApproveInvoices($user)) {
+            return 'Only the GM, a Director, the Warehouse Manager or an Accountant can approve orders.';
+        }
+        if (self::isAccountant($user) && $this->created_by && $this->created_by === $user->id) {
+            return 'You raised this order, so another approver (another accountant, the GM or a Director) must approve it.';
+        }
+
+        return null;
     }
 
     public function isInvoiceApproved(): bool

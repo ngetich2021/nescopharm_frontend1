@@ -437,7 +437,10 @@ export function PurchaseOrderDetailsSheet({ orderId, open, onOpenChange, onOrder
               </PermissionGuard>
               )}
 
-              {canApprove && order && order.status === 'pending' && itemCount > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
+              {order?.approval_block && order.status === 'pending' && (order.approval_status === 'pending' || !order.approval_status) && (
+                <p className="text-xs text-muted-foreground self-center">{order.approval_block}</p>
+              )}
+              {canApprove && order && order.can_approve !== false && order.status === 'pending' && itemCount > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
                 <Button
                   onClick={() => setIsApproveDialogOpen(true)}
                   disabled={isApproving}

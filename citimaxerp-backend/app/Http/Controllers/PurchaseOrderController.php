@@ -104,7 +104,28 @@ class PurchaseOrderController extends Controller
             $row['returnable_quantity'] = max(0, $item->received_quantity - $item->returned_quantity);
             return $row;
         })->values()->all();
+        // The page shows Approve from this, so it never disagrees with approve().
+        $user = auth()->user();
+        $data['can_approve'] = $user ? $this->approvalBlock($order, $user) === null : false;
+        $data['approval_block'] = $user && $user->role?->hasPermission('can_approve_purchase_orders') ? $this->approvalBlock($order, $user) : null;
         return $data;
+    }
+
+    /**
+     * Why $user may not approve this purchase order, or null when they may. Held by the GM,
+     * Director and Accountant roles (company/system admin rights deliberately don't imply it);
+     * an accountant never approves one they raised - another approver does.
+     */
+    protected function approvalBlock(PurchaseOrder $order, \App\Models\User $user): ?string
+    {
+        if (!$user->role?->hasPermission('can_approve_purchase_orders') || $user->company_id !== $order->company_id) {
+            return 'Only the GM, a Director or an Accountant can approve purchase orders.';
+        }
+        if (\App\Models\Order::isAccountant($user) && $order->created_by === $user->id) {
+            return 'You raised this purchase order, so another approver (another accountant, the GM or a Director) must approve it.';
+        }
+
+        return null;
     }
 
     protected function findForCompany(Request $request, $id): ?PurchaseOrder
@@ -682,12 +703,8 @@ class PurchaseOrderController extends Controller
         }
 
         $user = $request->user();
-        // Held only by the GM and Director roles; company/system admin rights deliberately don't imply it.
-        if (!$user->role?->hasPermission('can_approve_purchase_orders') || $user->company_id !== $purchaseOrder->company_id) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Only the GM or a Director can approve purchase orders.',
-            ], 403);
+        if ($block = $this->approvalBlock($purchaseOrder, $user)) {
+            return response()->json(['status' => 'failed', 'message' => $block], 403);
         }
 
         $validator = Validator::make($request->all(), [

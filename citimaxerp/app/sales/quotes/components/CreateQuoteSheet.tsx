@@ -436,7 +436,7 @@ export function CreateQuoteSheet({ open, onClose, onSuccess }: CreateQuoteSheetP
                       </Select>
                     </div>
                     <p className="col-span-2 text-xs text-muted-foreground">
-                      Not saved as a customer. To turn this quote into an order, register them under Customers first, then Edit the quote and pick them.
+                      Not saved as a customer. Converting the quote to an order asks which customer in the system it goes under.
                       Choose the sales team below.
                     </p>
                   </div>

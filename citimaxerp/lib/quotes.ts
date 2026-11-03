@@ -616,7 +616,8 @@ export async function deleteQuote(quoteId: string): Promise<boolean> {
 /**
  * Converts a quote to an order.
  */
-export async function convertQuoteToOrder(quoteId: string): Promise<any> {
+// customerId: for a one-time customer's quote, the customer in the system the order goes under.
+export async function convertQuoteToOrder(quoteId: string, customerId?: string): Promise<any> {
   // Server-side check
   if (typeof window === 'undefined') {
     throw new Error("convertQuoteToOrder must be called client-side");
@@ -636,7 +637,7 @@ export async function convertQuoteToOrder(quoteId: string): Promise<any> {
       const response = await apiCall<{status: string; order?: any; message?: string}>(
         `/quotes/${quoteId}/convert-to-order`,
         "POST",
-        undefined,
+        customerId ? { customer_id: customerId } : undefined,
         true
       );
       

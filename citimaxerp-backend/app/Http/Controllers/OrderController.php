@@ -265,7 +265,8 @@ class OrderController extends Controller
             }
 
             // The page shows Approve from this, so it never disagrees with approveInvoice().
-            $order->setAttribute('can_approve_invoice', Order::canApproveInvoices($user));
+            $order->setAttribute('can_approve_invoice', $order->invoiceApprovalBlock($user) === null);
+            $order->setAttribute('invoice_approval_block', Order::canApproveInvoices($user) ? $order->invoiceApprovalBlock($user) : null);
 
             return response()->json([
                 'status' => 'success',
@@ -531,6 +532,7 @@ class OrderController extends Controller
                     'id' => (string) Str::uuid(),
                     'order_number' => $orderNumber,
                     'customer_id' => $request->input('customer_id'),
+                    'created_by' => $user->id,
                     'sales_rep_id' => $request->input('sales_rep_id'),
                     'payment_type' => $orderCredit['payment_type'],
                     'credit_terms_days' => $orderCredit['credit_terms_days'],
@@ -1099,7 +1101,7 @@ class OrderController extends Controller
         if (!Order::canApproveInvoices($user)) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Only the GM, a Director or the Warehouse Manager can approve orders.',
+                'message' => 'Only the GM, a Director, the Warehouse Manager or an Accountant can approve orders.',
             ], 403);
         }
 
@@ -1109,6 +1111,9 @@ class OrderController extends Controller
                 'status' => 'failed',
                 'message' => 'Order not found.',
             ], 404);
+        }
+        if ($block = $order->invoiceApprovalBlock($user)) {
+            return response()->json(['status' => 'failed', 'message' => $block], 403);
         }
 
         if (\App\Models\Invoice::where('order_id', $order->id)->exists()) {
@@ -1162,7 +1167,7 @@ class OrderController extends Controller
     {
         $user = $request->user();
         if (!Order::canApproveInvoices($user)) {
-            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director or the Warehouse Manager can decide on orders.'], 403);
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director, the Warehouse Manager or an Accountant can decide on orders.'], 403);
         }
         $order = Order::where('id', $id)->where('company_id', $user->company_id)->first();
         if (!$order) {
@@ -1248,7 +1253,7 @@ class OrderController extends Controller
     {
         $user = $request->user();
         if (!Order::canApproveInvoices($user)) {
-            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director or the Warehouse Manager can restore orders.'], 403);
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director, the Warehouse Manager or an Accountant can restore orders.'], 403);
         }
         $order = Order::where('id', $id)->where('company_id', $user->company_id)->first();
         if (!$order) {

@@ -447,7 +447,7 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                       </Select>
                     </div>
                     <p className="col-span-2 text-xs text-muted-foreground">
-                      Not saved as a customer. Once they are registered under Customers, pick them above to turn this quote into an order.
+                      Not saved as a customer. Converting the quote to an order asks which customer in the system it goes under (or pick them above now).
                     </p>
                   </div>
                 )}

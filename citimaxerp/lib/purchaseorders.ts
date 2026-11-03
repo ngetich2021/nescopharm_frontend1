@@ -49,6 +49,9 @@ export interface PurchaseOrder {
   amount_paid?: string | null
   payment_status?: string | null
   approval_status?: string | null
+  // From the server: whether the signed-in user may approve it (an accountant never approves one they raised).
+  can_approve?: boolean
+  approval_block?: string | null
   // The approver relation serialises over the id column, so this is the approver user when loaded.
   approved_by?: { first_name?: string; last_name?: string } | string | null
   items: PurchaseOrderItem[]

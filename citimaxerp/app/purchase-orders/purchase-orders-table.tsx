@@ -441,7 +441,7 @@ export function PurchaseOrdersTable({ onDataChanged }: PurchaseOrdersTableProps)
                             </DropdownMenuItem>
                           </PermissionGuard>
                         )}
-                        {canApprove && order.status === 'pending' && order.items.length > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
+                        {canApprove && order.can_approve !== false && order.status === 'pending' && order.items.length > 0 && (order.approval_status === 'pending' || !order.approval_status) && (
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleApproveClick(order); }}>
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Approve
