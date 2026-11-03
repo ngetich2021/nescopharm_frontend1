@@ -20,7 +20,8 @@ import {
   Trash2,
   Loader2,
   RefreshCw,
-  Receipt
+  Receipt,
+  BookOpen
 } from "lucide-react"
 import { getSupplier, deleteSupplier, getSupplierStatement, Supplier, SupplierStatement } from "@/lib/suppliers"
 import { useToast } from "@/hooks/use-toast"
@@ -141,6 +142,13 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                     </Badge>
                   </div>
                   <div className="flex space-x-2">
+                    {/* The supplier's journal entries, both sides of each, in the General Ledger */}
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/finance/general-ledger?supplier_id=${supplier.id}&date_from=2020-01-01`}>
+                        <BookOpen className="h-4 w-4 mr-2" />
+                        Ledger
+                      </a>
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => setIsEditOpen(true)}>
                       <Edit className="h-4 w-4 mr-2" />
                       Edit

@@ -75,6 +75,13 @@ class GeneralLedgerController extends Controller
         $customerEntryIds = $customerId
             ? app(CustomerLedgerService::class)->entryIdsQuery($companyId, $customerId)
             : null;
+        // Same for a supplier or transporter: its bills, delivery invoices, goods receipts and payments.
+        $supplierId = $request->input('supplier_id');
+        if ($supplierId) {
+            $supplierEntryIds = \Illuminate\Support\Facades\DB::table('journal_entry_items')->select('journal_entry_id')
+                ->where('company_id', $companyId)->where('contact_id', $supplierId)->where('contact_type', \App\Models\Supplier::class);
+            $customerEntryIds = $customerEntryIds ? $customerEntryIds->whereIn('journal_entry_id', $supplierEntryIds) : $supplierEntryIds;
+        }
 
         try {
             // Build query for journal entry items
@@ -185,6 +192,7 @@ class GeneralLedgerController extends Controller
                         'account_id' => $accountId,
                         'account_type' => $accountType,
                         'customer_id' => $customerId,
+                        'supplier_id' => $supplierId,
                     ],
                     'summary' => [
                         'total_accounts' => count($ledgerData),

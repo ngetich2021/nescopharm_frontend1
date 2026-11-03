@@ -30,6 +30,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { getCustomers, getCustomerDisplayName, Customer } from "@/lib/customers"
+import { getSuppliers, type Supplier } from "@/lib/suppliers"
 import { cn } from "@/lib/utils"
 import { 
   getGeneralLedger, 
@@ -201,6 +202,10 @@ export default function GeneralLedgerPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [customerId, setCustomerId] = useState<string>("all")
   const [customerOpen, setCustomerOpen] = useState(false)
+  // Same for a supplier or transporter: its bills, delivery invoices, goods receipts and payments.
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [supplierId, setSupplierId] = useState<string>("all")
+  const [supplierOpen, setSupplierOpen] = useState(false)
   const { toast } = useToast()
 
   const accountTypes = [
@@ -216,22 +221,26 @@ export default function GeneralLedgerPage() {
     // Linked from a customer's Account Balance: ?customer_id=...&date_from=...&date_to=...
     const params = new URLSearchParams(window.location.search)
     if (params.get("customer_id")) setCustomerId(params.get("customer_id")!)
+    if (params.get("supplier_id")) setSupplierId(params.get("supplier_id")!)
     if (params.get("date_from")) setDateFrom(params.get("date_from")!)
     if (params.get("date_to")) setDateTo(params.get("date_to")!)
     fetchAccounts()
     getCustomers().then(setCustomers).catch(() => setCustomers([]))
+    getSuppliers().then(setSuppliers).catch(() => setSuppliers([]))
   }, [])
 
   useEffect(() => {
     if (accounts.length > 0) {
       fetchLedgerData()
     }
-  }, [accounts, dateFrom, dateTo, selectedAccountType, selectedAccount, customerId])
+  }, [accounts, dateFrom, dateTo, selectedAccountType, selectedAccount, customerId, supplierId])
 
   const customerLabel = (id: string) => {
     const c = customers.find((x) => x.id === id)
     return c ? getCustomerDisplayName(c) : "Selected customer"
   }
+
+  const supplierLabel = (id: string) => suppliers.find((x) => x.id === id)?.name ?? "Selected supplier"
 
   const fetchAccounts = async () => {
     try {
@@ -265,6 +274,10 @@ export default function GeneralLedgerPage() {
 
       if (customerId !== "all") {
         params.customer_id = customerId
+      }
+
+      if (supplierId !== "all") {
+        params.supplier_id = supplierId
       }
 
       const response = await getGeneralLedger(params)
@@ -303,7 +316,8 @@ export default function GeneralLedgerPage() {
     : ledgerData
 
   const periodLine = `${format(new Date(dateFrom), 'dd MMM yyyy')} to ${format(new Date(dateTo), 'dd MMM yyyy')}`
-  const customerLine = customerId !== "all" ? ` · ${customerLabel(customerId)}` : ""
+  const customerLine = (customerId !== "all" ? ` · ${customerLabel(customerId)}` : "")
+    + (supplierId !== "all" ? ` · ${supplierLabel(supplierId)}` : "")
 
   // Every account shown, each opened and closed with its balance, in one table.
   const buildLedgerExport = (): TableExport => {
@@ -363,7 +377,7 @@ export default function GeneralLedgerPage() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">From Date</label>
               <div className="relative">
@@ -465,6 +479,44 @@ export default function GeneralLedgerPage() {
             </div>
 
             <div>
+              <label className="text-sm font-medium mb-2 block">Supplier / Transporter</label>
+              <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                    <span className="truncate">{supplierId === "all" ? "All Suppliers" : supplierLabel(supplierId)}</span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search supplier or transporter..." />
+                    <CommandList>
+                      <CommandEmpty>No supplier found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem value="all suppliers" onSelect={() => { setSupplierId("all"); setSupplierOpen(false) }}>
+                          <Check className={cn("mr-2 h-4 w-4", supplierId === "all" ? "opacity-100" : "opacity-0")} />
+                          All Suppliers
+                        </CommandItem>
+                        {[...suppliers]
+                          .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+                          .map((s) => (
+                            <CommandItem
+                              key={s.id}
+                              value={`${s.name} ${s.id}`}
+                              onSelect={() => { setSupplierId(s.id); setSupplierOpen(false) }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", supplierId === s.id ? "opacity-100" : "opacity-0")} />
+                              <span className="truncate">{s.name}</span>
+                            </CommandItem>
+                          ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div>
               <label className="text-sm font-medium mb-2 block">Search</label>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -481,6 +533,12 @@ export default function GeneralLedgerPage() {
             <p className="text-xs text-muted-foreground mt-3">
               Showing only {customerLabel(customerId)}&apos;s journal entries, with both sides of each entry. Balances are this
               customer&apos;s movements on each account, not the account&apos;s full balance.
+            </p>
+          )}
+          {supplierId !== "all" && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Showing only {supplierLabel(supplierId)}&apos;s journal entries (bills, delivery invoices, goods received, debit notes and
+              payments), with both sides of each entry. The Payables account&apos;s closing balance is what is owed to them.
             </p>
           )}
         </CardContent>
