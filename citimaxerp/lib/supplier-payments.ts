@@ -231,7 +231,7 @@ export async function getSupplierBills(params: {
 } = {}): Promise<SupplierBillsResponse> {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") qs.append(k, String(v)); });
-    return apiCall<SupplierBillsResponse>(`/accounts-payable?${qs.toString()}`, "GET");
+    return apiCall<SupplierBillsResponse>(`/finance/accounts-payable?${qs.toString()}`, "GET");
 }
 
 export async function getOpenSupplierInvoices(supplierId: string): Promise<OpenSupplierInvoice[]> {
