@@ -11,11 +11,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Plus, Search, ArrowLeft, Save } from "lucide-react"
+import { Plus, Search, ArrowLeft, Save, UserPlus } from "lucide-react"
 import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { updateQuote, deleteEmptiedQuote, Quote } from "@/lib/quotes"
+import { updateQuote, deleteEmptiedQuote, isOneTimeQuote, ONE_TIME_PAYMENT_PERIODS, paymentPeriodLabel, Quote } from "@/lib/quotes"
 import { getCustomers, getCustomerDisplayName } from "@/lib/customers"
 import { getProducts } from "@/lib/products"
 import { useToast } from "@/hooks/use-toast"
@@ -38,13 +38,24 @@ const lineItemSchema = z.object({
 })
 
 const quoteSchema = z.object({
-  customer_id: z.string().min(1, "Customer is required"),
+  customer_id: z.string(),
+  // One-time customer: someone not in the system, quoted by name only.
+  one_time: z.boolean(),
+  one_time_customer_name: z.string().optional(),
+  payment_days: z.number().optional(),
   valid_until: z.string().min(1, "Valid until date is required"),
   currency: z.string().min(1, "Currency is required"),
   notes: z.string().optional(),
   status: z.enum(["pending", "accepted", "rejected", "expired"]),
   // Saving with no items deletes the quote (see onSubmit).
   items: z.array(lineItemSchema),
+}).superRefine((data, ctx) => {
+  if (data.one_time && !data.one_time_customer_name?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["one_time_customer_name"], message: "Customer name is required" })
+  }
+  if (!data.one_time && !data.customer_id) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["customer_id"], message: "Customer is required" })
+  }
 })
 
 type QuoteFormData = z.infer<typeof quoteSchema>
@@ -72,6 +83,9 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
     mode: 'onChange',
     defaultValues: {
       customer_id: '',
+      one_time: false,
+      one_time_customer_name: '',
+      payment_days: 0,
       valid_until: '',
       currency: 'KES',
       notes: '',
@@ -97,7 +111,10 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
   useEffect(() => {
     if (open && quote) {
       const formData: QuoteFormData = {
-        customer_id: quote.customer_id,
+        customer_id: quote.customer_id || '',
+        one_time: isOneTimeQuote(quote),
+        one_time_customer_name: quote.one_time_customer_name || '',
+        payment_days: quote.payment_days ?? 0,
         valid_until: quote.valid_until.split('T')[0], // Convert to date string
         currency: quote.currency || 'KES',
         notes: quote.notes || '',
@@ -192,7 +209,9 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
       }
       
       const updateData = {
-        customer_id: data.customer_id,
+        customer_id: data.one_time ? null : data.customer_id,
+        one_time_customer_name: data.one_time ? data.one_time_customer_name?.trim() : null,
+        payment_days: data.one_time ? data.payment_days ?? 0 : null,
         notes: data.notes || "",
         valid_until: data.valid_until,
         status: data.status,
@@ -292,7 +311,9 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                             aria-expanded={showCustomerSearch}
                             className="w-full justify-between"
                           >
-                            {form.watch('customer_id')
+                            {form.watch('one_time')
+                              ? "One-time customer"
+                              : form.watch('customer_id')
                               ? (() => {
                                   const selected = customers.find(customer => customer.id === form.watch('customer_id'))
                                   return selected ? getCustomerDisplayName(selected) : "Select or search customer"
@@ -323,6 +344,25 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                                 <Plus className="h-4 w-4" />
                                 Create New Customer
                               </div>
+                              <div
+                                className="flex flex-col gap-0.5 px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded"
+                                onClick={() => {
+                                  form.setValue('one_time', true)
+                                  form.setValue('customer_id', '')
+                                  if (customerSearchTerm.trim() && !form.getValues('one_time_customer_name')) {
+                                    form.setValue('one_time_customer_name', customerSearchTerm.trim())
+                                  }
+                                  form.clearErrors('customer_id')
+                                  setShowCustomerSearch(false)
+                                  setCustomerSearchTerm("")
+                                }}
+                              >
+                                <span className="flex items-center gap-2 font-medium text-blue-600">
+                                  <UserPlus className="h-4 w-4" />
+                                  One-time customer
+                                </span>
+                                <span className="text-xs text-gray-500 pl-6">Not in the system: quote by name only</span>
+                              </div>
                               {filteredCustomers.length === 0 && customerSearchTerm ? (
                                 <div className="px-2 py-4 text-sm text-gray-500 text-center">
                                   No customers found
@@ -334,6 +374,8 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                                     className="flex flex-col gap-1 px-2 py-2 cursor-pointer hover:bg-gray-100 rounded"
                                     onClick={() => {
                                       form.setValue('customer_id', customer.id)
+                                      form.setValue('one_time', false)
+                                      form.clearErrors('customer_id')
                                       setShowCustomerSearch(false)
                                       setCustomerSearchTerm("")
                                     }}
@@ -374,6 +416,41 @@ export function EditQuoteSheet({ open, onClose, quote, onSuccess }: EditQuoteShe
                     </Select>
                   </div>
                 </div>
+
+                {form.watch('one_time') && (
+                  <div className="grid grid-cols-2 gap-4 rounded-md border border-blue-200 bg-blue-50/40 p-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="one_time_customer_name">One-time customer name *</Label>
+                      <Input
+                        id="one_time_customer_name"
+                        placeholder="Name to print on the quotation"
+                        {...form.register('one_time_customer_name')}
+                      />
+                      {form.formState.errors.one_time_customer_name && (
+                        <p className="text-sm text-red-600">{form.formState.errors.one_time_customer_name.message}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="payment_days">Payment period</Label>
+                      <Select
+                        value={String(form.watch('payment_days') ?? 0)}
+                        onValueChange={(value) => form.setValue('payment_days', Number(value))}
+                      >
+                        <SelectTrigger id="payment_days">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ONE_TIME_PAYMENT_PERIODS.map((days) => (
+                            <SelectItem key={days} value={String(days)}>{paymentPeriodLabel(days)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="col-span-2 text-xs text-muted-foreground">
+                      Not saved as a customer. Once they are registered under Customers, pick them above to turn this quote into an order.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">

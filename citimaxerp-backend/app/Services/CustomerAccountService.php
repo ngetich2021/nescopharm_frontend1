@@ -245,6 +245,37 @@ class CustomerAccountService
     }
 
     /**
+     * Money received against one invoice that is more than it owes: the invoice is paid off, the
+     * rest goes on the customer's oldest unpaid invoices, and what is still left is their credit.
+     * Money is always taken; nothing is refused for being too much.
+     */
+    public function receiveOnInvoice(
+        Invoice $invoice,
+        User $user,
+        float $amount,
+        string $method,
+        ?string $paymentDate = null,
+        ?string $reference = null,
+        ?string $notes = null,
+    ): array {
+        $customer = Customer::where('company_id', $invoice->company_id)->findOrFail($invoice->customer_id);
+
+        return DB::transaction(function () use ($invoice, $customer, $user, $amount, $method, $paymentDate, $reference, $notes) {
+            $owed = max(0, $invoice->outstanding());
+            $split = $owed > 0.005 ? [['invoice_id' => $invoice->id, 'amount' => min($owed, $amount)]] : [];
+            $result = $this->receive($customer, $user, $amount, $method, $paymentDate, $reference, $notes ?: "Received on {$invoice->invoice_number}", $split);
+            if ($result['left_as_credit'] > 0.005) {
+                $more = $this->allocate($result['payment'], null, "Received on {$invoice->invoice_number}, rest applied to the oldest unpaid invoices");
+                $result['allocations'] = array_merge($result['allocations'], $more);
+                $result['allocated'] = round(array_sum(array_column($result['allocations'], 'amount')), 2);
+                $result['left_as_credit'] = round($amount - $result['allocated'], 2);
+            }
+
+            return $result;
+        });
+    }
+
+    /**
      * Put a receipt's unused money onto invoices of its customer. With a $split, each line is
      * capped at what that invoice still owes and what the receipt has left; without one, the
      * receipt's own order's invoice is paid first, then the oldest open invoices.

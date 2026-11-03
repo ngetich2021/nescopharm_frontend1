@@ -393,6 +393,10 @@ export interface PaymentRecordResponse {
     transaction_id: string | null;
     notes: string | null;
   };
+  // Paid over the invoice's balance: where the rest went, and what is kept as credit.
+  allocations?: Array<{ invoice_id: string; invoice_number: string; amount: number }>;
+  left_as_credit?: number;
+  message?: string;
 }
 
 export interface PaymentMappingResponse {
@@ -496,7 +500,7 @@ export async function recordInvoicePayment(invoiceId: string, paymentData: Recor
       paymentData,
       true
     );
-    return response.data;
+    return { ...response.data, message: response.message };
   } catch (error: any) {
     throw new Error(`Failed to record payment: ${error.message || "Unknown error"}`);
   }

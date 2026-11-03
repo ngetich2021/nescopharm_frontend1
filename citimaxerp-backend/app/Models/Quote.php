@@ -99,6 +99,8 @@ class Quote extends Model
         'signed_quote_name',
         'signed_quote_uploaded_at',
         'signed_quote_uploaded_by',
+        'one_time_customer_name',
+        'payment_days',
         'created_at',
         'updated_at',
     ];
@@ -110,6 +112,7 @@ class Quote extends Model
         'below_minimum_price' => 'boolean',
         'requires_approval' => 'boolean',
         'valid_until' => 'date',
+        'payment_days' => 'integer',
         'submitted_at' => 'datetime',
         'signed_quote_uploaded_at' => 'datetime',
         'created_at' => 'datetime',
@@ -183,6 +186,11 @@ class Quote extends Model
      */
     public function paymentTermsLabel(): string
     {
+        // A one-time customer has no account: the period typed on the quote is the term.
+        if ($this->isOneTimeCustomer()) {
+            return $this->payment_days ? "Strictly {$this->payment_days} days" : 'Strictly cash';
+        }
+
         $customer = $this->customer;
         if (!$customer || $customer->payment_method !== 'credit') {
             return 'Strictly cash';
@@ -253,6 +261,22 @@ class Quote extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /** Quoted to someone not in the system: only their name is kept, on the quote. */
+    public function isOneTimeCustomer(): bool
+    {
+        return !$this->customer_id && filled($this->one_time_customer_name);
+    }
+
+    public function customerDisplayName(): string
+    {
+        if ($this->isOneTimeCustomer()) {
+            return $this->one_time_customer_name;
+        }
+        $customer = $this->customer;
+
+        return $customer ? ($customer->business_name ?: $customer->name) : '';
     }
 
     public function quoteItems()

@@ -31,7 +31,7 @@
     $customer = $quote->customer;
     $rep = $quote->salesRep ?? $quote->originalSubmittedBy;
     $repName = $rep ? trim($rep->first_name . ' ' . $rep->last_name) : '';
-    $clientName = $customer ? ($customer->business_name ?: $customer->name) : '';
+    $clientName = $quote->customerDisplayName();
     $totals = $quote->vatBreakdown();
     $currency = $quote->currency ?: 'KES';
     $letterheadSrc = $company?->assetDataUri($company->letterhead_url);

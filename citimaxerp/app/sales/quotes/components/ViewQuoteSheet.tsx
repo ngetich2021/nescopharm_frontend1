@@ -18,7 +18,7 @@ import {
 import { Edit, ShoppingCart, FileText, Calendar, User, MapPin, Phone, Mail, ArrowLeft, Send, ChevronDown, MessageCircle, Eye, Upload, Download, CheckCircle2, AlertCircle } from "lucide-react"
 import { getCustomerDisplayName } from "@/lib/customers"
 import { formatCurrency } from "@/lib/utils"
-import { Quote, SalesRep, fetchQuoteSalesReps, assignQuoteSalesRep, uploadSignedQuote } from "@/lib/quotes"
+import { Quote, SalesRep, fetchQuoteSalesReps, assignQuoteSalesRep, uploadSignedQuote, isOneTimeQuote, paymentPeriodLabel } from "@/lib/quotes"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { SendQuoteModal } from "@/components/modals/send-quote-modal"
 import apiCall from "@/lib/api"
@@ -329,6 +329,33 @@ export function ViewQuoteSheet({
                     <span className="text-sm font-medium text-gray-600">Customer Type:</span>
                     <span className="text-sm capitalize">{quote.customer.customer_type}</span>
                   </div>
+                </CardContent>
+              </Card>
+            )}
+            {isOneTimeQuote(quote) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Customer Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Name:</span>
+                    <span className="text-sm font-semibold">{quote.one_time_customer_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Customer:</span>
+                    <Badge variant="outline" className="border-blue-300 text-blue-700">One-time customer</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Payment period:</span>
+                    <span className="text-sm">{paymentPeriodLabel(quote.payment_days)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Not in the system. To convert this quote to an order, register them under Customers, then Edit the quote and pick them.
+                  </p>
                 </CardContent>
               </Card>
             )}

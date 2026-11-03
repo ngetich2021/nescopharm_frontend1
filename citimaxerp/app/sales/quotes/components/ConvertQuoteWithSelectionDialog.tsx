@@ -2,7 +2,7 @@
 
 import { sizedName } from "@/lib/product-sizes"
 import { useState } from "react"
-import { Quote } from "@/lib/quotes"
+import { Quote, isOneTimeQuote } from "@/lib/quotes"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,8 +35,10 @@ export function ConvertQuoteWithSelectionDialog({
   }
 
   // Filter quotes that can be converted
+  // (a one-time customer's quote waits until they are registered and picked on it)
   const eligibleQuotes = quotes.filter(quote =>
     !quote.converted_to_order_id &&
+    !isOneTimeQuote(quote) &&
     !quote.requires_approval && 
     quote.status !== "rejected" && 
     quote.status !== "expired"

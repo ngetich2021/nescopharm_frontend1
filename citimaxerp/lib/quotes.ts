@@ -4,7 +4,11 @@ import apiCall from "@/lib/api"
 export interface Quote {
   id: string
   quote_number: string
-  customer_id: string
+  customer_id: string | null
+  // A customer not in the system ("one-time customer"): their name and the payment period
+  // offered (days, 0 = cash) are kept on the quote instead of an account.
+  one_time_customer_name?: string | null
+  payment_days?: number | null
   submitted_by_id?: string | null
   submitted_at?: string | null
   original_submitted_by_id?: string | null
@@ -407,11 +411,30 @@ export async function getQuoteById(quoteId: string): Promise<Quote | null> {
   });
 }
 
+// Payment periods offered to a one-time customer (days; 0 = cash).
+export const ONE_TIME_PAYMENT_PERIODS = [0, 7, 14, 30, 45, 60, 90]
+
+export function paymentPeriodLabel(days: number | null | undefined): string {
+  return days ? `Strictly ${days} days` : "Strictly cash"
+}
+
+/** Who the quote is for: the customer's name, or the one-time customer's typed name. */
+export function quoteCustomerName(quote: Pick<Quote, "customer" | "one_time_customer_name">): string {
+  if (quote.customer) return quote.customer.business_name || quote.customer.name || ""
+  return quote.one_time_customer_name || ""
+}
+
+export function isOneTimeQuote(quote: Pick<Quote, "customer_id" | "one_time_customer_name">): boolean {
+  return !quote.customer_id && !!quote.one_time_customer_name
+}
+
 /**
  * Creates a new quote in the system.
  */
 export async function createQuote(quoteData: {
-  customer_id: string;
+  customer_id: string | null;
+  one_time_customer_name?: string | null;
+  payment_days?: number | null;
   sales_rep_id?: string | null;
   items: { product_id: string; variant_id?: string | null; quantity: number; unit_price: string; price_label?: string | null; price_unit?: string | null }[];
   notes?: string;
@@ -479,7 +502,9 @@ export async function deleteEmptiedQuote(quoteId: string): Promise<void> {
 export async function updateQuote(
   quoteId: string, 
   quoteData: {
-    customer_id?: string;
+    customer_id?: string | null;
+    one_time_customer_name?: string | null;
+    payment_days?: number | null;
     items?: { product_id: string; variant_id?: string | null; quantity: number; unit_price: string; price_label?: string | null; price_unit?: string | null }[];
     notes?: string;
     valid_until?: string;

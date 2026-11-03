@@ -5,7 +5,7 @@ import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { getQuoteById, Quote } from "@/lib/quotes"
+import { getQuoteById, isOneTimeQuote, Quote } from "@/lib/quotes"
 import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentViewToggle, useDocumentView } from "@/components/document-view-toggle"
@@ -17,6 +17,12 @@ import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
 import { ScanMeFooter } from "@/components/scan-me-footer"
+
+// A one-time customer has no account: only the name typed on the quote.
+const quoteBuyer = (quote: Quote) =>
+  isOneTimeQuote(quote)
+    ? { ...buildBuyerBlock(null), name: quote.one_time_customer_name || "" }
+    : buildBuyerBlock(quote.customer)
 
 export default function QuoteDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -49,7 +55,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
   const fileBase = () =>
     quote
       ? documentFileName([
-          buildBuyerBlock(quote.customer).name,
+          quoteBuyer(quote).name,
           `Quotation ${quote.quote_number}${isPricing ? " (Pricing)" : ""}`,
           fileDate(quote.created_at),
         ])
@@ -64,7 +70,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
       fileName: fileBase(),
       title: `Quotation ${quote.quote_number}`,
       details: [
-        ["Customer", buildBuyerBlock(quote.customer).name || "-"],
+        ["Customer", quoteBuyer(quote).name || "-"],
         ["Date", new Date(quote.created_at).toLocaleDateString("en-GB")],
         ["Valid until", quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-GB") : "-"],
       ],
@@ -145,7 +151,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
   const company = quote.company
   const rep = quote.sales_rep || quote.original_submitted_by
   const repName = rep ? `${rep.first_name} ${rep.last_name}`.trim() : "-"
-  const buyer = buildBuyerBlock(quote.customer)
+  const buyer = quoteBuyer(quote)
   const currency = quote.currency || "KES"
   const totals = quote.totals
   const subtotal = Number(totals?.subtotal ?? quote.total_amount ?? 0)

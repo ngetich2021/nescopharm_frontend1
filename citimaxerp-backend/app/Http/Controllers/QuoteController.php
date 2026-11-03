@@ -112,6 +112,9 @@ class QuoteController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'nullable|uuid|exists:customers,id',
+            // A customer not in the system: just their name (and the payment period below).
+            'one_time_customer_name' => 'nullable|string|max:255',
+            'payment_days' => 'nullable|integer|min:0|max:365',
             'sales_rep_id' => 'nullable|uuid|exists:users,id',
             'discount' => 'nullable|numeric|min:0|max:999999.99',
             'status' => 'required|string|in:pending,approved,rejected,expired',
@@ -143,6 +146,8 @@ class QuoteController extends Controller
                 'message' => 'Unauthorized to create quotes.',
             ], 403);
         }
+
+        $oneTimeName = $request->filled('customer_id') ? null : (trim((string) $request->input('one_time_customer_name')) ?: null);
 
         try {
             Log::info('Quote creation attempt', [
@@ -314,7 +319,7 @@ class QuoteController extends Controller
                 $totalAmount += $item['quantity'] * $item['unit_price'];
             }
 
-            return DB::transaction(function () use ($request, $user, $customer, $totalAmount, $items, $belowMinimumPrice) {
+            return DB::transaction(function () use ($request, $user, $customer, $totalAmount, $items, $belowMinimumPrice, $oneTimeName) {
                 $discount = $request->input('discount', 0);
                 $finalAmount = $totalAmount - $discount;
 
@@ -342,6 +347,8 @@ class QuoteController extends Controller
                     'id' => (string) Str::uuid(),
                     'quote_number' => $quoteNumber,
                     'customer_id' => $request->input('customer_id'),
+                    'one_time_customer_name' => $oneTimeName,
+                    'payment_days' => $oneTimeName ? (int) $request->input('payment_days', 0) : null,
                     'company_id' => $user->company_id,
                     'sales_rep_id' => $request->input('sales_rep_id'),
                     'submitted_by_id' => $isRepSubmission ? $user->id : null,
@@ -441,6 +448,10 @@ class QuoteController extends Controller
             'status' => 'sometimes|required|string|in:pending,accepted,rejected',
             'valid_until' => 'sometimes|required|date|after:today',
             'notes' => 'nullable|string',
+            // Switch between a registered customer and a one-time customer (name + payment period).
+            'customer_id' => 'sometimes|nullable|uuid|exists:customers,id',
+            'one_time_customer_name' => 'sometimes|nullable|string|max:255',
+            'payment_days' => 'sometimes|nullable|integer|min:0|max:365',
             'discount' => 'sometimes|numeric|min:0|max:999999.99',
             // An empty list deletes the quote (handled below).
             'items' => 'sometimes|present|array',
@@ -515,6 +526,21 @@ class QuoteController extends Controller
                     'valid_until' => $request->input('valid_until', $quote->valid_until),
                     'notes' => $request->input('notes', $quote->notes),
                 ]);
+
+                if ($request->filled('customer_id')) {
+                    $customer = Customer::where('company_id', $quote->company_id)->find($request->input('customer_id'));
+                    if (!$customer) {
+                        return response()->json(['status' => 'failed', 'message' => 'Customer not found.'], 404);
+                    }
+                    // Registered now: the quote follows their account (and its terms) from here.
+                    $quote->fill(['customer_id' => $customer->id, 'one_time_customer_name' => null, 'payment_days' => null]);
+                } elseif ($request->filled('one_time_customer_name')) {
+                    $quote->fill([
+                        'customer_id' => null,
+                        'one_time_customer_name' => trim($request->input('one_time_customer_name')),
+                        'payment_days' => (int) $request->input('payment_days', $quote->payment_days ?? 0),
+                    ]);
+                }
 
                 // Once a can_update_quotes-authorized user edits a rep-submitted
                 // quote (see store(), where submitted_by_id is stamped), it's no
@@ -750,6 +776,16 @@ class QuoteController extends Controller
     protected function performConvertToOrder(Request $request, Quote $quote)
     {
         $user = $request->user();
+
+        // An order needs an account to bill: a one-time customer is registered first.
+        if (!$quote->customer_id) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $quote->isOneTimeCustomer()
+                    ? "{$quote->one_time_customer_name} is a one-time customer. Register them under Customers, then Edit this quote and pick them before converting it to an order."
+                    : 'Pick a customer on this quote (Edit) before converting it to an order.',
+            ], 422);
+        }
 
                 // Validate delivery location if provided
                 $deliveryLocationId = $request->input('delivery_location_id');
@@ -1034,6 +1070,7 @@ class QuoteController extends Controller
                     $term = $request->input('search');
                     $query->where(function ($q) use ($term) {
                         $q->where('quote_number', 'ilike', "%{$term}%")
+                            ->orWhere('one_time_customer_name', 'ilike', "%{$term}%")
                             ->orWhereHas('customer', function ($cq) use ($term) {
                                 $cq->where('name', 'ilike', "%{$term}%")
                                     ->orWhere('business_name', 'ilike', "%{$term}%");
@@ -1042,7 +1079,7 @@ class QuoteController extends Controller
                 }
 
                 $perPage = (int) $request->input('per_page', 20);
-                $quotes = $query->select('id', 'customer_id', 'company_id', 'quote_number', 'total_amount', 'final_amount', 'status', 'valid_until', 'submitted_by_id', 'submitted_at', 'original_submitted_by_id', 'signed_quote_path', 'created_at', 'updated_at')
+                $quotes = $query->select('id', 'customer_id', 'one_time_customer_name', 'payment_days', 'sales_rep_id', 'company_id', 'quote_number', 'total_amount', 'final_amount', 'status', 'valid_until', 'submitted_by_id', 'submitted_at', 'original_submitted_by_id', 'signed_quote_path', 'created_at', 'updated_at')
                     ->orderBy('created_at', 'desc')
                     ->paginate($perPage);
 
@@ -1622,7 +1659,9 @@ class QuoteController extends Controller
                 if (!$customer) {
                     return response()->json([
                         'status' => 'failed',
-                        'message' => 'No customer found for quote',
+                        'message' => $quote->isOneTimeCustomer()
+                            ? 'A one-time customer has no WhatsApp contact in the system: send the quote by email, or download it and share it.'
+                            : 'No customer found for quote',
                     ], 400);
                 }
                 $whatsappPhone = $request->get('phone') ?: $customer->getWhatsAppPhone();

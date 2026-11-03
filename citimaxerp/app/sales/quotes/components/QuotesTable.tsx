@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
-import { Quote } from "@/lib/quotes"
+import { Quote, quoteCustomerName, isOneTimeQuote } from "@/lib/quotes"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 
@@ -97,7 +97,7 @@ export function QuotesTable({
       rows: quotes.map((quote, i) => [
         i + 1,
         formatQuoteNumber(quote),
-        (quote.customer as any)?.business_name || quote.customer?.name || "Unknown",
+        isOneTimeQuote(quote) ? `${quoteCustomerName(quote)} (One-time customer)` : quoteCustomerName(quote) || "Unknown",
         new Date(quote.created_at).toLocaleDateString("en-GB"),
         formatStatus(quote.status),
         quote.signed_quote_path ? "Yes" : "No",
@@ -281,11 +281,15 @@ export function QuotesTable({
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">
-                        {(quote.customer as any)?.business_name || quote.customer?.name || "Unknown Customer"}
+                        {quoteCustomerName(quote) || "Unknown Customer"}
                       </span>
-                      <span className="text-xs text-gray-500">
-                        {quote.customer?.email || "No email"}
-                      </span>
+                      {isOneTimeQuote(quote) ? (
+                        <Badge variant="outline" className="w-fit text-[10px] border-blue-300 text-blue-700">One-time customer</Badge>
+                      ) : (
+                        <span className="text-xs text-gray-500">
+                          {quote.customer?.email || "No email"}
+                        </span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">

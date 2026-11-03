@@ -1,7 +1,7 @@
 "use client"
 
 import { sizedName } from "@/lib/product-sizes"
-import { Quote } from "@/lib/quotes"
+import { Quote, isOneTimeQuote, quoteCustomerName } from "@/lib/quotes"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +26,10 @@ export function ConvertQuoteDialog({
   if (!quote) return null
 
   // Check if quote can be converted
+  // A one-time customer has no account to bill: they are registered (and picked on the quote) first.
+  const oneTime = isOneTimeQuote(quote)
   const canConvert = !quote.converted_to_order_id &&
+                     !oneTime &&
                      !quote.requires_approval &&
                      quote.status !== "rejected" &&
                      quote.status !== "expired"
@@ -81,6 +84,9 @@ export function ConvertQuoteDialog({
                     {quote.status === "expired" && (
                       <li>Expired quotes cannot be converted</li>
                     )}
+                    {oneTime && (
+                      <li>{quote.one_time_customer_name} is a one-time customer: register them under Customers, then Edit this quote and pick them</li>
+                    )}
                   </ul>
                 </div>
               </div>
@@ -113,7 +119,7 @@ export function ConvertQuoteDialog({
                 <User className="h-4 w-4 text-gray-500 mt-0.5" />
                 <div>
                   <span className="block text-xs text-gray-500">Customer</span>
-                  <span className="font-medium text-gray-900">{quote.customer ? getCustomerDisplayName(quote.customer) : "Unknown"}</span>
+                  <span className="font-medium text-gray-900">{quote.customer ? getCustomerDisplayName(quote.customer) : quoteCustomerName(quote) || "Unknown"}</span>
                 </div>
               </div>
 

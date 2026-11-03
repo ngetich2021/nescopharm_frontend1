@@ -1122,6 +1122,42 @@ class InvoiceController extends Controller
             $invoice = Invoice::where('company_id', $user->company_id)
                 ->findOrFail($id);
 
+            // More than the invoice owes is still received: the rest pays the customer's oldest
+            // unpaid invoices, and anything left after that is kept as their credit.
+            if ($invoice->customer_id && (float) $request->amount > $invoice->outstanding() + 0.005) {
+                $result = app(\App\Services\CustomerAccountService::class)->receiveOnInvoice(
+                    $invoice,
+                    $user,
+                    (float) $request->amount,
+                    $request->payment_method ?? 'manual',
+                    $request->payment_date,
+                    $request->transaction_id,
+                    $request->notes,
+                );
+                $payment = $result['payment'];
+                $elsewhere = collect($result['allocations'])->where('invoice_id', '!=', $invoice->id)
+                    ->map(fn ($a) => number_format($a['amount'], 2) . ' on ' . $a['invoice_number'])->implode(', ');
+
+                return response()->json([
+                    'message' => 'Payment recorded'
+                        . ($elsewhere ? "; {$elsewhere}" : '')
+                        . ($result['left_as_credit'] > 0.005 ? '; ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
+                    'data' => [
+                        'invoice' => $invoice->fresh(),
+                        'payment' => [
+                            'id' => $payment->id,
+                            'amount' => (float) $request->amount,
+                            'payment_method' => $payment->payment_method,
+                            'payment_date' => $payment->payment_date->toDateString(),
+                            'transaction_id' => $payment->transaction_id,
+                            'notes' => $request->notes,
+                        ],
+                        'allocations' => $result['allocations'],
+                        'left_as_credit' => $result['left_as_credit'],
+                    ],
+                ]);
+            }
+
             $result = $this->paymentApplication->applyPayment(
                 $invoice,
                 $user,

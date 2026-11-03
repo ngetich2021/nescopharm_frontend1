@@ -56,6 +56,7 @@ export function QuotesPage() {
     const matchesSearch = search === "" ||
       (quote.quote_number && quote.quote_number.toLowerCase().includes(search.toLowerCase())) ||
       (quote.customer?.name && quote.customer.name.toLowerCase().includes(search.toLowerCase())) ||
+      (quote.one_time_customer_name && quote.one_time_customer_name.toLowerCase().includes(search.toLowerCase())) ||
       (quote.customer?.business_name && quote.customer.business_name.toLowerCase().includes(search.toLowerCase()))
     
     const matchesStatus = statusFilter === "all" || quote.status.toLowerCase() === statusFilter.toLowerCase()

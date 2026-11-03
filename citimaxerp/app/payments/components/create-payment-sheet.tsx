@@ -156,47 +156,36 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
   // A customer's payment with no invoice picked is applied to their oldest unpaid invoices first.
   const receivingOnAccount = !formData.invoice_id && !!formData.customer_id && formData.status === "completed"
 
-  // Never let the field itself hold more than what's owed - clamp as they type
-  // rather than only catching it at submit time.
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value
-    if (selectedInvoiceBalance !== null && value !== "" && parseFloat(value) > selectedInvoiceBalance) {
-      value = String(selectedInvoiceBalance)
-    }
-    setFormData((prev) => ({ ...prev, amount_paid: value }))
-  }
+  // Money is always received: more than the invoice owes goes to the customer's oldest unpaid
+  // invoices, and what is left after that is kept as their credit.
+  const overInvoice = selectedInvoiceBalance !== null && Number(formData.amount_paid) > selectedInvoiceBalance + 0.005
+    ? Number(formData.amount_paid) - selectedInvoiceBalance
+    : 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    if (selectedInvoiceBalance !== null && Number(formData.amount_paid) > selectedInvoiceBalance) {
-      toast({
-        title: "Error",
-        description: `Payment amount cannot exceed the balance owed of ${formatCurrency(selectedInvoiceBalance)} on this invoice`,
-        variant: "destructive",
-      })
-      setLoading(false)
-      return
-    }
-
     try {
+      let message = "Payment recorded successfully"
       if (formData.invoice_id) {
         // Settling a specific invoice - reuse the same path the invoice's own
         // "Record Payment" uses, so balance/status tracking stays consistent.
-        await recordInvoicePayment(formData.invoice_id, {
+        const result = await recordInvoicePayment(formData.invoice_id, {
           amount: Number(formData.amount_paid),
           payment_method: formData.payment_method,
           payment_date: formData.payment_date,
           transaction_id: formData.transaction_id || undefined,
         })
+        message = result.message || message
       } else if (receivingOnAccount) {
-        await receiveOnAccount(formData.customer_id, {
+        const result = await receiveOnAccount(formData.customer_id, {
           amount: Number(formData.amount_paid),
           payment_method: formData.payment_method,
           payment_date: formData.payment_date,
           transaction_id: formData.transaction_id || undefined,
         })
+        message = result.message || message
       } else {
         // No invoice selected - a standalone payment not tied to anything specific
         const payloadData: any = {
@@ -216,7 +205,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
 
       toast({
         title: "Success",
-        description: "Payment recorded successfully",
+        description: message,
       })
 
       onPaymentCreated()
@@ -366,14 +355,14 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                 type="number"
                 step="0.01"
                 min="0.01"
-                max={selectedInvoiceBalance ?? undefined}
                 value={formData.amount_paid}
-                onChange={handleAmountChange}
+                onChange={handleChange}
                 required
               />
               {selectedInvoiceBalance !== null && (
                 <p className="text-xs text-muted-foreground">
                   Balance owed on this invoice: {formatCurrency(selectedInvoiceBalance)}
+                  {overInvoice > 0 && `. The other ${formatCurrency(overInvoice)} goes to the customer's oldest unpaid invoices; anything left is kept as their credit.`}
                 </p>
               )}
             </div>

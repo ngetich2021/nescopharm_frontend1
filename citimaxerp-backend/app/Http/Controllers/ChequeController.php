@@ -229,8 +229,10 @@ class ChequeController extends Controller
             return response()->json(['message' => $pdLimitError, 'errors' => ['maturity_date' => [$pdLimitError]]], 422);
         }
 
+        // More than the invoice owes is accepted for a known customer: on approval the rest pays
+        // their oldest unpaid invoices and what is left is their credit.
         $balance = $invoice->total_amount - $invoice->getTotalAllocatedAmount() - (float) $invoice->amount_credited;
-        if ($request->amount > $balance) {
+        if (!$invoice->customer_id && $request->amount > $balance) {
             return response()->json([
                 'message' => 'Cheque amount exceeds invoice balance',
                 'balance_due' => $balance,
@@ -646,7 +648,7 @@ class ChequeController extends Controller
         if ($cheque->status === 'pending' && $cheque->direction === 'received') {
             if ($cheque->invoice_id) {
                 $invoice = Invoice::find($cheque->invoice_id);
-                if ($invoice && $amount > $invoice->outstanding() + 0.01) {
+                if ($invoice && !$invoice->customer_id && $amount > $invoice->outstanding() + 0.01) {
                     return response()->json(['message' => 'Cheque amount exceeds invoice balance', 'balance_due' => $invoice->outstanding()], 400);
                 }
             } elseif (isset($data['amount']) && abs($amount - (float) $cheque->amount) > 0.005) {

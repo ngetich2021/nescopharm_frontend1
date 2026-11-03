@@ -68,15 +68,6 @@ export function RecordPaymentModal({
       return
     }
 
-    if (formData.amount > balanceAmount) {
-      toast({
-        title: "Error",
-        description: `Payment amount cannot exceed balance of KES ${balanceAmount.toFixed(2)}`,
-        variant: "destructive",
-      })
-      return
-    }
-
     if (isCheque && (!chequeNumber || !bankName || !maturityDate)) {
       toast({
         title: "Error",
@@ -116,7 +107,7 @@ export function RecordPaymentModal({
 
         toast({
           title: "Success",
-          description: "Payment recorded successfully",
+          description: result.message || "Payment recorded successfully",
         })
 
         onPaymentRecorded?.(result)
@@ -172,15 +163,21 @@ export function RecordPaymentModal({
                 type="number"
                 step="0.01"
                 min="0.01"
-                max={balanceAmount}
                 value={formData.amount}
-                onChange={(e) => setFormData(prev => ({ 
-                  ...prev, 
-                  amount: parseFloat(e.target.value) || 0 
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  amount: parseFloat(e.target.value) || 0
                 }))}
                 placeholder="0.00"
                 required
               />
+              {formData.amount > balanceAmount + 0.005 && (
+                <p className="text-xs text-muted-foreground">
+                  {balanceAmount > 0.005 ? `KES ${balanceAmount.toFixed(2)} pays this invoice; the` : "The"} other
+                  KES {(formData.amount - Math.max(0, balanceAmount)).toFixed(2)} goes to the customer&apos;s oldest unpaid
+                  invoices, and anything left is kept as their credit.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="payment_date">Payment Date *</Label>
