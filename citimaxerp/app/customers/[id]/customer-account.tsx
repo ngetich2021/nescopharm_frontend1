@@ -173,8 +173,21 @@ export function CustomerAccount({ customerId, customerName }: CustomerAccountPro
           <CardTitle className="text-base">Customer Credit</CardTitle>
         </CardHeader>
         <CardContent>
+          {(data.overpaid_invoices ?? []).length > 0 && (
+            <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              {(data.overpaid_invoices ?? []).map((i) => (
+                <p key={i.id}>
+                  {i.invoice_number} was paid {formatCurrency(i.amount_paid)} on a total of {formatCurrency(i.total_amount)}:{" "}
+                  <strong>{formatCurrency(i.overpaid)}</strong> too much. It counts as the customer&apos;s credit; &quot;Apply Credit to
+                  Invoices&quot; moves it to the open invoices, oldest first.
+                </p>
+              ))}
+            </div>
+          )}
           {data.unapplied_payments.length === 0 && data.unapplied_credit_notes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No unused payments or credit notes.</p>
+            <p className="text-sm text-muted-foreground">
+              {(data.overpaid_invoices ?? []).length > 0 ? "No other unused payments or credit notes." : "No unused payments or credit notes."}
+            </p>
           ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table>

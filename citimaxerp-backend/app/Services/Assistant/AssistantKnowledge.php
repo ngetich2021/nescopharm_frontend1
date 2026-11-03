@@ -29,7 +29,7 @@ class AssistantKnowledge
         ['Cheques', '/sales/cheques', ['can_view_sales_menu'],
             'Sales > Cheques: post-dated cheques received, their maturity, clearing or bouncing (a bounced cheque re-opens the invoices and can add a charge invoice).'],
         ['Receipts (customer payments)', '/payments', ['can_view_payments_menu'],
-            'Receipts: money received from customers. "Receive Payment": customer, amount, method (cash, M-Pesa, bank, cheque), reference, then allocate it to their open invoices (oldest first by default). Unallocated money stays as credit on the customer\'s account.'],
+            'Receipts: money received from customers. "Receive Payment": customer, amount, method (cash, M-Pesa, bank, cheque), reference, then allocate it to their open invoices (oldest first by default). Unallocated money stays as credit on the customer\'s account. If an invoice was paid more than its total, the extra counts as the customer\'s credit (the Account Balance names the invoice) and "Apply Credit to Invoices" moves it to the open invoices, oldest first, so the balance matches the ledger.'],
         ['Dispatch', '/dispatch', ['can_view_inventory_menu'],
             'Dispatch: deliveries of orders and requisitions. Create a dispatch from an order, choose transporter/zone (delivery rates set the cost per carton), approve it, then print the delivery note. Delivery invoices from transporters are paid under Sales > Invoices > Delivery.'],
         ['Requisitions', '/requisitions', ['can_view_requisitions_menu'],

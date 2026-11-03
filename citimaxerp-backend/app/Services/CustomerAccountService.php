@@ -66,7 +66,10 @@ class CustomerAccountService
             ->get(['id', 'invoice_id', 'cheque_number', 'bank_name', 'amount', 'issue_date', 'maturity_date', 'allocation_plan']);
 
         $outstanding = round($open->sum(fn (Invoice $i) => $i->outstanding()), 2);
-        $paymentCredit = round((float) $usable->sum('available'), 2);
+        // Receipts put on an invoice beyond its total are the customer's money too (Apply Credit
+        // moves them onto open invoices); left out, the balance would differ from the ledger.
+        $overpaid = $invoices->filter(fn (Invoice $i) => $i->outstanding() < -0.005)->values();
+        $paymentCredit = round((float) $usable->sum('available') + $overpaid->sum(fn (Invoice $i) => -$i->outstanding()), 2);
         $creditNoteCredit = round((float) $creditNotes->sum('balance_amount'), 2);
         $creditAvailable = round($paymentCredit + $creditNoteCredit, 2);
         $depositTotal = round((float) $deposits->sum('available'), 2);
@@ -110,6 +113,14 @@ class CustomerAccountService
                 'overdue' => $i->due_date && $i->due_date->lt(today()),
             ])->values(),
             'unapplied_payments' => $usable->map(fn ($c) => collect($c)->except('usable'))->values(),
+            'overpaid_invoices' => $overpaid->map(fn (Invoice $i) => [
+                'id' => $i->id,
+                'invoice_number' => $i->invoice_number,
+                'invoice_date' => $i->invoice_date?->toDateString(),
+                'total_amount' => round((float) $i->total_amount, 2),
+                'amount_paid' => round((float) $i->amount_paid, 2),
+                'overpaid' => round(-$i->outstanding(), 2),
+            ])->values(),
             'deposits' => $deposits->map(fn ($c) => collect($c)->except('usable'))->values(),
             'unapplied_credit_notes' => $creditNotes->map(fn (CreditNote $n) => [
                 'id' => $n->id,
@@ -319,6 +330,7 @@ class CustomerAccountService
     {
         return DB::transaction(function () use ($companyId, $customerId) {
             $applied = [];
+            $this->releaseOverpayments($companyId, $customerId);
 
             foreach ($this->unappliedPayments($companyId, $customerId)->where('usable', true) as $credit) {
                 $payment = Payment::find($credit['id']);
@@ -428,6 +440,48 @@ class CustomerAccountService
             }
 
             return $moves;
+        });
+    }
+
+    /**
+     * Take what an invoice was paid beyond its total off its newest receipts, so that money is the
+     * customer's credit again (applyCredit then puts it on open invoices). Only which invoice a
+     * receipt sits on changes, never how much was received.
+     *
+     * @return array<int, array{invoice: string, payment_id: string, amount: float}>
+     */
+    public function releaseOverpayments(string $companyId, string $customerId): array
+    {
+        return DB::transaction(function () use ($companyId, $customerId) {
+            $released = [];
+            $invoices = Invoice::where('company_id', $companyId)
+                ->where('customer_id', $customerId)
+                ->whereNotIn('status', ['cancelled', 'void', 'voided'])
+                ->lockForUpdate()
+                ->get()
+                ->filter(fn (Invoice $i) => $i->outstanding() < -0.005);
+
+            foreach ($invoices as $invoice) {
+                $excess = round(-$invoice->outstanding(), 2);
+                $allocations = PaymentAllocation::where('invoice_id', $invoice->id)
+                    ->orderByDesc(Payment::select('payment_date')->whereColumn('payments.id', 'payment_allocations.payment_id'))
+                    ->orderByDesc('created_at')
+                    ->lockForUpdate()->get();
+                foreach ($allocations as $allocation) {
+                    if ($excess <= 0.005) {
+                        break;
+                    }
+                    $take = round(min($excess, (float) $allocation->amount_allocated), 2);
+                    $left = round((float) $allocation->amount_allocated - $take, 2);
+                    $left > 0.005 ? $allocation->update(['amount_allocated' => $left]) : $allocation->delete();
+                    $invoice->update(['amount_paid' => round((float) $invoice->amount_paid - $take, 2)]);
+                    $excess = round($excess - $take, 2);
+                    $released[] = ['invoice' => $invoice->invoice_number, 'payment_id' => $allocation->payment_id, 'amount' => $take];
+                }
+                $this->payments->syncOrderPaid($invoice->fresh());
+            }
+
+            return $released;
         });
     }
 

@@ -85,6 +85,8 @@ export interface CustomerAccountBalance {
   deposits: AccountUnappliedPayment[]
   unapplied_credit_notes: AccountUnappliedCreditNote[]
   pending_cheques: AccountPendingCheque[]
+  // Invoices paid beyond their total; the excess is in credit_available.
+  overpaid_invoices?: { id: string; invoice_number: string; invoice_date: string | null; total_amount: number; amount_paid: number; overpaid: number }[]
 }
 
 export interface ReceiveOnAccountRequest {
