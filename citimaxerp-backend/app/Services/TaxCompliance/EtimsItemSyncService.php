@@ -105,14 +105,16 @@ class EtimsItemSyncService
      */
     public function prepareInvoiceProducts(Company $company, Invoice $invoice): array
     {
-        $this->ensureInvoiceCatalogueProducts($company, $invoice);
+        $unlinked = $this->ensureInvoiceCatalogueProducts($company, $invoice);
         $invoice->loadMissing('lineItems.product');
 
         $missingProductLines = $invoice->lineItems->filter(fn ($line) => ! $line->product_id || ! $line->product);
-        if ($missingProductLines->isNotEmpty()) {
+        if ($unlinked || $missingProductLines->isNotEmpty()) {
             return [
                 'status' => 'failed',
-                'message' => 'Every eTIMS invoice line must be linked to a catalogue product.',
+                'message' => 'These lines are not linked to a product in the system, so the invoice was not sent: '
+                    .implode('; ', $unlinked ?: $missingProductLines->pluck('description')->all())
+                    .'. Edit the invoice and pick the product for each.',
                 'retryable' => false,
             ];
         }
@@ -268,79 +270,45 @@ class EtimsItemSyncService
     }
 
     /**
-     * Convert free-text invoice lines into catalogue products before DigiTax
-     * registration. The generated products do not track inventory and use a
-     * deterministic code based on the line ID, making retries idempotent.
+     * Link every invoice line to the existing product it is for, before DigiTax registration: a
+     * line with no product, or one whose product was deleted (an old product whose sizes were
+     * moved into products of their own), is placed on the live product by name
+     * (InvoiceLineProductResolver). No product is ever created here - a duplicate would split the
+     * item's stock, prices and KRA registration - so a line that matches no single product is
+     * returned, and the invoice is not sent until it is linked.
+     *
+     * @return array<int, string> descriptions of the lines that could not be linked
      */
-    public function ensureInvoiceCatalogueProducts(Company $company, Invoice $invoice): int
+    public function ensureInvoiceCatalogueProducts(Company $company, Invoice $invoice): array
     {
         $invoice->loadMissing('lineItems');
+        $resolver = app(\App\Services\InvoiceLineProductResolver::class);
+        $unlinked = [];
         $linked = 0;
 
         foreach ($invoice->lineItems as $line) {
-            $existingProduct = $line->product_id
-                ? Product::withoutGlobalScope('company')
-                    ->where('company_id', $company->id)
-                    ->find($line->product_id)
+            $current = $line->product_id
+                ? Product::withoutGlobalScope('company')->where('company_id', $company->id)->find($line->product_id)
                 : null;
-
-            if ($existingProduct) {
+            // A product the eTIMS sync used to make from a free-text line is moved to the real one too.
+            if ($current && ! str_starts_with((string) $current->product_code, 'ETIMS-AUTO-')) {
                 continue;
             }
 
-            DB::transaction(function () use ($company, $invoice, $line, &$linked) {
-                $productCode = 'ETIMS-AUTO-'.strtoupper(substr(str_replace('-', '', (string) $line->id), 0, 20));
-                $description = Str::squish((string) $line->description) ?: 'Invoice item';
-                $unit = Str::lower(trim((string) ($line->unit ?: 'unit')));
-                $type = $this->catalogueProductType($invoice, $unit);
-                $taxRate = (float) $line->tax_rate;
-
-                $product = Product::withoutGlobalScope('company')->firstOrCreate(
-                    [
-                        'company_id' => $company->id,
-                        'product_code' => $productCode,
-                    ],
-                    [
-                        'id' => (string) Str::uuid(),
-                        'product_number' => $productCode,
-                        'name' => Str::limit($description, 255, ''),
-                        'description' => $description,
-                        'type' => $type,
-                        'price' => (float) $line->unit_price,
-                        'unit_of_measurement' => $unit,
-                        'base_unit' => $unit,
-                        'is_active' => true,
-                        'is_taxable' => $taxRate > 0,
-                        'tax_rate' => $taxRate,
-                        'track_inventory' => false,
-                        'income_account_id' => $line->income_account_id,
-                    ],
-                );
-
-                $line->update([
-                    'product_id' => $product->id,
-                    'variant_id' => null,
-                ]);
-                $linked++;
-            });
+            [$product, $variant] = $resolver->resolve($line, (string) $company->id);
+            if (! $product) {
+                $unlinked[] = Str::squish((string) $line->description) ?: 'Invoice item';
+                continue;
+            }
+            $line->update(['product_id' => $product->id, 'variant_id' => $variant?->id]);
+            $linked++;
         }
 
         if ($linked > 0) {
             $invoice->unsetRelation('lineItems');
         }
 
-        return $linked;
-    }
-
-    private function catalogueProductType(Invoice $invoice, string $unit): string
-    {
-        if ($invoice->type === 'service') {
-            return 'service';
-        }
-
-        return in_array($unit, [
-            'service', 'hour', 'hours', 'day', 'days', 'month', 'months',
-        ], true) ? 'service' : 'product';
+        return $unlinked;
     }
 
     private function refreshProduct(
