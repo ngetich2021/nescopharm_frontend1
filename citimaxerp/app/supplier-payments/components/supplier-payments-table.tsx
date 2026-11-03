@@ -22,8 +22,6 @@ import {
   Filter,
   Download,
   CreditCard,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   RefreshCw,
   Trash2,
@@ -43,6 +41,7 @@ import { ExportMenu } from "@/components/export-menu"
 import type { ExportFormat } from "@/lib/table-export"
 import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 import CreateSupplierPaymentSheet from "./create-supplier-payment-sheet"
 import SupplierPaymentDetailsSheet from "./supplier-payment-details-sheet"
 
@@ -53,8 +52,6 @@ export function SupplierPaymentsTable() {
   const [payments, setPayments] = useState<SupplierPayment[]>([])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -110,8 +107,8 @@ export function SupplierPaymentsTable() {
       )
   )
 
-  const totalPages = Math.ceil(filteredPayments.length / rowsPerPage)
-  const paginatedPayments = filteredPayments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+  // 20, 50, 250 or All a page; back to page 1 when the search or status changes.
+  const { pageRows: paginatedPayments, start, pager } = usePaged(filteredPayments, 20, `${search}|${statusFilter}`)
 
   const handlePaymentCreated = () => {
     fetchPayments()
@@ -124,7 +121,6 @@ export function SupplierPaymentsTable() {
   // Debounce search to prevent excessive API calls
   useEffect(() => {
     const timer = setTimeout(() => {
-      setCurrentPage(1)
       fetchPayments()
     }, 500)
     
@@ -386,6 +382,7 @@ export function SupplierPaymentsTable() {
                     />
                   </div>
                 </TableHead>
+                <TableHead className="w-12 font-semibold">S/No</TableHead>
                 <TableHead className="font-semibold">Reference</TableHead>
                 <TableHead className="font-semibold">Supplier</TableHead>
                 <TableHead className="font-semibold">Invoices / PO</TableHead>
@@ -399,12 +396,12 @@ export function SupplierPaymentsTable() {
             <TableBody>
               {paginatedPayments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center">
+                  <TableCell colSpan={10} className="h-24 text-center">
                     No supplier payments found
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedPayments.map((payment) => (
+                paginatedPayments.map((payment, index) => (
                   <TableRow
                     key={payment.id}
                     className={`hover:bg-[#E30040]/5 transition-colors duration-200 cursor-pointer ${
@@ -429,6 +426,7 @@ export function SupplierPaymentsTable() {
                         />
                       </div>
                     </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{start + index + 1}</TableCell>
                     <TableCell className="font-medium">{payment.transaction_reference || "N/A"}</TableCell>
                     <TableCell>{payment.supplier?.name || "N/A"}</TableCell>
                     <TableCell className="max-w-[220px]">
@@ -489,54 +487,7 @@ export function SupplierPaymentsTable() {
             </TableBody>
           </Table>
         </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <p className="text-sm font-medium">Rows per page</p>
-            <Select
-              value={rowsPerPage.toString()}
-              onValueChange={(value) => {
-                setRowsPerPage(Number(value))
-                setCurrentPage(1)
-              }}
-            >
-              <SelectTrigger className="h-8 w-[70px]">
-                <SelectValue placeholder={rowsPerPage} />
-              </SelectTrigger>
-              <SelectContent side="top">
-                {[5, 10, 20, 30, 40, 50].map((pageSize) => (
-                  <SelectItem key={pageSize} value={pageSize.toString()}>
-                    {pageSize}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((old) => Math.max(old - 1, 1))}
-              disabled={currentPage === 1}
-              className="border-gray-200 hover:bg-[#E30040]/10 hover:text-[#E30040] hover:border-[#E30040]"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            <div className="flex items-center justify-center text-sm font-medium">
-              Page {currentPage} of {totalPages || 1}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((old) => Math.min(old + 1, totalPages || 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="border-gray-200 hover:bg-[#E30040]/10 hover:text-[#E30040] hover:border-[#E30040]"
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <TablePager {...pager} />
       </div>
 
       {/* Create Payment Sheet */}

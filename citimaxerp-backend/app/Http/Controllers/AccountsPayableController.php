@@ -40,49 +40,114 @@ class AccountsPayableController extends Controller
     /**
      * Display a listing of accounts payable.
      */
+    /**
+     * Supplier invoices (bills) and debit notes, newest first, for Sales > Invoices > Supplier Invoices.
+     * Each row carries its supplier, what is paid and still owed, and the supplier payments that paid it.
+     * kind = bill | debit_note; status = paid | part_paid | unpaid (bills only); per_page = number or "all".
+     */
     public function index(Request $request): JsonResponse
     {
-
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_view_accounts', $user->company_id)) {
-            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view accounts payable.', 'data' => null], 403);
+        $allowed = collect(['can_view_accounts', 'can_view_accounts_payable', 'can_view_payments'])
+            ->contains(fn ($p) => $this->hasPermission($request, $p, $user->company_id));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view supplier invoices.', 'data' => null], 403);
         }
 
-        $query = AccountsPayable::with(['supplier']);
+        $kindSql = "coalesce(accounts_payable.metadata::jsonb->>'kind', 'bill')";
+        $query = AccountsPayable::query()
+            ->leftJoin('suppliers', 'suppliers.id', '=', 'accounts_payable.vendor_id')
+            ->where('accounts_payable.company_id', $user->company_id)
+            ->select('accounts_payable.*', 'suppliers.name as supplier_name');
 
-        // Filter by supplier
-        if ($request->has('supplier_id')) {
-            $query->where('supplier_id', $request->supplier_id);
+        if ($request->filled('supplier_id')) {
+            $query->where('accounts_payable.vendor_id', $request->input('supplier_id'));
+        }
+        if (in_array($request->input('kind'), ['bill', 'debit_note'], true)) {
+            $query->whereRaw("{$kindSql} = ?", [$request->input('kind')]);
+        }
+        $status = $request->input('status');
+        if ($status === 'paid') {
+            $query->where('accounts_payable.balance_amount', '<=', 0);
+        } elseif ($status === 'part_paid') {
+            $query->where('accounts_payable.balance_amount', '>', 0)->where('accounts_payable.paid_amount', '>', 0);
+        } elseif ($status === 'unpaid') {
+            $query->where('accounts_payable.balance_amount', '>', 0)->where('accounts_payable.paid_amount', '<=', 0);
+        }
+        if ($request->filled('search')) {
+            $term = '%' . trim($request->input('search')) . '%';
+            $query->where(fn ($q) => $q->where('accounts_payable.invoice_number', 'ilike', $term)
+                ->orWhere('accounts_payable.vendor_invoice_number', 'ilike', $term)
+                ->orWhere('accounts_payable.description', 'ilike', $term)
+                ->orWhere('suppliers.name', 'ilike', $term)
+                // A payment's number or reference finds the invoices it paid.
+                ->orWhereExists(fn ($e) => $e->from('supplier_payment_allocations as a')
+                    ->join('supplier_payments as p', 'p.id', '=', 'a.supplier_payment_id')
+                    ->whereColumn('a.invoice_id', 'accounts_payable.id')->where('a.invoice_type', 'bill')
+                    ->where(fn ($w) => $w->where('p.payment_number', 'ilike', $term)->orWhere('p.transaction_reference', 'ilike', $term))));
         }
 
-        // Filter by status
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
-        }
+        // Owed on bills matching the filters (debit notes reduce it), for the tab's summary line.
+        $totalsQuery = clone $query;
+        $totalsQuery->getQuery()->columns = null;
+        $totals = $totalsQuery->selectRaw("count(*) as n,
+            coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.total_amount end), 0) as billed,
+            coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.paid_amount end), 0) as paid,
+            coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.balance_amount end), 0) as owed")->first();
 
-        // Filter by due date range
-        if ($request->has('due_date_from') && $request->has('due_date_to')) {
-            $query->whereBetween('due_date', [$request->due_date_from, $request->due_date_to]);
-        }
+        $perPage = $request->input('per_page') === 'all' ? max((int) $totals->n, 1) : (int) $request->input('per_page', 20);
+        $bills = $query->orderBy('accounts_payable.invoice_date', 'desc')->orderBy('accounts_payable.invoice_number', 'desc')
+            ->paginate(max(1, min($perPage, 10000)));
 
-        // Filter overdue invoices
-        if ($request->has('overdue') && $request->overdue) {
-            $query->where('due_date', '<', now())
-                ->where('status', '!=', 'paid');
-        }
+        $payments = DB::table('supplier_payment_allocations as a')
+            ->join('supplier_payments as p', 'p.id', '=', 'a.supplier_payment_id')
+            ->where('a.invoice_type', 'bill')->whereIn('a.invoice_id', $bills->getCollection()->pluck('id'))
+            ->orderBy('p.payment_date')
+            ->get(['a.invoice_id', 'a.amount', 'a.applied_at', 'p.id', 'p.payment_number', 'p.transaction_reference', 'p.payment_date', 'p.payment_method', 'p.status'])
+            ->groupBy('invoice_id');
 
-        // Search by invoice number or reference
-        if ($request->has('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('invoice_number', 'ilike', '%' . $request->search . '%')
-                    ->orWhere('reference', 'ilike', '%' . $request->search . '%');
-            });
-        }
+        $bills->getCollection()->transform(function (AccountsPayable $b) use ($payments) {
+            $meta = $b->metadata ?? [];
+            $total = round((float) $b->total_amount, 2);
+            $paid = round((float) $b->paid_amount, 2);
+            $balance = round((float) $b->balance_amount, 2);
+            return [
+                'id' => $b->id,
+                'kind' => $meta['kind'] ?? 'bill',
+                'invoice_number' => $b->invoice_number,
+                'supplier_invoice_number' => $b->vendor_invoice_number,
+                'supplier_id' => $b->vendor_id,
+                'supplier_name' => $b->supplier_name,
+                'invoice_date' => $b->invoice_date?->toDateString(),
+                'due_date' => $b->due_date?->toDateString(),
+                'description' => $b->description,
+                'total' => $total,
+                'paid' => $paid,
+                'balance' => $balance,
+                'status' => ($meta['kind'] ?? 'bill') === 'debit_note' ? 'debit_note' : ($balance <= 0 ? 'paid' : ($paid > 0 ? 'part_paid' : 'unpaid')),
+                'source' => $meta['source'] ?? null,
+                'payments' => ($payments->get($b->id) ?? collect())->map(fn ($p) => [
+                    'id' => $p->id,
+                    'payment_number' => $p->payment_number,
+                    'reference' => $p->transaction_reference,
+                    'date' => substr((string) $p->payment_date, 0, 10),
+                    'method' => $p->payment_method,
+                    'status' => $p->status,
+                    'amount' => round((float) $p->amount, 2),
+                    'applied' => (bool) $p->applied_at,
+                ])->values(),
+            ];
+        });
 
-        $payables = $query->orderBy('due_date', 'asc')
-            ->paginate($request->get('per_page', 15));
-
-        return response()->json($payables);
+        return response()->json([
+            'status' => 'success',
+            'data' => $bills->items(),
+            'pagination' => [
+                'total' => $bills->total(), 'per_page' => $bills->perPage(), 'current_page' => $bills->currentPage(),
+                'last_page' => $bills->lastPage(), 'from' => $bills->firstItem() ?? 0, 'to' => $bills->lastItem() ?? 0,
+            ],
+            'totals' => ['billed' => round((float) $totals->billed, 2), 'paid' => round((float) $totals->paid, 2), 'owed' => round((float) $totals->owed, 2)],
+        ]);
     }
 
     /**

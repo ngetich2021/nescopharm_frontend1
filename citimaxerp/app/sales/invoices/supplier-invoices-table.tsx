@@ -1,0 +1,282 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Loader2, Search } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { ExportMenu, useTableExport } from "@/components/export-menu";
+import { ALL_ROWS, TablePager } from "@/components/ui/table-pager";
+import { getSupplierBills, type SupplierBill } from "@/lib/supplier-payments";
+
+// 12-Jul-26
+const shortDate = (date?: string | null) => {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return date;
+  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`;
+};
+
+const money = (n: number) => `KES ${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+const STATUS: Record<SupplierBill["status"], { label: string; className: string }> = {
+  paid: { label: "paid", className: "bg-green-100 text-green-800" },
+  part_paid: { label: "part paid", className: "bg-blue-100 text-blue-800" },
+  unpaid: { label: "unpaid", className: "bg-amber-100 text-amber-800" },
+  debit_note: { label: "debit note", className: "bg-gray-100 text-gray-800" },
+};
+
+const METHOD_LABELS: Record<string, string> = { bank_transfer: "Bank Transfer", cash: "Cash", mpesa: "M-Pesa", cheque: "Cheque" };
+
+/** "PV-161, PV-162" - the payments that paid a bill. */
+const paidByLabel = (bill: SupplierBill) => bill.payments.map((p) => p.payment_number || p.reference || "payment").join(", ");
+
+/**
+ * What suppliers billed us (bills, e.g. PUR-131) and their debit notes, with what each payment put on
+ * them. Bills are paid from Supplier Payments; this tab is where the invoices those payments pay are seen.
+ */
+export function SupplierInvoicesTable() {
+  const { toast } = useToast();
+  const [bills, setBills] = useState<SupplierBill[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("bill");
+  const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [pagination, setPagination] = useState({ total: 0, per_page: 20, current_page: 1, last_page: 1, from: 0, to: 0 });
+  const [totals, setTotals] = useState({ billed: 0, paid: 0, owed: 0 });
+  const [viewing, setViewing] = useState<SupplierBill | null>(null);
+
+  const filters = () => ({
+    search: query || undefined,
+    kind: kind === "all" ? undefined : kind,
+    status: status === "all" ? undefined : status,
+  });
+
+  // Search as you type, a moment after the last key.
+  useEffect(() => {
+    const t = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => { setPage(1); }, [kind, status, pageSize]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getSupplierBills({ ...filters(), page, per_page: pageSize === ALL_ROWS ? "all" : pageSize })
+      .then((res) => {
+        if (cancelled) return;
+        setBills(res.data ?? []);
+        setPagination(res.pagination);
+        setTotals(res.totals);
+      })
+      .catch((e) => toast({ title: "Error", description: e?.message || "Failed to load supplier invoices", variant: "destructive" }))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, kind, status, page, pageSize]);
+
+  const exportColumns = ["S/No", "Invoice #", "Supplier Inv. #", "Date", "Due", "Supplier", "Description", "Total", "Paid", "Balance", "Status", "Paid By"];
+  const exportRow = (b: SupplierBill, i: number) => [
+    i + 1, b.invoice_number, b.supplier_invoice_number || "", shortDate(b.invoice_date), b.due_date ? shortDate(b.due_date) : "",
+    b.supplier_name || "", b.description || "", b.total, b.paid, b.balance, STATUS[b.status]?.label ?? b.status, paidByLabel(b),
+  ];
+
+  // Every invoice matching the filters, all pages.
+  const exportList = useTableExport(async () => {
+    const res = await getSupplierBills({ ...filters(), per_page: "all" });
+    return {
+      fileName: `supplier-invoices-${new Date().toISOString().slice(0, 10)}`,
+      title: kind === "debit_note" ? "Supplier Debit Notes" : "Supplier Invoices",
+      subtitle: query ? `Search: ${query}` : undefined,
+      headers: exportColumns,
+      moneyColumns: [7, 8, 9],
+      rows: res.data.map(exportRow),
+      footer: kind === "debit_note" ? undefined : [["", "", "", "", "", "", "Total", res.totals.billed, res.totals.paid, res.totals.owed, "", ""]],
+    };
+  });
+
+  return (
+    <div className="space-y-4">
+      {totals.owed > 0 && kind !== "debit_note" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          <strong>{money(totals.owed)}</strong> still owed to suppliers on these invoices. Pay them from Supplier Payments (Record Payment, then tick the invoices).
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[220px]">
+              <Label htmlFor="supplier-invoice-search" className="text-xs text-muted-foreground mb-1 block">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="supplier-invoice-search"
+                  placeholder="Invoice #, supplier, description, payment (PV-161)..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            <Select value={kind} onValueChange={setKind}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bill">Invoices</SelectItem>
+                <SelectItem value="debit_note">Debit notes</SelectItem>
+                <SelectItem value="all">Invoices + debit notes</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="unpaid">Unpaid</SelectItem>
+                <SelectItem value="part_paid">Part paid</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
+            <ExportMenu onExport={exportList} disabled={bills.length === 0} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-6">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : bills.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">No supplier invoices{query || status !== "all" ? " match" : " yet"}.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">S/NO</TableHead>
+                  <TableHead>Invoice #</TableHead>
+                  <TableHead className="whitespace-nowrap">Date</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead>Paid By</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bills.map((bill, index) => (
+                  <TableRow key={bill.id} className="cursor-pointer" onClick={() => setViewing(bill)}>
+                    <TableCell className="text-sm text-muted-foreground">{(pagination.current_page - 1) * pagination.per_page + index + 1}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">
+                      {bill.invoice_number}
+                      {bill.supplier_invoice_number && <span className="block text-xs text-muted-foreground">their inv {bill.supplier_invoice_number}</span>}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{shortDate(bill.invoice_date)}</TableCell>
+                    <TableCell>{bill.supplier_name || "—"}</TableCell>
+                    <TableCell className="text-right font-semibold whitespace-nowrap">{money(bill.total)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{bill.kind === "debit_note" ? "—" : money(bill.paid)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{bill.kind === "debit_note" ? "—" : money(bill.balance)}</TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <span className="block truncate" title={paidByLabel(bill)}>{paidByLabel(bill) || "—"}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={STATUS[bill.status]?.className}>{STATUS[bill.status]?.label ?? bill.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {!loading && (
+            <TablePager
+              total={pagination.total}
+              page={page}
+              pageCount={Math.max(1, pagination.last_page)}
+              pageSize={pageSize}
+              start={(pagination.current_page - 1) * pagination.per_page}
+              shown={bills.length}
+              setPage={setPage}
+              setPageSize={setPageSize}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{viewing?.kind === "debit_note" ? "Supplier Debit Note" : "Supplier Invoice"} {viewing?.invoice_number}</DialogTitle>
+            <DialogDescription>{viewing?.supplier_name}</DialogDescription>
+          </DialogHeader>
+          {viewing && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                <div><Label className="text-xs text-muted-foreground">Date</Label><p className="font-medium">{shortDate(viewing.invoice_date)}</p></div>
+                <div><Label className="text-xs text-muted-foreground">Due</Label><p className="font-medium">{shortDate(viewing.due_date)}</p></div>
+                <div><Label className="text-xs text-muted-foreground">Supplier's Invoice No.</Label><p className="font-medium">{viewing.supplier_invoice_number || "—"}</p></div>
+                <div><Label className="text-xs text-muted-foreground">Total</Label><p className="font-bold">{money(viewing.total)}</p></div>
+                {viewing.kind !== "debit_note" && (
+                  <>
+                    <div><Label className="text-xs text-muted-foreground">Paid</Label><p className="font-medium">{money(viewing.paid)}</p></div>
+                    <div><Label className="text-xs text-muted-foreground">Balance</Label><p className="font-bold text-primary">{money(viewing.balance)}</p></div>
+                  </>
+                )}
+                {viewing.description && (
+                  <div className="col-span-2 sm:col-span-3"><Label className="text-xs text-muted-foreground">Description</Label><p>{viewing.description}</p></div>
+                )}
+              </div>
+
+              {viewing.kind !== "debit_note" && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold">Payments</Label>
+                  {viewing.payments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground mt-2">No payment has been put on this invoice yet.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">S/No</TableHead>
+                          <TableHead>Payment</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead className="text-right">Amount on this invoice</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viewing.payments.map((p, i) => (
+                          <TableRow key={p.id}>
+                            <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                            <TableCell>
+                              <span className="font-medium">{p.payment_number || "—"}</span>
+                              {p.reference && <span className="block text-xs text-muted-foreground">{p.reference}</span>}
+                              {!p.applied && <span className="block text-xs text-amber-700">not applied yet ({p.status})</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">{shortDate(p.date)}</TableCell>
+                            <TableCell>{METHOD_LABELS[p.method] ?? p.method}</TableCell>
+                            <TableCell className="text-right whitespace-nowrap">{money(p.amount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

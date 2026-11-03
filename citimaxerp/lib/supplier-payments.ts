@@ -200,6 +200,40 @@ export interface SupplierInvoicePaid {
     applied: boolean;
 }
 
+/** A supplier invoice (bill) or debit note, as Sales > Invoices > Supplier Invoices lists it. */
+export interface SupplierBill {
+    id: string;
+    kind: "bill" | "debit_note";
+    invoice_number: string;
+    supplier_invoice_number: string | null;
+    supplier_id: string;
+    supplier_name: string | null;
+    invoice_date: string | null;
+    due_date: string | null;
+    description: string | null;
+    total: number;
+    paid: number;
+    balance: number;
+    status: "paid" | "part_paid" | "unpaid" | "debit_note";
+    source: string | null;
+    // The supplier payments that paid it, oldest first.
+    payments: { id: string; payment_number: string | null; reference: string | null; date: string; method: string; status: string; amount: number; applied: boolean }[];
+}
+
+export interface SupplierBillsResponse {
+    data: SupplierBill[];
+    pagination: { total: number; per_page: number; current_page: number; last_page: number; from: number; to: number };
+    totals: { billed: number; paid: number; owed: number };
+}
+
+export async function getSupplierBills(params: {
+    search?: string; kind?: string; status?: string; supplier_id?: string; page?: number; per_page?: number | "all";
+} = {}): Promise<SupplierBillsResponse> {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") qs.append(k, String(v)); });
+    return apiCall<SupplierBillsResponse>(`/accounts-payable?${qs.toString()}`, "GET");
+}
+
 export async function getOpenSupplierInvoices(supplierId: string): Promise<OpenSupplierInvoice[]> {
     const response = await apiCall<{ data: OpenSupplierInvoice[] }>(`/supplier-payments/open-invoices/${supplierId}`, "GET");
     return response.data ?? [];

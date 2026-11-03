@@ -96,10 +96,12 @@ class DeliveryInvoiceController extends Controller
                 $query->orderBy('created_at', $sortOrder);
         }
 
-        // Pagination
-        $perPage = min((int) $request->input('per_page', 20), 100);
-        $page = max(1, (int) $request->input('page', 1));
+        // Pagination: 20/50/250 a page, or per_page=all for every invoice.
         $total = $query->count();
+        $perPage = $request->input('per_page') === 'all' ? max($total, 1) : max(1, min((int) $request->input('per_page', 20), 1000));
+        $page = max(1, (int) $request->input('page', 1));
+        // All of them, not just this page's, for the "awaiting payment" note.
+        $pendingCount = (clone $query)->reorder()->where('status', 'pending')->count();
         $invoices = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
         return response()->json([
@@ -114,6 +116,7 @@ class DeliveryInvoiceController extends Controller
                 'from' => ($page - 1) * $perPage + 1,
                 'to' => min($page * $perPage, $total),
             ],
+            'pending_count' => $pendingCount,
         ], 200);
     }
 

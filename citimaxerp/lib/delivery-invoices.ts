@@ -80,6 +80,8 @@ export interface DeliveryInvoicesResponse {
     from: number;
     to: number;
   };
+  // Every pending invoice matching the filters, not only this page's.
+  pending_count?: number;
 }
 
 export async function getDeliveryInvoices(params?: {
@@ -88,7 +90,7 @@ export async function getDeliveryInvoices(params?: {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
   page?: number;
-  per_page?: number;
+  per_page?: number | 'all';
 }): Promise<DeliveryInvoicesResponse> {
   const qs = new URLSearchParams();
   if (params?.status) qs.append('status', params.status);
@@ -104,6 +106,7 @@ export async function getDeliveryInvoices(params?: {
     status: response.status || 'success',
     data: response.data || [],
     pagination: response.pagination || { total: 0, per_page: 20, current_page: 1, last_page: 0, from: 0, to: 0 },
+    pending_count: response.pending_count,
   };
 }
 

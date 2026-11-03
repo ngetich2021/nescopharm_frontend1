@@ -47,6 +47,7 @@ import { exportTable, type ExportFormat } from "@/lib/table-export";
 import { ExportMenu, ExportSubMenu, useTableExport } from "@/components/export-menu";
 import { DeliveryInvoicesImport, TransporterStatement } from "./delivery-invoices-excel";
 import { ImportHistoryDialog } from "@/components/import-history-dialog";
+import { ALL_ROWS, TablePager } from "@/components/ui/table-pager";
 
 // Imported invoices for deliveries made before the system have no order, only what the old records said.
 const orderLabel = (invoice: DeliveryInvoice) =>
@@ -98,6 +99,7 @@ export function DeliveryInvoicesTable() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [pagination, setPagination] = useState({ total: 0, per_page: 20, current_page: 1, last_page: 0, from: 0, to: 0 });
+  const [pendingCount, setPendingCount] = useState(0);
 
   const canPay = hasPermission(userProfile as any, "can_pay_delivery_invoices");
 
@@ -118,10 +120,11 @@ export function DeliveryInvoicesTable() {
         sort_by: sortBy,
         sort_order: sortOrder,
         page: currentPage,
-        per_page: perPage,
+        per_page: perPage === ALL_ROWS ? "all" : perPage,
       });
       setInvoices(response.data || []);
       setPagination(response.pagination);
+      setPendingCount(response.pending_count ?? response.data.filter((i) => i.status === "pending").length);
     } catch (error) {
       console.error("Failed to load delivery invoices", error);
       toast({ title: "Error", description: "Failed to load delivery invoices", variant: "destructive" });
@@ -183,8 +186,6 @@ export function DeliveryInvoicesTable() {
     }
   };
 
-  const pendingCount = invoices.filter((i) => i.status === "pending").length;
-
   const exportColumns = ["S/No", "Invoice #", "Date", "Order", "Transporter", "Transporter Inv.", "Zone", "Cartons", "Rate/Carton", "Total", "Status"];
   const exportRow = (invoice: DeliveryInvoice, i: number) => [
     i + 1,
@@ -200,14 +201,9 @@ export function DeliveryInvoicesTable() {
     invoice.status,
   ];
 
-  // Every delivery invoice matching the search (all pages; the API sends at most 100 at a time).
+  // Every delivery invoice matching the search, all pages.
   const exportList = useTableExport(async () => {
-    const all: DeliveryInvoice[] = [];
-    for (let page = 1; ; page++) {
-      const res = await getDeliveryInvoices({ search: search || undefined, sort_by: sortBy, sort_order: sortOrder, page, per_page: 100 });
-      all.push(...res.data);
-      if (page >= res.pagination.last_page || res.data.length === 0) break;
-    }
+    const all = (await getDeliveryInvoices({ search: search || undefined, sort_by: sortBy, sort_order: sortOrder, per_page: "all" })).data;
     return {
       fileName: `delivery-invoices-${new Date().toISOString().slice(0, 10)}`,
       title: "Delivery Invoices",
@@ -276,17 +272,6 @@ export function DeliveryInvoicesTable() {
                   />
                 </div>
               </div>
-              <Select value={perPage.toString()} onValueChange={(val) => setPerPage(parseInt(val))}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10 per page</SelectItem>
-                  <SelectItem value="20">20 per page</SelectItem>
-                  <SelectItem value="50">50 per page</SelectItem>
-                  <SelectItem value="100">100 per page</SelectItem>
-                </SelectContent>
-              </Select>
               <ExportMenu onExport={exportList} disabled={invoices.length === 0} />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -403,44 +388,17 @@ export function DeliveryInvoicesTable() {
             </Table>
           )}
 
-          {/* Pagination */}
-          {invoices.length > 0 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                Showing {pagination.from} to {pagination.to} of {pagination.total} invoices
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                >
-                  Previous
-                </Button>
-                <div className="flex items-center gap-2">
-                  {Array.from({ length: pagination.last_page }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === pagination.last_page}
-                  onClick={() => setCurrentPage(Math.min(pagination.last_page, currentPage + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+          {!loading && (
+            <TablePager
+              total={pagination.total}
+              page={currentPage}
+              pageCount={Math.max(1, pagination.last_page)}
+              pageSize={perPage}
+              start={(pagination.current_page - 1) * pagination.per_page}
+              shown={invoices.length}
+              setPage={setCurrentPage}
+              setPageSize={setPerPage}
+            />
           )}
         </CardContent>
       </Card>
