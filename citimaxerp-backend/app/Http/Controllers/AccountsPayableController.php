@@ -126,6 +126,10 @@ class AccountsPayableController extends Controller
                 'balance' => $balance,
                 'status' => ($meta['kind'] ?? 'bill') === 'debit_note' ? 'debit_note' : ($balance <= 0 ? 'paid' : ($paid > 0 ? 'part_paid' : 'unpaid')),
                 'source' => $meta['source'] ?? null,
+                // Raised by goods received: it follows its receipt, so it is not edited or deleted here.
+                'from_receipt' => ($meta['ledger'] ?? null) === 'receipt',
+                'tax_amount' => round((float) $b->tax_amount, 2),
+                'account_code' => $meta['debit_account_code'] ?? null,
                 'payments' => ($payments->get($b->id) ?? collect())->map(fn ($p) => [
                     'id' => $p->id,
                     'payment_number' => $p->payment_number,
@@ -151,65 +155,59 @@ class AccountsPayableController extends Controller
     }
 
     /**
-     * Store a newly created accounts payable record.
+     * Record a supplier invoice typed in (services, rent, a bill not from goods received). It posts on
+     * its own: DR the chosen account (Inventory when none is chosen) / CR Payables, and is numbered
+     * on from the PUR- series. Goods received raise their own invoice (SupplierBillService).
      */
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_create_accounts', $user->company_id)) {
-            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to create accounts payable.', 'data' => null], 403);
+        $allowed = collect(['can_create_accounts', 'can_create_payments'])->contains(fn ($p) => $this->hasPermission($request, $p, $user->company_id));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to record supplier invoices.', 'data' => null], 403);
         }
 
         $validator = Validator::make($request->all(), [
-            'supplier_id' => 'required|exists:suppliers,id',
-            'invoice_number' => 'required|string|max:255',
+            'supplier_id' => 'required|uuid|exists:suppliers,id',
+            'supplier_invoice_number' => 'nullable|string|max:255',
             'invoice_date' => 'required|date',
-            'due_date' => 'required|date|after_or_equal:invoice_date',
+            'due_date' => 'nullable|date|after_or_equal:invoice_date',
             'amount' => 'required|numeric|min:0.01',
             'tax_amount' => 'nullable|numeric|min:0',
-            'description' => 'nullable|string',
-            'reference' => 'nullable|string|max:255',
-            'payment_terms' => 'nullable|string',
-            'expense_account_id' => 'required|exists:chart_of_accounts,id',
+            'description' => 'nullable|string|max:1000',
+            'account_code' => 'nullable|string|max:50',
         ]);
-
         if ($validator->fails()) {
-            return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
         }
 
-        try {
-            DB::beginTransaction();
-
-            $payable = AccountsPayable::create([
-                'supplier_id' => $request->supplier_id,
-                'invoice_number' => $request->invoice_number,
-                'invoice_date' => $request->invoice_date,
-                'due_date' => $request->due_date,
-                'amount' => $request->amount,
-                'tax_amount' => $request->tax_amount ?? 0,
-                'total_amount' => $request->amount + ($request->tax_amount ?? 0),
-                'paid_amount' => 0,
-                'remaining_amount' => $request->amount + ($request->tax_amount ?? 0),
-                'description' => $request->description,
-                'reference' => $request->reference,
-                'payment_terms' => $request->payment_terms,
-                'status' => 'pending',
-                'company_id' => auth()->user()->company_id,
-            ]);
-
-            // Create journal entry for the payable
-            $this->createPayableJournalEntry($payable, $request->expense_account_id);
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'Accounts payable record created successfully',
-                'data' => $payable->load('supplier')
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['message' => 'Failed to create payable record', 'error' => $e->getMessage()], 500);
+        if (!\App\Models\Supplier::where('company_id', $user->company_id)->whereKey($request->input('supplier_id'))->exists()) {
+            return response()->json(['message' => 'Supplier not found.'], 422);
         }
+        $theirs = trim((string) $request->input('supplier_invoice_number'));
+        if ($theirs !== '') {
+            $dup = AccountsPayable::where('company_id', $user->company_id)->where('vendor_id', $request->input('supplier_id'))
+                ->whereRaw('lower(vendor_invoice_number) = ?', [mb_strtolower($theirs)])->value('invoice_number');
+            if ($dup) {
+                return response()->json(['message' => "This supplier's invoice {$theirs} is already recorded as {$dup}."], 422);
+            }
+        }
+        if ($request->filled('account_code') && !ChartOfAccount::where('company_id', $user->company_id)->where('account_code', $request->input('account_code'))->exists()) {
+            return response()->json(['message' => 'No account with code ' . $request->input('account_code') . ' in the chart of accounts.'], 422);
+        }
+
+        $bill = DB::transaction(fn () => app(\App\Services\SupplierBillService::class)->record($user->company_id, [
+            'supplier_id' => $request->input('supplier_id'),
+            'supplier_invoice_number' => $theirs !== '' ? $theirs : null,
+            'invoice_date' => $request->input('invoice_date'),
+            'due_date' => $request->input('due_date'),
+            'amount' => $request->input('amount'),
+            'tax_amount' => $request->input('tax_amount'),
+            'description' => $request->input('description'),
+            'account_code' => $request->input('account_code'),
+        ], $user->id));
+
+        return response()->json(['status' => 'success', 'message' => "Supplier invoice {$bill->invoice_number} recorded.", 'data' => $bill], 201);
     }
 
     /**
@@ -302,35 +300,33 @@ class AccountsPayableController extends Controller
     }
 
     /**
-     * Remove the specified accounts payable record.
+     * Delete a supplier invoice nothing has been paid on. One raised by goods received goes with its
+     * receipt (edit or delete the receipt instead).
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        if (!$this->hasPermission($request, 'can_delete_accounts', $user->company_id)) {
-            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to delete accounts payable.', 'data' => null], 403);
+        $allowed = collect(['can_delete_accounts', 'can_create_payments'])->contains(fn ($p) => $this->hasPermission($request, $p, $user->company_id));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to delete supplier invoices.', 'data' => null], 403);
         }
 
-        try {
-            $payable = AccountsPayable::findOrFail($id);
-
-            if ($payable->paid_amount > 0) {
-                return response()->json(['message' => 'Cannot delete payable with payments'], 400);
-            }
-
-            DB::beginTransaction();
-
-            // Delete related journal entries
-            $payable->journalEntries()->delete();
-            $payable->delete();
-
-            DB::commit();
-
-            return response()->json(['message' => 'Accounts payable record deleted successfully']);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['message' => 'Failed to delete payable record', 'error' => $e->getMessage()], 500);
+        $bill = AccountsPayable::where('company_id', $user->company_id)->find($id);
+        if (!$bill) {
+            return response()->json(['message' => 'Supplier invoice not found.'], 404);
         }
+        if (($bill->metadata['ledger'] ?? null) === 'receipt') {
+            return response()->json(['message' => "{$bill->invoice_number} comes from goods received; edit or delete that receipt instead."], 422);
+        }
+        if ((float) $bill->paid_amount > 0.005
+            || \App\Models\SupplierPaymentAllocation::where('invoice_type', 'bill')->where('invoice_id', $bill->id)->exists()) {
+            return response()->json(['message' => "{$bill->invoice_number} has payments on it and cannot be deleted."], 422);
+        }
+
+        // Its journal entry is removed by LedgerSyncObserver.
+        $bill->delete();
+
+        return response()->json(['status' => 'success', 'message' => "Supplier invoice {$bill->invoice_number} deleted."]);
     }
 
     /**

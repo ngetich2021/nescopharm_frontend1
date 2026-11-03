@@ -74,7 +74,7 @@ async function downloadFile(id: string, fileName: string) {
 }
 
 // Product / batch imports, plus the Data Import hub's steps.
-export type ImportHistoryKind = "products" | "batches" | "suppliers" | "supplier_payments" | "delivery_invoices" | "customers" | "opening_stock" | "past_invoices" | "etims_codes"
+export type ImportHistoryKind = "products" | "batches" | "suppliers" | "supplier_payments" | "delivery_invoices" | "supplier_invoices" | "customers" | "opening_stock" | "past_invoices" | "etims_codes"
 
 export function ImportHistoryDialog({ kind, title }: { kind: ImportHistoryKind; title?: string }) {
   const [open, setOpen] = useState(false)
@@ -174,8 +174,8 @@ export function ImportHistoryDialog({ kind, title }: { kind: ImportHistoryKind; 
                                 <thead className="bg-gray-50 text-xs text-gray-600">
                                   <tr>
                                     <th className="px-3 py-2 text-left font-medium">S/No</th>
-                                    <th className="px-3 py-2 text-left font-medium">{kind === "products" ? "Item No." : kind === "batches" ? "Batch" : kind === "supplier_payments" ? "Payment No." : kind === "delivery_invoices" ? "Invoice No." : kind === "etims_codes" ? "Sheet Row" : "Reference"}</th>
-                                    <th className="px-3 py-2 text-left font-medium">{kind === "supplier_payments" ? "Supplier" : kind === "delivery_invoices" ? "Transporter" : kind === "past_invoices" || kind === "customers" || kind === "suppliers" ? "Name" : "Item"}</th>
+                                    <th className="px-3 py-2 text-left font-medium">{kind === "products" ? "Item No." : kind === "batches" ? "Batch" : kind === "supplier_payments" ? "Payment No." : kind === "delivery_invoices" || kind === "supplier_invoices" ? "Invoice No." : kind === "etims_codes" ? "Sheet Row" : "Reference"}</th>
+                                    <th className="px-3 py-2 text-left font-medium">{kind === "supplier_payments" || kind === "supplier_invoices" ? "Supplier" : kind === "delivery_invoices" ? "Transporter" : kind === "past_invoices" || kind === "customers" || kind === "suppliers" ? "Name" : "Item"}</th>
                                     <th className="px-3 py-2 text-left font-medium">Action</th>
                                     <th className="px-3 py-2 text-left font-medium">Changes</th>
                                   </tr>

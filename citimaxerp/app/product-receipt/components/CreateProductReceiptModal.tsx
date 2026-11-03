@@ -839,6 +839,15 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
       }
     }
 
+    // The receipt raises the supplier's invoice at these buying prices, so a 0 price makes it short.
+    const free = items.filter((i) => !(Number(i.unit_price) > 0))
+    if (free.length > 0 && !window.confirm(
+      `${free.length} line(s) have a buying price of 0 (${free.map((i) => i.product?.name || "item").slice(0, 3).join(", ")}${free.length > 3 ? "..." : ""}). ` +
+      "The supplier invoice for these goods will leave them out. Save anyway?"
+    )) {
+      return false;
+    }
+
     return true;
   };
 

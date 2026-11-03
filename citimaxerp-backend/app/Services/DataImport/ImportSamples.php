@@ -22,6 +22,7 @@ class ImportSamples
                 'suppliers' => self::supplier($companyId),
                 'supplier_payments' => self::supplierPayment($companyId),
                 'delivery_invoices' => self::deliveryInvoice($companyId),
+                'supplier_invoices' => self::supplierInvoice($companyId),
                 'customers' => self::customer($companyId),
                 'opening_stock' => self::openingStock($companyId),
                 'purchase_order_items' => self::purchaseOrderItem($companyId),
@@ -85,6 +86,27 @@ class ImportSamples
         return $supplier ? [
             'supplier' => $supplier, 'payment_date' => self::date(now()), 'amount' => 10000, 'payment_method' => 'Bank Transfer',
             'reference' => 'Bank ref / voucher no.', 'status' => 'Completed', 'notes' => self::EXAMPLE_MARK,
+        ] : null;
+    }
+
+    private static function supplierInvoice(string $companyId): ?array
+    {
+        $b = DB::table('accounts_payable as b')->join('suppliers as s', 's.id', '=', 'b.vendor_id')
+            ->where('b.company_id', $companyId)->whereRaw("coalesce(b.metadata->>'ledger', '') <> 'receipt'")
+            ->whereRaw("coalesce(b.metadata->>'kind', 'bill') = 'bill'")
+            ->orderByDesc('b.invoice_date')->select('b.*', 's.name as supplier_name')->first();
+        if ($b) {
+            return [
+                'invoice_number' => $b->invoice_number, 'type' => 'Invoice', 'supplier' => $b->supplier_name,
+                'supplier_invoice_number' => $b->vendor_invoice_number, 'invoice_date' => self::date($b->invoice_date),
+                'due_date' => self::date($b->due_date), 'amount' => self::money((float) $b->total_amount - (float) $b->tax_amount),
+                'tax_amount' => (float) $b->tax_amount > 0 ? self::money($b->tax_amount) : null, 'description' => $b->description,
+            ];
+        }
+        $supplier = DB::table('suppliers')->where('company_id', $companyId)->where('is_active', true)->orderBy('name')->value('name');
+        return $supplier ? [
+            'type' => 'Invoice', 'supplier' => $supplier, 'supplier_invoice_number' => 'Their invoice no.', 'invoice_date' => self::date(now()),
+            'amount' => 10000, 'description' => 'What the bill is for', 'notes' => self::EXAMPLE_MARK,
         ] : null;
     }
 

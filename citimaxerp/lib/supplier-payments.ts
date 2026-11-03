@@ -216,6 +216,9 @@ export interface SupplierBill {
     balance: number;
     status: "paid" | "part_paid" | "unpaid" | "debit_note";
     source: string | null;
+    from_receipt: boolean;
+    tax_amount: number;
+    account_code: string | null;
     // The supplier payments that paid it, oldest first.
     payments: { id: string; payment_number: string | null; reference: string | null; date: string; method: string; status: string; amount: number; applied: boolean }[];
 }
@@ -232,6 +235,44 @@ export async function getSupplierBills(params: {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") qs.append(k, String(v)); });
     return apiCall<SupplierBillsResponse>(`/finance/accounts-payable?${qs.toString()}`, "GET");
+}
+
+export interface RecordSupplierBillPayload {
+    supplier_id: string;
+    supplier_invoice_number?: string;
+    invoice_date: string;
+    due_date?: string;
+    amount: number;
+    tax_amount?: number;
+    description?: string;
+    account_code?: string;
+}
+
+/** Record a supplier invoice typed in (not from goods received); it posts to the books. */
+export async function recordSupplierBill(payload: RecordSupplierBillPayload): Promise<{ message: string; data: { invoice_number: string } }> {
+    return apiCall(`/finance/accounts-payable`, "POST", payload);
+}
+
+export async function deleteSupplierBill(id: string): Promise<{ message: string }> {
+    return apiCall(`/finance/accounts-payable/${id}`, "DELETE");
+}
+
+/** Preview (dryRun) or save a supplier invoices sheet. Saved invoices post to the books. */
+export async function importSupplierBills(file: File, dryRun: boolean = true): Promise<any> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("dry_run", dryRun ? "1" : "0");
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/data-import/supplier_invoices`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(typeof body.message === "string" ? body.message : "Import failed");
+    }
+    return body;
 }
 
 export async function getOpenSupplierInvoices(supplierId: string): Promise<OpenSupplierInvoice[]> {

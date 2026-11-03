@@ -346,6 +346,13 @@ class LedgerPostingService
      */
     public function syncProductReceipt(ProductReceipt $receipt, bool $deleted = false): ?JournalEntry
     {
+        // Goods received are a supplier invoice too (Sales > Invoices > Supplier Invoices), kept in step here.
+        try {
+            app(SupplierBillService::class)->syncFromReceipt($receipt, $deleted);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Supplier invoice for goods received failed', ['receipt_id' => $receipt->id, 'error' => $e->getMessage()]);
+        }
+
         $settings = $this->settings($receipt->company_id);
         $desired = null;
 

@@ -16,6 +16,7 @@ class ImportSchemas
             'suppliers' => self::suppliers(),
             'supplier_payments' => self::supplierPayments(),
             'delivery_invoices' => self::deliveryInvoices(),
+            'supplier_invoices' => self::supplierInvoices(),
             'customers' => self::customers(),
             'opening_stock' => self::openingStock(),
             'purchase_order_items' => self::purchaseOrderItems(),
@@ -154,6 +155,31 @@ class ImportSchemas
                 ['key' => 'payment_date', 'label' => 'Payment Date', 'type' => 'date', 'example' => '20/09/2026', 'help' => 'For Paid rows; blank = the invoice date.'],
                 ['key' => 'payment_method', 'label' => 'Payment Method', 'type' => 'choice', 'choices' => ['Bank Transfer', 'Cash', 'M-Pesa', 'Cheque'], 'example' => 'M-Pesa', 'help' => 'For Paid rows; blank = Cash.'],
                 ['key' => 'payment_reference', 'label' => 'Payment Reference', 'type' => 'text', 'example' => 'QWE12RT45'],
+                ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
+            ],
+        ];
+    }
+
+    private static function supplierInvoices(): array
+    {
+        return [
+            'key' => 'supplier_invoices',
+            'label' => 'Supplier Invoices',
+            'order' => 3,
+            'description' => 'What suppliers billed you (bills) and their debit notes. Each posts to the books (the chosen account, Inventory by default, against Payables) and can then be paid from Supplier Payments. Goods received raise their own invoice - do not list those here.',
+            'matching' => 'A row with an Invoice No. already in the system (PUR-135) updates that invoice. A row without one is added (numbered on from PUR-), unless the same supplier invoice no. - or, without one, the same supplier, date and amount - is already recorded.',
+            'permission' => 'can_create_payments',
+            'columns' => [
+                ['key' => 'invoice_number', 'label' => 'Invoice No.', 'type' => 'text', 'example' => '', 'aliases' => ['invoice', 'billno', 'vchno'], 'help' => 'Leave blank for a new invoice; the system numbers it (PUR-135).'],
+                ['key' => 'type', 'label' => 'Type', 'type' => 'choice', 'choices' => ['Invoice', 'Debit Note'], 'example' => 'Invoice', 'aliases' => ['vchtype', 'vouchertype'], 'help' => 'Blank = Invoice. A debit note lowers what is owed.'],
+                ['key' => 'supplier', 'label' => 'Supplier Name', 'type' => 'text', 'required' => true, 'example' => 'Victoria Healthcare Ltd', 'aliases' => ['supplier', 'vendor'], 'help' => 'Must match a supplier in Suppliers.'],
+                ['key' => 'supplier_invoice_number', 'label' => 'Supplier Invoice No.', 'type' => 'text', 'example' => 'VHL/2026/0412', 'aliases' => ['theirinvoice', 'supplierinvoice', 'reference']],
+                ['key' => 'invoice_date', 'label' => 'Invoice Date', 'type' => 'date', 'required' => true, 'example' => '15/10/2026', 'aliases' => ['date'], 'help' => 'Day first: 15/10/2026.'],
+                ['key' => 'due_date', 'label' => 'Due Date', 'type' => 'date', 'example' => '14/11/2026', 'aliases' => ['due'], 'help' => "Blank = invoice date + the supplier's payment terms."],
+                ['key' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'example' => '89410', 'aliases' => ['total', 'totalamount'], 'help' => 'Before VAT when VAT is filled in; otherwise the full amount.'],
+                ['key' => 'tax_amount', 'label' => 'VAT', 'type' => 'number', 'example' => '', 'aliases' => ['vat', 'tax', 'taxamount']],
+                ['key' => 'description', 'label' => 'Description', 'type' => 'text', 'example' => 'Pharmaceuticals - October', 'aliases' => ['narration', 'particulars']],
+                ['key' => 'account_code', 'label' => 'Account Code', 'type' => 'text', 'example' => '', 'aliases' => ['account', 'expenseaccount'], 'help' => 'Optional: the account it is charged to (e.g. 5300 Utilities). Blank = Inventory.'],
                 ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
             ],
         ];

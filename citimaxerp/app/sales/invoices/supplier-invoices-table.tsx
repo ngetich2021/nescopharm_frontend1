@@ -12,7 +12,11 @@ import { Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ExportMenu, useTableExport } from "@/components/export-menu";
 import { ALL_ROWS, TablePager } from "@/components/ui/table-pager";
-import { getSupplierBills, type SupplierBill } from "@/lib/supplier-payments";
+import { deleteSupplierBill, getSupplierBills, type SupplierBill } from "@/lib/supplier-payments";
+import { ImportHistoryDialog } from "@/components/import-history-dialog";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
+import { RecordSupplierInvoice, SupplierInvoicesImport } from "./supplier-invoices-actions";
 
 // 12-Jul-26
 const shortDate = (date?: string | null) => {
@@ -22,6 +26,16 @@ const shortDate = (date?: string | null) => {
   const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
   return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`;
 };
+
+// 15/10/2026 - day first, the format the import reads back.
+const sheetDate = (date?: string | null) => {
+  if (!date) return "";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return date;
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+};
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const money = (n: number) => `KES ${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
@@ -54,6 +68,24 @@ export function SupplierInvoicesTable() {
   const [pagination, setPagination] = useState({ total: 0, per_page: 20, current_page: 1, last_page: 1, from: 0, to: 0 });
   const [totals, setTotals] = useState({ billed: 0, paid: 0, owed: 0 });
   const [viewing, setViewing] = useState<SupplierBill | null>(null);
+  const [reload, setReload] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+  const refresh = () => setReload((n) => n + 1);
+
+  const removeBill = async (bill: SupplierBill) => {
+    if (!window.confirm(`Delete supplier invoice ${bill.invoice_number}? Its entry in the books is removed too.`)) return;
+    setDeleting(true);
+    try {
+      const res = await deleteSupplierBill(bill.id);
+      toast({ title: "Deleted", description: res.message });
+      setViewing(null);
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Could not delete", description: e?.message || "Nothing was changed", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const filters = () => ({
     search: query || undefined,
@@ -83,12 +115,16 @@ export function SupplierInvoicesTable() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, kind, status, page, pageSize]);
+  }, [query, kind, status, page, pageSize, reload]);
 
-  const exportColumns = ["S/No", "Invoice #", "Supplier Inv. #", "Date", "Due", "Supplier", "Description", "Total", "Paid", "Balance", "Status", "Paid By"];
+  // The import template's columns first (an exported sheet can be edited and imported back: a row
+  // keeps its Invoice No. and updates that invoice), then what has been paid, which the import ignores.
+  const exportColumns = ["S/No.", "Invoice No.", "Type", "Supplier Name", "Supplier Invoice No.", "Invoice Date", "Due Date", "Amount", "VAT",
+    "Description", "Account Code", "Total", "Paid", "Balance", "Status", "Paid By"];
   const exportRow = (b: SupplierBill, i: number) => [
-    i + 1, b.invoice_number, b.supplier_invoice_number || "", shortDate(b.invoice_date), b.due_date ? shortDate(b.due_date) : "",
-    b.supplier_name || "", b.description || "", b.total, b.paid, b.balance, STATUS[b.status]?.label ?? b.status, paidByLabel(b),
+    i + 1, b.invoice_number, b.kind === "debit_note" ? "Debit Note" : "Invoice", b.supplier_name || "", b.supplier_invoice_number || "",
+    sheetDate(b.invoice_date), sheetDate(b.due_date), round2(b.total - (b.tax_amount || 0)), b.tax_amount || null, b.description || "",
+    b.account_code || "", b.total, b.paid, b.balance, STATUS[b.status]?.label ?? b.status, paidByLabel(b),
   ];
 
   // Every invoice matching the filters, all pages.
@@ -99,9 +135,10 @@ export function SupplierInvoicesTable() {
       title: kind === "debit_note" ? "Supplier Debit Notes" : "Supplier Invoices",
       subtitle: query ? `Search: ${query}` : undefined,
       headers: exportColumns,
-      moneyColumns: [7, 8, 9],
+      moneyColumns: [7, 8, 11, 12, 13],
       rows: res.data.map(exportRow),
-      footer: kind === "debit_note" ? undefined : [["", "", "", "", "", "", "Total", res.totals.billed, res.totals.paid, res.totals.owed, "", ""]],
+      footer: kind === "debit_note" ? undefined
+        : [["", "", "", "", "", "", "", "", "", "", "Total", res.totals.billed, res.totals.paid, res.totals.owed, "", ""]],
     };
   });
 
@@ -147,6 +184,11 @@ export function SupplierInvoicesTable() {
               </SelectContent>
             </Select>
             <ExportMenu onExport={exportList} disabled={bills.length === 0} />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <RecordSupplierInvoice onSaved={refresh} />
+            <SupplierInvoicesImport onImported={refresh} />
+            <ImportHistoryDialog kind="supplier_invoices" title="Supplier Invoice" />
           </div>
         </CardContent>
       </Card>
@@ -236,6 +278,11 @@ export function SupplierInvoicesTable() {
                 {viewing.description && (
                   <div className="col-span-2 sm:col-span-3"><Label className="text-xs text-muted-foreground">Description</Label><p>{viewing.description}</p></div>
                 )}
+                <div className="col-span-2 sm:col-span-3 text-xs text-muted-foreground">
+                  {viewing.from_receipt
+                    ? "Raised by goods received: its amount follows the receipt (edit the receipt to change it)."
+                    : viewing.source ? `Source: ${viewing.source}` : null}
+                </div>
               </div>
 
               {viewing.kind !== "debit_note" && (
@@ -271,6 +318,15 @@ export function SupplierInvoicesTable() {
                       </TableBody>
                     </Table>
                   )}
+                </div>
+              )}
+
+              {!viewing.from_receipt && viewing.paid <= 0 && viewing.payments.length === 0 && (
+                <div className="flex justify-end border-t pt-3">
+                  <Button variant="outline" size="sm" className="text-red-600" disabled={deleting} onClick={() => removeBill(viewing)}>
+                    {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                    Delete Invoice
+                  </Button>
                 </div>
               )}
             </div>

@@ -119,6 +119,7 @@ class DataImportController extends Controller
                 'suppliers' => $this->importSuppliers($body, $cells, $user->company_id, $headingRow),
                 'supplier_payments' => $this->importSupplierPayments($body, $cells, $user->company_id, $headingRow),
                 'delivery_invoices' => $this->importDeliveryInvoices($body, $cells, $user, $headingRow),
+                'supplier_invoices' => $this->importSupplierInvoices($body, $cells, $user, $headingRow),
                 'customers' => $this->importCustomers($body, $cells, $user, $headingRow),
                 'opening_stock' => $this->importOpeningStock($body, $cells, $user, $headingRow),
                 'past_invoices' => $this->importPastInvoices($body, $cells, $user, $headingRow),
@@ -508,6 +509,154 @@ class DataImportController extends Controller
                 'amount_paid' => $paid,
                 'payment_status' => $paid >= (float) $po->total_amount && (float) $po->total_amount > 0 ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid'),
             ]);
+        }
+
+        return [$summary, $results];
+    }
+
+    /**
+     * Supplier invoices (bills) and debit notes. Invoice No. finds the one to update; a new row is
+     * numbered on from PUR- (DN- for a debit note) and posts to the books through LedgerSyncObserver.
+     * Invoices raised by goods received are not changed here (they follow their receipt).
+     */
+    private function importSupplierInvoices(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+        $suppliers = Supplier::where('company_id', $companyId)->get()->keyBy(fn ($s) => $this->nameKey($s->name));
+        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)->pluck('account_code')->map(fn ($c) => (string) $c)->all();
+        $bills = app(\App\Services\SupplierBillService::class);
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $number = $cell('invoice_number');
+            $supplierName = $cell('supplier');
+            $result = ['row' => $line, 'key' => $number ?: "Row {$line}", 'name' => $supplierName];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            $supplier = $supplierName !== '' ? $suppliers->get($this->nameKey($supplierName)) : null;
+            $typeText = preg_replace('/[^a-z]/', '', strtolower($cell('type')));
+            $kind = in_array($typeText, ['debitnote', 'dn', 'debit'], true) ? 'debit_note'
+                : ($typeText === '' || in_array($typeText, ['invoice', 'bill', 'purchase', 'purchaselocal'], true) ? 'bill' : null);
+            $date = $this->date($cell('invoice_date'));
+            $dueText = $cell('due_date');
+            $due = $dueText !== '' ? $this->date($dueText) : null;
+            $amount = $this->number($cell('amount'));
+            $vatText = $cell('tax_amount');
+            $vat = $vatText !== '' ? $this->number($vatText) : 0.0;
+            $theirs = $cell('supplier_invoice_number');
+            $account = $cell('account_code');
+
+            if (!$supplier) {
+                $fail($supplierName === '' ? 'Supplier Name is required.' : "No supplier called \"{$supplierName}\" - add it in Suppliers first.");
+                continue;
+            }
+            if (!$kind) {
+                $fail('Type must be Invoice or Debit Note.');
+                continue;
+            }
+            if (!$date) {
+                $fail('Invoice Date is missing or not a date (use 15/10/2026).');
+                continue;
+            }
+            if ($due === false) {
+                $fail('Due Date is not a date (use 14/11/2026).');
+                continue;
+            }
+            if ($amount === null || $amount <= 0) {
+                $fail('Amount must be a number above 0.');
+                continue;
+            }
+            if ($vat === null || $vat < 0) {
+                $fail('VAT must be a number (or left blank).');
+                continue;
+            }
+            if ($account !== '' && !in_array($account, $accounts, true)) {
+                $fail("No account with code {$account} in the chart of accounts.");
+                continue;
+            }
+            $total = round($amount + $vat, 2);
+
+            $existing = $number !== '' ? \App\Models\AccountsPayable::where('company_id', $companyId)->where('invoice_number', $number)->first() : null;
+            if ($number !== '' && !$existing) {
+                $fail("No supplier invoice numbered {$number}. Leave Invoice No. blank to add a new one.");
+                continue;
+            }
+
+            if ($existing) {
+                $meta = $existing->metadata ?? [];
+                if (($meta['ledger'] ?? null) === 'receipt') {
+                    $summary['unchanged']++;
+                    $results[] = ['key' => $number, 'status' => 'unchanged', 'message' => 'Raised by goods received - change the receipt instead.'] + $result;
+                    continue;
+                }
+                if ($total < (float) $existing->paid_amount - 0.005) {
+                    $fail("{$number} already has " . number_format((float) $existing->paid_amount, 2) . ' paid on it; the amount cannot go below that.');
+                    continue;
+                }
+                $existing->fill(array_filter([
+                    'vendor_id' => $supplier->id,
+                    'vendor_invoice_number' => $theirs ?: null,
+                    'invoice_date' => $date,
+                    'due_date' => $due ?: null,
+                    'total_amount' => $total,
+                    'tax_amount' => round($vat, 2),
+                    'description' => $cell('description') ?: null,
+                ], fn ($v) => $v !== null));
+                if ($account !== '' && ($meta['debit_account_code'] ?? null) !== $account) {
+                    $existing->metadata = array_merge($meta, ['debit_account_code' => $account]);
+                }
+                if (!$existing->isDirty()) {
+                    $summary['unchanged']++;
+                    $results[] = ['key' => $number, 'status' => 'unchanged'] + $result;
+                    continue;
+                }
+                $changes = collect($existing->getDirty())->except(['metadata'])->map(function ($to, $field) use ($existing) {
+                    $from = $existing->getOriginal($field);
+                    return ['field' => $field, 'from' => $from instanceof \DateTimeInterface ? $from->format('Y-m-d') : $from, 'to' => $to];
+                })->values()->all();
+                $existing->balance_amount = round($total - (float) $existing->paid_amount, 2);
+                $existing->save();
+                $summary['updated']++;
+                $results[] = ['key' => $number, 'status' => 'updated', 'changes' => $changes] + $result;
+                continue;
+            }
+
+            // Already recorded: the same supplier invoice no., or (without one) the same supplier, date and amount.
+            $dup = \App\Models\AccountsPayable::where('company_id', $companyId)->where('vendor_id', $supplier->id)
+                ->when($theirs !== '',
+                    fn ($q) => $q->whereRaw('lower(vendor_invoice_number) = ?', [mb_strtolower($theirs)]),
+                    fn ($q) => $q->whereDate('invoice_date', $date)->where('total_amount', $total))
+                ->value('invoice_number');
+            if ($dup) {
+                $summary['unchanged']++;
+                $results[] = ['key' => $dup, 'status' => 'unchanged', 'message' => "Already recorded as {$dup}."] + $result;
+                continue;
+            }
+
+            $bill = $bills->record($companyId, [
+                'kind' => $kind,
+                'supplier_id' => $supplier->id,
+                'supplier_invoice_number' => $theirs ?: null,
+                'invoice_date' => $date,
+                'due_date' => $due ?: null,
+                'amount' => $amount,
+                'tax_amount' => $vat,
+                'description' => $cell('description') ?: ($cell('notes') ?: null),
+                'account_code' => $account ?: null,
+                'source' => 'Imported',
+            ], $user->id);
+            $summary['created']++;
+            $results[] = ['key' => $bill->invoice_number, 'status' => 'created'] + $result;
         }
 
         return [$summary, $results];
