@@ -50,7 +50,7 @@ class EtimsCatalogueController extends Controller
         $search = trim((string) $request->query('search'));
 
         $query = Invoice::query()
-            ->with('customer:id,name')
+            ->with('customer:id,name,business_name')
             ->where('company_id', $companyId)
             ->whereNotNull('etims_status');
         if ($status) {
@@ -62,7 +62,7 @@ class EtimsCatalogueController extends Controller
                 $q->where('invoice_number', 'ilike', "%{$search}%")
                     ->orWhere('etims_invoice_number', 'ilike', "%{$search}%")
                     ->orWhere('etims_receipt_number', 'ilike', "%{$search}%")
-                    ->orWhereHas('customer', fn ($c) => $c->where('name', 'ilike', "%{$search}%"));
+                    ->orWhereHas('customer', fn ($c) => $c->where('name', 'ilike', "%{$search}%")->orWhere('business_name', 'ilike', "%{$search}%"));
                 if ($digits !== '') {
                     $q->orWhere('file_number', 'ilike', '%'.ltrim($digits, '0').'%');
                 }
@@ -85,7 +85,8 @@ class EtimsCatalogueController extends Controller
                 'id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
                 'invoice_date' => $invoice->invoice_date?->toDateString(),
-                'customer' => $invoice->customer?->name,
+                // The business, as on the invoice; the contact person only when there is none.
+                'customer' => $invoice->customer ? ($invoice->customer->business_name ?: $invoice->customer->name) : null,
                 'total_amount' => (float) $invoice->total_amount,
                 'etims_status' => $invoice->etims_status,
                 'etims_invoice_number' => $invoice->etims_invoice_number,
