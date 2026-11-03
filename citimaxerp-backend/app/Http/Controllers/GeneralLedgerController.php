@@ -175,6 +175,45 @@ class GeneralLedgerController extends Controller
                 $ledgerData[$accId]['totals']['closing_balance'] = round($accountRunningBalances[$accId], 2);
             }
 
+            // An account with a balance brought forward but no entries in the period still shows,
+            // opening and closing on that balance (e.g. a supplier owed from before the period).
+            $quiet = ChartOfAccount::where('company_id', $companyId)
+                ->whereNotIn('id', array_keys($ledgerData))
+                ->when($accountId, fn ($q) => $q->where('id', $accountId))
+                ->when($accountType, fn ($q) => $q->where('account_type', $accountType))
+                ->where(function ($q) use ($dateFrom, $companyId, $customerEntryIds) {
+                    if (!$customerEntryIds) {
+                        $q->where('opening_balance', '!=', 0);
+                    }
+                    if ($dateFrom) {
+                        $q->orWhereIn('id', JournalEntryItem::select('account_id')
+                            ->whereHas('journalEntry', fn ($e) => $e->where('company_id', $companyId)
+                                ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)->where('entry_date', '<', $dateFrom))
+                            ->when($customerEntryIds, fn ($w) => $w->whereIn('journal_entry_id', $customerEntryIds)));
+                    }
+                })
+                ->get();
+            foreach ($quiet as $account) {
+                $opening = round($this->calculateOpeningBalance($account, $dateFrom, $customerEntryIds), 2);
+                if (abs($opening) < 0.005) {
+                    continue;
+                }
+                $ledgerData[$account->id] = [
+                    'account' => [
+                        'id' => $account->id,
+                        'code' => $account->account_code,
+                        'name' => $account->account_name,
+                        'type' => $account->account_type,
+                        'subtype' => $account->account_subtype,
+                        'normal_balance' => $this->hasDebitNormalBalance($account) ? 'debit' : 'credit',
+                    ],
+                    'opening_balance' => $opening,
+                    'transactions' => [],
+                    'totals' => ['total_debits' => 0, 'total_credits' => 0, 'closing_balance' => $opening],
+                ];
+            }
+            uasort($ledgerData, fn ($a, $b) => strcmp((string) $a['account']['code'], (string) $b['account']['code']));
+
             // Round totals
             foreach ($ledgerData as &$data) {
                 $data['totals']['total_debits'] = round($data['totals']['total_debits'], 2);

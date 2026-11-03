@@ -89,8 +89,11 @@ function ledgerRow(t: LedgerTransaction, index: number, account = ""): ExportCel
   ]
 }
 
-function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAccount; buildExport: () => TableExport }) {
+function LedgerAccountCard({ accountData, buildExport, dateFrom, dateTo }: { accountData: LedgerAccount; buildExport: () => TableExport; dateFrom: string; dateTo: string }) {
   const { pageRows, start, pager } = usePaged(accountData.transactions)
+  // The balance brought forward opens the first page and the balance carried closes the last.
+  const firstPage = pager.page === 1
+  const lastPage = pager.page >= pager.pageCount
   return (
     <Card>
       <CardHeader>
@@ -117,13 +120,12 @@ function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAc
             <DownloadButton
               title={`${accountData.account.account_code} ${accountData.account.account_name}`}
               build={buildExport}
-              disabled={accountData.transactions.length === 0}
             />
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        {accountData.transactions.length > 0 ? (
+        {(
           <>
             <Table scroll>
               <TableHeader>
@@ -138,6 +140,22 @@ function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAc
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {firstPage && (
+                  <TableRow className="bg-muted/40 font-medium">
+                    <TableCell />
+                    <TableCell>{dateFrom ? format(new Date(dateFrom), 'MMM dd, yyyy') : '-'}</TableCell>
+                    <TableCell />
+                    <TableCell>Opening Balance</TableCell>
+                    <TableCell />
+                    <TableCell />
+                    <TableCell className="font-mono text-right">{formatCurrency(accountData.opening_balance)}</TableCell>
+                  </TableRow>
+                )}
+                {accountData.transactions.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">No entries in this period</TableCell>
+                  </TableRow>
+                )}
                 {pageRows.map((transaction, i) => (
                   <TableRow key={transaction.id}>
                     <TableCell className="text-center text-muted-foreground tabular-nums">{start + i + 1}</TableCell>
@@ -155,6 +173,17 @@ function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAc
                     </TableCell>
                   </TableRow>
                 ))}
+                {lastPage && (
+                  <TableRow className="bg-muted/40 font-semibold">
+                    <TableCell />
+                    <TableCell>{dateTo ? format(new Date(dateTo), 'MMM dd, yyyy') : '-'}</TableCell>
+                    <TableCell />
+                    <TableCell>Closing Balance</TableCell>
+                    <TableCell className="font-mono text-right">{formatCurrency(accountData.totals.total_debits)}</TableCell>
+                    <TableCell className="font-mono text-right">{formatCurrency(accountData.totals.total_credits)}</TableCell>
+                    <TableCell className="font-mono text-right">{formatCurrency(accountData.totals.closing_balance)}</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
             <TablePager {...pager} />
@@ -179,10 +208,6 @@ function LedgerAccountCard({ accountData, buildExport }: { accountData: LedgerAc
               </div>
             </div>
           </>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            No transactions found for the selected period
-          </div>
         )}
       </CardContent>
     </Card>
@@ -350,8 +375,11 @@ export default function GeneralLedgerPage() {
     ],
     headers: ["S/No", "Date", "Reference", "Description", "Debit", "Credit", "Running Balance"],
     moneyColumns: [4, 5, 6],
-    rows: a.transactions.map((t, i) => { const r = ledgerRow(t, i); return [r[0], ...r.slice(2)] }),
-    footer: [["", "", "", "Totals", num(a.totals.total_debits), num(a.totals.total_credits), num(a.totals.closing_balance)]],
+    rows: [
+      ["", dateFrom, "", "Opening balance", null, null, num(a.opening_balance)],
+      ...a.transactions.map((t, i) => { const r = ledgerRow(t, i); return [r[0], ...r.slice(2)] }),
+    ],
+    footer: [["", dateTo, "", "Closing balance", num(a.totals.total_debits), num(a.totals.total_credits), num(a.totals.closing_balance)]],
   })
 
   if (isLoading) {
@@ -551,6 +579,8 @@ export default function GeneralLedgerPage() {
             key={accountData.account.id}
             accountData={accountData}
             buildExport={() => buildAccountExport(accountData)}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
           />
         ))}
         

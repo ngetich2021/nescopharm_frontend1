@@ -113,7 +113,7 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
           <p className="text-sm text-red-600">{error}</p>
         ) : isLoading && !data ? (
           <p className="text-sm text-muted-foreground">Loading ledger entries...</p>
-        ) : !data || data.entries.length === 0 ? (
+        ) : !data ? (
           <p className="text-sm text-muted-foreground">No ledger entries for this customer{dateFrom || dateTo ? " in this period" : ""}.</p>
         ) : (
           <div className="space-y-3">
@@ -145,6 +145,21 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* Every ledger opens with the balance brought forward and closes with the balance carried. */}
+                  <TableRow className="bg-muted/40 font-medium [&>td]:px-2 [&>td]:py-1.5">
+                    <TableCell />
+                    <TableCell className="whitespace-nowrap">{dateFrom ? shortDate(dateFrom) : "—"}</TableCell>
+                    <TableCell />
+                    <TableCell>Opening Balance</TableCell>
+                    <TableCell />
+                    <TableCell />
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{money(Number(data.opening_balance) || 0)}</TableCell>
+                  </TableRow>
+                  {rows.length === 0 && (
+                    <TableRow className="[&>td]:px-2 [&>td]:py-1.5">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">No entries in this period.</TableCell>
+                    </TableRow>
+                  )}
                   {rows.map(({ entry, debit, credit, others, ref, description }, idx) => (
                     <TableRow key={entry.id} className={`[&>td]:px-2 [&>td]:py-1.5 ${entry.status === "reversed" ? "text-muted-foreground" : ""}`}>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
@@ -160,6 +175,15 @@ export function CustomerLedgerEntries({ customerId }: { customerId: string }) {
                       <TableCell className="text-right tabular-nums font-medium whitespace-nowrap">{money(entry.balance)}</TableCell>
                     </TableRow>
                   ))}
+                  <TableRow className="bg-muted/40 font-semibold [&>td]:px-2 [&>td]:py-1.5">
+                    <TableCell />
+                    <TableCell className="whitespace-nowrap">{dateTo ? shortDate(dateTo) : "—"}</TableCell>
+                    <TableCell />
+                    <TableCell>Closing Balance</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{money(totalDebit)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{money(totalCredit)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{money(Number(data.totals.closing_balance) || 0)}</TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </div>

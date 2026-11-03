@@ -57,7 +57,7 @@ class AssistantKnowledge
         ['Filing', '/filing', ['can_view_filing'],
             'Every invoice by customer with the File No its printed copy is filed under (NSK number). File numbers can be typed in or filled in the exported Excel and imported back.'],
         ['Finance', '/finance', ['can_view_finance_menu'],
-            'Finance: Chart of Accounts, Journal Entries, General Ledger (per account, filter by date/account/customer/supplier or transporter - a customer or supplier filter shows only their entries with both sides of each, Download), Trial Balance, Balance Sheet, Income Statement (profit and loss), Cash Flow, Financial Ratios, Aging, Bank Accounts (withdrawals/transfers), Budgets, Tax Rates, Account Mappings.'],
+            'Finance: Chart of Accounts, Journal Entries, General Ledger (per account, filter by date/account/customer/supplier or transporter - a customer or supplier filter shows only their entries with both sides of each; every account opens with an Opening Balance row and ends with a Closing Balance row with total debits and credits, and an account with a balance brought forward but no entries in the period still shows; Download), Trial Balance, Balance Sheet, Income Statement (profit and loss), Cash Flow, Financial Ratios, Aging, Bank Accounts (withdrawals/transfers), Budgets, Tax Rates, Account Mappings.'],
         ['Sales Reports', '/reports/sales', ['can_view_reports_menu'],
             'Reports > Sales: pick the period, then tabs Sales Accounts (ledger, with "Show receipts"), Orders, Products, Customers, By Region, By County, By Town, By Sales Rep, Daily Log. Every table has Export (Excel/PDF/CSV).'],
         ['Inventory Reports', '/reports/inventory', ['can_view_reports_menu'],

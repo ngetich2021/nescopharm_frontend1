@@ -22,8 +22,6 @@ import {
   Download,
   Upload,
   Building2,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   RefreshCw,
   Trash2,
@@ -43,6 +41,7 @@ import { ExportMenu } from "@/components/export-menu"
 import type { ExportFormat } from "@/lib/table-export"
 import { fetchImportSchema, downloadTemplate } from "@/lib/data-import"
 import { ImportHistoryDialog } from "@/components/import-history-dialog"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SuppliersTableSkeleton } from "./suppliers-table-skeleton"
 import { useToast } from "@/hooks/use-toast"
@@ -60,8 +59,6 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -113,8 +110,7 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
         setSuppliers(cachedData)
         setIsLoading(false)
       }
-      // Fetch fresh data regardless of cache status
-      fetchSuppliers()
+      // Fresh data is fetched by the status-filter effect below, which also runs on load.
     }
   }, [])
 
@@ -158,21 +154,20 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
     }
   }
 
-  // Apply client-side filtering
-  const filteredSuppliers = suppliers.filter(
-    (supplier) =>
-      (statusFilter === "all" || 
-       (statusFilter === "active" && supplier.is_active) ||
-       (statusFilter === "inactive" && !supplier.is_active)) &&
-      (search === "" || 
-        supplier.name.toLowerCase().includes(search.toLowerCase()) ||
-        supplier.email.toLowerCase().includes(search.toLowerCase()) ||
-        supplier.phone.toLowerCase().includes(search.toLowerCase()) ||
-        supplier.contact_person.toLowerCase().includes(search.toLowerCase()))
-  )
+  // Client-side search. Any field may be empty (transporters often have no email or contact),
+  // so each is read as text; several words must all match ("victoria health").
+  const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const filteredSuppliers = suppliers.filter((supplier) => {
+    if (statusFilter === "active" && !supplier.is_active) return false
+    if (statusFilter === "inactive" && supplier.is_active) return false
+    if (words.length === 0) return true
+    const text = [supplier.name, supplier.contact_person, supplier.email, supplier.phone, supplier.tax_information, supplier.address]
+      .map((v) => String(v ?? "")).join(" ").toLowerCase()
+    return words.every((w) => text.includes(w))
+  })
 
-  const totalPages = Math.ceil(filteredSuppliers.length / rowsPerPage)
-  const paginatedSuppliers = filteredSuppliers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+  // 20, 50, 250 or All a page; back to page 1 when the search or status changes.
+  const { pageRows: paginatedSuppliers, start, pager } = usePaged(filteredSuppliers, 20, `${search}|${statusFilter}`)
 
   const handleSupplierCreated = () => {
     fetchSuppliers()
@@ -183,21 +178,10 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
     if (onDataChanged) onDataChanged()
   }
   
-  // Apply search and filter changes
-  const applyFilters = () => {
-    // Reset to first page when filters change
-    setCurrentPage(1)
-    fetchSuppliers()
-  }
-  
-  // Debounce search to prevent excessive API calls
+  // The status filter asks the server again; the search works on the loaded list.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      applyFilters()
-    }, 500)
-    
-    return () => clearTimeout(timer)
-  }, [search, statusFilter])
+    fetchSuppliers()
+  }, [statusFilter])
 
   const handleRowClick = (supplierId: string) => {
     setSelectedSupplierId(supplierId)
@@ -409,6 +393,7 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                     onCheckedChange={toggleSelectAll}
                   />
                 </TableHead>
+                <TableHead className="w-12">S/No</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Contact Person</TableHead>
                 <TableHead>Email</TableHead>
@@ -419,7 +404,14 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedSuppliers.map((supplier) => (
+              {paginatedSuppliers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} className="h-20 text-center text-muted-foreground">
+                    {search ? `No supplier matches "${search}".` : "No suppliers."}
+                  </TableCell>
+                </TableRow>
+              )}
+              {paginatedSuppliers.map((supplier, index) => (
                 <TableRow 
                   key={supplier.id}
                   className="cursor-pointer hover:bg-gray-50"
@@ -428,11 +420,12 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
                   <TableCell onClick={(e) => toggleSelectSupplier(e, supplier.id)}>
                     <Checkbox checked={selectedSuppliers.includes(supplier.id)} />
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{start + index + 1}</TableCell>
                   <TableCell className="font-medium">{supplier.name}</TableCell>
-                  <TableCell>{supplier.contact_person}</TableCell>
-                  <TableCell>{supplier.email}</TableCell>
-                  <TableCell>{supplier.phone}</TableCell>
-                  <TableCell>{supplier.payment_terms_days} days</TableCell>
+                  <TableCell>{supplier.contact_person || "—"}</TableCell>
+                  <TableCell>{supplier.email || "—"}</TableCell>
+                  <TableCell>{supplier.phone || "—"}</TableCell>
+                  <TableCell>{supplier.payment_terms_days != null ? `${supplier.payment_terms_days} days` : "—"}</TableCell>
                   <TableCell>
                     <Badge className={getStatusBadgeClass(supplier.is_active)}>
                       {supplier.is_active ? "Active" : "Inactive"}
@@ -476,36 +469,7 @@ export function SuppliersTable({ onDataChanged }: SuppliersTableProps) {
           </Table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Showing {((currentPage - 1) * rowsPerPage) + 1} to{" "}
-            {Math.min(currentPage * rowsPerPage, filteredSuppliers.length)} of{" "}
-            {filteredSuppliers.length} suppliers
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <TablePager {...pager} />
       </div>
 
       <PermissionGuard permissions={["can_create_suppliers", "can_manage_system", "can_manage_company"]} hideOnDenied>
