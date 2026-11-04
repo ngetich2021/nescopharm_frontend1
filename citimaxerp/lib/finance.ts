@@ -1,5 +1,9 @@
 import apiCall from './api';
 
+// Leaves out unset params: URLSearchParams would send the text "undefined", which the API rejects.
+const toQuery = (params: object): string =>
+  new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => [k, String(v)])).toString();
+
 // Re-export journal entries module
 export * from './journal-entries';
 export { journalEntriesApi } from './journal-entries';
@@ -368,7 +372,7 @@ export const getChartOfAccounts = async (params?: {
   parent_id?: string;
   search?: string;
 }): Promise<{ accounts: ChartOfAccount[] }> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/chart-of-accounts?${queryString}` : '/finance/chart-of-accounts';
   const response = await apiCall<{ accounts: ChartOfAccount[] }>(url, 'GET');
   return response;
@@ -412,7 +416,7 @@ export const getGeneralLedger = async (params?: {
   account_id?: string;
   account_type?: string;
 }): Promise<any> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/general-ledger?${queryString}` : '/finance/general-ledger';
   const response = await apiCall<any>(url, 'GET');
   return response;
@@ -422,7 +426,7 @@ export const getAccountLedger = async (id: string, params?: {
   date_from?: string;
   date_to?: string;
 }): Promise<any> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/accounts/${id}/ledger?${queryString}` : `/finance/accounts/${id}/ledger`;
   const response = await apiCall<any>(url, 'GET');
   return response;
@@ -432,7 +436,7 @@ export const getTrialBalance = async (params?: {
   company_id?: string;
   as_of_date?: string;
 }): Promise<{ accounts: TrialBalance[]; totals: any }> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/trial-balance?${queryString}` : '/finance/trial-balance';
   const response = await apiCall<{ accounts: TrialBalance[]; totals: any }>(url, 'GET');
   return response;
@@ -441,7 +445,7 @@ export const getTrialBalance = async (params?: {
 export const getAccountBalance = async (id: string, params?: {
   as_of_date?: string;
 }): Promise<any> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/accounts/${id}/balance?${queryString}` : `/finance/accounts/${id}/balance`;
   const response = await apiCall<any>(url, 'GET');
   return response;
@@ -455,7 +459,7 @@ export const getBankAccounts = async (params?: {
   bank_name?: string;
   search?: string;
 }): Promise<{ accounts: BankAccount[] }> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/bank-accounts?${queryString}` : '/finance/bank-accounts';
   const response = await apiCall<{ accounts: BankAccount[] }>(url, 'GET');
   return response;
@@ -478,7 +482,7 @@ export const getBankAccountTransactions = async (id: string, params?: {
   status?: string;
   is_reconciled?: boolean;
 }): Promise<any> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/bank-accounts/${id}/transactions?${queryString}` : `/finance/bank-accounts/${id}/transactions`;
   const response = await apiCall<any>(url, 'GET');
   return response;
@@ -489,7 +493,7 @@ export const getBalanceSheet = async (params?: {
   company_id?: string;
   as_of_date?: string;
 }): Promise<FinancialReport> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/reports/balance-sheet?${queryString}` : '/finance/reports/balance-sheet';
   const response = await apiCall<FinancialReport>(url, 'GET');
   return response;
@@ -500,7 +504,7 @@ export const getIncomeStatement = async (params?: {
   date_from?: string;
   date_to?: string;
 }): Promise<FinancialReport> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/reports/income-statement?${queryString}` : '/finance/reports/income-statement';
   const response = await apiCall<FinancialReport>(url, 'GET');
   return response;
@@ -511,7 +515,7 @@ export const getCashFlowStatement = async (params?: {
   date_from?: string;
   date_to?: string;
 }): Promise<FinancialReport> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/reports/cash-flow?${queryString}` : '/finance/reports/cash-flow';
   const response = await apiCall<FinancialReport>(url, 'GET');
   return response;
@@ -522,7 +526,7 @@ export const getFinancialRatios = async (params?: {
   as_of_date?: string;
   date_from?: string;
 }): Promise<FinancialReport> => {
-  const queryString = params ? new URLSearchParams(params as any).toString() : '';
+  const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/reports/financial-ratios?${queryString}` : '/finance/reports/financial-ratios';
   const response = await apiCall<FinancialReport>(url, 'GET');
   return response;

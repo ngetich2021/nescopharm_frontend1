@@ -39,36 +39,36 @@ export default function FinancialRatiosPage() {
   const fetchFinancialRatios = async () => {
     try {
       setLoading(true)
-      const data = await financeApi.getFinancialRatios({
+      const response = await financeApi.getFinancialRatios({
         as_of_date: asOfDate,
         date_from: fromDate,
-        company_id: undefined // Will use default company
       })
+      const { liquidity, profitability, leverage, efficiency } = response.data.ratios
       
       // Transform the API response to match our interface
       const transformedData: FinancialRatios = {
         status: 'success',
         message: 'Financial ratios loaded successfully',
         liquidityRatios: {
-          currentRatio: data.liquidity_ratios?.current_ratio || 0,
-          quickRatio: data.liquidity_ratios?.quick_ratio || 0,
-          cashRatio: data.liquidity_ratios?.cash_ratio || 0,
+          currentRatio: liquidity?.current_ratio || 0,
+          quickRatio: liquidity?.quick_ratio || 0,
+          cashRatio: liquidity?.cash_ratio || 0,
         },
         profitabilityRatios: {
-          grossProfitMargin: data.profitability_ratios?.gross_profit_margin || 0,
-          netProfitMargin: data.profitability_ratios?.net_profit_margin || 0,
-          returnOnAssets: data.profitability_ratios?.return_on_assets || 0,
-          returnOnEquity: data.profitability_ratios?.return_on_equity || 0,
+          grossProfitMargin: profitability?.gross_profit_margin || 0,
+          netProfitMargin: profitability?.net_profit_margin || 0,
+          returnOnAssets: profitability?.return_on_assets || 0,
+          returnOnEquity: profitability?.return_on_equity || 0,
         },
         leverageRatios: {
-          debtToEquity: data.leverage_ratios?.debt_to_equity || 0,
-          debtToAssets: data.leverage_ratios?.debt_to_assets || 0,
-          equityRatio: data.leverage_ratios?.equity_ratio || 0,
+          debtToEquity: leverage?.debt_to_equity || 0,
+          debtToAssets: leverage?.debt_to_assets || 0,
+          equityRatio: leverage?.equity_ratio || 0,
         },
         efficiencyRatios: {
-          assetTurnover: data.efficiency_ratios?.asset_turnover || 0,
-          inventoryTurnover: data.efficiency_ratios?.inventory_turnover || 0,
-          receivableTurnover: data.efficiency_ratios?.receivable_turnover || 0,
+          assetTurnover: efficiency?.asset_turnover || 0,
+          inventoryTurnover: efficiency?.inventory_turnover || 0,
+          receivableTurnover: efficiency?.receivables_turnover || 0,
         }
       }
       

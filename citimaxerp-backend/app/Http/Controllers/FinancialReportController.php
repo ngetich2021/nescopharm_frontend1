@@ -151,7 +151,7 @@ class FinancialReportController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Income statement generated successfully.',
-                'data' => $incomeStatement,
+                'data' => $incomeStatement + ['statement' => \App\Services\IncomeStatementLayout::from($incomeStatement)],
             ], 200);
         } catch (\Exception $e) {
             Log::error('Income Statement generation error: ' . $e->getMessage());

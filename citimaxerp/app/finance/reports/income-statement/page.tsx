@@ -1,102 +1,113 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Fragment, useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartSkeleton } from "@/components/ui/skeletons"
-import { 
-  FileText,
-  Calendar,
-  TrendingUp,
-  TrendingDown
-} from "lucide-react"
-import { financeApi, type IncomeStatement } from "@/lib/finance"
+import { AlertTriangle, Calendar } from "lucide-react"
+import { financeApi } from "@/lib/finance"
 import { documentFileName, filePeriod, sessionCompanyName } from "@/lib/document-names"
 import { DownloadButton } from "@/components/download-button"
 import type { ExportCell, TableExport } from "@/lib/table-export"
 
+interface StatementLine {
+  key: string
+  label: string
+  amount: number
+  accounts: { code: string; name: string; amount: number }[]
+}
+
+interface StatementSection {
+  key: string
+  title: string
+  groups: { title: string | null; total: number; lines: StatementLine[] }[]
+  total_label: string | null
+  total: number
+  subtotal_label: string
+  subtotal: number
+}
+
+interface Statement {
+  sections: StatementSection[]
+  totals: { net_revenue: number; gross_profit: number; operating_income: number; earnings_before_tax: number; net_income: number }
+  notes: string[]
+}
+
+// Deductions read in brackets, the way accountants write them; a line with nothing on it is a dash.
+const money = (amount: number) => {
+  if (Math.abs(amount) < 0.005) return "—"
+  const text = Math.abs(amount).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return amount < 0 ? `(${text})` : text
+}
+
 export default function IncomeStatementPage() {
-  const [incomeStatement, setIncomeStatement] = useState<IncomeStatement | null>(null)
+  const [statement, setStatement] = useState<Statement | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [fromDate, setFromDate] = useState(() => {
     const date = new Date()
     date.setMonth(date.getMonth() - 12) // Last 12 months
     return date.toISOString().split('T')[0]
   })
-  const [toDate, setToDate] = useState(() => {
-    return new Date().toISOString().split('T')[0]
-  })
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0])
 
-  const fetchIncomeStatement = async () => {
+  const fetchIncomeStatement = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      setLoading(true)
-      const data = await financeApi.getIncomeStatement({
-        date_from: fromDate,
-        date_to: toDate,
-        company_id: undefined // Will use default company
-      })
-      
-      // Transform the API response to match our interface
-      const transformedData: IncomeStatement = {
-        status: 'success',
-        message: 'Income statement loaded successfully',
-        totalRevenue: data.total_revenue || 0,
-        totalExpenses: data.total_expenses || 0,
-        netIncome: data.net_income || 0,
-        revenue: data.revenue || [],
-        expenses: data.expenses || []
-      }
-      
-      setIncomeStatement(transformedData)
-    } catch (error) {
-      console.error('Error fetching income statement:', error)
+      const response = await financeApi.getIncomeStatement({ date_from: fromDate, date_to: toDate })
+      setStatement(response.data.statement)
+    } catch (err: any) {
+      setStatement(null)
+      setError(err?.message || "The income statement could not be loaded. Please try again.")
     } finally {
       setLoading(false)
     }
-  }
+  }, [fromDate, toDate])
 
   useEffect(() => {
     fetchIncomeStatement()
-  }, [fromDate, toDate])
+  }, [fetchIncomeStatement])
 
-  // Revenue then expenses, each line with its share of the section, and net income.
+  const netRevenue = statement?.totals.net_revenue ?? 0
+  const share = (amount: number) => (netRevenue && Math.abs(amount) >= 0.005 ? `${((amount / netRevenue) * 100).toFixed(1)}%` : "")
+
   const buildExport = (): TableExport => {
-    const s = incomeStatement!
+    const s = statement!
     const rows: ExportCell[][] = []
-    const section = (label: string, items: any[], total: number) => {
-      rows.push(["", label.toUpperCase(), null, ""])
-      items.forEach((item, i) => rows.push([i + 1, item.accountName, Number(item.amount) || 0, `${getPercentage(item.amount, total)}%`]))
-      rows.push(["", `Total ${label}`, total, total ? "100.0%" : ""])
-    }
-    section("Revenue", s.revenue, s.totalRevenue)
-    section("Expenses", s.expenses, s.totalExpenses)
+    let serial = 0
+    s.sections.forEach((section) => {
+      rows.push(["", section.title.toUpperCase(), null, ""])
+      section.groups.forEach((group) => {
+        if (group.title) rows.push(["", group.title, null, ""])
+        group.lines.forEach((line) => {
+          serial += 1
+          rows.push([serial, line.label, line.amount, share(line.amount)])
+          line.accounts.forEach((a) => rows.push(["", `     ${a.code} ${a.name}`, a.amount, ""]))
+        })
+        if (group.title) rows.push(["", `Total ${group.title}`, group.total, share(group.total)])
+      })
+      if (section.total_label) rows.push(["", section.total_label, section.total, share(section.total)])
+      if (section.key !== "tax") rows.push(["", section.subtotal_label.toUpperCase(), section.subtotal, share(section.subtotal)])
+    })
+    const last = s.sections[s.sections.length - 1]
     return {
       fileName: documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`]),
       title: "Income Statement",
       subtitle: `For the period ${new Date(fromDate).toLocaleDateString("en-GB")} to ${new Date(toDate).toLocaleDateString("en-GB")}`,
-      headers: ["S/No", "Account", "Amount", "% of Section"],
+      details: s.notes.map((note, i) => [`Note ${i + 1}`, note] as [string, string]),
+      headers: ["S/No", "Particulars", "Amount (KES)", "% of Net Revenue"],
       moneyColumns: [2],
       rightColumns: [3],
       rows,
-      footer: [["", "Net Income", s.netIncome, `${getPercentage(s.netIncome, s.totalRevenue)}% margin`]],
+      footer: [["", last.subtotal_label, last.subtotal, share(last.subtotal)]],
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES'
-    }).format(amount)
-  }
-
-  const getPercentage = (amount: number, total: number) => {
-    if (total === 0) return 0
-    return ((amount / total) * 100).toFixed(1)
-  }
+  let serial = 0
 
   return (
     <div className="space-y-6">
@@ -108,7 +119,7 @@ export default function IncomeStatementPage() {
             Profit and loss statement showing revenues and expenses
           </p>
         </div>
-        <DownloadButton title="Income Statement" build={buildExport} disabled={!incomeStatement} />
+        <DownloadButton title="Income Statement" build={buildExport} disabled={!statement} />
       </div>
 
       {/* Date Filter */}
@@ -120,24 +131,14 @@ export default function IncomeStatementPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-end">
+          <div className="flex flex-wrap gap-4 items-end">
             <div className="space-y-2">
               <Label htmlFor="fromDate">From Date</Label>
-              <Input
-                id="fromDate"
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+              <Input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="toDate">To Date</Label>
-              <Input
-                id="toDate"
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
+              <Input id="toDate" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <Button onClick={fetchIncomeStatement} disabled={loading}>
               Generate Report
@@ -146,120 +147,124 @@ export default function IncomeStatementPage() {
         </CardContent>
       </Card>
 
-      {/* Income Statement */}
-      {incomeStatement && (
-        <div className="print:shadow-none">
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {loading && !statement && <ChartSkeleton height="h-[400px]" />}
+
+      {statement && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Net Revenue", amount: statement.totals.net_revenue },
+              { label: "Gross Profit", amount: statement.totals.gross_profit },
+              { label: "Operating Income / EBIT", amount: statement.totals.operating_income },
+              { label: "Net Profit", amount: statement.totals.net_income },
+            ].map((figure) => (
+              <Card key={figure.label}>
+                <CardContent className="p-4">
+                  <div className="text-sm text-muted-foreground">{figure.label}</div>
+                  <div className={`text-lg font-semibold ${figure.amount < 0 ? "text-red-600" : ""}`}>KES {money(figure.amount)}</div>
+                  <div className="text-xs text-muted-foreground">{share(figure.amount) && `${share(figure.amount)} of net revenue`}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {statement.notes.map((note) => (
+            <div key={note} className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{note}</span>
+            </div>
+          ))}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-center">Income Statement</CardTitle>
               <p className="text-center text-muted-foreground">
-                For the period from {new Date(fromDate).toLocaleDateString()} to {new Date(toDate).toLocaleDateString()}
+                For the period from {new Date(fromDate).toLocaleDateString("en-GB")} to {new Date(toDate).toLocaleDateString("en-GB")}
               </p>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Revenue Section */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                  REVENUE
-                </h3>
-                <div className="space-y-2">
-                  {incomeStatement.revenue.map((item: any, index: number) => (
-                    <div key={index} className="flex justify-between items-center py-1">
-                      <span className="pl-4">{item.accountName}</span>
-                      <div className="text-right">
-                        <span className="font-medium">{formatCurrency(item.amount)}</span>
-                        <Badge variant="secondary" className="ml-2 text-xs">
-                          {getPercentage(item.amount, incomeStatement.totalRevenue)}%
-                        </Badge>
-                      </div>
-                    </div>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">S/No</TableHead>
+                    <TableHead>Particulars</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Amount (KES)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">% of Net Revenue</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {statement.sections.map((section) => (
+                    <Fragment key={section.key}>
+                      <TableRow className="bg-muted/60 hover:bg-muted/60">
+                        <TableCell colSpan={4} className="font-bold uppercase text-xs tracking-wide">{section.title}</TableCell>
+                      </TableRow>
+                      {section.groups.map((group, g) => (
+                        <Fragment key={g}>
+                          {group.title && (
+                            <TableRow>
+                              <TableCell />
+                              <TableCell colSpan={3} className="font-semibold">{group.title}</TableCell>
+                            </TableRow>
+                          )}
+                          {group.lines.map((line) => {
+                            serial += 1
+                            return (
+                              <Fragment key={line.key}>
+                                <TableRow>
+                                  <TableCell className="text-muted-foreground">{serial}</TableCell>
+                                  <TableCell className={group.title ? "pl-6" : ""}>{line.label}</TableCell>
+                                  <TableCell className="text-right whitespace-nowrap">{money(line.amount)}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{share(line.amount)}</TableCell>
+                                </TableRow>
+                                {line.accounts.map((account) => (
+                                  <TableRow key={account.code} className="text-xs text-muted-foreground border-0">
+                                    <TableCell className="py-1" />
+                                    <TableCell className={`py-1 ${group.title ? "pl-10" : "pl-6"}`}>{account.code} {account.name}</TableCell>
+                                    <TableCell className="py-1 text-right whitespace-nowrap">{money(account.amount)}</TableCell>
+                                    <TableCell className="py-1" />
+                                  </TableRow>
+                                ))}
+                              </Fragment>
+                            )
+                          })}
+                          {group.title && (
+                            <TableRow>
+                              <TableCell />
+                              <TableCell className="font-medium">Total {group.title}</TableCell>
+                              <TableCell className="text-right font-medium whitespace-nowrap">{money(group.total)}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{share(group.total)}</TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      ))}
+                      {section.total_label && (
+                        <TableRow>
+                          <TableCell />
+                          <TableCell className="font-semibold">{section.total_label}</TableCell>
+                          <TableCell className="text-right font-semibold whitespace-nowrap">{money(section.total)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{share(section.total)}</TableCell>
+                        </TableRow>
+                      )}
+                      <TableRow className={section.key === "tax" ? "bg-[#1E2764]/10 hover:bg-[#1E2764]/10" : "bg-muted/30 hover:bg-muted/30"}>
+                        <TableCell />
+                        <TableCell className={`font-bold ${section.key === "tax" ? "text-base" : ""}`}>{section.subtotal_label}</TableCell>
+                        <TableCell className={`text-right font-bold whitespace-nowrap ${section.key === "tax" ? "text-base" : ""} ${section.subtotal < 0 ? "text-red-600" : ""}`}>{money(section.subtotal)}</TableCell>
+                        <TableCell className="text-right font-medium">{share(section.subtotal)}</TableCell>
+                      </TableRow>
+                    </Fragment>
                   ))}
-                  <Separator />
-                  <div className="flex justify-between items-center py-2 font-semibold">
-                    <span>Total Revenue</span>
-                    <span className="text-green-600">{formatCurrency(incomeStatement.totalRevenue)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <Separator className="my-6" />
-
-              {/* Expenses Section */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <TrendingDown className="h-5 w-5 text-red-600" />
-                  EXPENSES
-                </h3>
-                <div className="space-y-2">
-                  {incomeStatement.expenses.map((item: any, index: number) => (
-                    <div key={index} className="flex justify-between items-center py-1">
-                      <span className="pl-4">{item.accountName}</span>
-                      <div className="text-right">
-                        <span className="font-medium">{formatCurrency(item.amount)}</span>
-                        <Badge variant="secondary" className="ml-2 text-xs">
-                          {getPercentage(item.amount, incomeStatement.totalExpenses)}%
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                  <Separator />
-                  <div className="flex justify-between items-center py-2 font-semibold">
-                    <span>Total Expenses</span>
-                    <span className="text-red-600">{formatCurrency(incomeStatement.totalExpenses)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <Separator className="my-6" />
-
-              {/* Net Income */}
-              <div className="bg-muted/50 p-4 rounded-lg">
-                <div className="flex justify-between items-center text-xl font-bold">
-                  <span>NET INCOME</span>
-                  <span className={incomeStatement.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {formatCurrency(incomeStatement.netIncome)}
-                  </span>
-                </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                  Net Income Margin: {getPercentage(incomeStatement.netIncome, incomeStatement.totalRevenue)}%
-                </div>
-              </div>
-
-              {/* Summary Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Gross Profit</div>
-                    <div className="text-lg font-semibold">
-                      {formatCurrency(incomeStatement.totalRevenue)}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Total Expenses</div>
-                    <div className="text-lg font-semibold text-red-600">
-                      {formatCurrency(incomeStatement.totalExpenses)}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Net Margin</div>
-                    <div className="text-lg font-semibold">
-                      {getPercentage(incomeStatement.netIncome, incomeStatement.totalRevenue)}%
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {loading && (
-        <ChartSkeleton height="h-[400px]" />
+        </>
       )}
     </div>
   )

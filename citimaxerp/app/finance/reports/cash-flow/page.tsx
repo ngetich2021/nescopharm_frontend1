@@ -35,24 +35,29 @@ export default function CashFlowStatementPage() {
   const fetchCashFlowStatement = async () => {
     try {
       setLoading(true)
-      const data = await financeApi.getCashFlowStatement({
+      const response = await financeApi.getCashFlowStatement({
         date_from: fromDate,
         date_to: toDate,
-        company_id: undefined // Will use default company
       })
-      
+      const { sections, summary } = response.data
+      const toRows = (items: any[] = []) => items.map((item) => ({ accountName: item.account_name, amount: item.cash_effect }))
+
       // Transform the API response to match our interface
       const transformedData: CashFlowStatement = {
         status: 'success',
         message: 'Cash flow statement loaded successfully',
-        operatingActivities: data.operating_activities || [],
-        investingActivities: data.investing_activities || [],
-        financingActivities: data.financing_activities || [],
-        netCashFlow: data.net_cash_flow || 0,
-        beginningCash: data.beginning_cash || 0,
-        endingCash: data.ending_cash || 0
+        operatingActivities: [
+          { accountName: 'Net Income', amount: sections.operating_activities.net_income },
+          ...toRows(sections.operating_activities.adjustments?.items),
+          ...toRows(sections.operating_activities.working_capital_changes?.items),
+        ],
+        investingActivities: toRows(sections.investing_activities.items),
+        financingActivities: toRows(sections.financing_activities.items),
+        netCashFlow: summary.net_increase_in_cash || 0,
+        beginningCash: summary.beginning_cash_balance || 0,
+        endingCash: summary.ending_cash_balance || 0
       }
-      
+
       setCashFlowStatement(transformedData)
     } catch (error) {
       console.error('Error fetching cash flow statement:', error)
