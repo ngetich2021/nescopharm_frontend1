@@ -83,8 +83,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
   const [dateFrom, setDateFrom] = useState(firstOfMonthString())
   const [dateTo, setDateTo] = useState(lastOfMonthString())
-  // Width of each ageing range in days; empty follows the customer's credit days.
-  const [ageingDays, setAgeingDays] = useState("")
   // Optional sections: left off the statement (screen, print, PDF and CSV) unless ticked.
   const [include, setInclude] = useState({ outstanding: false, orders: false, pdCheques: false })
 
@@ -96,7 +94,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchCustomerStatement(id, { date_from: from, date_to: to, ageing_days: ageingDays })
+      const data = await fetchCustomerStatement(id, { date_from: from, date_to: to })
       setStatement(data)
     } catch (err: any) {
       setError(err.message || "Failed to load statement")
@@ -111,7 +109,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchCustomerStatement(id, { period: "all", ageing_days: ageingDays })
+      const data = await fetchCustomerStatement(id, { period: "all" })
       setStatement(data)
       setDateFrom(data.period.from)
       setDateTo(data.period.to)
@@ -204,13 +202,15 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
     if (ageing) {
       rows.push([`2. ACCOUNTS RECEIVABLE AGEING ANALYSIS (as at ${formatDate(ageing.as_at)})`])
-      rows.push(["Ageing Category", "Amount (KES)", "% of Total"])
-      for (const b of ageing.buckets) {
-        rows.push([b.label, b.amount.toFixed(2), ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%"])
-      }
-      if (ageing.unallocated !== 0) rows.push(["Unallocated payments / credits", ageing.unallocated.toFixed(2), ""])
-      if (ageing.credit_notes > 0) rows.push(["Credit notes already taken off the above", ageing.credit_notes.toFixed(2), ""])
-      rows.push(["Total", ageing.total.toFixed(2), ""])
+      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Age (Days)", ...ageing.buckets.map((b) => b.label), "Balance (KES)"])
+      ageing.rows.forEach((r, i) => {
+        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.age_days, ...ageing.buckets.map((_, b) => (b === r.bucket ? r.amount.toFixed(2) : "")), r.amount.toFixed(2)])
+      })
+      rows.push(["", "Total", "", "", "", ...ageing.buckets.map((b) => b.amount.toFixed(2)), ageingBase.toFixed(2)])
+      rows.push(["", "% of Total", "", "", "", ...ageing.buckets.map((b) => (ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%")), ""])
+      if (ageing.unallocated !== 0) rows.push(["", "Unallocated payments / credits", "", "", "", ...ageing.buckets.map(() => ""), ageing.unallocated.toFixed(2)])
+      if (ageing.credit_notes > 0) rows.push(["", "Credit notes already taken off the above", "", "", "", ...ageing.buckets.map(() => ""), ageing.credit_notes.toFixed(2)])
+      rows.push(["", "Total Outstanding", "", "", "", ...ageing.buckets.map(() => ""), ageing.total.toFixed(2)])
       rows.push([])
     }
 
@@ -367,19 +367,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
               <div className="grid gap-1">
                 <Label htmlFor="date_to" className="text-xs">To</Label>
                 <Input id="date_to" type="date" className="h-8 w-[150px]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              </div>
-              <div className="grid gap-1">
-                <Label htmlFor="ageing_days" className="text-xs">Ageing range (days)</Label>
-                <Input
-                  id="ageing_days"
-                  type="number"
-                  min={1}
-                  max={365}
-                  className="h-8 w-[130px]"
-                  placeholder={`Terms: ${ageing?.days ?? 30}`}
-                  value={ageingDays}
-                  onChange={(e) => setAgeingDays(e.target.value)}
-                />
               </div>
               <Button size="sm" onClick={() => loadStatement()} disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -564,43 +551,72 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
               <p className="text-xs text-gray-500 mb-2">
-                As at {formatDate(ageing.as_at)}, by days past invoice due date
+                As at {formatDate(ageing.as_at)}, each unpaid invoice by its age from the invoice date
                 {ageing.credit_notes > 0 && `, after credit notes of KES ${formatAmount(ageing.credit_notes)}`}
               </p>
               <div className="overflow-x-auto">
                 <table className={TABLE}>
                   <thead>
                     <tr>
-                      <th className={TH}>Ageing Category</th>
-                      <th className={`${TH} text-right w-36`}>Amount (KES)</th>
-                      <th className={`${TH} text-right w-24`}>% of Total</th>
+                      <th className={TH}>S/No</th>
+                      <th className={TH}>Invoice No.</th>
+                      <th className={TH}>Invoice Date</th>
+                      <th className={TH}>Due Date</th>
+                      <th className={`${TH} text-right`}>Age (Days)</th>
+                      {ageing.buckets.map((b) => (
+                        <th key={b.label} className={`${TH} text-right`}>{b.label}</th>
+                      ))}
+                      <th className={`${TH} text-right`}>Balance (KES)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ageing.buckets.map((b) => (
-                      <tr key={b.label}>
-                        <td className={TD}>{b.label}</td>
-                        <td className={`${TD} text-right`}>{formatAmount(b.amount)}</td>
-                        <td className={`${TD} text-right text-gray-600`}>
-                          {ageingBase > 0 ? `${((b.amount / ageingBase) * 100).toFixed(1)}%` : "0.0%"}
-                        </td>
+                    {ageing.rows.map((r, i) => (
+                      <tr key={r.invoice_id}>
+                        <td className={TD}>{i + 1}</td>
+                        <td className={TD}>{r.invoice_number}</td>
+                        <td className={TD}>{formatDate(r.invoice_date)}</td>
+                        <td className={TD}>{formatDate(r.due_date)}</td>
+                        <td className={`${TD} text-right`}>{r.age_days}</td>
+                        {ageing.buckets.map((b, index) => (
+                          <td key={b.label} className={`${TD} text-right`}>{index === r.bucket ? formatAmount(r.amount) : ""}</td>
+                        ))}
+                        <td className={`${TD} text-right`}>{formatAmount(r.amount)}</td>
                       </tr>
                     ))}
+                    {ageing.rows.length === 0 && (
+                      <tr>
+                        <td className={`${TD} italic text-gray-600`} colSpan={6 + ageing.buckets.length}>No unpaid invoices.</td>
+                      </tr>
+                    )}
+                    <tr className="font-semibold">
+                      <td className={TD} colSpan={5}>Total</td>
+                      {ageing.buckets.map((b) => (
+                        <td key={b.label} className={`${TD} text-right`}>{formatAmount(b.amount)}</td>
+                      ))}
+                      <td className={`${TD} text-right`}>{formatAmount(ageingBase)}</td>
+                    </tr>
+                    <tr>
+                      <td className={`${TD} text-gray-600`} colSpan={5}>% of Total</td>
+                      {ageing.buckets.map((b) => (
+                        <td key={b.label} className={`${TD} text-right text-gray-600`}>
+                          {ageingBase > 0 ? `${((b.amount / ageingBase) * 100).toFixed(1)}%` : "0.0%"}
+                        </td>
+                      ))}
+                      <td className={TD}></td>
+                    </tr>
                     {ageing.unallocated !== 0 && (
                       <tr>
-                        <td className={`${TD} italic text-gray-600`}>
+                        <td className={`${TD} italic text-gray-600`} colSpan={5 + ageing.buckets.length}>
                           {ageing.unallocated < 0 ? "Less: unallocated payments / credits" : "Add: unallocated balance"}
                         </td>
                         <td className={`${TD} text-right`}>{formatAmount(ageing.unallocated)}</td>
-                        <td className={TD}></td>
                       </tr>
                     )}
                   </tbody>
                   <tfoot>
                     <tr className="font-bold">
-                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap">Total Outstanding</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap" colSpan={5 + ageing.buckets.length}>Total Outstanding</td>
                       <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(ageing.total)}</td>
-                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap"></td>
                     </tr>
                   </tfoot>
                 </table>

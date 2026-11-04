@@ -28,7 +28,7 @@ class CustomerStatementService
      * after the period, then the period's own movements peel back further
      * to the opening figure.
      */
-    public function generate(string $companyId, string $customerId, Carbon $from, Carbon $to, ?int $ageingDays = null): array
+    public function generate(string $companyId, string $customerId, Carbon $from, Carbon $to): array
     {
         $customer = Customer::with('account')->where('company_id', $companyId)->findOrFail($customerId);
 
@@ -145,7 +145,7 @@ class CustomerStatementService
 
         $transactions = $this->buildTransactions($from, $openingBalance, $invoices, $payments, $creditNotes, $periodRefunds, $periodBounces, $bounced, $periodReceipts);
         $account = $customer->account ?? CustomerAccount::where('customer_id', $customerId)->latest()->first();
-        $ageing =$this->buildAgeing($customerId, $to, $closingBalance, $ageingDays ?: (int) $account?->credit_days ?: 30);
+        $ageing = $this->buildAgeing($customerId, $to, $closingBalance, (int) $account?->credit_days ?: 30);
 
         $creditLimit = $account?->credit_required !== null ? (float) $account->credit_required : null;
 
@@ -388,21 +388,22 @@ class CustomerStatementService
     }
 
     /**
-     * What the customer owed at the statement date, by days past due, in ranges $days wide. Worked
-     * out from the documents up to that date, not today's balances, so an older statement ages
-     * as it stood then. Each invoice is reduced by its own credit notes, then all other money
-     * (receipts, unused credit) goes on the oldest invoices first. Anything left is unallocated.
+     * What the customer owed at the statement date, invoice by invoice. Each unpaid invoice sits
+     * in one range by its age from the invoice date, moves along as it gets older, and drops off
+     * once paid. Worked out from the documents up to that date, not today's balances, so an older
+     * statement ages as it stood then. Each invoice is reduced by its own credit notes, then all
+     * other money (receipts, unused credit) goes on the oldest invoices first. Anything left is
+     * unallocated. An invoice with no due date is due after the customer's $creditDays.
      */
-    private function buildAgeing(string $customerId, Carbon $to, float $closingBalance, int $days): array
+    private function buildAgeing(string $customerId, Carbon $to, float $closingBalance, int $creditDays): array
     {
         // A period ending in the future (this month, say) ages as at today.
         $asAt = $to->copy()->min(now()->endOfDay());
         $buckets = [
-            ['label' => 'Current / Not Yet Due', 'amount' => 0.0],
-            ['label' => '1–' . $days . ' Days', 'amount' => 0.0],
-            ['label' => ($days + 1) . '–' . ($days * 2) . ' Days', 'amount' => 0.0],
-            ['label' => ($days * 2 + 1) . '–' . ($days * 3) . ' Days', 'amount' => 0.0],
-            ['label' => 'Over ' . ($days * 3) . ' Days', 'amount' => 0.0],
+            ['label' => '<30 Days', 'amount' => 0.0],
+            ['label' => '30–60 Days', 'amount' => 0.0],
+            ['label' => '60–90 Days', 'amount' => 0.0],
+            ['label' => '>90 Days', 'amount' => 0.0],
         ];
 
         $invoices = Invoice::where('customer_id', $customerId)
@@ -410,7 +411,7 @@ class CustomerStatementService
             ->where('invoice_date', '<=', $to)
             ->orderBy('invoice_date')
             ->orderBy('created_at')
-            ->get(['id', 'invoice_date', 'due_date', 'total_amount']);
+            ->get(['id', 'invoice_number', 'file_number', 'invoice_date', 'due_date', 'total_amount']);
 
         $notes = CreditNote::where('customer_id', $customerId)
             ->whereIn('status', ['issued', 'applied', 'refunded'])
@@ -423,6 +424,7 @@ class CustomerStatementService
         });
         $otherMoney = (float) $open->sum(fn ($o) => $o[1]) - $closingBalance;
 
+        $rows = [];
         foreach ($open as [$inv, $owed]) {
             $paid = min($owed, max(0.0, $otherMoney));
             $otherMoney -= $paid;
@@ -430,18 +432,32 @@ class CustomerStatementService
             if ($left <= 0) {
                 continue;
             }
-            $due = $inv->due_date ? Carbon::parse($inv->due_date) : Carbon::parse($inv->invoice_date)->addDays(30);
-            $daysOverdue = (int) $due->startOfDay()->diffInDays($asAt->copy()->startOfDay(), false);
-            $index = $daysOverdue <= 0 ? 0 : min(4, (int) ceil($daysOverdue / $days));
+            $invoiceDate = Carbon::parse($inv->invoice_date)->startOfDay();
+            $age = max(0, (int) $invoiceDate->diffInDays($asAt->copy()->startOfDay(), false));
+            $index = match (true) {
+                $age < 30 => 0,
+                $age < 60 => 1,
+                $age <= 90 => 2,
+                default => 3,
+            };
             $buckets[$index]['amount'] += $left;
+            $rows[] = [
+                'invoice_id' => $inv->id,
+                'invoice_number' => $inv->invoice_number,
+                'invoice_date' => $invoiceDate->toDateString(),
+                'due_date' => ($inv->due_date ? Carbon::parse($inv->due_date) : $invoiceDate->copy()->addDays($creditDays))->toDateString(),
+                'age_days' => $age,
+                'bucket' => $index,
+                'amount' => $left,
+            ];
         }
 
         $unallocated = round($closingBalance - array_sum(array_column($buckets, 'amount')), 2);
 
         return [
             'as_at' => $asAt->toDateString(),
-            'days' => $days,
             'buckets' => array_map(fn ($b) => ['label' => $b['label'], 'amount' => round($b['amount'], 2)], $buckets),
+            'rows' => $rows,
             'credit_notes' => round((float) $notes->sum('total_amount'), 2),
             'unallocated' => abs($unallocated) >= 0.01 ? $unallocated : 0.0,
             'total' => round($closingBalance, 2),

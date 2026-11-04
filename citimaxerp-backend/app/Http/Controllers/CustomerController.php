@@ -614,9 +614,7 @@ class CustomerController extends Controller
         }
 
         try {
-            // Width of each ageing range; left out, it follows the customer's credit days.
-            $ageingDays = $request->integer('ageing_days');
-            $statement = $statementService->generate($customer->company_id, $customerId, $from, $to, $ageingDays > 0 ? min($ageingDays, 365) : null);
+            $statement = $statementService->generate($customer->company_id, $customerId, $from, $to);
 
             return response()->json(['status' => 'success', 'data' => $statement]);
         } catch (\Exception $e) {
