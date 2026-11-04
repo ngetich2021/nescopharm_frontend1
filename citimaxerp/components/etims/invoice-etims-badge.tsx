@@ -120,7 +120,7 @@ export function InvoiceEtimsBadge({ invoiceId, isCreditNote = false }: { invoice
           <CardContent className="p-4">
             <p className="text-sm font-medium">eTIMS credit note not raised</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Approve this draft to raise it against the original KRA-signed invoice.
+              Credit notes go to KRA only once eTIMS is Live, against the original KRA-signed invoice.
             </p>
           </CardContent>
         </Card>

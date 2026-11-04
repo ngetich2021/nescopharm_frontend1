@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Fires eTIMS submission when an invoice is explicitly approved for a Kenyan
- * company with an enabled eTIMS configuration on/after go-live.
+ * company whose eTIMS is confirmed Live, on/after go-live. On Test an invoice
+ * goes to KRA only through Send to eTIMS.
  *
  * Idempotency: we never re-dispatch if etims_status is already terminal.
  */
@@ -61,12 +62,11 @@ class InvoiceObserver
         $config = CompanyEtimsConfig::query()
             ->where('company_id', $invoice->company_id)
             ->where('country_code', 'KE')
-            ->notSuperseded()
-            ->whereRaw('enabled = true')
+            ->live()
             ->first();
 
         if (! $config) {
-            return;   // company not enrolled in eTIMS - nothing to do
+            return;   // company not live on eTIMS - nothing to do
         }
 
         if ($config->go_live_date && $invoice->invoice_date && $invoice->invoice_date->lt($config->go_live_date)) {

@@ -82,6 +82,15 @@ class CreditNote extends Model
         'updated_at' => 'datetime',
     ];
 
+    protected $appends = ['on_live_etims'];
+
+    /** With KRA for real, so it can't be deleted. One signed on the Test environment can. */
+    public function getOnLiveEtimsAttribute(): bool
+    {
+        return in_array($this->etims_status, ['submitted', 'completed'], true)
+            && CompanyEtimsConfig::isLiveFor((string) $this->company_id);
+    }
+
     /**
      * PostgreSQL expects a native boolean when eTIMS credit notes are queued.
      */

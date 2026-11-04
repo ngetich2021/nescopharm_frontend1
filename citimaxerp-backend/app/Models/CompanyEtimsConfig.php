@@ -106,6 +106,20 @@ class CompanyEtimsConfig extends Model
         return $q->whereNull('superseded_at');
     }
 
+    /**
+     * Enabled and confirmed Live. Until then eTIMS never touches a business process: nothing
+     * goes to KRA by itself and nothing is refused because of it. Send to eTIMS still works.
+     */
+    public function scopeLive(Builder $q): Builder
+    {
+        return $q->active()->where('environment', 'live');
+    }
+
+    public static function isLiveFor(string $companyId): bool
+    {
+        return self::query()->where('company_id', $companyId)->live()->exists();
+    }
+
     // ─────────── Relations ───────────
 
     public function company()

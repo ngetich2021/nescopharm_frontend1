@@ -177,8 +177,8 @@ export default function CreditNoteDetailPage() {
   const canApply = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canRefund = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canVoid = (creditNote?.status === "draft" || creditNote?.status === "issued") && consumedAmount <= 0
-  // Any credit note not yet on eTIMS can be deleted (the server unwinds an issued one).
-  const canDelete = !!creditNote && !["submitted", "completed"].includes(creditNote.etims_status ?? "")
+  // Any credit note not on live eTIMS can be deleted (the server unwinds an issued one).
+  const canDelete = !!creditNote && !creditNote.on_live_etims
   const canEdit = creditNote?.status === "draft"
 
   const resetApplyRecoveryState = () => {

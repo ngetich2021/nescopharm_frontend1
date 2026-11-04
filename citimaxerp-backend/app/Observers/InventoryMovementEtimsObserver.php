@@ -45,15 +45,10 @@ class InventoryMovementEtimsObserver
         self::send((string) $movement->company_id, (string) $movement->product_id, $delta, $kind, 'inventory_movement:' . $movement->id);
     }
 
-    /** Queue the movement for eTIMS once the change is saved, when eTIMS is enabled for the company. */
+    /** Queue the movement for eTIMS once the change is saved, when the company's eTIMS is Live. */
     public static function send(string $companyId, string $productId, int $delta, string $kind, string $reference): void
     {
-        $enabled = CompanyEtimsConfig::query()
-            ->where('company_id', $companyId)
-            ->notSuperseded()
-            ->whereRaw('enabled = true')
-            ->exists();
-        if (!$enabled) {
+        if (!CompanyEtimsConfig::isLiveFor($companyId)) {
             return;
         }
 

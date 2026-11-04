@@ -62,18 +62,10 @@ class EtimsProductCodeService
         return $reregister;
     }
 
-    /** Register these products with KRA again now, when eTIMS is enabled for the company. */
+    /** Register these products with KRA again now, when the company's eTIMS is Live (else on their next send). */
     public function queue(string $companyId, array $productIds): void
     {
-        if ($productIds === []) {
-            return;
-        }
-        $enabled = CompanyEtimsConfig::query()
-            ->where('company_id', $companyId)
-            ->notSuperseded()
-            ->whereRaw('enabled = true')
-            ->exists();
-        if (! $enabled) {
+        if ($productIds === [] || ! CompanyEtimsConfig::isLiveFor($companyId)) {
             return;
         }
         foreach ($productIds as $productId) {

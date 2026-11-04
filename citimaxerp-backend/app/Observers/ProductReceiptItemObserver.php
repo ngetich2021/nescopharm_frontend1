@@ -18,12 +18,7 @@ class ProductReceiptItemObserver
             return;
         }
 
-        $config = CompanyEtimsConfig::query()
-            ->where('company_id', $companyId)
-            ->notSuperseded()
-            ->whereRaw('enabled = true')
-            ->first();
-        if (!$config) {
+        if (!CompanyEtimsConfig::isLiveFor((string) $companyId)) {
             return;
         }
 

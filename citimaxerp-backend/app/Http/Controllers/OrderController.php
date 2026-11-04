@@ -721,11 +721,11 @@ class OrderController extends Controller
             }
         }
 
-        // The invoice date follows the order date, except on an invoice already signed by eTIMS.
+        // The invoice date follows the order date, except on an invoice already signed by live eTIMS.
         $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
         $newDate = $request->filled('order_date') ? \Carbon\Carbon::parse($request->input('order_date'))->startOfDay() : null;
         $invoiceDateMoves = $invoice && $newDate && $invoice->invoice_date && !$invoice->invoice_date->isSameDay($newDate);
-        if ($invoiceDateMoves && $invoice->etims_submitted_at) {
+        if ($invoiceDateMoves && $invoice->etims_submitted_at && \App\Models\CompanyEtimsConfig::isLiveFor((string) $invoice->company_id)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => "Invoice {$invoice->invoice_number} is already on eTIMS with date "

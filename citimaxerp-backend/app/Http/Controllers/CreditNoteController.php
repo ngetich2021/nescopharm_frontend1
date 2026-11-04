@@ -350,7 +350,7 @@ class CreditNoteController extends Controller
 
         $creditNote = CreditNote::where('company_id', $companyId)->findOrFail($id);
 
-        if (in_array($creditNote->etims_status, ['submitted', 'completed'], true)) {
+        if ($creditNote->on_live_etims) {
             return response()->json([
                 'message' => 'This credit note is on eTIMS, so it cannot be deleted. Void it instead.',
             ], 400);
@@ -395,11 +395,11 @@ class CreditNoteController extends Controller
             return response()->json(['message' => 'Credit note must have a total amount greater than zero'], 400);
         }
 
+        // eTIMS has no say until it is confirmed Live: on Test the credit note simply issues.
         $etimsConfig = CompanyEtimsConfig::query()
             ->where('company_id', $companyId)
             ->where('country_code', 'KE')
-            ->notSuperseded()
-            ->whereRaw('enabled = true')
+            ->live()
             ->first();
         $original = Invoice::where('company_id', $companyId)->find($creditNote->invoice_id);
         if ($etimsConfig && $creditNote->etims_requested && $original?->etims_status === 'completed') {
@@ -427,7 +427,9 @@ class CreditNoteController extends Controller
                 }
             }
         } elseif ($etimsConfig && $creditNote->etims_requested && $original
-            && ($original->etims_requested || $original->etims_status !== null)) {
+            && ($original->etims_requested || $original->etims_status !== null)
+            // An invoice from before go-live was never going to KRA, so it can't hold its credit note up.
+            && !($etimsConfig->go_live_date && $original->invoice_date?->lt($etimsConfig->go_live_date))) {
             return response()->json([
                 'message' => 'Cannot issue this credit note until the original invoice has completed eTIMS submission.',
                 'original_etims_status' => $original->etims_status,
@@ -454,6 +456,16 @@ class CreditNoteController extends Controller
                 'status' => 'issued',
                 'issued_at' => now(),
             ]);
+
+            // An earlier refused attempt no longer applies once it has issued without eTIMS.
+            if (!$etimsConfig && !in_array($creditNote->etims_status, ['submitted', 'completed'], true)) {
+                $creditNote->update([
+                    'etims_status' => null,
+                    'etims_last_error' => null,
+                    'etims_lock_state' => null,
+                    'etims_lock_acquired_at' => null,
+                ]);
+            }
 
             // The credit comes off what its invoice still owes. Whatever is left (say the invoice
             // was already paid in money) stays with the customer as credit to use or refund.

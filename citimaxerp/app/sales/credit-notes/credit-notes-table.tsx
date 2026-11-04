@@ -227,8 +227,8 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
             </>
           )}
 
-          {/* Any credit note not yet on eTIMS can be deleted (the server unwinds an issued one). */}
-          {!["submitted", "completed"].includes(creditNote.etims_status ?? "") && (
+          {/* Any credit note not on live eTIMS can be deleted (the server unwinds an issued one). */}
+          {!creditNote.on_live_etims && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-primary" onClick={(event) => {
