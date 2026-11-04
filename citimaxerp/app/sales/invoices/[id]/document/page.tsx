@@ -15,7 +15,7 @@ import { ArrowLeft, Download, FileText, Mail, Printer, ShieldCheck } from "lucid
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
-import { DOCUMENT_COPIES, InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, RETURN_POLICY_PDF } from "@/components/invoices/invoice-document"
+import { DELIVERY_NOTE_COPIES, DOCUMENT_COPIES, InvoiceDocument, loadInvoiceDocumentData, RETURN_POLICY_IMAGE, RETURN_POLICY_PDF } from "@/components/invoices/invoice-document"
 import { FileLink } from "@/components/file-preview"
 import { listOrderDispatches } from "@/lib/order-dispatches"
 import { DeliveryNoteDocument } from "@/components/dispatch/delivery-note-document"
@@ -259,9 +259,9 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
 
       {/* Invoice Document */}
       <div className="container mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
-        {/* Printed four times - Original, Duplicate, Triplicate, Quadruplicate - each invoice
-            followed by its delivery note; the return policy goes with the original. Only the
-            original shows on screen (and in the PDF). */}
+        {/* Printed four times - Original, Duplicate, Triplicate, Quadruplicate. The Original and
+            Duplicate are each followed by their delivery note (it has only those two copies); the
+            return policy goes with the original. Only the original shows on screen (and in the PDF). */}
         {DOCUMENT_COPIES.map((copyLabel, i) => (
           <div key={copyLabel} className={i === 0 ? undefined : "hidden print:block print:break-before-page"}>
             <InvoiceDocument
@@ -273,7 +273,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
               companyPin={companyPin}
               copyLabel={copyLabel}
               withPolicy={i === 0}
-              enclosures={dispatchId && (
+              enclosures={dispatchId && i < DELIVERY_NOTE_COPIES.length && (
                 <div className="invoice-sheet mt-6 print:mt-0 print:break-before-page">
                   <DeliveryNoteDocument
                     ref={i === 0 ? deliveryNoteRef : undefined}

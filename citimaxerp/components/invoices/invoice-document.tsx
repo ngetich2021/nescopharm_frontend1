@@ -62,8 +62,11 @@ type Props = InvoiceDocumentData & {
   copyLabel?: string
 }
 
-/** The four printed copies of an invoice or delivery note, each labelled top right. */
+/** The four printed copies of an invoice, each labelled top right. */
 export const DOCUMENT_COPIES = ["ORIGINAL", "DUPLICATE", "TRIPLICATE", "QUADRUPLICATE"] as const
+
+/** A delivery note is printed twice only. */
+export const DELIVERY_NOTE_COPIES = ["ORIGINAL", "DUPLICATE"] as const
 
 /** The printed invoice, any enclosures, then the enclosed return policy page. */
 export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function InvoiceDocument(

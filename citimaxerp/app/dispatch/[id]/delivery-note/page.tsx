@@ -8,7 +8,7 @@ import { ArrowLeft, Download, Printer, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, fileDate, printWithFileName } from "@/lib/document-names"
 import { DeliveryNoteDocument, type DeliveryNoteLoaded } from "@/components/dispatch/delivery-note-document"
-import { DOCUMENT_COPIES } from "@/components/invoices/invoice-document"
+import { DELIVERY_NOTE_COPIES } from "@/components/invoices/invoice-document"
 import { fixTextOffset } from "@/lib/pdf-capture"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
@@ -143,8 +143,8 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
         .invoice-sheet { padding: 9mm 11mm !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
       }`}</style>
       <div className="container mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
-        {/* Printed four times - Original, Duplicate, Triplicate, Quadruplicate; only the original shows on screen. */}
-        {DOCUMENT_COPIES.map((copyLabel, i) => (
+        {/* Printed twice - Original and Duplicate; only the original shows on screen. */}
+        {DELIVERY_NOTE_COPIES.map((copyLabel, i) => (
           <div key={copyLabel} className={`invoice-sheet ${i === 0 ? "" : "hidden print:block print:break-before-page"}`}>
             <DeliveryNoteDocument
               ref={i === 0 ? docRef : undefined}
