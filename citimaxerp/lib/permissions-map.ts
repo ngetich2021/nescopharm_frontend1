@@ -1318,6 +1318,13 @@ export const PERMISSIONS_MAP: PermissionDefinition[] = [
     category: "Invoicing",
     module: "sales"
   },
+  {
+    key: "can_delete_credit_notes",
+    name: "Delete Credit Notes",
+    description: "Delete credit notes; the credit and returned stock are undone",
+    category: "Invoicing",
+    module: "sales"
+  },
 
   // Employee & Payroll Management
   {

@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\CreditNote;
 use App\Models\CreditNoteRefund;
 use App\Models\Customer;
+use App\Models\CustomerAccount;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Payment;
@@ -27,7 +28,7 @@ class CustomerStatementService
      * after the period, then the period's own movements peel back further
      * to the opening figure.
      */
-    public function generate(string $companyId, string $customerId, Carbon $from, Carbon $to): array
+    public function generate(string $companyId, string $customerId, Carbon $from, Carbon $to, ?int $ageingDays = null): array
     {
         $customer = Customer::with('account')->where('company_id', $companyId)->findOrFail($customerId);
 
@@ -143,9 +144,9 @@ class CustomerStatementService
         $openingBalance = $closingBalance - $invoicesTotal + $paymentsTotal + $creditNotesTotal - $refundsTotal - $bouncesTotal;
 
         $transactions = $this->buildTransactions($from, $openingBalance, $invoices, $payments, $creditNotes, $periodRefunds, $periodBounces, $bounced, $periodReceipts);
-        $ageing = $this->buildAgeing($customerId, $to, $closingBalance);
+        $account = $customer->account ?? CustomerAccount::where('customer_id', $customerId)->latest()->first();
+        $ageing =$this->buildAgeing($customerId, $to, $closingBalance, $ageingDays ?: (int) $account?->credit_days ?: 30);
 
-        $account = $customer->account;
         $creditLimit = $account?->credit_required !== null ? (float) $account->credit_required : null;
 
         $company = Company::find($companyId, ['id', 'name', 'logo_url', 'letterhead_url', 'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch', 'mpesa_paybill', 'mpesa_account_number']);
@@ -387,45 +388,61 @@ class CustomerStatementService
     }
 
     /**
-     * Outstanding invoice balances bucketed by days past due as at the
-     * statement date. Any gap to the closing balance is unallocated
-     * payments/credits not yet matched to an invoice.
+     * What the customer owed at the statement date, by days past due, in ranges $days wide. Worked
+     * out from the documents up to that date, not today's balances, so an older statement ages
+     * as it stood then. Each invoice is reduced by its own credit notes, then all other money
+     * (receipts, unused credit) goes on the oldest invoices first. Anything left is unallocated.
      */
-    private function buildAgeing(string $customerId, Carbon $asAt, float $closingBalance): array
+    private function buildAgeing(string $customerId, Carbon $to, float $closingBalance, int $days): array
     {
+        // A period ending in the future (this month, say) ages as at today.
+        $asAt = $to->copy()->min(now()->endOfDay());
         $buckets = [
-            'current' => ['label' => 'Current / Not Yet Due', 'amount' => 0.0],
-            '1_30' => ['label' => '1–30 Days', 'amount' => 0.0],
-            '31_60' => ['label' => '31–60 Days', 'amount' => 0.0],
-            '61_90' => ['label' => '61–90 Days', 'amount' => 0.0],
-            'over_90' => ['label' => 'Over 90 Days', 'amount' => 0.0],
+            ['label' => 'Current / Not Yet Due', 'amount' => 0.0],
+            ['label' => '1–' . $days . ' Days', 'amount' => 0.0],
+            ['label' => ($days + 1) . '–' . ($days * 2) . ' Days', 'amount' => 0.0],
+            ['label' => ($days * 2 + 1) . '–' . ($days * 3) . ' Days', 'amount' => 0.0],
+            ['label' => 'Over ' . ($days * 3) . ' Days', 'amount' => 0.0],
         ];
 
-        $outstanding = Invoice::where('customer_id', $customerId)
-            ->where('balance_amount', '>', 0)
+        $invoices = Invoice::where('customer_id', $customerId)
             ->whereNotIn('status', ['cancelled'])
-            ->where('invoice_date', '<=', $asAt)
-            ->get(['invoice_date', 'due_date', 'balance_amount']);
+            ->where('invoice_date', '<=', $to)
+            ->orderBy('invoice_date')
+            ->orderBy('created_at')
+            ->get(['id', 'invoice_date', 'due_date', 'total_amount']);
 
-        foreach ($outstanding as $inv) {
+        $notes = CreditNote::where('customer_id', $customerId)
+            ->whereIn('status', ['issued', 'applied', 'refunded'])
+            ->where('credit_note_date', '<=', $to)
+            ->get(['invoice_id', 'total_amount']);
+        $ownCredit = $notes->groupBy('invoice_id')->map(fn ($n) => (float) $n->sum('total_amount'));
+
+        $open = $invoices->map(function ($inv) use ($ownCredit) {
+            return [$inv, max(0.0, (float) $inv->total_amount - ($ownCredit[$inv->id] ?? 0.0))];
+        });
+        $otherMoney = (float) $open->sum(fn ($o) => $o[1]) - $closingBalance;
+
+        foreach ($open as [$inv, $owed]) {
+            $paid = min($owed, max(0.0, $otherMoney));
+            $otherMoney -= $paid;
+            $left = round($owed - $paid, 2);
+            if ($left <= 0) {
+                continue;
+            }
             $due = $inv->due_date ? Carbon::parse($inv->due_date) : Carbon::parse($inv->invoice_date)->addDays(30);
             $daysOverdue = (int) $due->startOfDay()->diffInDays($asAt->copy()->startOfDay(), false);
-            $key = match (true) {
-                $daysOverdue <= 0 => 'current',
-                $daysOverdue <= 30 => '1_30',
-                $daysOverdue <= 60 => '31_60',
-                $daysOverdue <= 90 => '61_90',
-                default => 'over_90',
-            };
-            $buckets[$key]['amount'] += (float) $inv->balance_amount;
+            $index = $daysOverdue <= 0 ? 0 : min(4, (int) ceil($daysOverdue / $days));
+            $buckets[$index]['amount'] += $left;
         }
 
-        $invoicedTotal = array_sum(array_column($buckets, 'amount'));
-        $unallocated = round($closingBalance - $invoicedTotal, 2);
+        $unallocated = round($closingBalance - array_sum(array_column($buckets, 'amount')), 2);
 
         return [
             'as_at' => $asAt->toDateString(),
-            'buckets' => array_map(fn ($b) => ['label' => $b['label'], 'amount' => round($b['amount'], 2)], array_values($buckets)),
+            'days' => $days,
+            'buckets' => array_map(fn ($b) => ['label' => $b['label'], 'amount' => round($b['amount'], 2)], $buckets),
+            'credit_notes' => round((float) $notes->sum('total_amount'), 2),
             'unallocated' => abs($unallocated) >= 0.01 ? $unallocated : 0.0,
             'total' => round($closingBalance, 2),
         ];

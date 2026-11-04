@@ -138,7 +138,8 @@ class CreditNoteController extends Controller
 
             $creditNote = CreditNote::create([
                 'company_id' => $companyId,
-                'customer_id' => $request->customer_id ?? $invoice->customer_id,
+                // Always the customer the invoice is on now, or the credit lands on the wrong account.
+                'customer_id' => $invoice->customer_id,
                 'invoice_id' => $invoice->id,
                 'created_by' => $user->id,
                 'status' => 'draft',
@@ -344,7 +345,8 @@ class CreditNoteController extends Controller
         $user = $request->user();
         $companyId = $user->company_id;
 
-        if (!$this->hasPermission($request, 'can_delete_invoices', $companyId)) {
+        if (!$this->hasPermission($request, 'can_delete_invoices', $companyId)
+            && !$this->hasPermission($request, 'can_delete_credit_notes', $companyId)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

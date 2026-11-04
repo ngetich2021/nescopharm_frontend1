@@ -83,6 +83,8 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
   const [dateFrom, setDateFrom] = useState(firstOfMonthString())
   const [dateTo, setDateTo] = useState(lastOfMonthString())
+  // Width of each ageing range in days; empty follows the customer's credit days.
+  const [ageingDays, setAgeingDays] = useState("")
   // Optional sections: left off the statement (screen, print, PDF and CSV) unless ticked.
   const [include, setInclude] = useState({ outstanding: false, orders: false, pdCheques: false })
 
@@ -94,7 +96,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchCustomerStatement(id, { date_from: from, date_to: to })
+      const data = await fetchCustomerStatement(id, { date_from: from, date_to: to, ageing_days: ageingDays })
       setStatement(data)
     } catch (err: any) {
       setError(err.message || "Failed to load statement")
@@ -109,7 +111,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchCustomerStatement(id, { period: "all" })
+      const data = await fetchCustomerStatement(id, { period: "all", ageing_days: ageingDays })
       setStatement(data)
       setDateFrom(data.period.from)
       setDateTo(data.period.to)
@@ -207,6 +209,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
         rows.push([b.label, b.amount.toFixed(2), ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%"])
       }
       if (ageing.unallocated !== 0) rows.push(["Unallocated payments / credits", ageing.unallocated.toFixed(2), ""])
+      if (ageing.credit_notes > 0) rows.push(["Credit notes already taken off the above", ageing.credit_notes.toFixed(2), ""])
       rows.push(["Total", ageing.total.toFixed(2), ""])
       rows.push([])
     }
@@ -364,6 +367,19 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
               <div className="grid gap-1">
                 <Label htmlFor="date_to" className="text-xs">To</Label>
                 <Input id="date_to" type="date" className="h-8 w-[150px]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="ageing_days" className="text-xs">Ageing range (days)</Label>
+                <Input
+                  id="ageing_days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  className="h-8 w-[130px]"
+                  placeholder={`Terms: ${ageing?.days ?? 30}`}
+                  value={ageingDays}
+                  onChange={(e) => setAgeingDays(e.target.value)}
+                />
               </div>
               <Button size="sm" onClick={() => loadStatement()} disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -547,7 +563,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           {ageing && (
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
-              <p className="text-xs text-gray-500 mb-2">As at {formatDate(ageing.as_at)}, by days past invoice due date</p>
+              <p className="text-xs text-gray-500 mb-2">
+                As at {formatDate(ageing.as_at)}, by days past invoice due date
+                {ageing.credit_notes > 0 && `, after credit notes of KES ${formatAmount(ageing.credit_notes)}`}
+              </p>
               <div className="overflow-x-auto">
                 <table className={TABLE}>
                   <thead>

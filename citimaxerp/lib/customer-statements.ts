@@ -78,7 +78,11 @@ export interface StatementOrder {
 
 export interface StatementAgeing {
   as_at: string
+  // Width of each ageing range, in days.
+  days: number
   buckets: { label: string; amount: number }[]
+  // Credit notes already taken off the amounts above.
+  credit_notes: number
   unallocated: number
   total: number
 }
@@ -146,10 +150,11 @@ export interface CustomerStatement {
 
 export async function fetchCustomerStatement(
   customerId: string,
-  filters?: { date_from?: string; date_to?: string; period?: "all" }
+  filters?: { date_from?: string; date_to?: string; period?: "all"; ageing_days?: string }
 ): Promise<CustomerStatement> {
   const params = new URLSearchParams()
   if (filters?.period) params.append("period", filters.period)
+  if (filters?.ageing_days) params.append("ageing_days", filters.ageing_days)
   if (filters?.date_from) params.append("date_from", filters.date_from)
   if (filters?.date_to) params.append("date_to", filters.date_to)
   const query = params.toString() ? `?${params.toString()}` : ""

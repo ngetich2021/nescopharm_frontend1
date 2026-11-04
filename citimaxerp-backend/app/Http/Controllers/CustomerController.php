@@ -607,13 +607,16 @@ class CustomerController extends Controller
                 Invoice::where('customer_id', $customerId)->min('invoice_date'),
                 Order::where('customer_id', $customerId)->selectRaw('MIN(COALESCE(order_date, created_at)) as first_date')->value('first_date'),
                 \App\Models\Payment::where('customer_id', $customerId)->where('status', 'completed')->min('payment_date'),
+                \App\Models\CreditNote::where('customer_id', $customerId)->whereIn('status', ['issued', 'applied', 'refunded'])->min('credit_note_date'),
             ])->filter()->map(fn ($d) => Carbon::parse($d))->min();
             $from = ($first ?? Carbon::now())->copy()->startOfDay();
             $to = Carbon::now()->endOfDay();
         }
 
         try {
-            $statement = $statementService->generate($customer->company_id, $customerId, $from, $to);
+            // Width of each ageing range; left out, it follows the customer's credit days.
+            $ageingDays = $request->integer('ageing_days');
+            $statement = $statementService->generate($customer->company_id, $customerId, $from, $to, $ageingDays > 0 ? min($ageingDays, 365) : null);
 
             return response()->json(['status' => 'success', 'data' => $statement]);
         } catch (\Exception $e) {

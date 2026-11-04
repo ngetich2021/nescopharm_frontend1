@@ -399,6 +399,72 @@ class CustomerAccountService
     }
 
     /**
+     * An invoice has just moved to another customer (its customer_id is already the new one), so
+     * the money on it follows: its credit notes, and each receipt or cheque that sits only on this
+     * invoice. A receipt that also paid other invoices can't be split, so it stays with the old
+     * customer and its share here goes back to their oldest open invoices (or their credit).
+     * Credit from the old customer's other notes goes back to those notes.
+     */
+    public function followInvoice(Invoice $invoice, string $fromCustomerId): void
+    {
+        $toCustomerId = $invoice->customer_id;
+
+        DB::transaction(function () use ($invoice, $fromCustomerId, $toCustomerId) {
+            CreditNote::where('invoice_id', $invoice->id)->where('customer_id', $fromCustomerId)->get()
+                ->each(fn (CreditNote $note) => $note->update(['customer_id' => $toCustomerId]));
+            $credited = app(CreditNoteService::class)->releaseInvoice($invoice, $fromCustomerId);
+
+            $shared = [];
+            $takenOff = 0.0;
+            foreach (PaymentAllocation::where('invoice_id', $invoice->id)->get() as $allocation) {
+                $payment = Payment::find($allocation->payment_id);
+                if (!$payment || $payment->customer_id !== $fromCustomerId) {
+                    continue;
+                }
+                $elsewhere = PaymentAllocation::where('payment_id', $payment->id)->where('invoice_id', '!=', $invoice->id)->exists();
+                if ($elsewhere) {
+                    $takenOff += (float) $allocation->amount_allocated;
+                    $allocation->delete();
+                    $shared[] = $payment;
+                    continue;
+                }
+                $this->moveReceipt($payment, $toCustomerId);
+            }
+
+            // Receipts tied straight to the invoice or its order, with no allocation rows.
+            Payment::where('customer_id', $fromCustomerId)
+                ->where(fn ($q) => $q->where('invoice_id', $invoice->id)
+                    ->orWhere('id', $invoice->payment_id)
+                    ->when($invoice->order_id, fn ($o) => $o->orWhere('order_id', $invoice->order_id)))
+                ->whereNotIn('id', collect($shared)->pluck('id'))
+                ->get()
+                ->each(fn (Payment $payment) => $this->moveReceipt($payment, $toCustomerId));
+
+            // A cheque still waiting to mature that was written for this invoice.
+            Cheque::where('invoice_id', $invoice->id)->where('customer_id', $fromCustomerId)->where('status', 'pending')
+                ->update(['customer_id' => $toCustomerId]);
+
+            if ($takenOff > 0 || $credited > 0) {
+                $invoice->update([
+                    'amount_paid' => max(0, round((float) $invoice->amount_paid - $takenOff, 2)),
+                    'amount_credited' => max(0, round((float) $invoice->amount_credited - $credited, 2)),
+                ]);
+                $this->payments->syncOrderPaid($invoice->fresh());
+            }
+
+            foreach ($shared as $payment) {
+                $this->allocate($payment->fresh(), null, "Back from {$invoice->invoice_number}: moved to another customer");
+            }
+        });
+    }
+
+    private function moveReceipt(Payment $payment, string $toCustomerId): void
+    {
+        $payment->update(['customer_id' => $toCustomerId]);
+        Cheque::where('payment_id', $payment->id)->update(['customer_id' => $toCustomerId]);
+    }
+
+    /**
      * Keep the customer's money on their oldest invoices: while an older invoice still owes and a
      * newer one holds receipt money, that money moves to the older invoice. Used after a bounced
      * cheque takes money off an old invoice, so the shortfall ends up on the newest invoices.

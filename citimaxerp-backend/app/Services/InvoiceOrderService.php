@@ -63,7 +63,12 @@ class InvoiceOrderService
             ]);
         }
 
-        $invoice->customer_id = $order->customer_id;
+        if ($invoice->customer_id !== $order->customer_id) {
+            $fromCustomerId = $invoice->customer_id;
+            $invoice->update(['customer_id' => $order->customer_id]);
+            app(CustomerAccountService::class)->followInvoice($invoice, $fromCustomerId);
+            $invoice->refresh();
+        }
         $invoice->amount_paid = (float) $invoice->getTotalAllocatedAmount();
         $invoice->load('lineItems');
         $invoice->calculateTotals();

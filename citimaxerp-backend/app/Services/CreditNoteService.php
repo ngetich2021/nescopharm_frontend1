@@ -72,19 +72,24 @@ class CreditNoteService
         });
     }
 
-    /** An invoice is going: credit that other notes applied to it goes back to those notes, unused. */
-    public function releaseInvoice(Invoice $invoice): void
+    /**
+     * An invoice is going (or moving away from $customerId): credit that other notes applied to it
+     * goes back to those notes, unused. Returns how much came off it.
+     */
+    public function releaseInvoice(Invoice $invoice, ?string $customerId = null): float
     {
+        $total = 0.0;
         CreditNote::where('company_id', $invoice->company_id)
-            ->where('customer_id', $invoice->customer_id)
+            ->where('customer_id', $customerId ?? $invoice->customer_id)
             ->where('amount_applied', '>', 0)
             ->get()
-            ->each(function (CreditNote $note) use ($invoice) {
+            ->each(function (CreditNote $note) use ($invoice, &$total) {
                 $applications = collect($note->metadata['applications'] ?? []);
                 $released = (float) $applications->where('invoice_id', $invoice->id)->sum('amount');
                 if ($released <= 0) {
                     return;
                 }
+                $total += $released;
                 $applied = max(0, (float) $note->amount_applied - $released);
                 $metadata = $note->metadata;
                 $metadata['applications'] = $applications->where('invoice_id', '!=', $invoice->id)->values()->all();
@@ -96,6 +101,8 @@ class CreditNoteService
                     'metadata' => $metadata,
                 ]);
             });
+
+        return round($total, 2);
     }
 
     protected function unapply(CreditNote $creditNote): void

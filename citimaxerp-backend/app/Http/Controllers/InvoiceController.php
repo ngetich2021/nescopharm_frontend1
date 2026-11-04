@@ -484,6 +484,7 @@ class InvoiceController extends Controller
         try {
             DB::beginTransaction();
 
+            $previousCustomerId = $invoice->customer_id;
             $invoice->update($request->only([
                 'customer_id',
                 'type',
@@ -497,6 +498,10 @@ class InvoiceController extends Controller
                 'payment_type',
                 'credit_terms_days',
             ]));
+            if ($previousCustomerId && $invoice->customer_id !== $previousCustomerId) {
+                app(\App\Services\CustomerAccountService::class)->followInvoice($invoice, $previousCustomerId);
+                $invoice->refresh();
+            }
 
             if ($request->has('generate_etims_receipt')) {
                 $invoice->update([
