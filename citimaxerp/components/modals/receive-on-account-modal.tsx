@@ -193,7 +193,6 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
                 <Input id="acc_attachment" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setAttachment(e.target.files?.[0] || null)} />
                 <p className="text-xs text-muted-foreground">
                   The cheque stays pending and changes no invoice until it matures and is approved (Sales &gt; Cheques). If it bounces, nothing is applied.
-                  Its maturity must fall within the customer&apos;s PD cheque credit period for every invoice it pays.
                 </p>
               </div>
             </div>

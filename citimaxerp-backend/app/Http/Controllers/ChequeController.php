@@ -4,9 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cheque;
 use App\Models\Customer;
-use App\Models\CustomerAccount;
 use App\Models\Invoice;
-use Carbon\Carbon;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\PaymentRefund;
@@ -161,40 +159,6 @@ class ChequeController extends Controller
         }
     }
 
-    /**
-     * A customer's agreed "credit period on PD cheques" (60/90 days) caps how
-     * far a post-dated cheque may be dated, counted from the invoice date.
-     * Returns an error message when the maturity date exceeds it.
-     */
-    protected function pdChequePeriodViolation(Invoice $invoice, string $maturityDate): ?string
-    {
-        if (!$invoice->customer_id) {
-            return null;
-        }
-
-        $days = CustomerAccount::where('customer_id', $invoice->customer_id)
-            ->whereNotNull('credit_period_pd_cheque_days')
-            ->latest()
-            ->value('credit_period_pd_cheque_days')
-            ?? Customer::find($invoice->customer_id)?->account?->credit_period_pd_cheque_days;
-
-        if (!$days) {
-            return null;
-        }
-
-        $from = Carbon::parse($invoice->invoice_date ?? $invoice->created_at)->startOfDay();
-        $latest = $from->copy()->addDays((int) $days);
-        $maturity = Carbon::parse($maturityDate)->startOfDay();
-
-        if ($maturity->gt($latest)) {
-            return "This customer's PD cheque credit period is {$days} days. The cheque maturity date "
-                . "({$maturity->toDateString()}) cannot be later than {$latest->toDateString()} "
-                . "({$days} days from invoice date {$from->toDateString()}).";
-        }
-
-        return null;
-    }
-
     protected function storeReceived(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -227,11 +191,6 @@ class ChequeController extends Controller
         }
 
         $invoice = Invoice::where('company_id', $user->company_id)->findOrFail($request->invoice_id);
-
-        $pdLimitError = $this->pdChequePeriodViolation($invoice, $request->maturity_date);
-        if ($pdLimitError) {
-            return response()->json(['message' => $pdLimitError, 'errors' => ['maturity_date' => [$pdLimitError]]], 422);
-        }
 
         // More than the invoice owes is accepted for a known customer: on approval the rest pays
         // their oldest unpaid invoices and what is left is their credit.
@@ -274,7 +233,7 @@ class ChequeController extends Controller
     /**
      * One cheque covering several of a customer's invoices (or more than they owe). It is kept
      * with its split - chosen, or oldest invoice first - and touches no balance until approved.
-     * Each invoice in the split is held to the customer's PD-cheque credit period.
+     * A cheque is always accepted, however old the invoices it pays.
      */
     protected function storeReceivedOnAccount(Request $request): JsonResponse
     {
@@ -294,25 +253,18 @@ class ChequeController extends Controller
                 if (!$invoice) {
                     return response()->json(['message' => 'One of the invoices in the split does not belong to this customer'], 422);
                 }
-                if ((float) $line['amount'] > $invoice->outstanding() + 0.01) {
-                    return response()->json([
-                        'message' => "The split puts " . number_format((float) $line['amount'], 2) . " on invoice {$invoice->invoice_number}, which only owes " . number_format($invoice->outstanding(), 2) . '.',
-                    ], 422);
+                // An invoice paid down since the form opened takes what it still owes; the rest
+                // goes on to the oldest unpaid invoices when the cheque is approved.
+                $put = round(min((float) $line['amount'], $invoice->outstanding()), 2);
+                if ($put > 0.005) {
+                    $plan[] = ['invoice_id' => $invoice->id, 'invoice_number' => $invoice->invoice_number, 'amount' => $put];
                 }
-                $plan[] = ['invoice_id' => $invoice->id, 'invoice_number' => $invoice->invoice_number, 'amount' => round((float) $line['amount'], 2)];
             }
             if (array_sum(array_column($plan, 'amount')) > $amount + 0.01) {
                 return response()->json(['message' => 'The split adds up to more than the cheque amount'], 422);
             }
         } else {
             $plan = app(\App\Services\CustomerAccountService::class)->suggestSplit($user->company_id, $customer->id, $amount);
-        }
-
-        foreach ($plan as $line) {
-            $error = $this->pdChequePeriodViolation(Invoice::find($line['invoice_id']), $request->maturity_date);
-            if ($error) {
-                return response()->json(['message' => "Invoice {$line['invoice_number']}: {$error}", 'errors' => ['maturity_date' => [$error]]], 422);
-            }
         }
 
         $attachmentPath = $request->hasFile('attachment') ? $request->file('attachment')->store('cheques', 's3') : null;
