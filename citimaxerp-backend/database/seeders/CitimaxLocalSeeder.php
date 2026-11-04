@@ -349,7 +349,10 @@ class CitimaxLocalSeeder extends Seeder
         $connection = config('database.default');
         $host = config("database.connections.{$connection}.host");
 
-        if ($connection !== 'pgsql' || !in_array($host, ['127.0.0.1', 'localhost', '::1'], true)) {
+        // The remote dev database counts as local. Production never does.
+        $isDevHost = str_starts_with((string) $host, 'ep-silent-field-');
+
+        if ($connection !== 'pgsql' || (!$isDevHost && !in_array($host, ['127.0.0.1', 'localhost', '::1'], true))) {
             throw new RuntimeException('CitimaxLocalSeeder requires a local PostgreSQL database connection.');
         }
     }
