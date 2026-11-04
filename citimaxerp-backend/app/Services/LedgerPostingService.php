@@ -835,11 +835,12 @@ class LedgerPostingService
         if (Carbon::parse($entry->entry_date)->toDateString() !== $spec['date']) {
             return false;
         }
+        // The customer counts too: a document moved to another customer moves in their ledger.
         $have = $entry->items
-            ->map(fn ($i) => $i->account_id . '|' . number_format((float) $i->debit_amount, 2, '.', '') . '|' . number_format((float) $i->credit_amount, 2, '.', ''))
+            ->map(fn ($i) => $i->account_id . '|' . number_format((float) $i->debit_amount, 2, '.', '') . '|' . number_format((float) $i->credit_amount, 2, '.', '') . '|' . $i->contact_id)
             ->sort()->values()->all();
         $want = collect($spec['items'])
-            ->map(fn ($i) => $i['account_id'] . '|' . number_format($i['debit_amount'], 2, '.', '') . '|' . number_format($i['credit_amount'], 2, '.', ''))
+            ->map(fn ($i) => $i['account_id'] . '|' . number_format($i['debit_amount'], 2, '.', '') . '|' . number_format($i['credit_amount'], 2, '.', '') . '|' . $i['contact_id'])
             ->sort()->values()->all();
         return $have === $want;
     }

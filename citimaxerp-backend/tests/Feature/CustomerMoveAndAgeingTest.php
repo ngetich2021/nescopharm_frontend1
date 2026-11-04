@@ -190,6 +190,29 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertEqualsWithDelta(100, $inSeptember['total'], 0.01);
     }
 
+    public function test_a_ledger_entry_for_another_customer_does_not_count_as_unchanged(): void
+    {
+        $entry = new \App\Models\JournalEntry(['entry_date' => '2026-05-14']);
+        $entry->setRelation('items', collect([new \App\Models\JournalEntryItem([
+            'account_id' => 'ar',
+            'debit_amount' => 100,
+            'credit_amount' => 0,
+            'contact_id' => $this->kitale,
+        ])]));
+        $spec = fn (string $customerId) => ['date' => '2026-05-14', 'items' => [[
+            'account_id' => 'ar',
+            'debit_amount' => 100.0,
+            'credit_amount' => 0.0,
+            'contact_id' => $customerId,
+        ]]];
+
+        $matches = new \ReflectionMethod(\App\Services\LedgerPostingService::class, 'matches');
+        $service = app(\App\Services\LedgerPostingService::class);
+
+        $this->assertTrue($matches->invoke($service, $entry, $spec($this->kitale)));
+        $this->assertFalse($matches->invoke($service, $entry, $spec($this->bungoma)));
+    }
+
     public function test_an_accountant_can_delete_a_credit_note_but_not_an_invoice(): void
     {
         $this->grant('can_delete_credit_notes');
