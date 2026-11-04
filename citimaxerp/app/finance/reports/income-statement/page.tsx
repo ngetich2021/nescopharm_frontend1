@@ -73,7 +73,11 @@ export default function IncomeStatementPage() {
   }, [fetchIncomeStatement])
 
   const netRevenue = statement?.totals.net_revenue ?? 0
-  const share = (amount: number) => (netRevenue && Math.abs(amount) >= 0.005 ? `${((amount / netRevenue) * 100).toFixed(1)}%` : "")
+  const share = (amount: number) => {
+    if (!netRevenue || Math.abs(amount) < 0.005) return ""
+    const percent = ((amount / netRevenue) * 100).toFixed(1)
+    return `${percent === "-0.0" ? "0.0" : percent}%`
+  }
 
   const buildExport = (): TableExport => {
     const s = statement!

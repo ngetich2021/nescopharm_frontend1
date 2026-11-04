@@ -217,13 +217,20 @@ async function exportPdf(data: TableExport, brand: Brand) {
   if (data.details?.length) {
     // Two columns of label: value pairs.
     const colWidth = (pageWidth - margin * 2) / 2
-    data.details.forEach(([label, value], i) => {
-      const x = margin + (i % 2) * colWidth
-      const lineY = y + 4 + Math.floor(i / 2) * 5
-      pdf.setFont("helvetica", "bold").setFontSize(9).text(`${label}:`, x, lineY)
-      pdf.setFont("helvetica", "normal").text(String(value ?? ""), x + 32, lineY, { maxWidth: colWidth - 34 })
-    })
-    y += Math.ceil(data.details.length / 2) * 5 + 2
+    // Each row is as tall as its longest value, so a long note wraps instead of running under the table.
+    let rowY = y + 4
+    for (let i = 0; i < data.details.length; i += 2) {
+      let rowLines = 1
+      data.details.slice(i, i + 2).forEach(([label, value], side) => {
+        const x = margin + side * colWidth
+        pdf.setFont("helvetica", "bold").setFontSize(9).text(`${label}:`, x, rowY)
+        const lines: string[] = pdf.setFont("helvetica", "normal").splitTextToSize(String(value ?? ""), colWidth - 34)
+        pdf.text(lines, x + 32, rowY)
+        rowLines = Math.max(rowLines, lines.length)
+      })
+      rowY += rowLines === 1 ? 5 : rowLines * 4 + 1
+    }
+    y = rowY - 4 + 2
   }
 
   const aligns = columnAlignments(data)

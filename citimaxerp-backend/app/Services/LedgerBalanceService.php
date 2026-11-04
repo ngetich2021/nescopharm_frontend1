@@ -24,6 +24,7 @@ class LedgerBalanceService
             ->join('journal_entries as e', 'e.id', '=', 'i.journal_entry_id')
             ->where('e.company_id', $companyId)
             ->whereIn('e.status', JournalEntry::LEDGER_STATUSES)
+            ->tap(fn ($q) => JournalEntry::withoutCorrections($q))
             ->when($from, fn ($q) => $q->where('e.entry_date', '>=', $from))
             ->when($to, fn ($q) => $q->where('e.entry_date', '<=', $to))
             ->groupBy('i.account_id')

@@ -129,6 +129,7 @@ class FinanceDashboardController extends Controller
             ->join('chart_of_accounts as a', 'a.id', '=', 'i.account_id')
             ->where('e.company_id', $companyId)
             ->whereIn('e.status', JournalEntry::LEDGER_STATUSES)
+            ->tap(fn ($q) => JournalEntry::withoutCorrections($q))
             ->whereIn('a.account_type', ['income', 'expense'])
             ->where('e.entry_date', '>=', $start->toDateString())
             ->groupByRaw("to_char(e.entry_date, 'YYYY-MM'), a.account_type")

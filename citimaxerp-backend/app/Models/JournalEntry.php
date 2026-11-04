@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class JournalEntry extends Model
@@ -137,6 +138,34 @@ class JournalEntry extends Model
      * Counting only "posted" would keep the reversal but drop the original.
      */
     public const LEDGER_STATUSES = ['posted', 'reversed'];
+
+    /** Why the ledger sync reverses an entry when its document was edited or removed. */
+    public const CORRECTION_REASONS = ['Source document changed', 'Source document voided or deleted'];
+
+    /**
+     * Leaves corrections out of a report: an entry replaced because its document was edited or
+     * removed, and the reversal that undid it. They net to nothing, but the reversal is dated the
+     * day of the edit while the original keeps its own date, so counting them doubles the sale's
+     * month and takes it all off the month of the edit. Genuine events stay, such as a bounced
+     * cheque, whose receipt and reversal both happened.
+     *
+     * @param \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder $query joined to journal_entries as $alias
+     */
+    public static function withoutCorrections($query, string $alias = 'e')
+    {
+        $reasons = self::CORRECTION_REASONS;
+
+        return $query
+            ->where(fn ($q) => $q->where("{$alias}.status", '!=', 'reversed')
+                ->orWhereNull("{$alias}.reversal_reason")
+                ->orWhereNotIn("{$alias}.reversal_reason", $reasons))
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
+                ->from('journal_entries as corrected')
+                ->where("{$alias}.source_type", self::class)
+                ->whereRaw("corrected.id::text = {$alias}.source_id::text")
+                ->where('corrected.status', 'reversed')
+                ->whereIn('corrected.reversal_reason', $reasons));
+    }
 
     /** Documents whose number can change after posting, and the column holding it. */
     protected const NUMBERED_SOURCES = [

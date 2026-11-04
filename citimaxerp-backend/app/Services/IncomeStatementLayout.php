@@ -266,8 +266,8 @@ class IncomeStatementLayout
     {
         $notes = [];
         if ($netRevenue > 0 && $costOfSales < $netRevenue * 0.1) {
-            $share = round($costOfSales / $netRevenue * 100, 1);
-            $notes[] = "Cost of Sales is only {$share}% of revenue, so profit is likely overstated. The ledger records the cost of goods when stock leaves on a dispatch, and sales brought across from the old system did not post one.";
+            $share = number_format(max(0, $costOfSales) / $netRevenue * 100, 1);
+            $notes[] = "Cost of Sales is only {$share}% of revenue, so profit is likely overstated. The ledger records the cost of goods when stock leaves on a dispatch, and sales brought across from the old system carry none.";
         }
         if ($beforeTax > 0 && abs($tax) < 0.01) {
             $notes[] = 'No income tax is recorded for this period, so Net Profit is the same as Earnings Before Taxes.';
