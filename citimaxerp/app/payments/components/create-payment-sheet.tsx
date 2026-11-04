@@ -392,7 +392,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                 {INSTANT_PAYMENT_METHODS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                 ))}
-                <SelectItem value="Credit Card">Credit Card</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">

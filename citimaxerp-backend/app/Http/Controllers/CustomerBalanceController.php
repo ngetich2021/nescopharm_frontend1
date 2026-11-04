@@ -6,9 +6,9 @@ use App\Models\Customer;
 use App\Models\Payment;
 use App\Services\CustomerAccountService;
 use App\Services\CustomerLedgerService;
+use App\Support\PaymentFailure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -77,7 +77,7 @@ class CustomerBalanceController extends Controller
     public function receive(Request $request, string $customerId): JsonResponse
     {
         if (!$this->hasPermission($request, 'can_update_invoices')) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => PaymentFailure::NOT_ALLOWED], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -89,7 +89,7 @@ class CustomerBalanceController extends Controller
             'allocations' => 'nullable|array',
             'allocations.*.invoice_id' => 'required_with:allocations|uuid',
             'allocations.*.amount' => 'required_with:allocations|numeric|min:0.01',
-        ]);
+        ], PaymentFailure::VALIDATION_MESSAGES);
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
         }
@@ -99,9 +99,8 @@ class CustomerBalanceController extends Controller
             return response()->json(['message' => 'The split adds up to more than the amount received'], 422);
         }
 
-        $customer = Customer::where('company_id', $request->user()->company_id)->findOrFail($customerId);
-
         try {
+            $customer = Customer::where('company_id', $request->user()->company_id)->findOrFail($customerId);
             $result = $this->accounts->receive(
                 $customer,
                 $request->user(),
@@ -112,11 +111,8 @@ class CustomerBalanceController extends Controller
                 $request->notes,
                 $split,
             );
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
-            Log::error('Failed to receive customer payment', ['customer_id' => $customerId, 'error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to record payment', 'error' => $e->getMessage()], 500);
+            return PaymentFailure::response($e);
         }
 
         return response()->json([
@@ -167,12 +163,8 @@ class CustomerBalanceController extends Controller
 
         try {
             $result = $this->accounts->removeReceipt($payment, $cancel);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
-            $verb = $cancel ? 'cancel' : 'delete';
-            Log::error("Failed to {$verb} customer payment", ['payment_id' => $paymentId, 'error' => $e->getMessage()]);
-            return response()->json(['message' => "Failed to {$verb} payment", 'error' => $e->getMessage()], 500);
+            return PaymentFailure::response($e, $cancel ? 'The cancellation' : 'The deletion');
         }
 
         $done = $cancel ? 'cancelled' : 'deleted';
@@ -198,8 +190,7 @@ class CustomerBalanceController extends Controller
         try {
             $applied = $this->accounts->applyCredit($companyId, $customerId);
         } catch (\Throwable $e) {
-            Log::error('Failed to apply customer credit', ['customer_id' => $customerId, 'error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to apply credit', 'error' => $e->getMessage()], 500);
+            return PaymentFailure::response($e, 'The credit');
         }
 
         $total = round(array_sum(array_column($applied, 'amount')), 2);

@@ -1096,7 +1096,7 @@ class InvoiceController extends Controller
         $user = $request->user();
         $companyId = $user->company_id;
         if (!$this->hasPermission($request, 'can_update_invoices', $companyId)) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => \App\Support\PaymentFailure::NOT_ALLOWED], 403);
         }
 
         $validator = Validator::make($request->all(), [
@@ -1105,7 +1105,7 @@ class InvoiceController extends Controller
             'payment_date' => 'nullable|date',
             'transaction_id' => 'nullable|string',
             'notes' => 'nullable|string',
-        ]);
+        ], \App\Support\PaymentFailure::VALIDATION_MESSAGES);
 
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
@@ -1188,18 +1188,8 @@ class InvoiceController extends Controller
                 ]
             ]);
 
-        } catch (\RuntimeException $e) {
-            $invoice = Invoice::where('company_id', $user->company_id)->find($id);
-            return response()->json([
-                'message' => $e->getMessage(),
-                'invoice_total' => $invoice->total_amount ?? null,
-                'amount_paid' => $invoice?->getTotalAllocatedAmount(),
-                'balance_due' => $invoice?->outstanding(),
-                'attempted_payment' => $request->amount,
-            ], 400);
-        } catch (\Exception $e) {
-            Log::error('Failed to record payment', ['error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to record payment', 'error' => $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return \App\Support\PaymentFailure::response($e);
         }
     }
 

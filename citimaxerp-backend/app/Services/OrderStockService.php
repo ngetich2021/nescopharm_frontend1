@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\ProductVariant;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * An order takes its stock out of inventory as soon as a dispatch is raised for it (credit
@@ -95,7 +96,22 @@ class OrderStockService
                 ]);
                 $item->batch_allocations = $result['allocations'] ?: null;
                 $item->save();
-                $target->decrement('stock_quantity', $qty);
+                // Money is always received, so a short shelf can't refuse the receipt that triggers
+                // this: take what is there (stock can't go below zero) and log the shortfall.
+                $onShelf = (int) $target->newQuery()->whereKey($target->getKey())->lockForUpdate()->value('stock_quantity');
+                $take = min($qty, max(0, $onShelf));
+                if ($take > 0) {
+                    $target->decrement('stock_quantity', $take);
+                }
+                if ($take < $qty) {
+                    Log::warning('Order took less stock than ordered', [
+                        'order' => $order->order_number,
+                        'product_id' => $item->product_id,
+                        'variant_id' => $item->variant_id,
+                        'ordered' => $qty,
+                        'taken' => $take,
+                    ]);
+                }
                 $this->stampInvoiceLines($order, $item->product_id, $item->variant_id, $result['allocations']);
             }
 
@@ -117,7 +133,9 @@ class OrderStockService
             foreach ($order->orderItems as $item) {
                 if ($item->product && $item->product->track_inventory) {
                     $target = $item->variant_id ? ProductVariant::find($item->variant_id) : $item->product;
-                    $target?->increment('stock_quantity', (int) ($item->base_quantity ?: $item->quantity));
+                    // Only what its batches gave up comes back: a short order took less than it ordered.
+                    $taken = collect($item->batch_allocations ?? [])->sum(fn ($a) => (int) ($a['quantity'] ?? 0));
+                    $target?->increment('stock_quantity', $taken ?: (int) ($item->base_quantity ?: $item->quantity));
                 }
                 foreach ($item->batch_allocations ?? [] as $allocation) {
                     InventoryBatch::find($allocation['batch_id'] ?? null)?->restoreFromSale((int) $allocation['quantity'], [

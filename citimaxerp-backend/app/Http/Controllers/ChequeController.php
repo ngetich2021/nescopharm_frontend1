@@ -152,9 +152,13 @@ class ChequeController extends Controller
     {
         $direction = $request->input('direction', 'received');
 
-        return $direction === 'issued'
-            ? $this->storeIssued($request)
-            : $this->storeReceived($request);
+        try {
+            return $direction === 'issued'
+                ? $this->storeIssued($request)
+                : $this->storeReceived($request);
+        } catch (\Throwable $e) {
+            return \App\Support\PaymentFailure::response($e, 'This cheque');
+        }
     }
 
     /**
@@ -501,7 +505,7 @@ class ChequeController extends Controller
             } catch (\Exception $e) {
                 DB::rollBack();
                 Log::error('Failed to finalize cleared cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
-                return response()->json(['message' => 'Failed to clear cheque', 'error' => $e->getMessage()], 500);
+                return \App\Support\PaymentFailure::response($e, 'Clearing this cheque');
             }
 
             return response()->json([
@@ -570,11 +574,8 @@ class ChequeController extends Controller
                 'allocations' => $result['allocations'],
                 'left_as_credit' => $result['left_as_credit'],
             ]);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        } catch (\Exception $e) {
-            Log::error('Failed to approve cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to approve cheque', 'error' => $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return \App\Support\PaymentFailure::response($e, 'Approving this cheque');
         }
     }
 
@@ -691,11 +692,8 @@ class ChequeController extends Controller
 
         try {
             $result = app(\App\Services\ChequeBounceService::class)->bounceReceived($cheque, $user);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        } catch (\Exception $e) {
-            Log::error('Failed to bounce cheque', ['cheque_id' => $cheque->id, 'error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to mark cheque as bounced', 'error' => $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return \App\Support\PaymentFailure::response($e, 'Marking this cheque as bounced');
         }
 
         $reversed = collect($result['reversed'])->map(fn ($r) => number_format($r['amount'], 2) . ' back on ' . $r['invoice_number'])->implode(', ');

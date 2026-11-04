@@ -190,7 +190,7 @@ class PaymentController extends Controller
             'payment_date' => 'nullable|date',
             'status' => 'required|string',
             'generate_invoice' => 'sometimes|boolean',
-        ]);
+        ], \App\Support\PaymentFailure::VALIDATION_MESSAGES);
 
         if ($validator->fails()) {
             return response()->json([
@@ -287,10 +287,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
                 'queries' => DB::getQueryLog(),
             ]);
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Failed to create payment: ' . $e->getMessage(),
-            ], 500);
+            return \App\Support\PaymentFailure::response($e);
         }
     }
 
@@ -405,10 +402,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
                 'queries' => DB::getQueryLog(),
             ]);
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Failed to update payment: ' . $e->getMessage(),
-            ], 500);
+            return \App\Support\PaymentFailure::response($e, 'This change to the payment');
         }
     }
 
@@ -808,10 +802,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
                 'queries' => DB::getQueryLog(),
             ]);
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Failed to refund payment: ' . $e->getMessage(),
-            ], 500);
+            return \App\Support\PaymentFailure::response($e, 'This refund');
         }
     }
 
