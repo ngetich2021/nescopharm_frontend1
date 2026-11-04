@@ -195,8 +195,7 @@ body { font-family: 'Figtree'; background: #fff; }
         @endif
 
         <div class="footer">
-            <div>Payment Terms: {{ $invoice->payment_terms ?? 'Due on Receipt' }}</div>
-            <div style="margin-top: 8px; font-weight: bold; color: #111827;">All goods are subject to the enclosed Non-returnable policy</div>
+            <div style="font-weight: bold; color: #111827;">All goods are subject to the enclosed Non-returnable policy</div>
             <div style="margin-top: 8px;">Thank you for your business.</div>
         </div>
         

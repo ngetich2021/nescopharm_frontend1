@@ -11,7 +11,6 @@ import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/custo
 import { INVOICE_PAYMENT_DETAILS, COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { amountInWords } from "@/lib/number-to-words"
 import { documentCode } from "@/lib/price-codes"
-import { ScanMeFooter } from "@/components/scan-me-footer"
 
 export const RETURN_POLICY_LINE = "All goods are subject to the enclosed Non-returnable policy"
 export const RETURN_POLICY_IMAGE = "/company/return-policy.jpg"
@@ -238,7 +237,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                 const vatRate = parseFloat((item.tax_rate ?? 0).toString())
                 const unitPriceInclVat = parseFloat(item.unit_price.toString()) * (1 + vatRate / 100)
                 return (
-                  <tr key={item.id || index} className="leading-tight">
+                  <tr key={item.id || index} className="leading-tight break-inside-avoid">
                     <td className="border border-gray-300 px-1.5 py-1 print:py-0.5 text-gray-900 align-top">{index + 1}</td>
                     <td className="border border-gray-300 px-1.5 py-1 print:py-0.5 text-gray-900 align-top whitespace-nowrap font-mono text-xs">
                       {documentCode(item.metadata?.price_label, (item.product as any)?.item_number)}
@@ -277,84 +276,55 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                   </tr>
                 )
               })}
+              {/* Totals are the table's last rows, so they take no room of their own. Plain rows,
+                  not a tfoot, which the browser would repeat on every printed page. */}
+              {[
+                ...(parseFloat(invoice.discount_amount.toString()) > 0 || parseFloat(invoice.tax_amount.toString()) > 0
+                  ? [{ label: "Subtotal", value: formatAmount(invoice.subtotal) }]
+                  : []),
+                ...(parseFloat(invoice.discount_amount.toString()) > 0
+                  ? [{ label: "Discount", value: `-${formatAmount(invoice.discount_amount)}` }]
+                  : []),
+                ...(parseFloat(invoice.tax_amount.toString()) > 0
+                  ? [{ label: "VAT", value: formatAmount(invoice.tax_amount) }]
+                  : []),
+              ].map((row) => (
+                <tr key={row.label} className="leading-tight break-inside-avoid">
+                  <td colSpan={6} className="border border-gray-300 text-right px-1.5 py-0.5 text-gray-700">{row.label}</td>
+                  <td className="border border-gray-300 text-right px-1.5 py-0.5 text-gray-900 whitespace-nowrap">{row.value}</td>
+                </tr>
+              ))}
+              <tr className="leading-tight break-inside-avoid bg-gray-50">
+                <td colSpan={6} className="border border-gray-300 text-right px-1.5 py-0.5 font-bold text-gray-900">Total</td>
+                <td className="border border-gray-300 text-right px-1.5 py-0.5 font-bold text-gray-900 whitespace-nowrap">KSh {formatAmount(invoice.total_amount)}</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
-        {/* The totals and amount in words stay together; the payment details and the declaration
-            with its footer are each kept whole too. They are separate blocks, so whatever fits stays
-            on the page under the items rather than the whole lot jumping to a new page. */}
-        <div className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
-        {/* Totals Section */}
-        <div className="flex justify-end mb-2">
-          <div className="w-64 space-y-0.5">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Subtotal:</span>
-              <span className="text-gray-900">KES {formatAmount(invoice.subtotal)}</span>
-            </div>
-            {parseFloat(invoice.discount_amount.toString()) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Discount:</span>
-                <span className="text-green-600">-KES {formatAmount(invoice.discount_amount)}</span>
-              </div>
-            )}
-            {parseFloat(invoice.tax_amount.toString()) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">VAT:</span>
-                <span className="text-gray-900">KES {formatAmount(invoice.tax_amount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-base font-bold border-t-2 border-gray-300 pt-1">
-              <span>Total:</span>
-              <span>KES {formatAmount(invoice.total_amount)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Amount Paid:</span>
-              <span className="text-green-600">KES {formatAmount(invoice.amount_paid)}</span>
-            </div>
-            <div className="flex justify-between text-base font-semibold">
-              <span>Balance Due:</span>
-              <span className={parseFloat(invoice.balance_amount.toString()) > 0 ? "text-red-600" : "text-green-600"}>
-                KES {formatAmount(invoice.balance_amount)}
-              </span>
-            </div>
-          </div>
-        </div>
-
         {/* Amount Chargeable (in words) */}
-        <div className="mb-2 pt-1.5 border-t border-gray-200 flex justify-between items-start gap-4">
+        <div className="mb-1.5 flex justify-between items-start gap-4 break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
           <div>
-            <p className="text-xs font-semibold text-gray-600">Amount Chargeable (in words)</p>
-            <p className="text-sm font-medium text-gray-900">{amountInWords(invoice.total_amount)}</p>
+            <p className="text-[11px] font-semibold text-gray-600">Amount Chargeable (in words)</p>
+            <p className="text-xs font-medium text-gray-900">{amountInWords(invoice.total_amount)}</p>
           </div>
           <p className="text-xs text-gray-500 italic whitespace-nowrap">E. &amp; O.E</p>
         </div>
-        </div>
 
-        {/* Notes & Payment Terms */}
-        {(invoice.notes || invoice.payment_terms) && (
-          <div className="border-t border-gray-200 pt-1.5 space-y-1">
-            {invoice.payment_terms && (
-              <div>
-                <p className="text-xs font-semibold text-gray-700">Payment Terms</p>
-                <p className="text-sm text-gray-600">{invoice.payment_terms}</p>
-              </div>
-            )}
-            {invoice.notes && (
-              <div>
-                <p className="text-xs font-semibold text-gray-700">Notes</p>
-                <p className="text-sm text-gray-600">{invoice.notes}</p>
-              </div>
-            )}
+        {invoice.notes && (
+          <div className="mb-1.5 text-xs">
+            <span className="font-semibold text-gray-700">Notes: </span>
+            <span className="text-gray-600">{invoice.notes}</span>
           </div>
         )}
 
-        {/* Company KRA PIN & Payment Details - always shown, side by side, kept whole on one
+        {/* Company KRA PIN & Payment Details, with the "Scan me!" QR beside them - kept whole on one
             printed page (never split across a page break) and compact to save space. */}
         {(() => {
           const c = company || (invoice.company as Company | undefined)
           return (
-            <div className="mt-2 border border-gray-300 text-[11px] leading-tight break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-stretch gap-2 break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex-1 min-w-0 border border-gray-300 text-[11px] leading-tight">
               <p className="bg-gray-50 border-b border-gray-300 px-2 py-0.5 font-bold text-gray-800">
                 {(c?.name || 'COMPANY').toUpperCase()} PAYMENT DETAILS
               </p>
@@ -379,28 +349,29 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                 </div>
               </div>
             </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/scan-me.jpg" alt="Scan me" width={64} height={64} className="h-16 w-16 print:h-14 print:w-14 shrink-0 self-center" />
+            </div>
           )
         })()}
 
         {/* Declaration & Signature */}
         <div className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
-        <div className="mt-2 pt-1.5 border-t border-gray-200 flex justify-between items-end gap-8">
+        <div className="mt-1.5 flex justify-between items-end gap-8">
           <div className="max-w-sm">
-            <p className="text-xs font-semibold text-gray-700 mb-1">Declaration</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-[11px] font-semibold text-gray-700">Declaration</p>
+            <p className="text-[11px] leading-tight text-gray-500">
               We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
             </p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-700 mb-6">for {company?.name || invoice.company?.name || 'the Company'}</p>
-            <p className="text-xs text-gray-500 border-t border-gray-300 pt-1">Authorised Signatory</p>
+            <p className="text-xs text-gray-700 mb-5">for {company?.name || invoice.company?.name || 'the Company'}</p>
+            <p className="text-[11px] text-gray-500 border-t border-gray-300 pt-0.5">Authorised Signatory</p>
           </div>
         </div>
 
         {/* Footer */}
-        <ScanMeFooter className="mt-2 pt-1 border-t border-gray-200 text-center text-xs text-gray-500">
-          <p>Thank you for your business! · This is a Computer Generated Invoice</p>
-        </ScanMeFooter>
+        <p className="mt-1 text-center text-[11px] text-gray-500">Thank you for your business! · This is a Computer Generated Invoice</p>
         </div>
       </Card>
 
