@@ -94,7 +94,7 @@ export function RecordPaymentModal({
 
         toast({
           title: "Cheque recorded",
-          description: "It's pending until approved on maturity, from Sales > Cheques.",
+          description: "It's pending until approved on maturity, from Sales > Cheques. It then pays the customer's oldest invoices first.",
         })
 
         onPaymentRecorded?.(null)
@@ -171,13 +171,9 @@ export function RecordPaymentModal({
                 placeholder="0.00"
                 required
               />
-              {formData.amount > balanceAmount + 0.005 && (
-                <p className="text-xs text-muted-foreground">
-                  {balanceAmount > 0.005 ? `KES ${balanceAmount.toFixed(2)} pays this invoice; the` : "The"} other
-                  KES {(formData.amount - Math.max(0, balanceAmount)).toFixed(2)} goes to the customer&apos;s oldest unpaid
-                  invoices, and anything left is kept as their credit.
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                This pays the customer&apos;s oldest unpaid invoices first, which may not be this one. Anything left is kept as their credit.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="payment_date">Payment Date *</Label>
@@ -248,7 +244,7 @@ export function RecordPaymentModal({
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  This cheque will be recorded as pending and only applied to the invoice once approved on/after this date.
+                  This cheque will be recorded as pending and only applied, oldest invoice first, once approved on/after this date.
                 </p>
                 <p className="text-xs text-amber-700">
                   Late payment beyond the credit period attracts a 3% charge on the outstanding amount.

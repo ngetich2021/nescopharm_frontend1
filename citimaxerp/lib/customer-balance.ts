@@ -95,8 +95,6 @@ export interface ReceiveOnAccountRequest {
   payment_date?: string
   transaction_id?: string
   notes?: string
-  // Omit to apply oldest invoice first.
-  allocations?: AccountSplitLine[]
 }
 
 export interface ChequeOnAccountRequest {
@@ -108,7 +106,6 @@ export interface ChequeOnAccountRequest {
   maturity_date: string
   notes?: string
   attachment?: File | null
-  allocations?: AccountSplitLine[]
 }
 
 export async function fetchCustomerAccountBalance(customerId: string): Promise<CustomerAccountBalance> {
@@ -221,16 +218,12 @@ export async function deleteCustomerReceipt(customerId: string, paymentId: strin
   return { message: response.message }
 }
 
-// A PD cheque on the customer's account, spread over several invoices once it is approved.
+// A PD cheque on the customer's account; once approved it pays their oldest invoices first.
 export async function recordChequeOnAccount(data: ChequeOnAccountRequest): Promise<{ message: string }> {
-  const { attachment, allocations, ...fields } = data
+  const { attachment, ...fields } = data
   const formData = new FormData()
   Object.entries(fields).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") formData.append(key, String(value))
-  })
-  allocations?.forEach((line, i) => {
-    formData.append(`allocations[${i}][invoice_id]`, line.invoice_id)
-    formData.append(`allocations[${i}][amount]`, String(line.amount))
   })
   if (attachment) formData.append("attachment", attachment)
 

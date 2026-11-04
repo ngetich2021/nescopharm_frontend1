@@ -33,11 +33,6 @@ class PaymentFailure
         'payment_method.in' => 'The payment method must be Cash, M-Pesa Paybill or Bank Transfer. Record a cheque from the cheque option.',
         'payment_date.date' => 'Enter a valid payment date.',
         'transaction_id.max' => 'The reference is too long: use 255 characters or fewer.',
-        'allocations.*.invoice_id.required_with' => 'Each line of the split needs an invoice.',
-        'allocations.*.invoice_id.uuid' => 'One of the invoices in the split is not valid. Reopen the form and try again.',
-        'allocations.*.amount.required_with' => 'Each line of the split needs an amount.',
-        'allocations.*.amount.numeric' => 'Each amount in the split must be a number.',
-        'allocations.*.amount.min' => 'Each amount in the split must be more than zero.',
     ];
 
     /** @param string $what What failed, as the start of a sentence: "This payment", "This cheque". */

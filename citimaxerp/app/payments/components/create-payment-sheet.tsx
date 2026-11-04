@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { createPayment } from "@/lib/payments"
-import { fetchInvoices, recordInvoicePayment, type Invoice } from "@/lib/invoices"
 import { getCustomers, Customer, getCustomerDisplayName } from "@/lib/customers"
 import { formatCurrency } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
@@ -38,7 +37,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     customer_id: "",
-    invoice_id: "",
     amount_paid: "",
     payment_date: new Date().toISOString().split("T")[0],
     payment_method: "mpesa",
@@ -47,7 +45,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
   })
 
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loadingCustomers, setLoadingCustomers] = useState(false)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [customerSearch, setCustomerSearch] = useState("");
@@ -56,7 +53,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
   useEffect(() => {
     if (isOpen) {
       fetchCustomers()
-      fetchOutstandingInvoices()
     }
   }, [isOpen])
 
@@ -86,25 +82,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
       setCustomers([])
     } finally {
       setLoadingCustomers(false)
-    }
-  }
-
-  const fetchOutstandingInvoices = async () => {
-    setLoadingInvoices(true)
-    try {
-      const { data } = await fetchInvoices()
-      // Only invoices that still owe something are worth paying against here
-      setInvoices((data || []).filter(inv => parseFloat(String(inv.balance_amount ?? 0)) > 0))
-    } catch (error: any) {
-      console.error('Error fetching invoices for payments:', error)
-      toast({
-        title: "Error",
-        description: `Failed to load invoices: ${error.message || 'Please try again.'}`,
-        variant: "destructive",
-      })
-      setInvoices([])
-    } finally {
-      setLoadingInvoices(false)
     }
   }
 
@@ -143,24 +120,10 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
     }
   }, [formData.customer_id])
 
-  const filteredInvoices: OpenInvoiceOption[] = customerInvoices ?? invoices.map((inv) => ({
-    id: inv.id,
-    invoice_number: inv.invoice_number,
-    customer_id: inv.customer_id,
-    due_date: inv.due_date ?? null,
-    balance: parseFloat(String(inv.balance_amount)),
-  }))
+  const openInvoices: OpenInvoiceOption[] = customerInvoices ?? []
 
-  const selectedInvoice = filteredInvoices.find((inv) => inv.id === formData.invoice_id)
-  const selectedInvoiceBalance = selectedInvoice ? selectedInvoice.balance : null
-  // A customer's payment with no invoice picked is applied to their oldest unpaid invoices first.
-  const receivingOnAccount = !formData.invoice_id && !!formData.customer_id && formData.status === "completed"
-
-  // Money is always received: more than the invoice owes goes to the customer's oldest unpaid
-  // invoices, and what is left after that is kept as their credit.
-  const overInvoice = selectedInvoiceBalance !== null && Number(formData.amount_paid) > selectedInvoiceBalance + 0.005
-    ? Number(formData.amount_paid) - selectedInvoiceBalance
-    : 0
+  // A customer's payment always pays their oldest unpaid invoices first.
+  const receivingOnAccount = !!formData.customer_id && formData.status === "completed"
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -168,17 +131,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
 
     try {
       let message = "Payment recorded successfully"
-      if (formData.invoice_id) {
-        // Settling a specific invoice - reuse the same path the invoice's own
-        // "Record Payment" uses, so balance/status tracking stays consistent.
-        const result = await recordInvoicePayment(formData.invoice_id, {
-          amount: Number(formData.amount_paid),
-          payment_method: formData.payment_method,
-          payment_date: formData.payment_date,
-          transaction_id: formData.transaction_id || undefined,
-        })
-        message = result.message || message
-      } else if (receivingOnAccount) {
+      if (receivingOnAccount) {
         const result = await receiveOnAccount(formData.customer_id, {
           amount: Number(formData.amount_paid),
           payment_method: formData.payment_method,
@@ -187,7 +140,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
         })
         message = result.message || message
       } else {
-        // No invoice selected - a standalone payment not tied to anything specific
+        // No customer, or not yet received - a standalone payment not tied to anything specific
         const payloadData: any = {
           amount_paid: Number(formData.amount_paid),
           payment_method: formData.payment_method,
@@ -213,8 +166,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
 
       // Reset form
       setFormData({
-        customer_id: "",
-        invoice_id: "",
+    customer_id: "",
         amount_paid: "",
         payment_date: new Date().toISOString().split("T")[0],
         payment_method: "mpesa",
@@ -246,7 +198,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
             <Label htmlFor="customer_id">Customer (Optional)</Label>
             <Select
               value={formData.customer_id}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, customer_id: value, invoice_id: "" }))}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, customer_id: value }))}
               onOpenChange={(open) => {
                 if (open && customers.length === 0 && !loadingCustomers) {
                   console.log('Customer select opened, fetching customers...')
@@ -296,55 +248,15 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="invoice_id">Invoice (Optional)</Label>
-            <Select
-              value={formData.invoice_id}
-              onValueChange={(value) => {
-                const picked = filteredInvoices.find((inv) => inv.id === value)
-                setFormData((prev) => ({
-                  ...prev,
-                  invoice_id: value,
-                  customer_id: prev.customer_id || picked?.customer_id || prev.customer_id,
-                  amount_paid: prev.amount_paid || (picked ? String(picked.balance) : prev.amount_paid),
-                }))
-              }}
-              onOpenChange={(open) => {
-                if (open && invoices.length === 0 && !loadingInvoices) {
-                  fetchOutstandingInvoices()
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select an invoice to settle" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                {loadingInvoices ? (
-                  <SelectItem value="loading" disabled>
-                    Loading invoices...
-                  </SelectItem>
-                ) : filteredInvoices.length > 0 ? (
-                  filteredInvoices.map((invoice) => (
-                    <SelectItem key={invoice.id} value={invoice.id}>
-                      #{invoice.invoice_number} — {formatCurrency(invoice.balance)} owed
-                      {invoice.due_date ? ` · due ${new Date(invoice.due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}
-                      {invoice.overdue ? " · overdue" : ""}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="none" disabled>
-                    {formData.customer_id ? "This customer has no unpaid invoices" : "No outstanding invoices"}
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            {formData.customer_id && !loadingInvoices && filteredInvoices.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {filteredInvoices.length} unpaid invoice{filteredInvoices.length === 1 ? "" : "s"}, oldest first
-                ({formatCurrency(filteredInvoices.reduce((sum, inv) => sum + inv.balance, 0))} owed in total).
-              </p>
-            )}
-          </div>
+          {formData.customer_id && (
+            <p className="text-xs text-muted-foreground">
+              {loadingInvoices
+                ? "Loading what this customer owes..."
+                : openInvoices.length > 0
+                  ? `Owes ${formatCurrency(openInvoices.reduce((sum, inv) => sum + inv.balance, 0))} on ${openInvoices.length} invoice${openInvoices.length === 1 ? "" : "s"}, paid oldest first${openInvoices[0] ? ` (next: #${openInvoices[0].invoice_number})` : ""}.`
+                  : "This customer has no unpaid invoices: the payment is kept as their credit."}
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -359,12 +271,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                 onChange={handleChange}
                 required
               />
-              {selectedInvoiceBalance !== null && (
-                <p className="text-xs text-muted-foreground">
-                  Balance owed on this invoice: {formatCurrency(selectedInvoiceBalance)}
-                  {overInvoice > 0 && `. The other ${formatCurrency(overInvoice)} goes to the customer's oldest unpaid invoices; anything left is kept as their credit.`}
-                </p>
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="payment_date">Payment Date</Label>
@@ -395,7 +301,7 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Paying by cheque? Record it from the invoice's "Record Payment" instead — cheques stay pending until they clear.
+              Paying by cheque? Record it from the customer's Account tab or an invoice's "Record Payment" instead — cheques stay pending until they clear.
             </p>
           </div>
 
@@ -411,18 +317,12 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
             />
           </div>
 
-          {formData.invoice_id && (
-            <p className="text-xs text-muted-foreground">
-              This payment will be applied to the selected invoice's balance immediately.
-            </p>
-          )}
           {receivingOnAccount && (
             <p className="text-xs text-muted-foreground">
-              No invoice picked: the payment pays this customer's oldest unpaid invoices first, and anything over what they owe is kept as their credit.
+              The payment pays this customer's oldest unpaid invoices first, and anything over what they owe is kept as their credit.
             </p>
           )}
-          {!formData.invoice_id && (
-            <div className="space-y-2">
+          <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
               <Select value={formData.status} onValueChange={(value) => handleSelectChange("status", value)}>
                 <SelectTrigger className="w-full">
@@ -435,7 +335,6 @@ export function CreatePaymentSheet({ isOpen, onOpenChange, onPaymentCreated }: C
                 </SelectContent>
               </Select>
             </div>
-          )}
 
           <SheetFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>

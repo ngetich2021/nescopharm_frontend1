@@ -32,8 +32,6 @@ export function MapPaymentModal({
 }: MapPaymentModalProps) {
   const [allPayments, setAllPayments] = useState<AccountUnappliedPayment[]>([])
   const [selectedPaymentId, setSelectedPaymentId] = useState("")
-  const [applyAmount, setApplyAmount] = useState<number>(0)
-  const [maxApplyAmount, setMaxApplyAmount] = useState<number>(0)
   const [isLoadingPayments, setIsLoadingPayments] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -75,18 +73,6 @@ export function MapPaymentModal({
     )
   }, [allPayments, searchQuery])
 
-  useEffect(() => {
-    const selectedPayment = allPayments.find(p => p.id === selectedPaymentId)
-    if (selectedPayment) {
-      const maxAmount = Math.min(selectedPayment.available, balanceAmount)
-      setMaxApplyAmount(maxAmount)
-      setApplyAmount(maxAmount)
-    } else {
-      setMaxApplyAmount(0)
-      setApplyAmount(0)
-    }
-  }, [selectedPaymentId, allPayments, balanceAmount])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -99,37 +85,18 @@ export function MapPaymentModal({
       return
     }
 
-    if (applyAmount <= 0) {
-      toast({
-        title: "Error",
-        description: "Apply amount must be greater than zero",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (applyAmount > maxApplyAmount) {
-      toast({
-        title: "Error",
-        description: `Apply amount cannot exceed ${maxApplyAmount.toFixed(2)}`,
-        variant: "destructive",
-      })
-      return
-    }
-
     setIsSubmitting(true)
 
     try {
       const mappingRequest: MapPaymentRequest = {
-        payment_id: selectedPaymentId,
-        apply_amount: applyAmount
+        payment_id: selectedPaymentId
       }
 
       const result = await mapPaymentToInvoice(invoiceId, mappingRequest)
 
       toast({
         title: "Success",
-        description: "Payment mapped to invoice successfully",
+        description: result.message || "Payment applied, oldest invoice first",
       })
 
       onPaymentMapped?.(result)
@@ -137,7 +104,6 @@ export function MapPaymentModal({
 
       // Reset form
       setSelectedPaymentId("")
-      setApplyAmount(0)
     } catch (error: any) {
       toast({
         title: "Error",
@@ -154,7 +120,6 @@ export function MapPaymentModal({
       // Reset search when closing
       setSearchQuery("")
       setSelectedPaymentId("")
-      setApplyAmount(0)
       onClose()
     }
   }
@@ -345,25 +310,9 @@ export function MapPaymentModal({
             </div>
           )}
 
-          {selectedPaymentId && (
-            <div className="space-y-2">
-              <Label htmlFor="apply_amount">Amount to Apply *</Label>
-              <Input
-                id="apply_amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={maxApplyAmount}
-                value={applyAmount}
-                onChange={(e) => setApplyAmount(parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                required
-              />
-              <div className="text-xs text-muted-foreground">
-                Maximum: {formatCurrency(maxApplyAmount)}
-              </div>
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            The payment&apos;s unused money pays this customer&apos;s oldest unpaid invoices first, which may not be this one.
+          </p>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

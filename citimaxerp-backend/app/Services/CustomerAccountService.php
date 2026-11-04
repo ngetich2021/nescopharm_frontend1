@@ -202,9 +202,8 @@ class CustomerAccountService
     }
 
     /**
-     * Receive money from the customer on account: one receipt, spread over their open invoices.
-     * $split is [{invoice_id, amount}] when the person chose it; otherwise oldest invoice first.
-     * Any amount not placed on an invoice stays on the receipt as the customer's credit.
+     * Receive money from the customer: one receipt, which always pays their oldest unpaid invoice
+     * first, through to the newest. Anything left stays on the receipt as the customer's credit.
      */
     public function receive(
         Customer $customer,
@@ -214,13 +213,12 @@ class CustomerAccountService
         ?string $paymentDate = null,
         ?string $reference = null,
         ?string $notes = null,
-        ?array $split = null,
     ): array {
         if ($amount <= 0) {
             throw new RuntimeException('Amount must be more than zero');
         }
 
-        return DB::transaction(function () use ($customer, $user, $amount, $method, $paymentDate, $reference, $notes, $split) {
+        return DB::transaction(function () use ($customer, $user, $amount, $method, $paymentDate, $reference, $notes) {
             $payment = Payment::create([
                 'id' => (string) Str::uuid(),
                 'order_id' => null,
@@ -233,7 +231,7 @@ class CustomerAccountService
                 'payment_date' => $paymentDate ?? now()->toDateString(),
             ]);
 
-            $allocations = $this->allocate($payment, $split, $notes ?: 'Received on account');
+            $allocations = $this->allocate($payment, null, $notes ?: 'Received on account');
 
             return [
                 'payment' => $payment->fresh(),
@@ -245,9 +243,9 @@ class CustomerAccountService
     }
 
     /**
-     * Money received against one invoice that is more than it owes: the invoice is paid off, the
-     * rest goes on the customer's oldest unpaid invoices, and what is still left is their credit.
-     * Money is always taken; nothing is refused for being too much.
+     * Money recorded from one invoice's screen: it is a receipt like any other, so it pays the
+     * customer's oldest unpaid invoices first, whichever invoice it was recorded from. Money is
+     * always taken; nothing is refused for being too much.
      */
     public function receiveOnInvoice(
         Invoice $invoice,
@@ -260,19 +258,16 @@ class CustomerAccountService
     ): array {
         $customer = Customer::where('company_id', $invoice->company_id)->findOrFail($invoice->customer_id);
 
-        return DB::transaction(function () use ($invoice, $customer, $user, $amount, $method, $paymentDate, $reference, $notes) {
-            $owed = max(0, $invoice->outstanding());
-            $split = $owed > 0.005 ? [['invoice_id' => $invoice->id, 'amount' => min($owed, $amount)]] : [];
-            $result = $this->receive($customer, $user, $amount, $method, $paymentDate, $reference, $notes ?: "Received on {$invoice->invoice_number}", $split);
-            if ($result['left_as_credit'] > 0.005) {
-                $more = $this->allocate($result['payment'], null, "Received on {$invoice->invoice_number}, rest applied to the oldest unpaid invoices");
-                $result['allocations'] = array_merge($result['allocations'], $more);
-                $result['allocated'] = round(array_sum(array_column($result['allocations'], 'amount')), 2);
-                $result['left_as_credit'] = round($amount - $result['allocated'], 2);
-            }
+        return $this->receive($customer, $user, $amount, $method, $paymentDate, $reference, $notes ?: "Recorded from {$invoice->invoice_number}");
+    }
 
-            return $result;
-        });
+    /** Where a receipt's money went, for the message: "100.00 on NSK/0067, 50.00 on NSK/0068; 20.00 kept as customer credit". */
+    public function describeApplied(array $allocations, float $leftAsCredit): string
+    {
+        $placed = collect($allocations)->map(fn ($a) => number_format($a['amount'], 2) . ' on ' . $a['invoice_number'])->implode(', ');
+        $credit = $leftAsCredit > 0.005 ? number_format($leftAsCredit, 2) . ' kept as customer credit' : '';
+
+        return implode('; ', array_filter([$placed, $credit]));
     }
 
     /**

@@ -86,17 +86,9 @@ class CustomerBalanceController extends Controller
             'payment_date' => 'nullable|date',
             'transaction_id' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
-            'allocations' => 'nullable|array',
-            'allocations.*.invoice_id' => 'required_with:allocations|uuid',
-            'allocations.*.amount' => 'required_with:allocations|numeric|min:0.01',
         ], PaymentFailure::VALIDATION_MESSAGES);
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
-        }
-
-        $split = $request->has('allocations') ? (array) $request->input('allocations') : null;
-        if ($split !== null && array_sum(array_column($split, 'amount')) > (float) $request->amount + 0.01) {
-            return response()->json(['message' => 'The split adds up to more than the amount received'], 422);
         }
 
         try {
@@ -109,15 +101,13 @@ class CustomerBalanceController extends Controller
                 $request->payment_date,
                 $request->transaction_id,
                 $request->notes,
-                $split,
             );
         } catch (\Throwable $e) {
             return PaymentFailure::response($e);
         }
 
         return response()->json([
-            'message' => 'Payment recorded: ' . number_format($result['allocated'], 2) . ' applied to invoices'
-                . ($result['left_as_credit'] > 0.005 ? ', ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
+            'message' => 'Payment recorded: ' . $this->accounts->describeApplied($result['allocations'], $result['left_as_credit']),
             'data' => $result,
             'account' => $this->accounts->summary($customer->company_id, $customer->id),
         ], 201);

@@ -61,6 +61,8 @@ export function PaymentAllocationModal({
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
+  // A customer's payment always goes oldest invoice first; only one with no customer is placed by hand.
+  const oldestFirst = !!payment?.customer_id
 
   useEffect(() => {
     if (isOpen && payment) {
@@ -196,7 +198,7 @@ export function PaymentAllocationModal({
       allocation.invoice_id && allocation.amount > 0
     )
 
-    if (validAllocations.length === 0) {
+    if (!oldestFirst && validAllocations.length === 0) {
       toast({
         title: "Error",
         description: "Please add at least one valid allocation.",
@@ -228,7 +230,7 @@ export function PaymentAllocationModal({
       
       toast({
         title: "Success",
-        description: `Successfully allocated payment to ${validAllocations.length} invoice(s).`,
+        description: result.message || `Successfully allocated payment to ${validAllocations.length} invoice(s).`,
       })
 
       onAllocationComplete?.(result)
@@ -238,7 +240,7 @@ export function PaymentAllocationModal({
       console.error('Error allocating payment:', error)
       toast({
         title: "Error",
-        description: "Failed to allocate payment. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to allocate payment. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -305,8 +307,14 @@ export function PaymentAllocationModal({
             </CardContent>
           </Card>
 
+          {oldestFirst && (
+            <p className="text-sm text-muted-foreground">
+              This payment&apos;s unused money pays the customer&apos;s oldest unpaid invoices first, through to the newest. Anything left stays as their credit.
+            </p>
+          )}
+
           {/* Invoice Allocations */}
-          <Card>
+          {!oldestFirst && <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Invoice Allocations</CardTitle>
               <Button onClick={addAllocation} size="sm" className="bg-[#1E2764] hover:bg-[#1E2764]/90">
@@ -411,7 +419,7 @@ export function PaymentAllocationModal({
                 </div>
               ) : null}
             </CardContent>
-          </Card>
+          </Card>}
 
           {/* Allocation Summary */}
           {allocations.length > 0 && (
@@ -457,7 +465,7 @@ export function PaymentAllocationModal({
           </Button>
           <Button 
             onClick={handleSubmit} 
-            disabled={submitting || allocations.length === 0 || totalAllocated === 0 || remainingAmount < 0}
+            disabled={submitting || (oldestFirst ? availableAmount <= 0 : allocations.length === 0 || totalAllocated === 0 || remainingAmount < 0)}
             className="bg-primary hover:bg-primary/90"
           >
             {submitting ? (

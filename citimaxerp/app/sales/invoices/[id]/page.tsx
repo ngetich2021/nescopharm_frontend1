@@ -262,11 +262,6 @@ export default function InvoiceDetailPage() {
     if (params.id) {
       await loadInvoice(params.id as string);
     }
-    
-    toast({
-      title: "Success",
-      description: "Payment recorded successfully",
-    });
   }
 
   const handlePaymentMapped = async () => {
@@ -276,11 +271,6 @@ export default function InvoiceDetailPage() {
     if (params.id) {
       await loadInvoice(params.id as string);
     }
-    
-    toast({
-      title: "Success",
-      description: "Payment mapped to invoice successfully",
-    });
   }
 
   const getStatusColor = getInvoiceStatusColor

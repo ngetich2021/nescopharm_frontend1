@@ -337,7 +337,6 @@ export interface RecordPaymentRequest {
 
 export interface MapPaymentRequest {
   payment_id: string;
-  apply_amount?: number;
 }
 
 export interface InvoicePayment {
@@ -400,6 +399,8 @@ export interface PaymentRecordResponse {
 }
 
 export interface PaymentMappingResponse {
+  // Where the money went: a customer's payment pays their oldest invoices first.
+  message?: string;
   invoice: {
     id: string;
     invoice_number: string;
@@ -439,6 +440,8 @@ export interface PaymentAllocation {
 }
 
 export interface BulkAllocationResponse {
+  // Where the money went: a customer's payment pays their oldest invoices first.
+  message?: string;
   payment: {
     id: string;
     total_amount: string;

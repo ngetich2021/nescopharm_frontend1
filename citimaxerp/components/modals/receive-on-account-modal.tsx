@@ -39,9 +39,8 @@ function oldestFirst(invoices: AccountOpenInvoice[], amount: number): Record<str
 }
 
 /**
- * One payment or PD cheque from a customer, spread over several of their invoices. The split
- * starts oldest invoice first and can be changed line by line; anything not placed on an
- * invoice stays with the customer as credit.
+ * One payment or PD cheque from a customer. It always pays their oldest invoice first, through to
+ * the newest; the table only shows where it will go. Anything left stays with them as credit.
  */
 export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerName, openInvoices, onRecorded }: ReceiveOnAccountModalProps) {
   const [amount, setAmount] = useState(0)
@@ -53,8 +52,6 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
   const [bankName, setBankName] = useState("")
   const [maturityDate, setMaturityDate] = useState("")
   const [attachment, setAttachment] = useState<File | null>(null)
-  const [split, setSplit] = useState<Record<string, number>>({})
-  const [manualSplit, setManualSplit] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const isCheque = method === "cheque"
@@ -71,15 +68,10 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
       setBankName("")
       setMaturityDate("")
       setAttachment(null)
-      setManualSplit(false)
-      setSplit(oldestFirst(openInvoices, owed))
     }
-  }, [isOpen, openInvoices, owed])
+  }, [isOpen, owed])
 
-  useEffect(() => {
-    if (!manualSplit) setSplit(oldestFirst(openInvoices, amount))
-  }, [amount, manualSplit, openInvoices])
-
+  const split = useMemo(() => oldestFirst(openInvoices, amount), [openInvoices, amount])
   const applied = round2(Object.values(split).reduce((s, v) => s + (v || 0), 0))
   const leftAsCredit = round2(amount - applied)
 
@@ -89,14 +81,7 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
 
     if (!method) return fail("Please select a payment method")
     if (amount <= 0) return fail("Amount must be greater than zero")
-    if (leftAsCredit < -0.005) return fail("The split adds up to more than the amount received")
-    const over = openInvoices.find((i) => (split[i.id] || 0) > i.balance + 0.005)
-    if (over) return fail(`Invoice ${over.invoice_number} only owes ${formatCurrency(over.balance)}`)
     if (isCheque && (!chequeNumber || !bankName || !maturityDate)) return fail("Please provide the cheque number, bank name, and maturity date")
-
-    const allocations = openInvoices
-      .filter((i) => (split[i.id] || 0) > 0)
-      .map((i) => ({ invoice_id: i.id, amount: round2(split[i.id]) }))
 
     setIsSubmitting(true)
     try {
@@ -110,7 +95,6 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
             maturity_date: maturityDate,
             notes: notes || undefined,
             attachment,
-            allocations,
           })
         : await receiveOnAccount(customerId, {
             amount,
@@ -118,7 +102,6 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
             payment_date: paymentDate,
             transaction_id: reference || undefined,
             notes: notes || undefined,
-            allocations,
           })
       toast({ title: isCheque ? "Cheque recorded" : "Payment recorded", description: result.message })
       onRecorded?.()
@@ -204,14 +187,7 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
           )}
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Apply to invoices</Label>
-              {manualSplit && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setManualSplit(false)}>
-                  Reset to oldest first
-                </Button>
-              )}
-            </div>
+            <Label>Where it goes (oldest invoice first)</Label>
             {openInvoices.length === 0 ? (
               <p className="text-sm text-muted-foreground rounded-md border p-3">
                 No open invoices. The whole amount will be kept as the customer&apos;s credit.
@@ -225,7 +201,7 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
                       <TableHead>Invoice</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Balance</TableHead>
-                      <TableHead className="text-right w-40">Apply</TableHead>
+                      <TableHead className="text-right w-40">Will pay</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -238,20 +214,7 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
                         </TableCell>
                         <TableCell>{inv.invoice_date ? formatDate(inv.invoice_date) : "—"}</TableCell>
                         <TableCell className="text-right">{formatCurrency(inv.balance)}</TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max={inv.balance}
-                            className="h-8 text-right"
-                            value={split[inv.id] ?? 0}
-                            onChange={(e) => {
-                              setManualSplit(true)
-                              setSplit((prev) => ({ ...prev, [inv.id]: parseFloat(e.target.value) || 0 }))
-                            }}
-                          />
-                        </TableCell>
+                        <TableCell className="text-right">{formatCurrency(split[inv.id] ?? 0)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -260,9 +223,7 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
             )}
             <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 text-sm">
               <span>Applied: <strong>{formatCurrency(applied)}</strong></span>
-              <span className={leftAsCredit < -0.005 ? "text-red-600" : ""}>
-                {leftAsCredit < -0.005 ? "Over by" : "Kept as customer credit"}: <strong>{formatCurrency(Math.abs(leftAsCredit))}</strong>
-              </span>
+              <span>Kept as customer credit: <strong>{formatCurrency(leftAsCredit)}</strong></span>
             </div>
           </div>
 

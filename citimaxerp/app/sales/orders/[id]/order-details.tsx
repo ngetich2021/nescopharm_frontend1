@@ -633,16 +633,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
     try {
       const invoice = await fetchInvoiceByOrderId(order.id);
       setOrderInvoice(invoice);
-      
-      toast({
-        title: "Success",
-        description: "Payment recorded successfully.",
-      });
     } catch (error: any) {
-      toast({
-        title: "Success", 
-        description: "Payment recorded successfully. Please refresh to see the latest data.",
-      });
+      console.error("Failed to reload the invoice after a payment", error);
     }
   }
 
@@ -653,16 +645,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
     try {
       const invoice = await fetchInvoiceByOrderId(order.id);
       setOrderInvoice(invoice);
-      
-      toast({
-        title: "Success",
-        description: "Payment mapped to invoice successfully.",
-      });
     } catch (error: any) {
-      toast({
-        title: "Success",
-        description: "Payment mapped successfully. Please refresh to see the latest data.",
-      });
+      console.error("Failed to reload the invoice after a payment", error);
     }
   }
 

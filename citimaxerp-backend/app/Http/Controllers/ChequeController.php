@@ -170,9 +170,6 @@ class ChequeController extends Controller
             // Against one invoice, or on the customer's account (spread over their invoices).
             'invoice_id' => 'required_without:customer_id|nullable|uuid',
             'customer_id' => 'required_without:invoice_id|nullable|uuid',
-            'allocations' => 'nullable|array',
-            'allocations.*.invoice_id' => 'required_with:allocations|uuid',
-            'allocations.*.amount' => 'required_with:allocations|numeric|min:0.01',
             'cheque_number' => 'required|string|max:100',
             'bank_name' => 'required|string|max:150',
             'amount' => 'required|numeric|min:0.01',
@@ -192,10 +189,16 @@ class ChequeController extends Controller
 
         $invoice = Invoice::where('company_id', $user->company_id)->findOrFail($request->invoice_id);
 
-        // More than the invoice owes is accepted for a known customer: on approval the rest pays
-        // their oldest unpaid invoices and what is left is their credit.
+        // A customer's cheque pays their oldest unpaid invoices first, whichever invoice it was
+        // recorded from.
+        if ($invoice->customer_id) {
+            $request->merge(['customer_id' => $invoice->customer_id]);
+
+            return $this->storeReceivedOnAccount($request);
+        }
+
         $balance = $invoice->total_amount - $invoice->getTotalAllocatedAmount() - (float) $invoice->amount_credited;
-        if (!$invoice->customer_id && $request->amount > $balance) {
+        if ($request->amount > $balance) {
             return response()->json([
                 'message' => 'Cheque amount exceeds invoice balance',
                 'balance_due' => $balance,
@@ -232,8 +235,8 @@ class ChequeController extends Controller
 
     /**
      * One cheque covering several of a customer's invoices (or more than they owe). It is kept
-     * with its split - chosen, or oldest invoice first - and touches no balance until approved.
-     * A cheque is always accepted, however old the invoices it pays.
+     * with its oldest-first plan and touches no balance until approved. A cheque is always
+     * accepted, however old the invoices it pays.
      */
     protected function storeReceivedOnAccount(Request $request): JsonResponse
     {
@@ -241,31 +244,7 @@ class ChequeController extends Controller
         $customer = Customer::where('company_id', $user->company_id)->findOrFail($request->customer_id);
         $amount = (float) $request->amount;
 
-        if ($request->filled('allocations')) {
-            $invoices = Invoice::where('company_id', $user->company_id)
-                ->where('customer_id', $customer->id)
-                ->whereIn('id', collect($request->allocations)->pluck('invoice_id'))
-                ->get()
-                ->keyBy('id');
-            $plan = [];
-            foreach ($request->allocations as $line) {
-                $invoice = $invoices->get($line['invoice_id']);
-                if (!$invoice) {
-                    return response()->json(['message' => 'One of the invoices in the split does not belong to this customer'], 422);
-                }
-                // An invoice paid down since the form opened takes what it still owes; the rest
-                // goes on to the oldest unpaid invoices when the cheque is approved.
-                $put = round(min((float) $line['amount'], $invoice->outstanding()), 2);
-                if ($put > 0.005) {
-                    $plan[] = ['invoice_id' => $invoice->id, 'invoice_number' => $invoice->invoice_number, 'amount' => $put];
-                }
-            }
-            if (array_sum(array_column($plan, 'amount')) > $amount + 0.01) {
-                return response()->json(['message' => 'The split adds up to more than the cheque amount'], 422);
-            }
-        } else {
-            $plan = app(\App\Services\CustomerAccountService::class)->suggestSplit($user->company_id, $customer->id, $amount);
-        }
+        $plan = app(\App\Services\CustomerAccountService::class)->suggestSplit($user->company_id, $customer->id, $amount);
 
         $attachmentPath = $request->hasFile('attachment') ? $request->file('attachment')->store('cheques', 's3') : null;
 
@@ -377,9 +356,9 @@ class ChequeController extends Controller
     /**
      * Approve a matured cheque.
      *
-     * Received: applies it as a real payment against its invoice or split (creating
-     * the Payment/allocations and accounting entry) - it is now a receivable. Any part
-     * the invoices no longer owe stays with the customer as credit.
+     * Received: applies it as a real payment to the customer's oldest unpaid invoices
+     * (creating the Payment/allocations and accounting entry) - it is now a receivable.
+     * Any part the invoices no longer owe stays with the customer as credit.
      *
      * Issued: just marks it cleared/honoured by the bank. Deliberately does
      * NOT create a SupplierPayment or touch purchase order balances - that
@@ -466,17 +445,12 @@ class ChequeController extends Controller
             ]);
         }
 
-        // A cheque against one invoice pays what that invoice still owes; one on the customer's
-        // account follows its split. Whatever those invoices can't take (another receipt may have
-        // paid them since the cheque was recorded) goes on to the customer's oldest unpaid
-        // invoices, and only what is left after every invoice is paid stays as their credit.
-        $split = $cheque->invoice_id
-            ? [['invoice_id' => $cheque->invoice_id, 'amount' => (float) $cheque->amount]]
-            : ($cheque->allocation_plan ?? []);
-
+        // The cheque pays the customer's oldest unpaid invoices first, as they stand today (its
+        // plan was only a preview), and only what is left after every invoice is paid stays as
+        // their credit.
         try {
             $customer = Customer::where('company_id', $user->company_id)->findOrFail($cheque->customer_id);
-            $result = DB::transaction(function () use ($cheque, $customer, $user, $split) {
+            $result = DB::transaction(function () use ($cheque, $customer, $user) {
                 $accounts = app(\App\Services\CustomerAccountService::class);
                 $result = $accounts->receive(
                     $customer,
@@ -486,18 +460,7 @@ class ChequeController extends Controller
                     $cheque->maturity_date->toDateString(),
                     $this->paymentReference($cheque->cheque_number),
                     "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
-                    $split,
                 );
-                if ($result['left_as_credit'] > 0.005) {
-                    $more = $accounts->allocate($result['payment'], null, "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), remainder applied to the next unpaid invoices");
-                    // The remainder can top up an invoice the split already paid part of: one line each.
-                    $result['allocations'] = collect(array_merge($result['allocations'], $more))
-                        ->groupBy('invoice_id')
-                        ->map(fn ($rows) => array_merge($rows->last(), ['amount' => round($rows->sum('amount'), 2)]))
-                        ->values()->all();
-                    $result['allocated'] = round(array_sum(array_column($result['allocations'], 'amount')), 2);
-                    $result['left_as_credit'] = round((float) $cheque->amount - $result['allocated'], 2);
-                }
                 $cheque->update([
                     'status' => 'approved',
                     'payment_id' => $result['payment']->id,
@@ -505,8 +468,7 @@ class ChequeController extends Controller
                     'approved_at' => now(),
                 ]);
 
-                // The split was planned when the cheque was recorded; anything raised since (a
-                // bounced cheque charge) still takes its place in the oldest-first order.
+                // Money placed earlier by hand moves too, so the oldest invoices are paid first.
                 $result['moved'] = $accounts->rebalanceOldestFirst($cheque->company_id, $customer->id);
 
                 return $result;

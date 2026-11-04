@@ -1122,10 +1122,11 @@ class InvoiceController extends Controller
             $invoice = Invoice::where('company_id', $user->company_id)
                 ->findOrFail($id);
 
-            // More than the invoice owes is still received: the rest pays the customer's oldest
-            // unpaid invoices, and anything left after that is kept as their credit.
-            if ($invoice->customer_id && (float) $request->amount > $invoice->outstanding() + 0.005) {
-                $result = app(\App\Services\CustomerAccountService::class)->receiveOnInvoice(
+            // A customer's money always pays their oldest unpaid invoices first, whichever invoice
+            // it is recorded from; anything left after that is kept as their credit.
+            if ($invoice->customer_id) {
+                $accounts = app(\App\Services\CustomerAccountService::class);
+                $result = $accounts->receiveOnInvoice(
                     $invoice,
                     $user,
                     (float) $request->amount,
@@ -1135,13 +1136,9 @@ class InvoiceController extends Controller
                     $request->notes,
                 );
                 $payment = $result['payment'];
-                $elsewhere = collect($result['allocations'])->where('invoice_id', '!=', $invoice->id)
-                    ->map(fn ($a) => number_format($a['amount'], 2) . ' on ' . $a['invoice_number'])->implode(', ');
 
                 return response()->json([
-                    'message' => 'Payment recorded'
-                        . ($elsewhere ? "; {$elsewhere}" : '')
-                        . ($result['left_as_credit'] > 0.005 ? '; ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : ''),
+                    'message' => 'Payment recorded: ' . $accounts->describeApplied($result['allocations'], $result['left_as_credit']),
                     'data' => [
                         'invoice' => $invoice->fresh(),
                         'payment' => [
@@ -1392,6 +1389,20 @@ class InvoiceController extends Controller
             $payment = Payment::where('company_id', $user->company_id)
                 ->findOrFail($request->payment_id);
 
+            // A customer's unused money always goes to their oldest unpaid invoices first.
+            if ($payment->customer_id) {
+                $accounts = app(\App\Services\CustomerAccountService::class);
+                $done = $accounts->allocate($payment, null, $request->notes ?: 'Applied from an existing payment');
+                $message = $done
+                    ? 'Payment applied: ' . $accounts->describeApplied($done, 0)
+                    : 'Nothing applied: this payment has no money left, or the customer owes nothing';
+
+                return response()->json([
+                    'message' => $message,
+                    'data' => ['message' => $message, 'invoice' => $invoice->fresh(), 'allocations' => $done],
+                ]);
+            }
+
             // Check if payment is already allocated to this invoice
             $existingAllocation = PaymentAllocation::where('payment_id', $payment->id)
                 ->where('invoice_id', $invoice->id)
@@ -1465,13 +1476,8 @@ class InvoiceController extends Controller
                 ]
             ]);
 
-        } catch (\Exception $e) {
-            Log::error('Failed to map payment to invoice', [
-                'invoice_id' => $id,
-                'payment_id' => $request->payment_id,
-                'error' => $e->getMessage()
-            ]);
-            return response()->json(['message' => 'Failed to map payment', 'error' => $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return \App\Support\PaymentFailure::response($e, 'Applying this payment');
         }
     }
 
@@ -1622,7 +1628,8 @@ class InvoiceController extends Controller
 
         $validator = Validator::make($request->all(), [
             'payment_id' => 'required|uuid',
-            'allocations' => 'required|array|min:1',
+            // Only a payment with no customer is placed by hand; a customer's goes oldest first.
+            'allocations' => 'nullable|array',
             'allocations.*.invoice_id' => 'required|uuid',
             'allocations.*.amount' => 'required|numeric|min:0.01',
             'allocations.*.notes' => 'nullable|string',
@@ -1634,6 +1641,23 @@ class InvoiceController extends Controller
         $payment = Payment::where('company_id', $user->company_id)->findOrFail($request->payment_id);
         $accounts = app(\App\Services\CustomerAccountService::class);
         $before = $accounts->paymentAvailable($payment);
+
+        if ($payment->customer_id) {
+            try {
+                $done = $accounts->allocate($payment, null, 'Allocated from payment');
+            } catch (\Throwable $e) {
+                return \App\Support\PaymentFailure::response($e, 'Allocating this payment');
+            }
+            $message = $done
+                ? 'Payment applied: ' . $accounts->describeApplied($done, 0)
+                : 'Nothing applied: this payment has no money left, or the customer owes nothing';
+
+            return response()->json(['message' => $message, 'data' => ['message' => $message, 'allocations' => $done]]);
+        }
+
+        if (empty($request->allocations)) {
+            return response()->json(['message' => 'Add at least one invoice and amount: this payment has no customer to work from.'], 422);
+        }
         $requested = round(array_sum(array_column($request->allocations, 'amount')), 2);
 
         if ($requested > $before + 0.005) {
@@ -1662,8 +1686,7 @@ class InvoiceController extends Controller
         try {
             $done = $accounts->allocate($payment, $request->allocations, 'Allocated from payment');
         } catch (\Throwable $e) {
-            Log::error('Failed to allocate payment to invoices', ['payment_id' => $payment->id, 'error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to allocate payment', 'error' => $e->getMessage()], 500);
+            return \App\Support\PaymentFailure::response($e, 'Allocating this payment');
         }
 
         $newly = round(array_sum(array_column($done, 'amount')), 2);
