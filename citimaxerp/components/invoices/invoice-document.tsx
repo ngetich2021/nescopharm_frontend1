@@ -1,7 +1,7 @@
 "use client"
 
 import { displayDate } from "@/lib/date-format"
-import { forwardRef } from "react"
+import { forwardRef, useEffect, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import type { Invoice } from "@/lib/invoices"
 import { getCompany, type Company } from "@/lib/company"
@@ -12,6 +12,7 @@ import { getCustomerAccount, type CustomerAccountWithDetails } from "@/lib/custo
 import { INVOICE_PAYMENT_DETAILS, COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { amountInWords } from "@/lib/number-to-words"
 import { documentCode } from "@/lib/price-codes"
+import { invoicePrintZoom } from "./print-fit"
 
 export const RETURN_POLICY_LINE = "All goods are subject to the enclosed Non-returnable policy"
 export const RETURN_POLICY_IMAGE = "/company/return-policy.jpg"
@@ -73,6 +74,23 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
   { invoice, company, customerDetails, customerAccount, companyPin, withPolicy = true, enclosures, copyLabel },
   invoiceRef,
 ) {
+  // Shrinks the printed invoice just enough when a few lines would spill onto one more page.
+  const fitRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const content = fitRef.current
+    if (!content) return
+    const fit = () => content.style.setProperty("--invoice-fit", String(invoicePrintZoom(content)))
+    fit()
+    void document.fonts?.ready.then(fit)
+    const images = Array.from(content.querySelectorAll("img"))
+    images.forEach((image) => image.addEventListener("load", fit))
+    window.addEventListener("beforeprint", fit)
+    return () => {
+      images.forEach((image) => image.removeEventListener("load", fit))
+      window.removeEventListener("beforeprint", fit)
+    }
+  }, [invoice, company, customerDetails, customerAccount, companyPin, copyLabel])
+
   return (
     <>
       {/* No page margin when printing, so the browser has nowhere to print its own header and
@@ -81,11 +99,16 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
       <style>{`@media print {
         @page { size: A4; margin: 0; }
         .invoice-sheet { padding: 9mm 11mm !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-      }`}</style>
+        .invoice-fit { zoom: var(--invoice-fit, 1); }
+      }
+      /* The hidden copy print-fit measures, with the sizes the print: classes below give on paper. */
+      .invoice-fit-measure td, .invoice-fit-measure th { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+      .invoice-fit-measure img[alt="Scan me"] { height: 3.5rem; width: 3.5rem; }`}</style>
       <Card
         ref={invoiceRef}
         className="invoice-sheet max-w-4xl mx-auto bg-white p-6 md:p-8 shadow-lg print:shadow-none print:max-w-none print:m-0 print:border-0 text-sm"
       >
+        <div ref={fitRef} className="invoice-fit">
         {/* Letterhead Banner - the sole source of company identity/contact info on this document.
             Full width at its natural aspect ratio - cropping or forcing a fixed height distorts/cuts
             the logo, so height is left to scale with width instead. */}
@@ -383,6 +406,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
 
         {/* Footer */}
         <p className="mt-1 text-center text-[11px] text-gray-500">Thank you for your business! · This is a Computer Generated Invoice</p>
+        </div>
         </div>
       </Card>
 
