@@ -201,7 +201,7 @@ export function PayrollConfigPage() {
           <div>
             <p className="font-medium text-sm">
               {current
-                ? `Active configuration: effective from ${format(new Date(current.effective_from), "d MMM yyyy")}`
+                ? `Active configuration: effective from ${format(new Date(current.effective_from), "dd/MM/yyyy")}`
                 : "No active configuration — payroll is using built-in defaults"}
             </p>
             {!current && (
@@ -232,8 +232,8 @@ export function PayrollConfigPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base">
-                      Effective {format(new Date(cfg.effective_from), "d MMM yyyy")}
-                      {cfg.effective_to && ` – ${format(new Date(cfg.effective_to), "d MMM yyyy")}`}
+                      Effective {format(new Date(cfg.effective_from), "dd/MM/yyyy")}
+                      {cfg.effective_to && ` – ${format(new Date(cfg.effective_to), "dd/MM/yyyy")}`}
                     </CardTitle>
                     <CardDescription>Personal relief: {formatCurrency(Number(cfg.personal_relief))}/month</CardDescription>
                   </div>
@@ -431,7 +431,7 @@ export function PayrollConfigPage() {
           <DialogHeader>
             <DialogTitle>Delete Configuration</DialogTitle>
             <DialogDescription>
-              Delete the configuration effective {deleteTarget && format(new Date(deleteTarget.effective_from), "d MMM yyyy")}?
+              Delete the configuration effective {deleteTarget && format(new Date(deleteTarget.effective_from), "dd/MM/yyyy")}?
               If this is the active configuration, payroll calculations will fall back to built-in defaults.
             </DialogDescription>
           </DialogHeader>

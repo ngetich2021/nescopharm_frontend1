@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -495,7 +496,7 @@ export default function PermissionsPage() {
                         {permission.creator ? `${permission.creator.first_name} ${permission.creator.last_name}` : "Unknown"}
                       </TableCell>
                       <TableCell>
-                        {new Date(permission.created_at).toLocaleDateString()}
+                        {displayDate(new Date(permission.created_at))}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

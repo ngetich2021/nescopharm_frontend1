@@ -133,7 +133,7 @@ export function BreakageModal({
                     </div>
                   </CardTitle>
                   <CardDescription>
-                    Created on {format(new Date(currentBreakage.created_at), "MMMM dd, yyyy 'at' HH:mm")}
+                    Created on {format(new Date(currentBreakage.created_at), "dd/MM/yyyy HH:mm")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -181,7 +181,7 @@ export function BreakageModal({
                             <p className="text-sm text-gray-500">{currentBreakage.approver.email}</p>
                             {currentBreakage.approved_at && (
                               <p className="text-xs text-gray-400">
-                                Approved on {format(new Date(currentBreakage.approved_at), "MMM dd, yyyy 'at' HH:mm")}
+                                Approved on {format(new Date(currentBreakage.approved_at), "dd/MM/yyyy HH:mm")}
                               </p>
                             )}
                           </div>

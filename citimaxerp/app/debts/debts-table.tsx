@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -212,7 +213,7 @@ export function DebtsTable({ debts: initialDebts }: DebtsTableProps) {
                           <td className="p-2">
                             <span className="font-medium text-red-600">{formatCurrency(debt.outstandingAmount)}</span>
                           </td>
-                          <td className="p-2">{new Date(debt.dueDate).toLocaleDateString()}</td>
+                          <td className="p-2">{displayDate(new Date(debt.dueDate))}</td>
                           <td className="p-2">{getStatusBadge(debt.status)}</td>
                           <td className="p-2">{getPriorityBadge(debt.priority)}</td>
                           <td className="p-2 text-sm">{getCategoryLabel(debt.category)}</td>
@@ -310,7 +311,7 @@ export function DebtsTable({ debts: initialDebts }: DebtsTableProps) {
                           {getPriorityBadge(debt.priority)}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Due: {new Date(debt.dueDate).toLocaleDateString()}
+                          Due: {displayDate(new Date(debt.dueDate))}
                         </p>
                       </div>
                     </CardContent>

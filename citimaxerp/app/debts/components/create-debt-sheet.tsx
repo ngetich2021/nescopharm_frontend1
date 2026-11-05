@@ -240,7 +240,7 @@ export function CreateDebtSheet({ open, onOpenChange, onDebtCreated, editDebt, o
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(dueDate, "PPP")}
+                    {format(dueDate, "dd/MM/yyyy")}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">

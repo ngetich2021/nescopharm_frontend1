@@ -198,7 +198,7 @@ export function RequisitionModal({
                     </div>
                   </CardTitle>
                   <CardDescription>
-                    Created on {format(new Date(currentRequisition.created_at), "MMMM dd, yyyy 'at' HH:mm")}
+                    Created on {format(new Date(currentRequisition.created_at), "dd/MM/yyyy HH:mm")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

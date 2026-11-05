@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -214,7 +215,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
       title: `Order ${order.order_number}`,
       details: [
         ["Customer", buyer.name || (order.customer as any)?.business_name || order.customer?.name || "-"],
-        ["Order date", order.order_date ? new Date(order.order_date).toLocaleDateString("en-GB") : "-"],
+        ["Order date", order.order_date ? displayDate(new Date(order.order_date)) : "-"],
         ["Status", String(order.status ?? "-")],
         ["Delivery", deliveryAddressParts.join(", ") || "-"],
       ],
@@ -276,7 +277,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-600">Order Date</p>
-              <p className="font-semibold">{new Date(order.created_at).toLocaleDateString()}</p>
+              <p className="font-semibold">{displayDate(new Date(order.created_at))}</p>
               <p className="text-sm text-gray-600 mt-2">Status</p>
               <p className="font-semibold capitalize">{order.status?.replace('_', ' ')}</p>
             </div>

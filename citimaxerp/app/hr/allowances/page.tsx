@@ -99,7 +99,7 @@ export default function AllowancesPage() {
       r.name,
       Number(r.amount) || 0,
       r.is_taxable ? "Yes" : "No",
-      r.updated_at ? format(new Date(r.updated_at), "dd MMM yyyy HH:mm") : "",
+      r.updated_at ? format(new Date(r.updated_at), "dd/MM/yyyy HH:mm") : "",
     ]),
     footer: [["", "", "", "", "", "Total", total, "", ""]],
   }))
@@ -220,7 +220,7 @@ export default function AllowancesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {r.updated_at ? format(new Date(r.updated_at), "dd MMM yyyy, HH:mm") : "—"}
+                        {r.updated_at ? format(new Date(r.updated_at), "dd/MM/yyyy HH:mm") : "—"}
                       </TableCell>
                     </TableRow>
                   ))

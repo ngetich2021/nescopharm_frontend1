@@ -197,14 +197,14 @@ export function PayrollTable({
                           {record.payroll_number}
                         </span>
                         <span className="text-xs text-gray-500">
-                          Created {format(new Date(record.created_at), 'MMM d, yyyy')}
+                          Created {format(new Date(record.created_at), 'dd/MM/yyyy')}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">
-                          {format(new Date(record.pay_period_start), 'MMM d')} - {format(new Date(record.pay_period_end), 'MMM d, yyyy')}
+                          {format(new Date(record.pay_period_start), 'dd/MM')} - {format(new Date(record.pay_period_end), 'dd/MM/yyyy')}
                         </span>
                       </div>
                     </TableCell>
@@ -230,7 +230,7 @@ export function PayrollTable({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {format(new Date(record.pay_date), 'MMM d, yyyy')}
+                      {format(new Date(record.pay_date), 'dd/MM/yyyy')}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <ActionsDropdown

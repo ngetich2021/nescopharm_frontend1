@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react";
 import {
@@ -313,7 +314,7 @@ export function DispatchDetailsSheet({
     const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? "Not available"
-      : format(date, "MMM dd, yyyy 'at' HH:mm");
+      : format(date, "dd/MM/yyyy HH:mm");
   };
 
   return (
@@ -865,7 +866,7 @@ export function DispatchDetailsSheet({
                                {item.batch_allocations.map((a) => (
                                  <div key={a.batch_id}>
                                    Pick from Batch {a.batch_number}
-                                   {a.expiry_date && ` · Exp ${new Date(a.expiry_date).toLocaleDateString()}`}
+                                   {a.expiry_date && ` · Exp ${displayDate(new Date(a.expiry_date))}`}
                                    {item.batch_allocations!.length > 1 && ` (${a.quantity})`}
                                  </div>
                                ))}

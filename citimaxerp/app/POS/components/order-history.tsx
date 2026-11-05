@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -97,7 +98,7 @@ export function OrderHistory() {
   }
 
   const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString()
+    return displayDateTime(new Date(timestamp))
   }
 
   const viewOrderDetails = (order: Order) => {

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState } from "react"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -164,7 +165,7 @@ export function ExpensesTable({
                   onCheckedChange={(checked) => handleSelectOne(expense.id, !!checked)}
                 />
               </TableCell>
-              <TableCell>{new Date(expense.expense_date).toLocaleDateString()}</TableCell>
+              <TableCell>{displayDate(new Date(expense.expense_date))}</TableCell>
               <TableCell className="max-w-[200px] truncate text-muted-foreground" title={expense.description || ""}>
                 {expense.description || "-"}
               </TableCell>

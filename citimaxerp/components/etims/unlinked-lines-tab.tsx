@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +14,7 @@ import { Check, ChevronsUpDown, Link2, Loader2, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { linkUnlinkedLine, listUnlinkedLines, type LinkableProduct, type UnlinkedInvoiceLine } from "@/lib/etims"
 
-const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
+const fmtDate = (d: string | null) => (d ? displayDate(new Date(d)) : "-")
 
 // Lines written the same way are linked together (e.g. 34 lines of one bandage).
 interface Group {

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,7 +18,7 @@ type SortKey = "customer" | "customer_number" | "orders" | "order_value" | "invo
 type Show = "all" | "with" | "without"
 
 const money = (v: number) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const day = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
+const day = (d: string | null) => (d ? displayDate(new Date(d)) : "-")
 
 const COLUMNS: { key: SortKey; label: string; right?: boolean }[] = [
   { key: "customer", label: "Customer" },

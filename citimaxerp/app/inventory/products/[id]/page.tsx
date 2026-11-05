@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
@@ -301,7 +302,7 @@ export default function ProductDetailsPage() {
                   <div>
                     <p className="text-sm text-gray-600">Last Updated</p>
                     <p className="text-sm font-medium text-gray-900">
-                      {new Date(product.updated_at).toLocaleDateString()}
+                      {displayDate(new Date(product.updated_at))}
                     </p>
                   </div>
                 </div>
@@ -574,13 +575,13 @@ export default function ProductDetailsPage() {
                             <div className="flex justify-between">
                               <span className="text-gray-600">Created</span>
                               <span className="text-sm">
-                                {variant.created_at ? new Date(variant.created_at).toLocaleDateString() : "N/A"}
+                                {variant.created_at ? displayDate(new Date(variant.created_at)) : "N/A"}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Updated</span>
                               <span className="text-sm">
-                                {variant.updated_at ? new Date(variant.updated_at).toLocaleDateString() : "N/A"}
+                                {variant.updated_at ? displayDate(new Date(variant.updated_at)) : "N/A"}
                               </span>
                             </div>
                           </div>
@@ -661,8 +662,8 @@ export default function ProductDetailsPage() {
                                     <td className="px-3 py-2 font-mono">{batch.batch_number || "—"}</td>
                                     <td className="px-3 py-2 font-mono">{batch.lot_number || "—"}</td>
                                     <td className="px-3 py-2 text-right font-semibold">{Number(batch.quantity_available).toLocaleString()}</td>
-                                    <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}</td>
-                                    <td className="px-3 py-2">{batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "—"}</td>
+                                    <td className="px-3 py-2">{batch.manufacture_date ? displayDate(new Date(batch.manufacture_date)) : "—"}</td>
+                                    <td className="px-3 py-2">{batch.expiry_date ? displayDate(new Date(batch.expiry_date)) : "—"}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -709,8 +710,8 @@ export default function ProductDetailsPage() {
                         <td className="px-3 py-2 font-mono">{batch.batch_number || "—"}</td>
                         <td className="px-3 py-2 font-mono">{batch.lot_number || "—"}</td>
                         <td className="px-3 py-2 text-right font-semibold">{Number(batch.quantity_available).toLocaleString()}</td>
-                        <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}</td>
-                        <td className="px-3 py-2">{batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "—"}</td>
+                        <td className="px-3 py-2">{batch.manufacture_date ? displayDate(new Date(batch.manufacture_date)) : "—"}</td>
+                        <td className="px-3 py-2">{batch.expiry_date ? displayDate(new Date(batch.expiry_date)) : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -742,7 +743,7 @@ export default function ProductDetailsPage() {
                   <tbody>
                     {priceHistory.map((h) => {
                       const d = new Date(h.created_at)
-                      const dateStr = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      const dateStr = displayDate(d)
                       const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
                       const change = h.change_amount ? parseFloat(h.change_amount) : null
                       return (

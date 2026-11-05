@@ -198,14 +198,14 @@ export function LeaveManagementTable({
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-sm">
-                          {format(new Date(request.startDate), "MMM dd, yyyy")}
+                          {format(new Date(request.startDate), "dd/MM/yyyy")}
                         </span>
                         <span className="text-xs text-gray-500">
-                          to {format(new Date(request.endDate), "MMM dd, yyyy")}
+                          to {format(new Date(request.endDate), "dd/MM/yyyy")}
                         </span>
                         {request.reportingDate && (
                           <span className="text-xs text-gray-500">
-                            back {format(new Date(request.reportingDate), "MMM dd, yyyy")}
+                            back {format(new Date(request.reportingDate), "dd/MM/yyyy")}
                           </span>
                         )}
                       </div>

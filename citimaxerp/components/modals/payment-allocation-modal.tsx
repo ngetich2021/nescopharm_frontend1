@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -372,7 +373,7 @@ export function PaymentAllocationModal({
                                     <span className="font-medium">{invoice.invoice_number}</span>
                                     <span className="text-sm text-muted-foreground">
                                       Outstanding: Ksh {parseFloat(invoice.outstanding_balance || "0").toFixed(2)}
-                                      {invoice.due_date && ` • Due: ${new Date(invoice.due_date).toLocaleDateString()}`}
+                                      {invoice.due_date && ` • Due: ${displayDate(new Date(invoice.due_date))}`}
                                     </span>
                                   </div>
                                 </SelectItem>

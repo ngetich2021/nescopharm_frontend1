@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import {
   Sheet,
   SheetContent,
@@ -32,11 +33,7 @@ export default function SupplierPaymentDetailsSheet({
   if (!payment) return null
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-KE", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
+    return displayDate(new Date(dateString))
   }
 
   const formatCurrency = (amount: string | number) => {
@@ -185,7 +182,7 @@ export default function SupplierPaymentDetailsSheet({
                                   {inv.total != null && Number(inv.amount) < Number(inv.total) ? ` (of ${formatCurrency(inv.total)})` : ""}
                                 </div>
                               </td>
-                              <td className="px-2 py-1.5 whitespace-nowrap">{inv.date ? new Date(inv.date).toLocaleDateString("en-GB") : "-"}</td>
+                              <td className="px-2 py-1.5 whitespace-nowrap">{inv.date ? displayDate(new Date(inv.date)) : "-"}</td>
                               <td className="px-2 py-1.5 text-right whitespace-nowrap">{formatCurrency(inv.amount)}</td>
                             </tr>
                           ))}

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { CardDescription } from "@/components/ui/card"
 
 import { useEffect, useState } from "react"
@@ -104,7 +105,7 @@ export default function AdminPaymentsPage() {
     {
       accessorKey: "paid_at",
       header: "Paid At",
-      cell: ({ row }) => <div>{new Date(row.getValue("paid_at")).toLocaleDateString()}</div>,
+      cell: ({ row }) => <div>{displayDate(new Date(row.getValue("paid_at")))}</div>,
     },
   ]
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -85,7 +86,7 @@ export default function CashFlowStatementPage() {
     return {
       fileName: documentFileName([sessionCompanyName(), `Cash Flow Statement ${filePeriod(fromDate, toDate)}`]),
       title: "Cash Flow Statement",
-      subtitle: `For the period ${new Date(fromDate).toLocaleDateString("en-GB")} to ${new Date(toDate).toLocaleDateString("en-GB")}`,
+      subtitle: `For the period ${displayDate(new Date(fromDate))} to ${displayDate(new Date(toDate))}`,
       headers: ["S/No", "Account", "Amount"],
       moneyColumns: [2],
       rows,
@@ -194,7 +195,7 @@ export default function CashFlowStatementPage() {
             <CardHeader>
               <CardTitle className="text-center">Cash Flow Statement</CardTitle>
               <p className="text-center text-muted-foreground">
-                For the period from {new Date(fromDate).toLocaleDateString()} to {new Date(toDate).toLocaleDateString()}
+                For the period from {displayDate(new Date(fromDate))} to {displayDate(new Date(toDate))}
               </p>
             </CardHeader>
             <CardContent className="space-y-6">

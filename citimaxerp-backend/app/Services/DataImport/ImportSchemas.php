@@ -308,7 +308,7 @@ class ImportSchemas
      */
     private static function pastInvoices(): array
     {
-        $cutoff = date('d-m-Y', strtotime(self::PAST_INVOICE_CUTOFF));
+        $cutoff = date('d/m/Y', strtotime(self::PAST_INVOICE_CUTOFF));
 
         return [
             'key' => 'past_invoices',

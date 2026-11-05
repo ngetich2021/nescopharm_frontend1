@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState } from "react"
 import { Quote, isOneTimeQuote } from "@/lib/quotes"
@@ -195,7 +196,7 @@ export function ConvertQuoteWithSelectionDialog({
                             })}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {new Date(quote.created_at).toLocaleDateString()}
+                            {displayDate(new Date(quote.created_at))}
                           </div>
                         </div>
                       </div>
@@ -242,7 +243,7 @@ export function ConvertQuoteWithSelectionDialog({
                     <div>
                       <span className="block text-xs text-gray-500">Valid Until</span>
                       <span className="font-medium text-gray-900">
-                        {new Date(selectedQuote.valid_until).toLocaleDateString()}
+                        {displayDate(new Date(selectedQuote.valid_until))}
                       </span>
                     </div>
                   </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate } from "@/lib/date-format"
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -225,7 +226,7 @@ export function EmployeesTable({
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {employee.created_at ? new Date(employee.created_at).toLocaleDateString() : 'N/A'}
+                        {employee.created_at ? displayDate(new Date(employee.created_at)) : 'N/A'}
                       </div>
                     </TableCell>
                     <TableCell>

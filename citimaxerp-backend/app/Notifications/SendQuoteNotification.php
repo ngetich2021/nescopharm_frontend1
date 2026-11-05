@@ -41,7 +41,7 @@ class SendQuoteNotification extends Notification implements ShouldQueue
             ->line('You have received a new quotation from ' . ($quote->company->name ?? 'our company') . '.')
             ->line('Quote Number: ' . $quote->quote_number)
             ->line('Total Amount: ' . number_format($quote->final_amount, 2) . ' ' . $quote->currency)
-            ->line('Valid Until: ' . \Carbon\Carbon::parse($quote->valid_until)->format('F j, Y'))
+            ->line('Valid Until: ' . \Carbon\Carbon::parse($quote->valid_until)->format('d/m/Y'))
             ->action('View Quote', $url)
             ->line('Thank you for considering our quotation!')
             ->attachData($pdfContent, 'quote-' . $quote->quote_number . '.pdf', [

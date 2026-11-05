@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -76,8 +77,8 @@ export default function ViewAccountDialog({ open, onOpenChange, account, onEdit 
               </div>
 
               <div className="mt-4 text-xs text-muted-foreground">
-                {account.created_at && <div>Created: {new Date(account.created_at).toLocaleString()}</div>}
-                {account.updated_at && <div>Updated: {new Date(account.updated_at).toLocaleString()}</div>}
+                {account.created_at && <div>Created: {displayDateTime(new Date(account.created_at))}</div>}
+                {account.updated_at && <div>Updated: {displayDateTime(new Date(account.updated_at))}</div>}
               </div>
 
               <div className="mt-6 flex justify-end gap-2">

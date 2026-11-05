@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -119,7 +120,7 @@ export default function FinancialRatiosPage() {
     return {
       fileName: documentFileName([sessionCompanyName(), `Financial Ratios ${filePeriod(null, asOfDate)}`]),
       title: "Financial Ratios",
-      subtitle: `As of ${new Date(asOfDate).toLocaleDateString("en-GB")} · period from ${new Date(fromDate).toLocaleDateString("en-GB")}`,
+      subtitle: `As of ${displayDate(new Date(asOfDate))} · period from ${displayDate(new Date(fromDate))}`,
       headers: ["S/No", "Ratio", "Value"],
       rightColumns: [2],
       rows,

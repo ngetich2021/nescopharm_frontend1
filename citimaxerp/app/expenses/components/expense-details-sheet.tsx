@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -95,13 +96,7 @@ export function ExpenseDetailsSheet({ expenseId, isOpen, onClose, onEditClick }:
 
   // Format date helper
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return displayDate(new Date(dateString))
   }
 
   if (!expense && !loading) {
@@ -180,7 +175,7 @@ export function ExpenseDetailsSheet({ expenseId, isOpen, onClose, onEditClick }:
                       <div className="text-right">
                         <p className="text-sm text-green-600 mb-1">Expense Date</p>
                         <p className="text-lg font-semibold text-green-800">
-                          {format(new Date(expense.expense_date), "MMM d, yyyy")}
+                          {format(new Date(expense.expense_date), "dd/MM/yyyy")}
                         </p>
                       </div>
                     </div>
@@ -247,7 +242,7 @@ export function ExpenseDetailsSheet({ expenseId, isOpen, onClose, onEditClick }:
                 <div className="space-y-4">
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">Date</span>
-                    <span className="font-medium">{format(new Date(expense.expense_date), "PPP")}</span>
+                    <span className="font-medium">{format(new Date(expense.expense_date), "dd/MM/yyyy")}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">Payment Method</span>

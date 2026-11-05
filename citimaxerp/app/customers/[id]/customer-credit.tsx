@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -22,7 +23,7 @@ function formatKES(amount: string | number | null | undefined): string {
 
 function formatDate(value: string | null): string {
   if (!value) return "—"
-  return new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+  return displayDate(new Date(value))
 }
 
 function statusColor(status: string): string {

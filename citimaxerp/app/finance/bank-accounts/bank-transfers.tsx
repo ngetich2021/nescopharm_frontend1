@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -117,7 +118,7 @@ export function BankTransfers({ onChanged }: { onChanged?: () => void }) {
       moneyColumns: [7, 8, 9],
       rows: list.map((t, i) => [
         i + 1,
-        new Date(t.transfer_date).toLocaleDateString("en-GB"),
+        displayDate(new Date(t.transfer_date)),
         t.transfer_number,
         t.from_account ?? "",
         t.to_account ?? "",
@@ -183,7 +184,7 @@ export function BankTransfers({ onChanged }: { onChanged?: () => void }) {
                 {pageRows.map((t, i) => (
                   <TableRow key={t.id}>
                     <TableCell className="text-muted-foreground">{start + i + 1}</TableCell>
-                    <TableCell className="whitespace-nowrap">{new Date(t.transfer_date).toLocaleDateString("en-GB")}</TableCell>
+                    <TableCell className="whitespace-nowrap">{displayDate(new Date(t.transfer_date))}</TableCell>
                     <TableCell className="font-medium">{t.transfer_number}</TableCell>
                     <TableCell>{t.from_account}</TableCell>
                     <TableCell>{t.to_account}</TableCell>

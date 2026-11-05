@@ -344,18 +344,18 @@ export default function StockCountDetailsPage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Created</p>
-                <p>{format(new Date(stockCount.created_at), "PPP")}</p>
+                <p>{format(new Date(stockCount.created_at), "dd/MM/yyyy")}</p>
               </div>
               {stockCount.started_at && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Started</p>
-                  <p>{format(new Date(stockCount.started_at), "PPP p")}</p>
+                  <p>{format(new Date(stockCount.started_at), "dd/MM/yyyy HH:mm")}</p>
                 </div>
               )}
               {stockCount.completed_at && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Completed</p>
-                  <p>{format(new Date(stockCount.completed_at), "PPP p")}</p>
+                  <p>{format(new Date(stockCount.completed_at), "dd/MM/yyyy HH:mm")}</p>
                 </div>
               )}
               <div>
@@ -437,7 +437,7 @@ export default function StockCountDetailsPage() {
                           )}
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{item.batch_number || <span className="text-muted-foreground">No batch</span>}</TableCell>
-                        <TableCell className="whitespace-nowrap">{item.expiry_date ? format(new Date(item.expiry_date), "dd MMM yyyy") : "-"}</TableCell>
+                        <TableCell className="whitespace-nowrap">{item.expiry_date ? format(new Date(item.expiry_date), "dd/MM/yyyy") : "-"}</TableCell>
                         <TableCell className="text-right">{item.expected_quantity}</TableCell>
                         <TableCell className="text-right">
                           {canEdit ? (

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -31,7 +32,7 @@ import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
 
 const kes = (v: unknown) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
+const fmtDate = (d?: string | null) => (d ? displayDate(new Date(d)) : "-")
 const STATUS: Record<string, string> = {
   paid: "bg-green-100 text-green-800",
   credited: "bg-teal-100 text-teal-800",
@@ -214,7 +215,7 @@ export default function FilingPage() {
       tr { break-inside: avoid; }
       .r { text-align: right; } .f { text-align: center; font-weight: bold; }
       tr.total td { font-weight: bold; background: #f7f7f7; }
-    </style></head><body><h1><span>Filing list</span><small>${new Date().toLocaleDateString("en-GB")}</small></h1>${sections}</body></html>`)
+    </style></head><body><h1><span>Filing list</span><small>${displayDate(new Date())}</small></h1>${sections}</body></html>`)
   }
 
   const exportExcel = () => {

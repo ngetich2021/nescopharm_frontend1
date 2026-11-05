@@ -107,7 +107,7 @@ export function CustomerReceipts({ customerId }: { customerId: string }) {
                   <tr key={r.id} className={`border-b last:border-b-0 align-top ${r.status === "cancelled" ? "text-gray-400" : ""}`}>
                     <td className="px-2 py-1.5">{i + 1}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      {r.payment_date ? format(new Date(r.payment_date), "dd MMM yyyy") : "—"}
+                      {r.payment_date ? format(new Date(r.payment_date), "dd/MM/yyyy") : "—"}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex flex-wrap gap-1">

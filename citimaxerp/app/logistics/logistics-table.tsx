@@ -87,7 +87,7 @@ function capitalize(str: string) {
 function formatDate(dateString: string | null) {
   if (!dateString) return "—"
   try {
-    return format(new Date(dateString), "MMM dd, yyyy HH:mm")
+    return format(new Date(dateString), "dd/MM/yyyy HH:mm")
   } catch {
     return dateString
   }

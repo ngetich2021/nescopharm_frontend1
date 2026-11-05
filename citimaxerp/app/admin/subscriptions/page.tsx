@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { CardDescription } from "@/components/ui/card"
 
 import { useEffect, useState } from "react"
@@ -174,12 +175,12 @@ export default function AdminSubscriptionsPage() {
     {
       accessorKey: "started_at",
       header: "Started",
-      cell: ({ row }) => <div>{new Date(row.getValue("started_at")).toLocaleDateString()}</div>,
+      cell: ({ row }) => <div>{displayDate(new Date(row.getValue("started_at")))}</div>,
     },
     {
       accessorKey: "expires_at",
       header: "Expires",
-      cell: ({ row }) => <div>{new Date(row.getValue("expires_at")).toLocaleDateString()}</div>,
+      cell: ({ row }) => <div>{displayDate(new Date(row.getValue("expires_at")))}</div>,
     },
     {
       accessorKey: "auto_renew",

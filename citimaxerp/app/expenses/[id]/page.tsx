@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -172,7 +173,7 @@ export default function ExpenseDetailsPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Date</p>
-            <p className="text-lg">{new Date(expense.expense_date).toLocaleDateString()}</p>
+            <p className="text-lg">{displayDate(new Date(expense.expense_date))}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Payment Method</p>
@@ -233,11 +234,11 @@ export default function ExpenseDetailsPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Created At</p>
-            <p className="text-lg">{new Date(expense.created_at).toLocaleString()}</p>
+            <p className="text-lg">{displayDateTime(new Date(expense.created_at))}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Last Updated</p>
-            <p className="text-lg">{new Date(expense.updated_at).toLocaleString()}</p>
+            <p className="text-lg">{displayDateTime(new Date(expense.updated_at))}</p>
           </div>
         </CardContent>
       </Card>

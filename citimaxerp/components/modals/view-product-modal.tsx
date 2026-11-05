@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, JSXElementConstructor, ReactElement, ReactNode, ReactPortal } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -309,10 +310,10 @@ export function ViewProductModal({ isOpen, onClose, product, variants = [], onPr
                 <div>
                   <p className="text-sm font-medium text-purple-700 mb-2">Last Updated</p>
                   <p className="text-lg font-bold text-purple-900">
-                    {product.updated_at ? new Date(product.updated_at).toLocaleDateString() : "N/A"}
+                    {product.updated_at ? displayDate(new Date(product.updated_at)) : "N/A"}
                   </p>
                   <div className="text-sm text-purple-600 mt-3">
-                    Created: {product.created_at ? new Date(product.created_at).toLocaleDateString() : "N/A"}
+                    Created: {product.created_at ? displayDate(new Date(product.created_at)) : "N/A"}
                   </div>
                 </div>
               </div>
@@ -580,13 +581,13 @@ export function ViewProductModal({ isOpen, onClose, product, variants = [], onPr
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Created</span>
                                 <span className="text-sm">
-                                  {variant.created_at ? new Date(variant.created_at).toLocaleDateString() : "N/A"}
+                                  {variant.created_at ? displayDate(new Date(variant.created_at)) : "N/A"}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Updated</span>
                                 <span className="text-sm">
-                                  {variant.updated_at ? new Date(variant.updated_at).toLocaleDateString() : "N/A"}
+                                  {variant.updated_at ? displayDate(new Date(variant.updated_at)) : "N/A"}
                                 </span>
                               </div>
                             </div>

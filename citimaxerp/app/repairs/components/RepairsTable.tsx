@@ -264,7 +264,7 @@ export function RepairsTable({
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {format(new Date(repair.created_at), "MMM dd, yyyy")}
+                        {format(new Date(repair.created_at), "dd/MM/yyyy")}
                         <div className="text-xs text-muted-foreground">
                           {format(new Date(repair.created_at), "HH:mm")}
                         </div>

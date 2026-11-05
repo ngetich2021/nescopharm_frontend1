@@ -76,7 +76,7 @@ class LeaveRequest extends Model
                 'can_approve_leave',
                 $model->employee?->leave_approver_id,
                 '/hr/leave-management',
-                ucfirst(str_replace('_', ' ', (string) $model->leave_type)) . ' leave ' . $model->start_date?->format('d M') . ' – ' . $model->end_date?->format('d M Y') . '.',
+                ucfirst(str_replace('_', ' ', (string) $model->leave_type)) . ' leave ' . $model->start_date?->format('d/m/Y') . ' – ' . $model->end_date?->format('d/m/Y') . '.',
             );
         });
     }

@@ -202,7 +202,7 @@ export function SalaryAdvanceTable({
                       {request.amount}
                     </TableCell>
                     <TableCell>
-                      {format(new Date(request.requestDate), "MMM dd, yyyy")}
+                      {format(new Date(request.requestDate), "dd/MM/yyyy")}
                     </TableCell>
                     <TableCell>
                       <div className="max-w-[200px] truncate" title={request.reason}>

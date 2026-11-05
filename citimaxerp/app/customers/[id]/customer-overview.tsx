@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Plus, ChevronLeft, ChevronRight, PhoneCall, Users, ListTodo } from "lucide-react"
@@ -164,7 +165,7 @@ export function CustomerOverview({ customerId }: CustomerOverviewProps) {
               <div key={note.id} className="rounded-md bg-muted p-4">
                 <p className="text-sm">{note.note_content}</p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Added by User ID: {note.created_by} - {new Date(note.created_at).toLocaleDateString()}
+                  Added by User ID: {note.created_by} - {displayDate(new Date(note.created_at))}
                 </p>
               </div>
             ))}
@@ -315,7 +316,7 @@ export function CustomerOverview({ customerId }: CustomerOverviewProps) {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    {new Date(activity.created_at).toLocaleString()} - {activity.location || "N/A"}
+                    {displayDateTime(new Date(activity.created_at))} - {activity.location || "N/A"}
                   </p>
                 </div>
               ))}
@@ -392,7 +393,7 @@ export function CustomerOverview({ customerId }: CustomerOverviewProps) {
             <div>
               <h4 className="text-sm font-medium">Date and Time</h4>
               <p className="text-sm">
-                {selectedActivity?.start_time && new Date(selectedActivity.start_time).toLocaleString()}
+                {selectedActivity?.start_time && displayDateTime(new Date(selectedActivity.start_time))}
               </p>
             </div>
             <div>

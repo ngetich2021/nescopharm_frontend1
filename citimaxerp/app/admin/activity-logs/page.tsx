@@ -332,7 +332,7 @@ export default function ActivityLogsPage() {
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateFrom ? format(dateFrom, "MMM dd") : "From"}
+                    {dateFrom ? format(dateFrom, "dd/MM") : "From"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
@@ -355,7 +355,7 @@ export default function ActivityLogsPage() {
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateTo ? format(dateTo, "MMM dd") : "To"}
+                    {dateTo ? format(dateTo, "dd/MM") : "To"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
@@ -403,7 +403,7 @@ export default function ActivityLogsPage() {
                     <TableRow key={log.id}>
                       <TableCell>
                         <div className="text-sm">
-                          <div>{format(new Date(log.created_at), "MMM dd, yyyy")}</div>
+                          <div>{format(new Date(log.created_at), "dd/MM/yyyy")}</div>
                           <div className="text-muted-foreground">
                             {format(new Date(log.created_at), "HH:mm:ss")}
                           </div>

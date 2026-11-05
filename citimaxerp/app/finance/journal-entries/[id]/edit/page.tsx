@@ -357,7 +357,7 @@ export default function EditJournalEntryPage() {
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {form.watch("entry_date") ? (
-                          format(new Date(form.watch("entry_date")), "PPP")
+                          format(new Date(form.watch("entry_date")), "dd/MM/yyyy")
                         ) : (
                           <span>Pick a date</span>
                         )}

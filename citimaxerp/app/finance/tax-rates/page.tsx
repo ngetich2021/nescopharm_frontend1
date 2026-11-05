@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -425,11 +426,11 @@ export default function TaxRatesPage() {
                         {formatMethodLabel(taxRate.calculation_method)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {new Date(taxRate.effective_from).toLocaleDateString()}
+                        {displayDate(new Date(taxRate.effective_from))}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {taxRate.effective_to
-                          ? new Date(taxRate.effective_to).toLocaleDateString()
+                          ? displayDate(new Date(taxRate.effective_to))
                           : "-"}
                       </TableCell>
                       <TableCell>

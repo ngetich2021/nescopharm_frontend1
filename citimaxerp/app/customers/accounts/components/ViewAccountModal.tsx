@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useState } from "react";
 import {
   Sheet,
@@ -502,7 +503,7 @@ export function ViewAccountModal({ open, onOpenChange, account, onRefresh }: Vie
                             <div className="text-right text-sm">
                               <p className="text-muted-foreground">by {approval.approver?.full_name || "N/A"}</p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(approval.approved_at).toLocaleString()}
+                                {displayDateTime(new Date(approval.approved_at))}
                               </p>
                             </div>
                           </div>
@@ -559,7 +560,7 @@ export function ViewAccountModal({ open, onOpenChange, account, onRefresh }: Vie
                           {document.expiry_date && (
                             <div className="flex justify-between items-center">
                               <p className="text-sm text-muted-foreground">Expiry Date</p>
-                              <p className="font-medium">{new Date(document.expiry_date).toLocaleDateString()}</p>
+                              <p className="font-medium">{displayDate(new Date(document.expiry_date))}</p>
                             </div>
                           )}
                           {document.regulatory_body && (
@@ -609,11 +610,11 @@ export function ViewAccountModal({ open, onOpenChange, account, onRefresh }: Vie
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Created</p>
-                  <p className="font-medium">{new Date(account.created_at).toLocaleString()}</p>
+                  <p className="font-medium">{displayDateTime(new Date(account.created_at))}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Last Updated</p>
-                  <p className="font-medium">{new Date(account.updated_at).toLocaleString()}</p>
+                  <p className="font-medium">{displayDateTime(new Date(account.updated_at))}</p>
                 </div>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { displayDate } from "@/lib/date-format"
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -32,11 +33,7 @@ export function formatCurrency(amount: number | string): string {
 }
 
 export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("en-KE", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(date))
+  return displayDate(date)
 }
 
 export function toSentenceCase(str: string): string {

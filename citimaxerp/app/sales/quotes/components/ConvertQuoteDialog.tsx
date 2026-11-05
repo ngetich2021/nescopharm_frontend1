@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { sizedName } from "@/lib/product-sizes"
 import { Quote, isOneTimeQuote, quoteCustomerName } from "@/lib/quotes"
@@ -187,7 +188,7 @@ export function ConvertQuoteDialog({
                 <div>
                   <span className="block text-xs text-gray-500">Valid Until</span>
                   <span className="font-medium text-gray-900">
-                    {new Date(quote.valid_until).toLocaleDateString()}
+                    {displayDate(new Date(quote.valid_until))}
                   </span>
                 </div>
               </div>

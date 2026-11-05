@@ -13,7 +13,7 @@
     'docLines' => array_filter([
       'Dispatch No: ' . $dispatch->dispatch_number,
       $requisition ? 'Requisition No: ' . $requisition->requisition_number : null,
-      'Date: ' . $dispatch->created_at->format('d M Y'),
+      'Date: ' . $dispatch->created_at->format('d/m/Y'),
     ]),
   ])
 
@@ -62,7 +62,7 @@
         <td>{{ $item->product->name ?? '—' }}</td>
         <td>{{ $item->variant->name ?? '—' }}</td>
         <td>{{ $item->batch->batch_number ?? '—' }}</td>
-        <td>{{ $item->batch?->expiry_date ? $item->batch->expiry_date->format('d M Y') : '—' }}</td>
+        <td>{{ $item->batch?->expiry_date ? $item->batch->expiry_date->format('d/m/Y') : '—' }}</td>
         <td class="qty">{{ $item->quantity }}</td>
       </tr>
       @endforeach
@@ -83,7 +83,7 @@
           <div class="sig-role">Issued By (Warehouse Manager)</div>
           <div>Name: {{ $dispatch->createdBy ? trim($dispatch->createdBy->first_name . ' ' . $dispatch->createdBy->last_name) : '______________________' }}</div>
           <div>Signature: ______________________</div>
-          <div>Date: {{ $dispatch->created_at->format('d M Y') }}</div>
+          <div>Date: {{ $dispatch->created_at->format('d/m/Y') }}</div>
         </div>
       </td>
       <td>
@@ -98,7 +98,7 @@
 
   <div class="footer">
     This requisition note is computer-generated. &nbsp;
-    Generated: {{ now()->format('d M Y H:i') }} &nbsp;|&nbsp; {{ $company?->name ?? 'CitiMax ERP' }}
+    Generated: {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp; {{ $company?->name ?? 'CitiMax ERP' }}
   </div>
 
 </div>

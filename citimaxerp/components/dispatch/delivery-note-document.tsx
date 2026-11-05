@@ -107,7 +107,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
     ].filter((s, i, arr): s is string => !!s && arr.indexOf(s) === i)
     const letterheadSrc = letterheadCandidates[letterheadIndex]
     const dispatchDate = dispatch.dispatch_date || dispatch.created_at
-    const dateStr = dispatchDate ? format(new Date(dispatchDate), 'dd-MMM-yy') : 'N/A'
+    const dateStr = dispatchDate ? format(new Date(dispatchDate), 'dd/MM/yyyy') : 'N/A'
 
     const referenceCells = [
       { label: "Delivery Note No.", value: dispatch.dispatch_number },

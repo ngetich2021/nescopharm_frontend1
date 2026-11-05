@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -47,7 +48,7 @@ type Budget = {
 }
 
 const kes = (v: unknown) => `KES ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
+const fmtDate = (d?: string | null) => (d ? displayDate(new Date(d)) : "-")
 const STATUS: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
   approved: "bg-green-100 text-green-800",

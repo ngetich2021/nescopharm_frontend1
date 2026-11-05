@@ -265,7 +265,7 @@ export function CustomerAccountsTable({
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {account.created_at ? format(new Date(account.created_at), "MMM dd, yyyy") : "-"}
+                        {account.created_at ? format(new Date(account.created_at), "dd/MM/yyyy") : "-"}
                         {account.created_at && (
                           <div className="text-xs text-muted-foreground">
                             {format(new Date(account.created_at), "HH:mm")}

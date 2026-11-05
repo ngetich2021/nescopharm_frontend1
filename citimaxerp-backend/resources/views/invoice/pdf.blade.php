@@ -92,11 +92,11 @@ body { font-family: 'Figtree'; background: #fff; }
                 </td>
                 <td class="header-right">
                     <div class="row"><span class="label">Invoice No.</span> <span class="value">{{ $invoice->invoice_number }}</span></div>
-                    <div class="row"><span class="label">Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('j M Y') }}</span></div>
+                    <div class="row"><span class="label">Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y') }}</span></div>
                     @if($invoice->created_at)
-                    <div class="row"><span class="label">Invoice Date:</span> <span class="value">{{ $invoice->created_at->format('j M Y') }}</span></div>
+                    <div class="row"><span class="label">Invoice Date:</span> <span class="value">{{ $invoice->created_at->format('d/m/Y') }}</span></div>
                     @endif
-                    <div class="row"><span class="label">Due Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->due_date)->format('j M Y') }}</span></div>
+                    <div class="row"><span class="label">Due Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</span></div>
                 </td>
             </tr>
         </table>
@@ -192,7 +192,7 @@ body { font-family: 'Figtree'; background: #fff; }
             <div style="margin-top: 12px; font-size: 0.8rem; border-top: 1px solid #e5e7eb; padding-top: 8px;">
                 <strong>Customer contact person:</strong> {{ $approvedOrder->invoice_contact_person }}@if($approvedOrder->invoice_contact_phone) - {{ $approvedOrder->invoice_contact_phone }}@endif<br>
                 <strong>Approved by:</strong> {{ $approvedOrder->invoiceApprover?->full_name }}
-                ({{ $approvedOrder->invoice_approved_at->format('d M Y') }})<br>
+                ({{ $approvedOrder->invoice_approved_at->format('d/m/Y') }})<br>
                 <strong>Comment:</strong> {{ $approvedOrder->invoice_approval_comment }}
             </div>
         @endif

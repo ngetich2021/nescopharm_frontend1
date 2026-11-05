@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate } from "@/lib/date-format"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -59,11 +60,7 @@ export function PayrollSummary({
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
+    return displayDate(new Date(dateString));
   };
 
   return (

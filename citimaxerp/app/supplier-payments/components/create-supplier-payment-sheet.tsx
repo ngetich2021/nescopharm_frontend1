@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import {
   Sheet,
@@ -621,7 +622,7 @@ export default function CreateSupplierPaymentSheet({
                                     {inv.type === "delivery_invoice" ? "Delivery" : "Bill"}{inv.description ? ` - ${inv.description}` : ""}
                                   </div>
                                 </td>
-                                <td className="px-2 py-1.5 whitespace-nowrap">{inv.date ? new Date(inv.date).toLocaleDateString("en-GB") : "-"}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{inv.date ? displayDate(new Date(inv.date)) : "-"}</td>
                                 <td className="px-2 py-1.5 text-right whitespace-nowrap">{formatCurrency(inv.balance)}</td>
                                 <td className="px-2 py-1.5">
                                   <Input

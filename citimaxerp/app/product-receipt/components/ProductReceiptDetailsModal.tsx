@@ -1,4 +1,5 @@
 "use client";
+import { displayDate } from "@/lib/date-format"
 import { useState } from "react";
 import * as React from "react";
 import {
@@ -197,7 +198,7 @@ export function ProductReceiptDetailsModal({
                             Created At
                           </span>
                           <span className="font-medium">
-                            {receipt.created_at ? new Date(receipt.created_at).toLocaleDateString() : "-"}
+                            {receipt.created_at ? displayDate(new Date(receipt.created_at)) : "-"}
                           </span>
                         </div>
                       </div>
@@ -295,7 +296,7 @@ export function ProductReceiptDetailsModal({
                               <div className="col-span-2">
                                 <span className="text-gray-600">Expiry Date:</span>
                                 <span className="ml-2 font-medium">
-                                  {new Date(item.expiry_date).toLocaleDateString()}
+                                  {displayDate(new Date(item.expiry_date))}
                                 </span>
                               </div>
                             )}

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -457,7 +458,7 @@ export default function RolesPage() {
                   <TableCell>{role.users?.length || 0}</TableCell>
                   <TableCell>{role.permissions?.length || 0}</TableCell>
                   <TableCell>
-                    {new Date(role.created_at).toLocaleDateString()}
+                    {displayDate(new Date(role.created_at))}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

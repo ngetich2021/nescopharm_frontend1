@@ -120,7 +120,7 @@ export default function BalanceSheetPage() {
     return {
       fileName: documentFileName([sessionCompanyName(), `Balance Sheet ${filePeriod(null, asOfDate)}`]),
       title: "Balance Sheet",
-      subtitle: `As of ${format(new Date(asOfDate), 'dd MMM yyyy')}${bs.is_balanced ? "" : " · OUT OF BALANCE"}`,
+      subtitle: `As of ${format(new Date(asOfDate), 'dd/MM/yyyy')}${bs.is_balanced ? "" : " · OUT OF BALANCE"}`,
       headers: ["S/No", "Account Code", "Account Name", "Balance"],
       moneyColumns: [3],
       rows,
@@ -195,7 +195,7 @@ export default function BalanceSheetPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Balance Sheet</CardTitle>
             <CardDescription className="text-lg">
-              As of {format(new Date(asOfDate), 'MMMM dd, yyyy')}
+              As of {format(new Date(asOfDate), 'dd/MM/yyyy')}
             </CardDescription>
           </CardHeader>
           <CardContent>

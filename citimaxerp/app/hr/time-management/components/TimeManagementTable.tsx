@@ -187,7 +187,7 @@ export function TimeManagementTable({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {format(new Date(entry.date), "MMM dd, yyyy")}
+                      {format(new Date(entry.date), "dd/MM/yyyy")}
                     </TableCell>
                     <TableCell>
                       {entry.hours}

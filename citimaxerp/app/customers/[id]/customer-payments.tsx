@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -161,7 +162,7 @@ export function CustomerPayments({ customerId, initialPayments }: CustomerPaymen
                   {currentItems.map((payment) => (
                     <TableRow key={payment.id} className="hover:bg-gray-50">
                       <TableCell className="font-medium">{payment.id.slice(0, 8)}</TableCell>
-                      <TableCell>{new Date(payment.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{displayDate(new Date(payment.created_at))}</TableCell>
                       <TableCell>{paymentMethodLabel(payment.payment_method)}</TableCell>
                       <TableCell>KES {Number.parseFloat(payment.amount_paid).toFixed(2)}</TableCell>
                       <TableCell>

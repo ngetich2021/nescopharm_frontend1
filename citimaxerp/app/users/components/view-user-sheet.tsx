@@ -140,7 +140,7 @@ export function ViewUserSheet({ user, open, onOpenChange, onEdit }: ViewUserShee
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                 <div>
                   <div className="font-medium">Account terminated</div>
-                  <div className="text-red-700/80">On {display.terminated_at ? format(new Date(display.terminated_at as string), "PPP p") : "—"} — {(display as any).termination_reason || "No reason provided"}</div>
+                  <div className="text-red-700/80">On {display.terminated_at ? format(new Date(display.terminated_at as string), "dd/MM/yyyy HH:mm") : "—"} — {(display as any).termination_reason || "No reason provided"}</div>
                 </div>
               </div>
             )}
@@ -149,7 +149,7 @@ export function ViewUserSheet({ user, open, onOpenChange, onEdit }: ViewUserShee
                 <UserX className="h-4 w-4 mt-0.5 shrink-0" />
                 <div>
                   <div className="font-medium">Soft deleted</div>
-                  <div className="text-amber-700/80">On {display.deleted_at ? format(new Date(display.deleted_at as string), "PPP p") : "—"} — restore to reactivate.</div>
+                  <div className="text-amber-700/80">On {display.deleted_at ? format(new Date(display.deleted_at as string), "dd/MM/yyyy HH:mm") : "—"} — restore to reactivate.</div>
                 </div>
               </div>
             )}
@@ -245,17 +245,17 @@ export function ViewUserSheet({ user, open, onOpenChange, onEdit }: ViewUserShee
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground inline-flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> Created</span>
-                  <span className="font-medium">{display.created_at ? format(new Date(display.created_at), "PPP") : "—"}</span>
+                  <span className="font-medium">{display.created_at ? format(new Date(display.created_at), "dd/MM/yyyy") : "—"}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Updated</span>
-                  <span className="font-medium">{display.updated_at ? format(new Date(display.updated_at), "PPP") : "—"}</span>
+                  <span className="font-medium">{display.updated_at ? format(new Date(display.updated_at), "dd/MM/yyyy") : "—"}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Last login</span>
-                  <span className="font-medium">{display.last_login_at ? format(new Date(display.last_login_at), "PPP p") : "Never"}</span>
+                  <span className="font-medium">{display.last_login_at ? format(new Date(display.last_login_at), "dd/MM/yyyy HH:mm") : "Never"}</span>
                 </div>
               </CardContent>
             </Card>

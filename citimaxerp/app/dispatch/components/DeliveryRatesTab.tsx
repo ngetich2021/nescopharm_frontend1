@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDateTime } from "@/lib/date-format"
 import { ExportMenu, useTableExport } from "@/components/export-menu";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -210,7 +211,7 @@ export function DeliveryRatesTab() {
       Number(rate.rate_per_carton) || 0,
       rate.status,
       rate.created_by ? `${(rate.created_by as any).first_name} ${(rate.created_by as any).last_name}` : "",
-      new Date(rate.created_at).toLocaleString("en-GB"),
+      displayDateTime(new Date(rate.created_at)),
     ]),
   }));
 
@@ -412,8 +413,8 @@ export function DeliveryRatesTab() {
                 </div>
               )}
               <div className="border-t pt-4 text-sm text-muted-foreground space-y-1">
-                <p>Created: {new Date(viewingRate.created_at).toLocaleString()}</p>
-                {viewingRate.approved_at && <p>Approved: {new Date(viewingRate.approved_at).toLocaleString()}</p>}
+                <p>Created: {displayDateTime(new Date(viewingRate.created_at))}</p>
+                {viewingRate.approved_at && <p>Approved: {displayDateTime(new Date(viewingRate.approved_at))}</p>}
                 {viewingRate.approved_by && (
                   <p>By: {viewingRate.approved_by.first_name} {viewingRate.approved_by.last_name}</p>
                 )}

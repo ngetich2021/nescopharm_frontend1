@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { Fragment, useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -329,7 +330,7 @@ export default function PriceListsPage() {
                   <TableBody>
                     {history.map((h) => {
                       const d = new Date(h.created_at)
-                      const dateStr = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      const dateStr = displayDate(d)
                       const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
                       const isOpen = expanded === h.id
                       const detail = changes[h.id]

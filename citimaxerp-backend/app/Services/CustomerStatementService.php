@@ -465,18 +465,10 @@ class CustomerStatementService
         ];
     }
 
-    /**
-     * "1st - 30th September 2026" for a period within one calendar month,
-     * or a full "1st January 2026 - 15th February 2026" style range
-     * otherwise.
-     */
+    /** "01/09/2026 - 30/09/2026". */
     public function formatPeriodLabel(Carbon $from, Carbon $to): string
     {
-        if ($from->month === $to->month && $from->year === $to->year) {
-            return $from->format('jS') . ' - ' . $to->format('jS') . ' ' . $to->format('F Y');
-        }
-
-        return $from->format('jS F Y') . ' - ' . $to->format('jS F Y');
+        return $from->format('d/m/Y') . ' - ' . $to->format('d/m/Y');
     }
 
     /**

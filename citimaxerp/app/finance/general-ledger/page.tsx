@@ -80,7 +80,7 @@ function ledgerRow(t: LedgerTransaction, index: number, account = ""): ExportCel
   return [
     index + 1,
     account,
-    format(new Date(t.date), 'dd MMM yyyy'),
+    format(new Date(t.date), 'dd/MM/yyyy'),
     t.reference,
     t.description,
     num(t.debit_amount) > 0 ? num(t.debit_amount) : null,
@@ -143,7 +143,7 @@ function LedgerAccountCard({ accountData, buildExport, dateFrom, dateTo }: { acc
                 {firstPage && (
                   <TableRow className="bg-muted/40 font-medium">
                     <TableCell />
-                    <TableCell>{dateFrom ? format(new Date(dateFrom), 'MMM dd, yyyy') : '-'}</TableCell>
+                    <TableCell>{dateFrom ? format(new Date(dateFrom), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell />
                     <TableCell>Opening Balance</TableCell>
                     <TableCell />
@@ -159,7 +159,7 @@ function LedgerAccountCard({ accountData, buildExport, dateFrom, dateTo }: { acc
                 {pageRows.map((transaction, i) => (
                   <TableRow key={transaction.id}>
                     <TableCell className="text-center text-muted-foreground tabular-nums">{start + i + 1}</TableCell>
-                    <TableCell>{format(new Date(transaction.date), 'MMM dd, yyyy')}</TableCell>
+                    <TableCell>{format(new Date(transaction.date), 'dd/MM/yyyy')}</TableCell>
                     <TableCell className="font-mono">{transaction.reference}</TableCell>
                     <TableCell>{transaction.description}</TableCell>
                     <TableCell className="font-mono text-right">
@@ -176,7 +176,7 @@ function LedgerAccountCard({ accountData, buildExport, dateFrom, dateTo }: { acc
                 {lastPage && (
                   <TableRow className="bg-muted/40 font-semibold">
                     <TableCell />
-                    <TableCell>{dateTo ? format(new Date(dateTo), 'MMM dd, yyyy') : '-'}</TableCell>
+                    <TableCell>{dateTo ? format(new Date(dateTo), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell />
                     <TableCell>Closing Balance</TableCell>
                     <TableCell className="font-mono text-right">{formatCurrency(accountData.totals.total_debits)}</TableCell>
@@ -340,7 +340,7 @@ export default function GeneralLedgerPage() {
       )
     : ledgerData
 
-  const periodLine = `${format(new Date(dateFrom), 'dd MMM yyyy')} to ${format(new Date(dateTo), 'dd MMM yyyy')}`
+  const periodLine = `${format(new Date(dateFrom), 'dd/MM/yyyy')} to ${format(new Date(dateTo), 'dd/MM/yyyy')}`
   const customerLine = (customerId !== "all" ? ` · ${customerLabel(customerId)}` : "")
     + (supplierId !== "all" ? ` · ${supplierLabel(supplierId)}` : "")
 

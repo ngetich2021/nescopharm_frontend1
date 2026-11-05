@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -95,7 +96,7 @@ export function LogisticsDetailsSheet({ isOpen, onOpenChange, logisticsId }: Log
                 </CardHeader>
                 <CardContent>
                   <div className="text-sm font-medium">
-                    {logistics.delivery_date ? new Date(logistics.delivery_date).toLocaleDateString() : "Not scheduled"}
+                    {logistics.delivery_date ? displayDate(new Date(logistics.delivery_date)) : "Not scheduled"}
                   </div>
                 </CardContent>
               </Card>
@@ -156,7 +157,7 @@ export function LogisticsDetailsSheet({ isOpen, onOpenChange, logisticsId }: Log
                     <h4 className="text-sm font-medium text-gray-500">Order Date</h4>
                     <p className="mt-1">
                       {logistics.orders?.order_date
-                        ? new Date(logistics.orders.order_date).toLocaleDateString()
+                        ? displayDate(new Date(logistics.orders.order_date))
                         : "N/A"}
                     </p>
                   </div>
@@ -179,7 +180,7 @@ export function LogisticsDetailsSheet({ isOpen, onOpenChange, logisticsId }: Log
                     <h4 className="text-sm font-medium text-gray-500">Estimated Delivery</h4>
                     <p className="mt-1">
                       {logistics.estimated_delivery_date
-                        ? new Date(logistics.estimated_delivery_date).toLocaleDateString()
+                        ? displayDate(new Date(logistics.estimated_delivery_date))
                         : "N/A"}
                     </p>
                   </div>
@@ -187,7 +188,7 @@ export function LogisticsDetailsSheet({ isOpen, onOpenChange, logisticsId }: Log
                     <h4 className="text-sm font-medium text-gray-500">Actual Delivery</h4>
                     <p className="mt-1">
                       {logistics.actual_delivery_date
-                        ? new Date(logistics.actual_delivery_date).toLocaleDateString()
+                        ? displayDate(new Date(logistics.actual_delivery_date))
                         : "Not delivered yet"}
                     </p>
                   </div>

@@ -1,4 +1,5 @@
 "use client"
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
 import { useRouter } from "next/navigation"
@@ -851,7 +852,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                 </div>
                 <div className="sm:text-right">
                   <div className="text-muted-foreground mb-1">Order created</div>
-                  <div>{new Date(order.created_at).toLocaleString()}</div>
+                  <div>{displayDateTime(new Date(order.created_at))}</div>
                 </div>
               </div>
             </div>
@@ -1003,7 +1004,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                                   <div key={a.batch_id}>
                                     {item.batch_allocations!.length > 1 ? `${a.quantity} from ` : ''}
                                     Batch {a.batch_number}
-                                    {a.expiry_date && ` · Exp ${new Date(a.expiry_date).toLocaleDateString()}`}
+                                    {a.expiry_date && ` · Exp ${displayDate(new Date(a.expiry_date))}`}
                                   </div>
                                 ))}
                               </div>
@@ -1144,7 +1145,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                         </div>
                         <div className="text-right">
                           <div className="font-medium text-xs">KES {formatAmount(payment.amount_paid)}</div>
-                          <div className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleDateString()}</div>
+                          <div className="text-xs text-muted-foreground">{displayDate(new Date(payment.created_at))}</div>
                         </div>
                       </div>
                     ))}
@@ -1178,7 +1179,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                     <div>
                       <span className="text-muted-foreground">Approved by: </span>
                       {[order.invoice_approver?.first_name, order.invoice_approver?.last_name].filter(Boolean).join(" ") || "-"}
-                      {order.invoice_approved_at && ` on ${new Date(order.invoice_approved_at).toLocaleString()}`}
+                      {order.invoice_approved_at && ` on ${displayDateTime(new Date(order.invoice_approved_at))}`}
                     </div>
                     {order.invoice_contact_person && (
                       <div>
@@ -1215,11 +1216,11 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                             Invoice #{orderInvoice.invoice_number}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            Issued: {new Date(orderInvoice.invoice_date).toLocaleDateString()}
+                            Issued: {displayDate(new Date(orderInvoice.invoice_date))}
                           </div>
                           {orderInvoice.due_date && (
                             <div className="text-xs text-muted-foreground">
-                              Due: {new Date(orderInvoice.due_date).toLocaleDateString()}
+                              Due: {displayDate(new Date(orderInvoice.due_date))}
                             </div>
                           )}
                         </div>

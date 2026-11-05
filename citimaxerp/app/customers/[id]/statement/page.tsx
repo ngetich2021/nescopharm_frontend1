@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useRef, useState, use } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -29,7 +30,7 @@ function formatAmount(amount: string | number | null | undefined): string {
 }
 
 function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("en-GB")
+  return displayDate(new Date(value))
 }
 
 function toDateString(d: Date) {

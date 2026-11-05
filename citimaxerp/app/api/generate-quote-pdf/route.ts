@@ -1,3 +1,4 @@
+import { displayDate } from "@/lib/date-format"
 import { NextResponse } from "next/server"
 import puppeteer from "puppeteer"
 import { buildBuyerBlock } from "@/lib/customer-address"
@@ -8,8 +9,8 @@ export async function POST(request: Request) {
     const buyer = buildBuyerBlock(customerInfo)
 
     // Format the quote date and valid until date
-    const quoteDate = new Date(quoteDetails.date).toLocaleDateString()
-    const validUntil = new Date(quoteDetails.validUntil).toLocaleDateString()
+    const quoteDate = displayDate(new Date(quoteDetails.date))
+    const validUntil = displayDate(new Date(quoteDetails.validUntil))
 
     // Format items for HTML
     const itemsHtml = quoteDetails.items

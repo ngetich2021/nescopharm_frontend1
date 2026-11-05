@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDayMonth } from "@/lib/date-format"
 import { getCustomerDisplayName } from "@/lib/customers"
 import { DialogTrigger } from "@/components/ui/dialog"
 import { useEffect, useState } from "react"
@@ -482,7 +483,7 @@ export function CustomerProfile({ customerId, isOpen, onClose }: CustomerProfile
     } else if (diffDays < 7 && diffDays > 0) {
       return `${diffDays} days ago, ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
     } else {
-      return date.toLocaleDateString() + ", " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      return displayDate(date) + ", " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     }
   }
 
@@ -495,7 +496,7 @@ export function CustomerProfile({ customerId, isOpen, onClose }: CustomerProfile
       return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     } else {
       return (
-        date.toLocaleDateString([], { month: "short", day: "numeric" }) +
+        displayDayMonth(date) +
         " " +
         date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       )
@@ -547,12 +548,7 @@ export function CustomerProfile({ customerId, isOpen, onClose }: CustomerProfile
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(date)
+    return displayDate(dateString)
   }
 
   return (

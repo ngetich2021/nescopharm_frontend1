@@ -223,13 +223,13 @@ export function SerialNumberTable({
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {format(new Date(serialNumber.received_date), "MMM dd, yyyy")}
+                        {format(new Date(serialNumber.received_date), "dd/MM/yyyy")}
                       </div>
                     </TableCell>
                     <TableCell>
                       {serialNumber.warranty_expiry_date ? (
                         <div className="text-sm">
-                          {format(new Date(serialNumber.warranty_expiry_date), "MMM dd, yyyy")}
+                          {format(new Date(serialNumber.warranty_expiry_date), "dd/MM/yyyy")}
                         </div>
                       ) : (
                         <span>-</span>

@@ -439,7 +439,7 @@ class AssistantTools
             }
             if ($stock > 0) {
                 $expiry = $b->pluck('nearest_expiry')->filter()->min();
-                $inStock->push([$name, $stock, max(0, $stock - $expired - $badDate), $expiry ? Carbon::parse($expiry)->format('j M Y') : '-']);
+                $inStock->push([$name, $stock, max(0, $stock - $expired - $badDate), $expiry ? Carbon::parse($expiry)->format('d/m/Y') : '-']);
             } elseif ($r['is_active']) {
                 // A hidden (inactive) product at 0 is not stock that ran out.
                 $atZero->push($name);
@@ -457,7 +457,7 @@ class AssistantTools
         }
 
         return [
-            'as_of' => now($tz)->format('j M Y H:i'),
+            'as_of' => now($tz)->format('d/m/Y H:i'),
             'lines_in_stock' => $inStock->count(),
             'lines_out_of_stock' => $atZero->count(),
             'total_units_in_stock' => (float) $inStock->sum(1),

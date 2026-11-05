@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { Fragment, useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -136,7 +137,7 @@ export function ImportHistoryDialog({ kind, title }: { kind: ImportHistoryKind; 
                           {isOpen ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
                         </TableCell>
                         <TableCell className="text-gray-500">{i + 1}</TableCell>
-                        <TableCell className="whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</TableCell>
+                        <TableCell className="whitespace-nowrap">{displayDateTime(new Date(log.created_at))}</TableCell>
                         <TableCell>{log.user ?? "-"}</TableCell>
                         <TableCell>
                           {log.has_file ? (

@@ -21,7 +21,7 @@
     'docLines' => array_filter([
       'Requisition No: ' . $requisition->requisition_number,
       $dispatch ? 'Dispatch No: ' . $dispatch->dispatch_number : null,
-      'Date: ' . $requisition->created_at->format('d M Y'),
+      'Date: ' . $requisition->created_at->format('d/m/Y'),
     ]),
   ])
 
@@ -44,7 +44,7 @@
       <td class="label">Issued From</td>
       <td class="value">{{ $dispatch->fromStore->name ?? '—' }}</td>
       <td class="label">Issued On</td>
-      <td class="value">{{ $dispatch->created_at->format('d M Y') }}</td>
+      <td class="value">{{ $dispatch->created_at->format('d/m/Y') }}</td>
     </tr>
     @endif
   </table>
@@ -111,7 +111,7 @@
           <div class="sig-role">Issued By (Warehouse Manager)</div>
           <div>Name: {{ $dispatch?->createdBy ? trim($dispatch->createdBy->first_name . ' ' . $dispatch->createdBy->last_name) : '______________________' }}</div>
           <div>Signature: ______________________</div>
-          <div>Date: {{ $dispatch ? $dispatch->created_at->format('d M Y') : '______________________' }}</div>
+          <div>Date: {{ $dispatch ? $dispatch->created_at->format('d/m/Y') : '______________________' }}</div>
         </div>
       </td>
       <td>
@@ -126,7 +126,7 @@
 
   <div class="footer">
     This document is computer-generated for official purposes. &nbsp;
-    Generated: {{ now()->format('d M Y H:i') }} &nbsp;|&nbsp; {{ $company?->name ?? 'CitiMax ERP' }}
+    Generated: {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp; {{ $company?->name ?? 'CitiMax ERP' }}
   </div>
 
 </div>

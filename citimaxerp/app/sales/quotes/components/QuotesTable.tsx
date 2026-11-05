@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -98,10 +99,10 @@ export function QuotesTable({
         i + 1,
         formatQuoteNumber(quote),
         isOneTimeQuote(quote) ? `${quoteCustomerName(quote)} (One-time customer)` : quoteCustomerName(quote) || "Unknown",
-        new Date(quote.created_at).toLocaleDateString("en-GB"),
+        displayDate(new Date(quote.created_at)),
         formatStatus(quote.status),
         quote.signed_quote_path ? "Yes" : "No",
-        quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-GB") : "",
+        quote.valid_until ? displayDate(new Date(quote.valid_until)) : "",
         amount(quote),
       ]),
       footer: [["", "", "", "", "", "", "Total", quotes.reduce((s, q) => s + amount(q), 0)]],
@@ -272,7 +273,7 @@ export function QuotesTable({
                       </span>
                       {quote.submitted_by_id && (
                         <Badge variant="outline" className="w-fit bg-blue-50 text-blue-800 border-blue-400 text-[11px] font-normal">
-                          From: {quote.submittedBy?.full_name || [quote.submittedBy?.first_name, quote.submittedBy?.last_name].filter(Boolean).join(" ") || "Rep"} · {new Date(quote.submitted_at || quote.created_at).toLocaleDateString()}{" "}
+                          From: {quote.submittedBy?.full_name || [quote.submittedBy?.first_name, quote.submittedBy?.last_name].filter(Boolean).join(" ") || "Rep"} · {displayDate(new Date(quote.submitted_at || quote.created_at))}{" "}
                           {new Date(quote.submitted_at || quote.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · Needs Review
                         </Badge>
                       )}
@@ -337,7 +338,7 @@ export function QuotesTable({
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      {new Date(quote.valid_until).toLocaleDateString()}
+                      {displayDate(new Date(quote.valid_until))}
                       <div className="text-xs text-muted-foreground">
                         {new Date(quote.valid_until).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </div>
@@ -345,7 +346,7 @@ export function QuotesTable({
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      {new Date(quote.created_at).toLocaleDateString()}
+                      {displayDate(new Date(quote.created_at))}
                       <div className="text-xs text-muted-foreground">
                         {new Date(quote.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </div>

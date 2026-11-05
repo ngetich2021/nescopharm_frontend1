@@ -156,7 +156,7 @@ export function DispatchTable({
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {format(new Date(dispatch.created_at), "MMM dd, yyyy")}
+                        {format(new Date(dispatch.created_at), "dd/MM/yyyy")}
                         <div className="text-xs text-muted-foreground">
                           {format(new Date(dispatch.created_at), "HH:mm")}
                         </div>

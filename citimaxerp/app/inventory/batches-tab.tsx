@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -199,7 +200,7 @@ export function BatchesTab() {
                         {batch.expiry_date ? (
                           <div className="flex items-center gap-1">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {new Date(batch.expiry_date).toLocaleDateString()}
+                            {displayDate(new Date(batch.expiry_date))}
                           </div>
                         ) : (
                           "N/A"

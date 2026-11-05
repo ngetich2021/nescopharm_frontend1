@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -215,13 +216,13 @@ export function ViewQuoteSheet({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-gray-600">Created:</span>
-                  <span className="text-sm">{new Date(quote.created_at).toLocaleDateString()}</span>
+                  <span className="text-sm">{displayDate(new Date(quote.created_at))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm font-medium text-gray-600">Valid Until:</span>
                   <span className="text-sm flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
-                    {new Date(quote.valid_until).toLocaleDateString()}
+                    {displayDate(new Date(quote.valid_until))}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -469,7 +470,7 @@ export function ViewQuoteSheet({
                   <p className="font-medium">{quote.signed_quote_name || "Signed quote"}</p>
                   <p className="text-muted-foreground">
                     Uploaded
-                    {quote.signed_quote_uploaded_at && ` ${new Date(quote.signed_quote_uploaded_at).toLocaleString()}`}
+                    {quote.signed_quote_uploaded_at && ` ${displayDateTime(new Date(quote.signed_quote_uploaded_at))}`}
                     {quote.signed_quote_uploaded_by && ` by ${repFullName(quote.signed_quote_uploaded_by)}`}
                   </p>
                 </div>

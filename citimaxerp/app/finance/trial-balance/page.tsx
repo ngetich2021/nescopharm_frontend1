@@ -86,7 +86,7 @@ export default function TrialBalancePage() {
     return {
       fileName: documentFileName([sessionCompanyName(), `Trial Balance ${filePeriod(null, asOfDate)}`]),
       title: "Trial Balance",
-      subtitle: `As of ${format(new Date(asOfDate), 'dd MMM yyyy')}`,
+      subtitle: `As of ${format(new Date(asOfDate), 'dd/MM/yyyy')}`,
       headers: ["S/No", "Account Code", "Account Name", "Account Type", "Debit Balance", "Credit Balance"],
       moneyColumns: [4, 5],
       rows: accounts.map((a, i) => [i + 1, a.account_code, a.account_name, a.account_type, amount(a.debit_balance), amount(a.credit_balance)]),
@@ -166,7 +166,7 @@ export default function TrialBalancePage() {
       {/* Trial Balance Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Trial Balance as of {format(new Date(asOfDate), 'MMMM dd, yyyy')}</CardTitle>
+          <CardTitle>Trial Balance as of {format(new Date(asOfDate), 'dd/MM/yyyy')}</CardTitle>
           <CardDescription>
             All account balances grouped by account type
           </CardDescription>

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -112,7 +113,7 @@ export function ExpensesClient() {
     moneyColumns: [4],
     rows: filteredExpenses.map((e, i) => [
       i + 1,
-      e.expense_date ? new Date(e.expense_date).toLocaleDateString("en-GB") : "",
+      e.expense_date ? displayDate(new Date(e.expense_date)) : "",
       e.description,
       e.category?.name || "",
       Number(e.amount) || 0,

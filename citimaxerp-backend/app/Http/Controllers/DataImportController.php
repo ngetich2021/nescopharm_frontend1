@@ -1075,7 +1075,7 @@ class DataImportController extends Controller
                 continue;
             }
             if ($invoiceDate >= $cutoff) {
-                $fail("Invoice Date {$invoiceDate} is not before " . date('d-m-Y', strtotime($cutoff)) . ' - enter invoices from that date onwards in the system the normal way.');
+                $fail("Invoice Date {$invoiceDate} is not before " . date('d/m/Y', strtotime($cutoff)) . ' - enter invoices from that date onwards in the system the normal way.');
                 continue;
             }
 

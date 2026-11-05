@@ -1,3 +1,4 @@
+import { displayDate } from "@/lib/date-format"
 import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
@@ -41,10 +42,10 @@ export async function POST(request: Request) {
           
           <div style="background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
             <div style="margin-bottom: 20px;">
-              <p style="margin: 5px 0;"><strong>Quote Date:</strong> ${new Date().toLocaleDateString()}</p>
-              <p style="margin: 5px 0;"><strong>Valid Until:</strong> ${new Date(
+              <p style="margin: 5px 0;"><strong>Quote Date:</strong> ${displayDate(new Date())}</p>
+              <p style="margin: 5px 0;"><strong>Valid Until:</strong> ${displayDate(new Date(
                 quoteDetails.validUntil,
-              ).toLocaleDateString()}</p>
+              ))}</p>
             </div>
             
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">

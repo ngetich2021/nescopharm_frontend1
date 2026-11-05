@@ -46,7 +46,7 @@
         <table class="title-row">
             <tr>
                 <td class="quote-title">QUOTATION</td>
-                <td style="text-align: right;">Date: <strong>{{ \Carbon\Carbon::parse($quote->created_at)->format('j M Y') }}</strong></td>
+                <td style="text-align: right;">Date: <strong>{{ \Carbon\Carbon::parse($quote->created_at)->format('d/m/Y') }}</strong></td>
             </tr>
         </table>
 
@@ -124,7 +124,7 @@
 
         @if($quote->valid_until)
         <div class="valid-until">
-            This quote is valid until {{ \Carbon\Carbon::parse($quote->valid_until)->format('F j, Y') }}
+            This quote is valid until {{ \Carbon\Carbon::parse($quote->valid_until)->format('d/m/Y') }}
         </div>
         @endif
 

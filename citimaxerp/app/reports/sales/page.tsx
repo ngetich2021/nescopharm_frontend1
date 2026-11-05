@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -288,7 +289,7 @@ export default function SalesReportPage() {
   ]
 
   // The selected period in words, e.g. "01 Oct 2026 – 30 Oct 2026", for the totals.
-  const fmtDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  const fmtDay = (iso: string) => displayDate(new Date(`${iso}T00:00:00`))
   const periodLabel = (() => {
     const from = calculateDateFrom(dateRange)
     const to = dateRange === 'yesterday' ? daysAgo(1) : dateRange === 'custom' && dateTo ? dateTo : ymd(new Date())

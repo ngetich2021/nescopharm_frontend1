@@ -306,7 +306,7 @@ export function CreateDispatchFromBreakageModal({
                   <div>
                     <Label className="text-sm font-medium">Date Reported</Label>
                     <p className="text-sm text-gray-700">
-                      {format(new Date(breakage.created_at), "MMM dd, yyyy")}
+                      {format(new Date(breakage.created_at), "dd/MM/yyyy")}
                     </p>
                   </div>
                 </div>

@@ -1,3 +1,4 @@
+import { displayDate } from "@/lib/date-format"
 import apiCall from "./api"
 import type { TableExport } from "./table-export"
 
@@ -544,7 +545,7 @@ export async function fetchInvoicePaymentHistory(invoiceId: string): Promise<Pay
 // its PDF is the invoice document itself.
 export function invoiceExport(invoice: Invoice): TableExport {
   const n = parseInvoiceAmount
-  const date = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "")
+  const date = (d?: string | null) => (d ? displayDate(new Date(d)) : "")
   const customer = invoice.customer?.business_name || invoice.customer?.name || ""
   const lines = invoice.line_items ?? []
   const lineTotal = (l: InvoiceLineItem) => (l.line_total != null ? n(l.line_total) : n(l.quantity) * n(l.unit_price) - n(l.discount_amount))

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -85,7 +86,7 @@ export default function LogisticsOverview() {
                   <TableCell>{entry.delivery_person_id || "N/A"}</TableCell>
                   <TableCell>{entry.delivery_status}</TableCell>
                   <TableCell>{entry.tracking_number || "N/A"}</TableCell>
-                  <TableCell>{new Date(entry.created_at).toLocaleString()}</TableCell>
+                  <TableCell>{displayDateTime(new Date(entry.created_at))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

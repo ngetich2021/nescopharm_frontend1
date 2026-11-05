@@ -729,7 +729,7 @@ class OrderController extends Controller
             return response()->json([
                 'status' => 'failed',
                 'message' => "Invoice {$invoice->invoice_number} is already on eTIMS with date "
-                    . $invoice->invoice_date->format('d-m-Y') . ', so the order date cannot be changed.',
+                    . $invoice->invoice_date->format('d/m/Y') . ', so the order date cannot be changed.',
             ], 400);
         }
 

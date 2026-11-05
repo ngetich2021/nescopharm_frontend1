@@ -148,7 +148,7 @@ export function StockCountsTable({
       c.count_type,
       c.status,
       c.created_by || "System",
-      c.scheduled_date ? format(new Date(c.scheduled_date), "dd MMM yyyy") : "-",
+      c.scheduled_date ? format(new Date(c.scheduled_date), "dd/MM/yyyy") : "-",
       Number(c.total_products_expected) || 0,
       Number(c.total_products_counted) || 0,
       Number(c.total_variances) || 0,
@@ -481,7 +481,7 @@ export function StockCountsTable({
                     {count.scheduled_date ? (
                       <div className="flex items-center">
                         <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                        {format(new Date(count.scheduled_date), "MMM d, yyyy")}
+                        {format(new Date(count.scheduled_date), "dd/MM/yyyy")}
                       </div>
                     ) : (
                       "-"

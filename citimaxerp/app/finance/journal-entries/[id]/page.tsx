@@ -151,7 +151,7 @@ export default function JournalEntryDetailPage() {
     fileName: documentFileName([sessionCompanyName(), `Journal Entry ${e.entry_number}`]),
     title: `Journal Entry ${e.entry_number}`,
     details: [
-      ["Date", format(new Date(e.entry_date), 'dd MMM yyyy')],
+      ["Date", format(new Date(e.entry_date), 'dd/MM/yyyy')],
       ["Reference", e.reference || "-"],
       ["Type", e.entry_type],
       ["Status", e.status],
@@ -301,7 +301,7 @@ export default function JournalEntryDetailPage() {
                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-300 ml-11">
                     <div className="flex items-center gap-2">
                        <Calendar className="h-4 w-4 text-slate-400" />
-                       <span>{format(new Date(entry.entry_date), 'MMMM dd, yyyy')}</span>
+                       <span>{format(new Date(entry.entry_date), 'dd/MM/yyyy')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                        <Hash className="h-4 w-4 text-slate-400" />
@@ -514,11 +514,11 @@ export default function JournalEntryDetailPage() {
                        <dl className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                              <dt className="text-slate-500 mb-1">Created At</dt>
-                             <dd className="font-medium text-slate-900">{format(new Date(entry.created_at), "PPp")}</dd>
+                             <dd className="font-medium text-slate-900">{format(new Date(entry.created_at), "dd/MM/yyyy HH:mm")}</dd>
                           </div>
                           <div>
                              <dt className="text-slate-500 mb-1">Last Updated</dt>
-                             <dd className="font-medium text-slate-900">{format(new Date(entry.updated_at), "PPp")}</dd>
+                             <dd className="font-medium text-slate-900">{format(new Date(entry.updated_at), "dd/MM/yyyy HH:mm")}</dd>
                           </div>
                           {entry.posted_by && (
                              <div>
@@ -555,7 +555,7 @@ export default function JournalEntryDetailPage() {
                               Entry Created
                               {entry.creator && <span className="text-slate-500 font-normal"> by {entry.creator.full_name}</span>}
                            </p>
-                           <p className="text-xs text-slate-500">{format(new Date(entry.created_at), "PPP p")}</p>
+                           <p className="text-xs text-slate-500">{format(new Date(entry.created_at), "dd/MM/yyyy HH:mm")}</p>
                         </div>
                      </div>
 
@@ -568,7 +568,7 @@ export default function JournalEntryDetailPage() {
                                  Entry Posted
                                  {entry.approver && <span className="text-slate-500 font-normal"> by {entry.approver.full_name}</span>}
                               </p>
-                              <p className="text-xs text-slate-500">{format(new Date(entry.posted_at), "PPP p")}</p>
+                              <p className="text-xs text-slate-500">{format(new Date(entry.posted_at), "dd/MM/yyyy HH:mm")}</p>
                            </div>
                         </div>
                      )}
@@ -582,7 +582,7 @@ export default function JournalEntryDetailPage() {
                                  Entry Reversed
                                  {entry.reversed_by && <span className="text-slate-500 font-normal"> by {entry.reversed_by}</span>}
                               </p>
-                              <p className="text-xs text-slate-500">{format(new Date(entry.reversed_at), "PPP p")}</p>
+                              <p className="text-xs text-slate-500">{format(new Date(entry.reversed_at), "dd/MM/yyyy HH:mm")}</p>
                               {entry.reversal_reason && (
                                  <p className="text-sm text-red-600 bg-red-50 p-2 rounded mt-2 inline-block">
                                     Reason: {entry.reversal_reason}

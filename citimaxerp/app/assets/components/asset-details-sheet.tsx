@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -67,11 +68,11 @@ export function AssetDetailsSheet({ asset, open, onOpenChange }: AssetDetailsShe
               <CardContent className="grid grid-cols-2 gap-4">
                 <Field
                   label="Created"
-                  value={asset.created_at ? new Date(asset.created_at).toLocaleString() : "-"}
+                  value={asset.created_at ? displayDateTime(new Date(asset.created_at)) : "-"}
                 />
                 <Field
                   label="Last Updated"
-                  value={asset.updated_at ? new Date(asset.updated_at).toLocaleString() : "-"}
+                  value={asset.updated_at ? displayDateTime(new Date(asset.updated_at)) : "-"}
                 />
               </CardContent>
             </Card>

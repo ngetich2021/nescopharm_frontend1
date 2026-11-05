@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useEffect, useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -741,7 +742,7 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
                   ] as [string, string | undefined][]).map(([label, value]) => (
                     <div key={label} className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                      <p className="font-medium">{value ? (/^\d{4}-\d{2}-\d{2}/.test(value) ? new Date(value).toLocaleDateString() : value) : "-"}</p>
+                      <p className="font-medium">{value ? (/^\d{4}-\d{2}-\d{2}/.test(value) ? displayDate(new Date(value)) : value) : "-"}</p>
                     </div>
                   ))}
                 </CardContent>

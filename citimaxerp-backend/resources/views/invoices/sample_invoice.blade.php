@@ -252,8 +252,8 @@
             <div class="invoice-details">
                 <h2>INVOICE</h2>
                 <p><strong>Invoice #:</strong> INV-2026-00001</p>
-                <p><strong>Date:</strong> {{ date('d M Y') }}</p>
-                <p><strong>Due Date:</strong> {{ date('d M Y', strtotime('+30 days')) }}</p>
+                <p><strong>Date:</strong> {{ date('d/m/Y') }}</p>
+                <p><strong>Due Date:</strong> {{ date('d/m/Y', strtotime('+30 days')) }}</p>
             </div>
         </div>
 
@@ -374,7 +374,7 @@
 
         <!-- Footer -->
         <div class="footer">
-            <p>Generated on {{ date('d M Y H:i') }} | Invoice #INV-2026-00001 | Page 1 of 1</p>
+            <p>Generated on {{ date('d/m/Y H:i') }} | Invoice #INV-2026-00001 | Page 1 of 1</p>
         </div>
     </div>
 </body>

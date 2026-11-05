@@ -89,7 +89,7 @@ export default function ProductReceiptTable({
         i + 1,
         r.product_receipt_number || "",
         r.reference_number || "",
-        r.created_at ? format(new Date(r.created_at), "dd MMM yyyy") : "",
+        r.created_at ? format(new Date(r.created_at), "dd/MM/yyyy") : "",
         r.store?.name || "",
         r.supplier?.name || "",
         String(r.document_type || "").replace(/_/g, " "),
@@ -262,7 +262,7 @@ export default function ProductReceiptTable({
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {receipt.created_at ? format(new Date(receipt.created_at), "MMM dd, yyyy") : "-"}
+                          {receipt.created_at ? format(new Date(receipt.created_at), "dd/MM/yyyy") : "-"}
                           {receipt.created_at && (
                             <div className="text-xs text-muted-foreground">
                               {format(new Date(receipt.created_at), "HH:mm")}

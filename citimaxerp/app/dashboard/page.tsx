@@ -1,4 +1,5 @@
 "use client";
+import { displayDate, displayDayMonth } from "@/lib/date-format"
 import { useEffect, useState, useMemo } from "react";
 import {
   fetchDashboardOverview,
@@ -288,7 +289,7 @@ export default function DashboardPage() {
               <p className="text-muted-foreground text-sm mt-0.5">
                 {canViewFullDashboard
                   ? overview?.period
-                    ? `Showing ${overview.period.label}: ${new Date(overview.period.from).toLocaleDateString("en-GB")} – ${new Date(overview.period.to).toLocaleDateString("en-GB")}`
+                    ? `Showing ${overview.period.label}: ${displayDate(new Date(overview.period.from))} – ${displayDate(new Date(overview.period.to))}`
                     : "Your business at a glance"
                   : "Welcome to CitiMax ERP"}
               </p>
@@ -384,7 +385,7 @@ export default function DashboardPage() {
                           let dateLabel = "";
                           try {
                             const d = new Date(item.date || item.period);
-                            if (!isNaN(d.getTime())) dateLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                            if (!isNaN(d.getTime())) dateLabel = displayDayMonth(d);
                           } catch {}
                           return { label: dateLabel, value: item.revenue || item.total || 0 };
                         })}

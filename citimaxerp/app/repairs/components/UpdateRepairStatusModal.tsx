@@ -225,7 +225,7 @@ export function UpdateRepairStatusModal({
                       <Label className="text-sm font-medium">Date Reported</Label>
                       <div className="flex items-center space-x-2 text-sm text-gray-700">
                         <Calendar className="h-4 w-4" />
-                        <span>{format(new Date(repair.created_at), "MMM dd, yyyy 'at' HH:mm")}</span>
+                        <span>{format(new Date(repair.created_at), "dd/MM/yyyy HH:mm")}</span>
                       </div>
                     </div>
                   </div>

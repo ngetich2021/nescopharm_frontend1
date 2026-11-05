@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -156,7 +157,7 @@ export function CustomerOrders({ customerId, initialOrders }: CustomerOrdersProp
                     >
                       <TableCell className="font-medium">{order.order_number}</TableCell>
                       <TableCell>{order.tracking_number || "N/A"}</TableCell>
-                      <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{displayDate(new Date(order.created_at))}</TableCell>
                       <TableCell>
                         {order.order_items && order.order_items.length > 0 ? order.order_items[0].count : 0}
                       </TableCell>

@@ -381,8 +381,8 @@ export function TopNav() {
                       <div className="min-w-0 flex-1">
                         <p className={`text-sm text-gray-900 ${notification.read_at ? "" : "font-semibold"}`}>{notification.data.title}</p>
                         <p className="text-xs text-gray-600 mt-0.5">{notification.data.message}</p>
-                        <p className="text-[11px] text-gray-400 mt-1" title={format(new Date(notification.created_at), "dd MMM yyyy, HH:mm")}>
-                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })} · {format(new Date(notification.created_at), "dd MMM, HH:mm")}
+                        <p className="text-[11px] text-gray-400 mt-1" title={format(new Date(notification.created_at), "dd/MM/yyyy HH:mm")}>
+                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })} · {format(new Date(notification.created_at), "dd/MM HH:mm")}
                         </p>
                       </div>
                       {!notification.read_at && (

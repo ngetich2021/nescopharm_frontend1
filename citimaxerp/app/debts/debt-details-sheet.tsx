@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -275,11 +276,11 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
                       <CalendarIconLucide className="h-3 w-3" />
                       Due Date
                     </Label>
-                    <p className="text-sm text-muted-foreground">{new Date(debt.dueDate).toLocaleDateString()}</p>
+                    <p className="text-sm text-muted-foreground">{displayDate(new Date(debt.dueDate))}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Created Date</Label>
-                    <p className="text-sm text-muted-foreground">{new Date(debt.createdDate).toLocaleDateString()}</p>
+                    <p className="text-sm text-muted-foreground">{displayDate(new Date(debt.createdDate))}</p>
                   </div>
                 </div>
 
@@ -287,7 +288,7 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
                   <div>
                     <Label className="text-sm font-medium">Last Payment</Label>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(debt.lastPaymentDate).toLocaleDateString()}
+                      {displayDate(new Date(debt.lastPaymentDate))}
                     </p>
                   </div>
                 )}
@@ -326,7 +327,7 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
                         </div>
                         <div className="text-right">
                           <div className="text-sm font-medium">
-                            {new Date(payment.paymentDate).toLocaleDateString()}
+                            {displayDate(new Date(payment.paymentDate))}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {new Date(payment.createdAt).toLocaleTimeString()}
@@ -400,7 +401,7 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {format(paymentDate, "PPP")}
+                          {format(paymentDate, "dd/MM/yyyy")}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">

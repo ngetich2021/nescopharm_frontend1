@@ -213,7 +213,7 @@
 
   <div class="footer">
     This payslip is computer-generated and does not require a signature. &nbsp;
-    Generated: {{ now()->format('d M Y H:i') }} &nbsp;|&nbsp; CitiMax ERP
+    Generated: {{ now()->format('d/m/Y H:i') }} &nbsp;|&nbsp; CitiMax ERP
   </div>
 
 </div>

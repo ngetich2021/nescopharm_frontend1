@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import apiCall from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -382,11 +383,11 @@ export function CompanySettings() {
               </div>
               <div>
                 <Label className="text-gray-500">Created</Label>
-                <p>{new Date(company.created_at).toLocaleDateString()}</p>
+                <p>{displayDate(new Date(company.created_at))}</p>
               </div>
               <div>
                 <Label className="text-gray-500">Last Updated</Label>
-                <p>{new Date(company.updated_at).toLocaleDateString()}</p>
+                <p>{displayDate(new Date(company.updated_at))}</p>
               </div>
             </div>
           </CardContent>

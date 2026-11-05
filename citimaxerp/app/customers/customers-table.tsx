@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import type React from "react"
 import { useState, useRef } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -231,13 +232,13 @@ export default function Customers() {
     c.notes || "",
     Array.isArray(c.tags) ? c.tags.join(", ") : (c.tags || ""), // Handle tags array
     c.preferred_communication_channel || "",
-    c.last_contact_date ? new Date(c.last_contact_date).toLocaleDateString() : "",
+    c.last_contact_date ? displayDate(new Date(c.last_contact_date)) : "",
     c.customer_type || "",
     c.total_spend || "0.00",
     c.total_orders || 0,
     c.loyalty_points || 0,
-    new Date(c.created_at).toLocaleString(),
-    new Date(c.updated_at).toLocaleString(),
+    displayDateTime(new Date(c.created_at)),
+    displayDateTime(new Date(c.updated_at)),
   ]
 
   const exportHeaders = [
@@ -593,7 +594,7 @@ export default function Customers() {
                           className="text-gray-600 px-4 py-3 hidden lg:table-cell cursor-pointer"
                           onClick={() => handleRowClick(customer.id)}
                         >
-                          {new Date(customer.created_at).toLocaleDateString()}
+                          {displayDate(new Date(customer.created_at))}
                         </TableCell>
                         <TableCell className="text-right px-4 py-3">
                           <DropdownMenu>

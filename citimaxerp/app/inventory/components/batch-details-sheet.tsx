@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -243,7 +244,7 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
                 <div>
                   <div className="text-sm text-muted-foreground">Received Date</div>
                   <div className="font-medium">
-                    {new Date(batch.received_date).toLocaleDateString()}
+                    {displayDate(new Date(batch.received_date))}
                   </div>
                 </div>
                 
@@ -251,7 +252,7 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
                   <div>
                     <div className="text-sm text-muted-foreground">Manufacture Date</div>
                     <div className="font-medium">
-                      {new Date(batch.manufacture_date).toLocaleDateString()}
+                      {displayDate(new Date(batch.manufacture_date))}
                     </div>
                   </div>
                 )}
@@ -261,7 +262,7 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
                     <div className="text-sm text-muted-foreground">Expiry Date</div>
                     <div className="font-medium flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      {new Date(batch.expiry_date).toLocaleDateString()}
+                      {displayDate(new Date(batch.expiry_date))}
                     </div>
                   </div>
                 )}
@@ -402,7 +403,7 @@ export function BatchDetailsSheet({ productId, batchId, open, onOpenChange }: Ba
                             </div>
                           </TableCell>
                           <TableCell>
-                            {new Date(movement.movement_date).toLocaleDateString()}
+                            {displayDate(new Date(movement.movement_date))}
                           </TableCell>
                           <TableCell>
                             <span className={movement.quantity > 0 ? "text-green-600" : "text-red-600"}>

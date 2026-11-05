@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -71,8 +72,8 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
       title: `Quotation ${quote.quote_number}`,
       details: [
         ["Customer", quoteBuyer(quote).name || "-"],
-        ["Date", new Date(quote.created_at).toLocaleDateString("en-GB")],
-        ["Valid until", quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-GB") : "-"],
+        ["Date", displayDate(new Date(quote.created_at))],
+        ["Valid until", quote.valid_until ? displayDate(new Date(quote.valid_until)) : "-"],
       ],
       headers: ["S/No", "Code", "Description", "Pack Size", "Qty", "Unit Price", "VAT %", "Total"],
       moneyColumns: [5, 7],
@@ -199,7 +200,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
           <div className="flex justify-between items-end mb-3">
             <h1 className="text-xl font-bold text-gray-900 tracking-wide">QUOTATION{isPricing && " (PRICING)"}</h1>
             <p className="text-xs text-gray-600">
-              Date: <span className="font-semibold text-gray-900">{new Date(quote.created_at).toLocaleDateString("en-GB")}</span>
+              Date: <span className="font-semibold text-gray-900">{displayDate(new Date(quote.created_at))}</span>
             </p>
           </div>
 
@@ -298,7 +299,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
 
           {quote.valid_until && (
             <div className="mt-6 rounded bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-              This quote is valid until {new Date(quote.valid_until).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+              This quote is valid until {displayDate(new Date(quote.valid_until))}
             </div>
           )}
 

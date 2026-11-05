@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { useCallback, useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -170,12 +171,12 @@ export function InvoiceEtimsBadge({ invoiceId, isCreditNote = false }: { invoice
         )}
         {status.etims_submitted_at && (
           <div className="text-xs text-muted-foreground">
-            Submitted: {new Date(status.etims_submitted_at).toLocaleString()}
+            Submitted: {displayDateTime(new Date(status.etims_submitted_at))}
           </div>
         )}
         {status.etims_synced_at && (
           <div className="text-xs text-muted-foreground">
-            Confirmed: {new Date(status.etims_synced_at).toLocaleString()}
+            Confirmed: {displayDateTime(new Date(status.etims_synced_at))}
           </div>
         )}
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { Fragment, useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -101,7 +102,7 @@ export default function IncomeStatementPage() {
     return {
       fileName: documentFileName([sessionCompanyName(), `Income Statement ${filePeriod(fromDate, toDate)}`]),
       title: "Income Statement",
-      subtitle: `For the period ${new Date(fromDate).toLocaleDateString("en-GB")} to ${new Date(toDate).toLocaleDateString("en-GB")}`,
+      subtitle: `For the period ${displayDate(new Date(fromDate))} to ${displayDate(new Date(toDate))}`,
       details: s.notes.map((note, i) => [`Note ${i + 1}`, note] as [string, string]),
       headers: ["S/No", "Particulars", "Amount (KES)", "% of Net Revenue"],
       moneyColumns: [2],
@@ -190,7 +191,7 @@ export default function IncomeStatementPage() {
             <CardHeader>
               <CardTitle className="text-center">Income Statement</CardTitle>
               <p className="text-center text-muted-foreground">
-                For the period from {new Date(fromDate).toLocaleDateString("en-GB")} to {new Date(toDate).toLocaleDateString("en-GB")}
+                For the period from {displayDate(new Date(fromDate))} to {displayDate(new Date(toDate))}
               </p>
             </CardHeader>
             <CardContent className="overflow-x-auto">

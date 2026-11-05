@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -443,7 +444,7 @@ export function SupplierPaymentsTable() {
                     </TableCell>
                     <TableCell>Ksh. {parseFloat(payment.amount || "0").toLocaleString()}</TableCell>
                     <TableCell className="capitalize">{payment.payment_method?.replace("_", " ") || "N/A"}</TableCell>
-                    <TableCell>{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : "N/A"}</TableCell>
+                    <TableCell>{payment.payment_date ? displayDate(new Date(payment.payment_date)) : "N/A"}</TableCell>
                     <TableCell>
                       <Badge className={getStatusBadgeClass(payment.status)}>{payment.status || "N/A"}</Badge>
                     </TableCell>

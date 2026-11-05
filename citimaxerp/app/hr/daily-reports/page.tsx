@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { getDailyReports } from "@/lib/daily-reports"
@@ -292,7 +293,7 @@ export default function DailyReportsPage() {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
                         {report.created_at
-                          ? new Date(report.created_at).toLocaleDateString()
+                          ? displayDate(new Date(report.created_at))
                           : "—"}
                       </td>
                       <td className="px-4 py-3 text-center">

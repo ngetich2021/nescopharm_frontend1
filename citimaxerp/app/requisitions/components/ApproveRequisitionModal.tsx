@@ -157,7 +157,7 @@ export function ApproveRequisitionModal({
                     <div>
                       <Label className="text-sm font-medium">Created Date</Label>
                       <p className="text-sm text-gray-700">
-                        {format(new Date(requisition.created_at), "MMM dd, yyyy 'at' HH:mm")}
+                        {format(new Date(requisition.created_at), "dd/MM/yyyy HH:mm")}
                       </p>
                     </div>
                   </div>

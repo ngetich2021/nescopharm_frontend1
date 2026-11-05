@@ -204,7 +204,7 @@ export default function UsersTable({
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {user.last_login_at ? format(new Date(user.last_login_at), "MMM dd, yyyy") : "-"}
+                          {user.last_login_at ? format(new Date(user.last_login_at), "dd/MM/yyyy") : "-"}
                           {user.last_login_at && (
                             <div className="text-xs text-muted-foreground">
                               {format(new Date(user.last_login_at), "HH:mm")}
@@ -214,7 +214,7 @@ export default function UsersTable({
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {user.created_at ? format(new Date(user.created_at), "MMM dd, yyyy") : "-"}
+                          {user.created_at ? format(new Date(user.created_at), "dd/MM/yyyy") : "-"}
                           {user.created_at && (
                             <div className="text-xs text-muted-foreground">
                               {format(new Date(user.created_at), "HH:mm")}

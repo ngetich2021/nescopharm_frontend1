@@ -510,7 +510,7 @@ export default function AdminCompaniesPage() {
                       </TableCell>
                       <TableCell>{company.users_count}</TableCell>
                       <TableCell>
-                        {format(new Date(company.created_at), "MMM dd, yyyy")}
+                        {format(new Date(company.created_at), "dd/MM/yyyy")}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -854,7 +854,7 @@ function CompanyDetailsView({ company }: { company: CompanyDetails }) {
                     {company.current_subscription.status}
                   </Badge>
                 </div>
-                <div><strong>Expires:</strong> {format(new Date(company.current_subscription.expires_at), "MMM dd, yyyy")}</div>
+                <div><strong>Expires:</strong> {format(new Date(company.current_subscription.expires_at), "dd/MM/yyyy")}</div>
               </div>
             ) : (
               <p className="text-muted-foreground">No active subscription</p>
@@ -890,7 +890,7 @@ function CompanyDetailsView({ company }: { company: CompanyDetails }) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {user.last_login ? format(new Date(user.last_login), "MMM dd, yyyy HH:mm") : "Never"}
+                    {user.last_login ? format(new Date(user.last_login), "dd/MM/yyyy HH:mm") : "Never"}
                   </TableCell>
                 </TableRow>
               ))}
@@ -913,7 +913,7 @@ function CompanyDetailsView({ company }: { company: CompanyDetails }) {
                   <div className="text-xs text-muted-foreground">by {log.performed_by}</div>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {format(new Date(log.created_at), "MMM dd, HH:mm")}
+                  {format(new Date(log.created_at), "dd/MM HH:mm")}
                 </div>
               </div>
             ))}

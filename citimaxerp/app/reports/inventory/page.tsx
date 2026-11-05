@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import type { ExportCell } from "@/lib/table-export"
@@ -63,7 +64,7 @@ const daysUntil = (date?: string | null) => (date ? Math.ceil((new Date(date).ge
 function ExpiryCell({ date }: { date?: string | null }) {
   const days = daysUntil(date)
   if (!date || days === null) return <span className="text-gray-400">-</span>
-  const label = new Date(date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
+  const label = displayDate(new Date(date))
   if (days < 0) return <span className="font-medium text-red-600">{label} (expired)</span>
   if (days <= EXPIRY_WARN_DAYS) return <span className="font-medium text-amber-600">{label} ({days}d)</span>
   return <span>{label}</span>
@@ -258,8 +259,8 @@ export default function InventoryReportPage() {
             key: "movement_date",
             header: "Date",
             className: "whitespace-nowrap",
-            render: (r) => new Date(r.movement_date).toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-            exportValue: (r) => new Date(r.movement_date).toLocaleString(),
+            render: (r) => displayDateTime(new Date(r.movement_date)),
+            exportValue: (r) => displayDateTime(new Date(r.movement_date)),
           },
           itemNo,
           description,
@@ -406,7 +407,7 @@ export default function InventoryReportPage() {
     if (reportType === "stock_management") {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Closing Stock" value={qty(summary.total_closing_stock)} hint={`as of ${new Date().toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })}`} icon={<Boxes className="h-5 w-5" />} />
+          <SummaryCard label="Closing Stock" value={qty(summary.total_closing_stock)} hint={`as of ${displayDate(new Date())}`} icon={<Boxes className="h-5 w-5" />} />
           <SummaryCard label="Closing Value" value={`KES ${money(summary.total_closing_stock_value)}`} hint="at buying price" icon={<Wallet className="h-5 w-5" />} />
           <SummaryCard label="Gross Profit" value={`KES ${money(summary.total_gross_profit)}`} hint={period ? `${period.date_from} to ${period.date_to}` : undefined} icon={<TrendingUp className="h-5 w-5" />} tone="green" />
           <button type="button" className="text-left" onClick={() => setReorderOnly((v) => !v)} disabled={!summary.reorder_alert_count}>

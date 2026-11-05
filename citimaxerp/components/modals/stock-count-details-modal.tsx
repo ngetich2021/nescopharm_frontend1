@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -70,7 +71,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
           company_id: "company-123",
           store_id: "store-456",
           count_number: "SC-" + id.substring(0, 6),
-          name: "Monthly Inventory Count - " + new Date().toLocaleDateString(),
+          name: "Monthly Inventory Count - " + displayDate(new Date()),
           count_type: "cycle_count",
           status: "in_progress",
           location: "Main Warehouse",
@@ -143,7 +144,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
           company_id: "company-123",
           store_id: "store-456",
           count_number: "SC-" + id.substring(0, 6),
-          name: "Monthly Inventory Count - " + new Date().toLocaleDateString(),
+          name: "Monthly Inventory Count - " + displayDate(new Date()),
           description: "Regular cycle count for the main warehouse focusing on electronics and accessories.",
           count_type: "cycle_count",
           status: "in_progress",
@@ -313,7 +314,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
                           <p className="text-sm font-medium">Scheduled</p>
                           <p className="text-sm text-muted-foreground">
                             {details.overview.scheduled_date
-                              ? format(new Date(details.overview.scheduled_date), "MMM d, yyyy")
+                              ? format(new Date(details.overview.scheduled_date), "dd/MM/yyyy")
                               : "Not scheduled"}
                           </p>
                         </div>
@@ -455,14 +456,14 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
                           <div className="flex items-center space-x-2">
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                             <span>
-                              Created: {format(new Date(details.full_details.created_at), "MMM d, yyyy 'at' h:mm a")}
+                              Created: {format(new Date(details.full_details.created_at), "dd/MM/yyyy HH:mm")}
                             </span>
                           </div>
                           {details.full_details.started_at && (
                             <div className="flex items-center space-x-2">
                               <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
                               <span>
-                                Started: {format(new Date(details.full_details.started_at), "MMM d, yyyy 'at' h:mm a")}
+                                Started: {format(new Date(details.full_details.started_at), "dd/MM/yyyy HH:mm")}
                               </span>
                             </div>
                           )}
@@ -471,7 +472,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
                               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                               <span>
                                 Completed:{" "}
-                                {format(new Date(details.full_details.completed_at), "MMM d, yyyy 'at' h:mm a")}
+                                {format(new Date(details.full_details.completed_at), "dd/MM/yyyy HH:mm")}
                               </span>
                             </div>
                           )}
@@ -480,7 +481,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
                               <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                               <span>
                                 Approved:{" "}
-                                {format(new Date(details.full_details.approved_at), "MMM d, yyyy 'at' h:mm a")}
+                                {format(new Date(details.full_details.approved_at), "dd/MM/yyyy HH:mm")}
                               </span>
                             </div>
                           )}
@@ -531,7 +532,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
                 Last updated:{" "}
                 <span className="font-medium">
                   {details.full_details.updated_at
-                    ? format(new Date(details.full_details.updated_at), "MMM d, yyyy")
+                    ? format(new Date(details.full_details.updated_at), "dd/MM/yyyy")
                     : "Unknown"}
                 </span>
               </>

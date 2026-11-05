@@ -293,6 +293,21 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertSame('Syria Pharmacy', (new Customer(['name' => 'Syria Pharmacy', 'business_name' => null]))->display_name);
     }
 
+    public function test_a_statement_period_reads_dd_mm_yyyy(): void
+    {
+        $this->assertSame('01/09/2026 - 30/09/2026', app(CustomerStatementService::class)->formatPeriodLabel(Carbon::parse('2026-09-01'), Carbon::parse('2026-09-30')));
+    }
+
+    public function test_imports_read_the_systems_dates_day_first(): void
+    {
+        $date = new \ReflectionMethod(\App\Http\Controllers\DataImportController::class, 'date');
+        $controller = app(\App\Http\Controllers\DataImportController::class);
+
+        $this->assertSame('2026-11-04', $date->invoke($controller, '04/11/2026'));
+        $this->assertSame('2026-02-15', $date->invoke($controller, '15/02/2026'));
+        $this->assertFalse($date->invoke($controller, '31/02/2026'));
+    }
+
     private function bounce(string $maturity, User $user): array
     {
         $cheque = Cheque::create([

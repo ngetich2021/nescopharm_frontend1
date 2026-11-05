@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -122,7 +123,7 @@ export function EmployeeDetailsSheet({ employee, open, onOpenChange, onEdit }: E
                   <p className="text-sm text-gray-500">Date of Birth</p>
                   <p className="font-medium">
                     {employee.date_of_birth 
-                      ? new Date(employee.date_of_birth).toLocaleDateString() 
+                      ? displayDate(new Date(employee.date_of_birth)) 
                       : "Not provided"}
                   </p>
                 </div>
@@ -196,7 +197,7 @@ export function EmployeeDetailsSheet({ employee, open, onOpenChange, onEdit }: E
                   <p className="text-sm text-gray-500">Hire Date</p>
                   <p className="font-medium">
                     {employee.hire_date 
-                      ? new Date(employee.hire_date).toLocaleDateString() 
+                      ? displayDate(new Date(employee.hire_date)) 
                       : "Not provided"}
                   </p>
                 </div>
@@ -226,7 +227,7 @@ export function EmployeeDetailsSheet({ employee, open, onOpenChange, onEdit }: E
                 <div className="space-y-1">
                   <p className="text-sm text-gray-500">Termination Date</p>
                   <p className="font-medium">
-                    {employee.termination_date ? new Date(employee.termination_date).toLocaleDateString() : "Not terminated"}
+                    {employee.termination_date ? displayDate(new Date(employee.termination_date)) : "Not terminated"}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -432,7 +433,7 @@ export function EmployeeDetailsSheet({ employee, open, onOpenChange, onEdit }: E
                   <p className="text-sm text-gray-500">Termination Date</p>
                   <p className="font-medium">
                     {employee.termination_date 
-                      ? new Date(employee.termination_date).toLocaleDateString() 
+                      ? displayDate(new Date(employee.termination_date)) 
                       : "Not terminated"}
                   </p>
                 </div>
@@ -440,7 +441,7 @@ export function EmployeeDetailsSheet({ employee, open, onOpenChange, onEdit }: E
                   <p className="text-sm text-gray-500">Created At</p>
                   <p className="font-medium">
                     {employee.created_at 
-                      ? new Date(employee.created_at).toLocaleString() 
+                      ? displayDateTime(new Date(employee.created_at)) 
                       : "Not provided"}
                   </p>
                 </div>
@@ -448,7 +449,7 @@ export function EmployeeDetailsSheet({ employee, open, onOpenChange, onEdit }: E
                   <p className="text-sm text-gray-500">Last Updated</p>
                   <p className="font-medium">
                     {employee.updated_at 
-                      ? new Date(employee.updated_at).toLocaleString() 
+                      ? displayDateTime(new Date(employee.updated_at)) 
                       : "Not provided"}
                   </p>
                 </div>

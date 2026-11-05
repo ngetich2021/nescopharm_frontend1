@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -60,7 +61,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       title: `Delivery Note ${d.dispatch_number}`,
       details: [
         ["Customer", buildBuyerBlock(mergeCustomerSources(loaded.customerDetails, d.order?.customer as CustomerAddressSource | null)).name || "-"],
-        ["Date", new Date(d.dispatch_date || d.created_at).toLocaleDateString("en-GB")],
+        ["Date", displayDate(new Date(d.dispatch_date || d.created_at))],
         ["Order", (d.order as any)?.order_number || "-"],
       ],
       headers: ["S/No", "Description of Goods", "Pieces per Pack", "Packs", "Pieces"],

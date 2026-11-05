@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -102,13 +103,13 @@ export function LogisticsDetails({ logisticsEntry }: LogisticsDetailsProps) {
             <p className="text-muted-foreground">
               <strong>Scheduled Date:</strong>{" "}
               {logisticsEntry.scheduled_delivery_date
-                ? new Date(logisticsEntry.scheduled_delivery_date).toLocaleDateString()
+                ? displayDate(new Date(logisticsEntry.scheduled_delivery_date))
                 : "N/A"}
             </p>
             <p className="text-muted-foreground">
               <strong>Actual Date:</strong>{" "}
               {logisticsEntry.actual_delivery_date
-                ? new Date(logisticsEntry.actual_delivery_date).toLocaleDateString()
+                ? displayDate(new Date(logisticsEntry.actual_delivery_date))
                 : "N/A"}
             </p>
           </div>

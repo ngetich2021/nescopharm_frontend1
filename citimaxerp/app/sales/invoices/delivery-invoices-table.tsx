@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -467,7 +468,7 @@ export function DeliveryInvoicesTable() {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Payment Date</p>
-                      <p className="font-medium">{viewingInvoice.payment_date ? new Date(viewingInvoice.payment_date).toLocaleDateString() : "—"}</p>
+                      <p className="font-medium">{viewingInvoice.payment_date ? displayDate(new Date(viewingInvoice.payment_date)) : "—"}</p>
                     </div>
                     {viewingInvoice.payment_reference && (
                       <div>
@@ -487,7 +488,7 @@ export function DeliveryInvoicesTable() {
                         </div>
                         <div>
                           <p className="text-muted-foreground">Cheque Maturity</p>
-                          <p className="font-medium">{viewingInvoice.cheque_maturity_date ? new Date(viewingInvoice.cheque_maturity_date).toLocaleDateString() : "—"}</p>
+                          <p className="font-medium">{viewingInvoice.cheque_maturity_date ? displayDate(new Date(viewingInvoice.cheque_maturity_date)) : "—"}</p>
                         </div>
                       </>
                     )}

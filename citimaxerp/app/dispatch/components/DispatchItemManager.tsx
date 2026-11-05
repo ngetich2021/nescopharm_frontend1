@@ -245,7 +245,7 @@ export function DispatchItemManager({
                   {item.return_date && (
                     <div className="flex items-center space-x-2 text-purple-600 text-sm">
                       <Calendar className="h-3 w-3" />
-                      <span>Return Date: {format(new Date(item.return_date), "MMM dd, yyyy")}</span>
+                      <span>Return Date: {format(new Date(item.return_date), "dd/MM/yyyy")}</span>
                     </div>
                   )}                  {item.return_notes && (
                     <div className="text-sm text-purple-600 mt-1">

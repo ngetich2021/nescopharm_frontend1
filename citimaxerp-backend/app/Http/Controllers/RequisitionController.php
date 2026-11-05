@@ -365,7 +365,7 @@ class RequisitionController extends Controller
                 'requested' => $item->quantity,
                 'issued' => $isCustom || !$dispatch ? null : (int) $issuedLines->sum('quantity'),
                 'batches' => $batches->pluck('batch_number')->unique()->implode(', '),
-                'expiries' => $batches->pluck('expiry_date')->filter()->map(fn ($d) => $d->format('d M Y'))->unique()->implode(', '),
+                'expiries' => $batches->pluck('expiry_date')->filter()->map(fn ($d) => $d->format('d/m/Y'))->unique()->implode(', '),
             ];
         })->values()->all();
 

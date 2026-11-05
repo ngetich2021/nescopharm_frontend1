@@ -594,7 +594,7 @@ export function CreateDispatchFromRequisitionModal({
                             <SelectContent>
                               {(batchesByIndex[index] || []).map((batch) => (
                                 <SelectItem key={batch.id} value={batch.id}>
-                                  {batch.batch_number} — exp {batch.expiry_date ? format(new Date(batch.expiry_date), "dd MMM yyyy") : "N/A"} — {batch.quantity_available} avail
+                                  {batch.batch_number} — exp {batch.expiry_date ? format(new Date(batch.expiry_date), "dd/MM/yyyy") : "N/A"} — {batch.quantity_available} avail
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -607,7 +607,7 @@ export function CreateDispatchFromRequisitionModal({
                                 Batch <span className="font-medium">{selected.batch_number}</span>
                                 {" · "}Expiry{" "}
                                 <span className="font-medium">
-                                  {selected.expiry_date ? format(new Date(selected.expiry_date), "dd MMM yyyy") : "N/A"}
+                                  {selected.expiry_date ? format(new Date(selected.expiry_date), "dd/MM/yyyy") : "N/A"}
                                 </span>
                                 {" · "}{selected.quantity_available} available
                               </p>
@@ -634,7 +634,7 @@ export function CreateDispatchFromRequisitionModal({
                                 <div key={b.id} className="flex items-center justify-between gap-2">
                                   <span>
                                     {b.store?.name ?? "Unknown store"} — {b.batch_number}, exp{" "}
-                                    {b.expiry_date ? format(new Date(b.expiry_date), "dd MMM yyyy") : "N/A"}, {b.quantity_available} avail
+                                    {b.expiry_date ? format(new Date(b.expiry_date), "dd/MM/yyyy") : "N/A"}, {b.quantity_available} avail
                                   </span>
                                   <Button
                                     type="button"

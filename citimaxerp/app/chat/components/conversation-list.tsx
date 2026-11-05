@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react";
 import apiCall from "@/lib/api";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -68,7 +69,7 @@ export function ConversationList({
       // Show day of week
       return date.toLocaleDateString(undefined, { weekday: "long" });
     } else {
-      return date.toLocaleDateString();
+      return displayDate(date);
     }
   };
 

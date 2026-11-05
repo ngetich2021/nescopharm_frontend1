@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -244,7 +245,7 @@ export function EmployeesPage() {
       emp.department || "",
       emp.position || "",
       emp.employment_type || "",
-      emp.hire_date ? new Date(emp.hire_date).toLocaleDateString("en-GB") : "",
+      emp.hire_date ? displayDate(new Date(emp.hire_date)) : "",
       Number(emp.basic_salary) || 0,
       emp.termination_date ? "Terminated" : "Active",
     ]),

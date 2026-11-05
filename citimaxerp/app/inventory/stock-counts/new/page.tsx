@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import type React from "react"
 
 import { useState, useMemo, useRef } from "react"
@@ -120,7 +121,7 @@ export default function NewStockCountPage() {
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
-              <p className="text-sm font-medium">{stockCount.date.toLocaleDateString()}</p>
+              <p className="text-sm font-medium">{displayDate(stockCount.date)}</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>

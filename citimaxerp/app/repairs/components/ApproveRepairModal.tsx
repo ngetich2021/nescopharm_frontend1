@@ -196,7 +196,7 @@ export function ApproveRepairModal({
                       <Label className="text-sm font-medium">Date Reported</Label>
                       <div className="flex items-center space-x-2 text-sm text-gray-700">
                         <Calendar className="h-4 w-4" />
-                        <span>{format(new Date(repair.created_at), "MMM dd, yyyy 'at' HH:mm")}</span>
+                        <span>{format(new Date(repair.created_at), "dd/MM/yyyy HH:mm")}</span>
                       </div>
                     </div>
                   </div>
@@ -365,7 +365,7 @@ export function ApproveRepairModal({
                   <p className="text-sm text-yellow-800">
                     This repair request has already been {repair.approval_status}.
                     {repair.approver && ` Processed by ${repair.approver.first_name} ${repair.approver.last_name}`}
-                    {repair.approved_at && ` on ${format(new Date(repair.approved_at), "MMM dd, yyyy 'at' HH:mm")}`}.
+                    {repair.approved_at && ` on ${format(new Date(repair.approved_at), "dd/MM/yyyy HH:mm")}`}.
                   </p>
                 </div>
               </CardContent>

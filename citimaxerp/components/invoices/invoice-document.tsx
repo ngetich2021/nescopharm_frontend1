@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { forwardRef } from "react"
 import { Card } from "@/components/ui/card"
 import type { Invoice } from "@/lib/invoices"
@@ -50,8 +51,7 @@ const formatAmount = (amount: string | number): string => {
   return (num || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const formatBatchDate = (date: string): string =>
-  new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }).replace(/ /g, "-")
+const formatBatchDate = (date: string): string => displayDate(date)
 
 type Props = InvoiceDocumentData & {
   companyPin: string | null
@@ -105,7 +105,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           {/* The day it was entered in the system, directly above the Dated box below. */}
           {invoice.created_at && (
             <p className="col-start-2 px-2 text-xs text-gray-600 whitespace-nowrap">
-              Invoice Date: <span className="font-semibold text-gray-900">{new Date(invoice.created_at).toLocaleDateString()}</span>
+              Invoice Date: <span className="font-semibold text-gray-900">{displayDate(new Date(invoice.created_at))}</span>
             </p>
           )}
           <div className="col-start-3 col-span-2 flex flex-col items-end gap-0.5">
@@ -114,7 +114,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
             )}
             {invoice.due_date && invoice.due_date !== invoice.invoice_date && (
               <p className="text-xs text-gray-600">
-                Due Date: <span className="font-semibold text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
+                Due Date: <span className="font-semibold text-gray-900">{displayDate(new Date(invoice.due_date))}</span>
               </p>
             )}
           </div>
@@ -165,24 +165,24 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
 
               const cells = [
                 { label: "Invoice No.", value: invoice.invoice_number },
-                { label: "Dated", value: new Date(invoice.invoice_date).toLocaleDateString() },
+                { label: "Dated", value: displayDate(new Date(invoice.invoice_date)) },
                 { label: "Delivery Note", value: invoice.delivery_note_number || "N/A" },
                 { label: "Mode/Terms of Payment", value: invoice.mode_of_payment || "N/A" },
                 {
                   label: "Delivery Note Date",
-                  value: invoice.delivery_note_date ? new Date(invoice.delivery_note_date).toLocaleDateString() : "N/A",
+                  value: invoice.delivery_note_date ? displayDate(new Date(invoice.delivery_note_date)) : "N/A",
                 },
                 {
                   label: "Reference No. & Date",
                   value: invoice.reference_number
-                    ? `${invoice.reference_number}${invoice.reference_date ? ` dt. ${new Date(invoice.reference_date).toLocaleDateString()}` : ""}`
+                    ? `${invoice.reference_number}${invoice.reference_date ? ` dt. ${displayDate(new Date(invoice.reference_date))}` : ""}`
                     : "N/A",
                 },
                 { label: "Other References", value: contactValue },
                 {
                   label: "Buyer's Order No.",
                   value: invoice.buyers_order_no
-                    ? `${invoice.buyers_order_no}${invoice.buyers_order_date ? ` dt. ${new Date(invoice.buyers_order_date).toLocaleDateString()}` : ""}`
+                    ? `${invoice.buyers_order_no}${invoice.buyers_order_date ? ` dt. ${displayDate(new Date(invoice.buyers_order_date))}` : ""}`
                     : "N/A",
                 },
                 { label: "Dispatch Doc No.", value: invoice.dispatch_doc_no || "N/A" },

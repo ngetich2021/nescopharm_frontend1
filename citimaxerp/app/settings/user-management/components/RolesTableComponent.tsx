@@ -181,7 +181,7 @@ export default function RolesTableComponent({
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          {role.created_at ? format(new Date(role.created_at), "MMM dd, yyyy") : "-"}
+                          {role.created_at ? format(new Date(role.created_at), "dd/MM/yyyy") : "-"}
                           {role.created_at && (
                             <div className="text-xs text-muted-foreground">
                               {format(new Date(role.created_at), "HH:mm")}

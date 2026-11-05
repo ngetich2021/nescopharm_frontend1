@@ -433,7 +433,7 @@ export default function StockAdjustmentDetailPage() {
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Created By</h4>
                   <p className="font-medium">{adjustment.created_by.full_name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {format(new Date(adjustment.created_at), "MMM dd, yyyy 'at' hh:mm a")}
+                    {format(new Date(adjustment.created_at), "dd/MM/yyyy HH:mm")}
                   </p>
                 </div>
 
@@ -443,7 +443,7 @@ export default function StockAdjustmentDetailPage() {
                     <p className="font-medium">{adjustment.approved_by.full_name}</p>
                     {adjustment.approved_at && (
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(adjustment.approved_at), "MMM dd, yyyy 'at' hh:mm a")}
+                        {format(new Date(adjustment.approved_at), "dd/MM/yyyy HH:mm")}
                       </p>
                     )}
                   </div>
@@ -455,7 +455,7 @@ export default function StockAdjustmentDetailPage() {
                     <p className="font-medium">{adjustment.rejected_by.full_name}</p>
                     {adjustment.rejected_at && (
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(adjustment.rejected_at), "MMM dd, yyyy 'at' hh:mm a")}
+                        {format(new Date(adjustment.rejected_at), "dd/MM/yyyy HH:mm")}
                       </p>
                     )}
                   </div>
@@ -489,7 +489,7 @@ export default function StockAdjustmentDetailPage() {
                           <p className="text-sm font-medium">{activity.description}</p>
                           <div className="text-xs text-muted-foreground mt-1">
                             {activity.user.full_name} •{" "}
-                            {format(new Date(activity.created_at), "MMM dd, yyyy 'at' hh:mm a")}
+                            {format(new Date(activity.created_at), "dd/MM/yyyy HH:mm")}
                           </div>
                         </div>
                       </div>

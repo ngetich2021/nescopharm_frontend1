@@ -459,7 +459,7 @@ class ChequeController extends Controller
                     'cheque',
                     $cheque->maturity_date->toDateString(),
                     $this->paymentReference($cheque->cheque_number),
-                    "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
+                    "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->format('d/m/Y'),
                 );
                 $cheque->update([
                     'status' => 'approved',
@@ -577,7 +577,7 @@ class ChequeController extends Controller
             if ($cheque->status === 'approved' && $cheque->payment_id && $payment = Payment::find($cheque->payment_id)) {
                 $payment->update([
                     'transaction_id' => $this->paymentReference($cheque->cheque_number, $payment->id),
-                    'notes' => "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->toDateString(),
+                    'notes' => "Cheque {$cheque->cheque_number} ({$cheque->bank_name}), matured " . $cheque->maturity_date->format('d/m/Y'),
                 ]);
             }
         });

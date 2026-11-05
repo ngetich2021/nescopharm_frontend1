@@ -1,3 +1,4 @@
+import { displayDate } from "@/lib/date-format"
 import apiCall from './api';
 
 export interface LeaveRequest {
@@ -122,7 +123,8 @@ export function leaveDates(start: string, total: number, unit: string): { end: s
 /** "Mon, 28 Sep 2026" for a yyyy-mm-dd date. */
 export function formatLeaveDate(date?: string | null): string {
   if (!date) return '';
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const weekday = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+  return `${weekday} ${displayDate(date)}`;
 }
 
 const HOURS_PER_DAY = 8;

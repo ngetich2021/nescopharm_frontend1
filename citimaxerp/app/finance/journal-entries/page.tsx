@@ -191,13 +191,13 @@ export default function JournalEntriesPage() {
   const buildExport = (): TableExport => ({
     fileName: documentFileName([sessionCompanyName(), `Journal Entries ${filePeriod(dateFrom || null, dateTo || null) || todayFileDate()}`]),
     title: "Journal Entries",
-    subtitle: dateFrom || dateTo ? `${dateFrom ? format(new Date(dateFrom), 'dd MMM yyyy') : "Start"} to ${dateTo ? format(new Date(dateTo), 'dd MMM yyyy') : "today"}` : undefined,
+    subtitle: dateFrom || dateTo ? `${dateFrom ? format(new Date(dateFrom), 'dd/MM/yyyy') : "Start"} to ${dateTo ? format(new Date(dateTo), 'dd/MM/yyyy') : "today"}` : undefined,
     headers: ["S/No", "Entry No.", "Date", "Reference", "Description", "Type", "Status", "Debit", "Credit", "Created By"],
     moneyColumns: [7, 8],
     rows: filteredEntries.map((e, i) => [
       i + 1,
       e.entry_number,
-      format(new Date(e.entry_date), 'dd MMM yyyy'),
+      format(new Date(e.entry_date), 'dd/MM/yyyy'),
       e.reference ?? "",
       e.description ?? "",
       e.entry_type,
@@ -433,7 +433,7 @@ export default function JournalEntriesPage() {
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-sm text-slate-700 font-medium">
-                              {format(new Date(entry.entry_date), 'MMM dd, yyyy')}
+                              {format(new Date(entry.entry_date), 'dd/MM/yyyy')}
                             </span>
                             <span className="text-[10px] text-slate-400">
                               {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}

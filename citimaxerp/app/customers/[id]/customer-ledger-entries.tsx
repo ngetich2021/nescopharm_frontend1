@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,7 +17,7 @@ import { CustomerLedger, fetchCustomerLedger } from "@/lib/customer-balance"
 // Compact cells for the profile sheet: amounts without the currency (it's in the column header)
 // and dd/mm/yy dates.
 const money = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const shortDate = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })
+const shortDate = (d: string) => displayDate(new Date(d))
 
 /**
  * The customer's double entries: each journal entry touching them with every line (debit and

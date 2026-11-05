@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -26,7 +27,7 @@ const periodStart = (p: Period): string | undefined => {
 
 // Numbers can arrive as strings from the database; never call number methods on raw values.
 const hrs = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : `${Number(v).toFixed(1)} h`)
-const when = (v: unknown) => (v ? new Date(String(v).replace(" ", "T")).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-")
+const when = (v: unknown) => (v ? displayDateTime(new Date(String(v).replace(" ", "T"))) : "-")
 
 const sortable = (label: string) => ({ column }: any) => (
   <button type="button" className="inline-flex items-center gap-1 font-medium hover:text-foreground" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>

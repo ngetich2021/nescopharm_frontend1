@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
@@ -140,7 +141,7 @@ export function SerialNumberDetailsSheet({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Received Date</span>
                   <span className="font-medium">
-                    {serialNumber.received_date ? new Date(serialNumber.received_date).toLocaleDateString() : "-"}
+                    {serialNumber.received_date ? displayDate(new Date(serialNumber.received_date)) : "-"}
                   </span>
                 </div>
                 
@@ -148,7 +149,7 @@ export function SerialNumberDetailsSheet({
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Warranty Expiry</span>
                     <span className="font-medium">
-                      {new Date(serialNumber.warranty_expiry_date).toLocaleDateString()}
+                      {displayDate(new Date(serialNumber.warranty_expiry_date))}
                     </span>
                   </div>
                 )}
@@ -170,14 +171,14 @@ export function SerialNumberDetailsSheet({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Created At</span>
                   <span className="font-medium">
-                    {new Date(serialNumber.created_at).toLocaleDateString()}
+                    {displayDate(new Date(serialNumber.created_at))}
                   </span>
                 </div>
                 
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Last Updated</span>
                   <span className="font-medium">
-                    {new Date(serialNumber.updated_at).toLocaleDateString()}
+                    {displayDate(new Date(serialNumber.updated_at))}
                   </span>
                 </div>
                 

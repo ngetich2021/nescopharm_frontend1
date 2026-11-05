@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/data-table"
@@ -106,7 +107,7 @@ export function CompaniesClient() {
     {
       accessorKey: "created_at",
       header: "Created At",
-      cell: ({ row }) => <div>{new Date(row.getValue("created_at")).toLocaleDateString()}</div>,
+      cell: ({ row }) => <div>{displayDate(new Date(row.getValue("created_at")))}</div>,
     },
     {
       id: "actions",

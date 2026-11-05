@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -106,13 +107,7 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
 
   // Format date
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return displayDate(new Date(dateString))
   }
 
   // Get status badge color
@@ -322,7 +317,7 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                       <div>
                         <p className="text-xs text-gray-600">Last Updated</p>
                         <p className="text-sm font-medium text-gray-900">
-                          {new Date(product.updated_at).toLocaleDateString()}
+                          {displayDate(new Date(product.updated_at))}
                         </p>
                       </div>
                     </div>
@@ -824,8 +819,8 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                                       <td className="px-2 py-1.5 font-mono">{batch.batch_number || "—"}</td>
                                       <td className="px-2 py-1.5 font-mono">{batch.lot_number || "—"}</td>
                                       <td className="px-2 py-1.5 text-right font-semibold">{Number(batch.quantity_available).toLocaleString()}</td>
-                                      <td className="px-2 py-1.5">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}</td>
-                                      <td className="px-2 py-1.5">{batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "—"}</td>
+                                      <td className="px-2 py-1.5">{batch.manufacture_date ? displayDate(new Date(batch.manufacture_date)) : "—"}</td>
+                                      <td className="px-2 py-1.5">{batch.expiry_date ? displayDate(new Date(batch.expiry_date)) : "—"}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -870,8 +865,8 @@ export function ProductDetailsSheet({ open, onOpenChange, product, onEdit, isLoa
                           <td className="px-3 py-2 font-mono">{batch.batch_number || "—"}</td>
                           <td className="px-3 py-2 font-mono">{batch.lot_number || "—"}</td>
                           <td className="px-3 py-2 text-right font-semibold">{Number(batch.quantity_available).toLocaleString()}</td>
-                          <td className="px-3 py-2">{batch.manufacture_date ? new Date(batch.manufacture_date).toLocaleDateString() : "—"}</td>
-                          <td className="px-3 py-2">{batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : "—"}</td>
+                          <td className="px-3 py-2">{batch.manufacture_date ? displayDate(new Date(batch.manufacture_date)) : "—"}</td>
+                          <td className="px-3 py-2">{batch.expiry_date ? displayDate(new Date(batch.expiry_date)) : "—"}</td>
                         </tr>
                       ))}
                     </tbody>

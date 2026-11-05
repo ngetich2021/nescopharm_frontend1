@@ -298,7 +298,7 @@ export function StockAdjustmentsTable({
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(adjustment.created_at), "MMM dd, yyyy")}
+                        {format(new Date(adjustment.created_at), "dd/MM/yyyy")}
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>

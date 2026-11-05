@@ -234,7 +234,7 @@ export function EmployeePayrollTable({ items }: EmployeePayrollTableProps) {
                           <div>
                             <div className="text-gray-600">Hire Date</div>
                             <div className="font-medium">
-                              {format(new Date(item.employee.hire_date), 'MMM d, yyyy')}
+                              {format(new Date(item.employee.hire_date), 'dd/MM/yyyy')}
                             </div>
                           </div>
                           <div>

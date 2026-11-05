@@ -304,7 +304,7 @@ export function AdminDashboardClient() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {format(new Date(company.created_at), "MMM dd, yyyy")}
+                      {format(new Date(company.created_at), "dd/MM/yyyy")}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -344,7 +344,7 @@ export function AdminDashboardClient() {
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {format(new Date(activity.created_at), "MMM dd, HH:mm")}
+                    {format(new Date(activity.created_at), "dd/MM HH:mm")}
                   </div>
                 </div>
               ))}

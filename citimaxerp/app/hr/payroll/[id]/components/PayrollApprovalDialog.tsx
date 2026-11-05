@@ -89,7 +89,7 @@ export function PayrollApprovalDialog({
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-600">Pay Period</span>
               <span className="text-sm">
-                {format(new Date(payrollRecord.pay_period_start), 'MMM d')} - {format(new Date(payrollRecord.pay_period_end), 'MMM d, yyyy')}
+                {format(new Date(payrollRecord.pay_period_start), 'dd/MM')} - {format(new Date(payrollRecord.pay_period_end), 'dd/MM/yyyy')}
               </span>
             </div>
 

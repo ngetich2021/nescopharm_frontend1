@@ -255,7 +255,7 @@ export default function AdminReportsPage() {
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.from ? format(dateRange.from, "MMM dd") : "From"}
+                    {dateRange.from ? format(dateRange.from, "dd/MM") : "From"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
@@ -280,7 +280,7 @@ export default function AdminReportsPage() {
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.to ? format(dateRange.to, "MMM dd") : "To"}
+                    {dateRange.to ? format(dateRange.to, "dd/MM") : "To"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
@@ -489,7 +489,7 @@ export default function AdminReportsPage() {
             {reportData.activityTrends.slice(0, 7).map((trend) => (
               <div key={trend.date} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="font-medium">
-                  {format(new Date(trend.date), "MMM dd, yyyy")}
+                  {format(new Date(trend.date), "dd/MM/yyyy")}
                 </div>
                 <div className="text-2xl font-bold">{trend.count}</div>
               </div>

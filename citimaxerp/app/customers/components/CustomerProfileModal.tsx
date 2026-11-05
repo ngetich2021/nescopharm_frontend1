@@ -396,7 +396,7 @@ export function CustomerProfileModal({
                                     <span>{doc.document_name}</span>
                                   )}
                                   {doc.reference_number && <span className="text-gray-500">Ref: {doc.reference_number}</span>}
-                                  {doc.expiry_date && <span className="text-gray-500">Expires: {format(new Date(doc.expiry_date), "MMM dd, yyyy")}</span>}
+                                  {doc.expiry_date && <span className="text-gray-500">Expires: {format(new Date(doc.expiry_date), "dd/MM/yyyy")}</span>}
                                   {doc.regulatory_body && <span className="text-gray-500">{doc.regulatory_body}</span>}
                                 </li>
                               ))}
@@ -504,7 +504,7 @@ export function CustomerProfileModal({
                                 <div>
                                   <div className="font-medium">Order {order.order_number}</div>
                                   <div className="text-sm text-gray-500">
-                                    {format(new Date(order.created_at), "MMM dd, yyyy")}
+                                    {format(new Date(order.created_at), "dd/MM/yyyy")}
                                   </div>
                                 </div>
                                 <div className="text-right">
@@ -594,7 +594,7 @@ export function CustomerProfileModal({
                                   <div className="flex items-center justify-between mt-2">
                                     <span className="text-xs font-medium text-gray-600">{creatorName}</span>
                                     <span className="text-xs text-gray-500">
-                                      {note.created_at ? format(new Date(note.created_at), "MMM dd, yyyy 'at' HH:mm") : ""}
+                                      {note.created_at ? format(new Date(note.created_at), "dd/MM/yyyy HH:mm") : ""}
                                     </span>
                                   </div>
                                 </div>
@@ -623,7 +623,7 @@ export function CustomerProfileModal({
                               <div className="font-medium">{activity.title}</div>
                               <div className="text-sm text-gray-600 mt-1">{activity.description}</div>
                               <div className="text-xs text-gray-500 mt-2">
-                                {format(new Date(activity.start_time), "MMM dd, yyyy 'at' HH:mm")}
+                                {format(new Date(activity.start_time), "dd/MM/yyyy HH:mm")}
                               </div>
                             </div>
                           ))}

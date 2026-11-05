@@ -1,3 +1,4 @@
+import { displayDate } from "@/lib/date-format"
 import { NextRequest, NextResponse } from "next/server";
 import puppeteer from "puppeteer";
 import apiCall from "@/lib/api";
@@ -170,8 +171,8 @@ function generateInvoiceHTML(invoiceData: any) {
           <div class="invoice-info">
             <h3>Invoice Details:</h3>
             <p><strong>Invoice #:</strong> ${invoiceData.invoice_number}</p>
-            <p><strong>Date:</strong> ${new Date(invoiceData.invoice_date || invoiceData.created_at).toLocaleDateString()}</p>
-            <p><strong>Due Date:</strong> ${new Date(invoiceData.due_date).toLocaleDateString()}</p>
+            <p><strong>Date:</strong> ${displayDate(new Date(invoiceData.invoice_date || invoiceData.created_at))}</p>
+            <p><strong>Due Date:</strong> ${displayDate(new Date(invoiceData.due_date))}</p>
           </div>
         </div>
         

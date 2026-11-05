@@ -82,7 +82,7 @@ class SendChequeMaturityReminders extends Command
                 new SystemAlert(
                     'cheque',
                     $dueToday ? "Cheque from {$from} matures today" : "Cheque from {$from} matures in 3 days",
-                    "Cheque #{$cheque->cheque_number} ({$cheque->bank_name}) for {$amount} " . ($dueToday ? 'is ready to bank.' : 'matures on ' . $cheque->maturity_date->format('d M Y') . '.'),
+                    "Cheque #{$cheque->cheque_number} ({$cheque->bank_name}) for {$amount} " . ($dueToday ? 'is ready to bank.' : 'matures on ' . $cheque->maturity_date->format('d/m/Y') . '.'),
                     '/sales/cheques',
                     ['type' => 'received_cheque_maturity', 'cheque_id' => $cheque->id],
                 ),

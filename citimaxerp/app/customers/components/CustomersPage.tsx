@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDateTime } from "@/lib/date-format"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { CustomersTable } from "./CustomersTable";
@@ -143,8 +144,8 @@ export function CustomersPage() {
     ["Total Spend (KES)", (c) => Number(c.total_spend) || 0],
     ["Total Orders", (c) => c.total_orders ?? 0],
     ["Loyalty Points", (c) => c.loyalty_points ?? 0],
-    ["Created At", (c) => (c.created_at ? new Date(c.created_at).toLocaleString() : "")],
-    ["Updated At", (c) => (c.updated_at ? new Date(c.updated_at).toLocaleString() : "")],
+    ["Created At", (c) => (c.created_at ? displayDateTime(new Date(c.created_at)) : "")],
+    ["Updated At", (c) => (c.updated_at ? displayDateTime(new Date(c.updated_at)) : "")],
   ];
 
   // Exports the whole (search-filtered) list, not just the page on screen.

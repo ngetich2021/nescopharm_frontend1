@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -183,7 +184,7 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
         formatOrderNumber(order),
         order.invoice?.invoice_number || "",
         (order.customer as any)?.business_name || order.customer?.name || "Unknown",
-        new Date(order.order_date || order.created_at).toLocaleDateString("en-GB"),
+        displayDate(new Date(order.order_date || order.created_at)),
         formatStatus(order.status),
         amount(order),
       ]),
@@ -414,10 +415,10 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                   <TableCell>
                     {/* The sale's own date; when it was keyed in is shown under it if that's a different day. */}
                     <div className="text-sm">
-                      {new Date(order.order_date || order.created_at).toLocaleDateString("en-GB")}
+                      {displayDate(new Date(order.order_date || order.created_at))}
                       {order.order_date && order.order_date.slice(0, 10) !== order.created_at?.slice(0, 10) && (
                         <div className="text-xs text-muted-foreground">
-                          entered {new Date(order.created_at).toLocaleDateString("en-GB")}
+                          entered {displayDate(new Date(order.created_at))}
                         </div>
                       )}
                     </div>

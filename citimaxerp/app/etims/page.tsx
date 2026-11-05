@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,9 +46,9 @@ const KRA_STATUS: Record<EtimsProductRow["kra_status"], { label: string; classNa
 }
 
 const fmtMoney = (n: number) => n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-GB") : "-")
+const fmtDate = (d: string | null) => (d ? displayDate(new Date(d)) : "-")
 const fmtDateTime = (d: string | null) =>
-  d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"
+  d ? displayDateTime(new Date(d)) : "-"
 
 export default function EtimsPage() {
   const [tab, setTab] = useState("invoices")

@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -344,13 +345,13 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">Created</div>
                         <div className="font-medium">
-                          {new Date(supplier.created_at).toLocaleDateString()}
+                          {displayDate(new Date(supplier.created_at))}
                         </div>
                       </div>
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">Last Updated</div>
                         <div className="font-medium">
-                          {new Date(supplier.updated_at).toLocaleDateString()}
+                          {displayDate(new Date(supplier.updated_at))}
                         </div>
                       </div>
                     </div>

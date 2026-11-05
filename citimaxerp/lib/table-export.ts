@@ -1,3 +1,4 @@
+import { displayDateTime } from "@/lib/date-format"
 import { getCompany, type Company } from "@/lib/company"
 import { addScanMe, SCAN_ME_SIZE } from "@/lib/scan-me"
 
@@ -254,7 +255,7 @@ async function exportPdf(data: TableExport, brand: Brand) {
     didDrawPage: () => {
       const pageHeight = pdf.internal.pageSize.getHeight()
       pdf.setFont("helvetica", "normal").setFontSize(8)
-      pdf.text(`Printed ${new Date().toLocaleString("en-GB")}`, margin, pageHeight - 6)
+      pdf.text(`Printed ${displayDateTime(new Date())}`, margin, pageHeight - 6)
       pdf.text(`Page ${pdf.getNumberOfPages()}`, pageWidth - margin - SCAN_ME_SIZE, pageHeight - 6, { align: "right" })
     },
   })

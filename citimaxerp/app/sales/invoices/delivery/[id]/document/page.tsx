@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -65,7 +66,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
       title: `Delivery Invoice ${invoice.invoice_number}`,
       details: [
         ["Transporter", invoice.transporter_name || "-"],
-        ["Date", new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString("en-GB")],
+        ["Date", displayDate(new Date(invoice.invoice_date || invoice.created_at))],
         ["Order", invoice.order_dispatch?.order?.order_number || invoice.order_reference || "-"],
         ["Status", invoice.status],
       ],
@@ -196,7 +197,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold w-36">Invoice No.:</td>
                 <td className="border border-gray-300 px-2 py-1.5 font-semibold text-gray-900">{invoice.invoice_number}</td>
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold w-32">Date:</td>
-                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{new Date(invoice.created_at).toLocaleDateString("en-GB")}</td>
+                <td className="border border-gray-300 px-2 py-1.5 text-gray-900">{displayDate(new Date(invoice.created_at))}</td>
               </tr>
               <tr>
                 <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold">Order:</td>
@@ -270,7 +271,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
                   <td className="border border-gray-300 px-2 py-1.5 capitalize text-gray-900">{invoice.payment_method || "-"}</td>
                   <td className="border border-gray-300 bg-gray-50 px-2 py-1.5 font-semibold w-32">Payment Date:</td>
                   <td className="border border-gray-300 px-2 py-1.5 text-gray-900">
-                    {invoice.payment_date ? new Date(invoice.payment_date).toLocaleDateString("en-GB") : "-"}
+                    {invoice.payment_date ? displayDate(new Date(invoice.payment_date)) : "-"}
                   </td>
                 </tr>
                 {invoice.payment_reference && (

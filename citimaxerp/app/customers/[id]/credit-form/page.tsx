@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -774,7 +775,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
               <FormLine label="Position" value={reviewedByPosition} wide />
               <FormLine label="Approved Credit Limit (KES)" value={formatMoney(approvedCreditLimit)} wide />
               <FormLine label="Approved Credit Terms (Days)" value={approvedCreditDays} wide />
-              <FormLine label="Date Approved" value={account?.updated_at ? new Date(account.updated_at).toLocaleDateString() : null} wide />
+              <FormLine label="Date Approved" value={account?.updated_at ? displayDate(new Date(account.updated_at)) : null} wide />
               <FormLine label="Remarks" value={officialRemarks} wide />
             </div>
 
@@ -852,7 +853,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
                       />
                     </div>
                   </div>
-                  <FormLine label="Date Approved" value={account.updated_at ? new Date(account.updated_at).toLocaleDateString() : null} wide />
+                  <FormLine label="Date Approved" value={account.updated_at ? displayDate(new Date(account.updated_at)) : null} wide />
                   <div className="space-y-1">
                     <Label htmlFor="official-remarks" className="text-xs font-bold" style={{ color: NAVY }}>Remarks</Label>
                     <Textarea

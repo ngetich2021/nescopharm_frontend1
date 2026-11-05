@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDateTime } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -113,7 +114,7 @@ export function CustomerChats({ customerId }: CustomerChatsProps) {
                         >
                           <p className="text-sm">{message.content}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(message.timestamp).toLocaleString()}
+                            {displayDateTime(new Date(message.timestamp))}
                           </p>
                         </div>
                       </div>

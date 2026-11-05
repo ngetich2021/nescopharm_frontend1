@@ -178,7 +178,7 @@ export function RepairModal({
                     </div>
                   </CardTitle>
                   <CardDescription>
-                    Created on {format(new Date(currentRepair.created_at), "MMMM dd, yyyy 'at' HH:mm")}
+                    Created on {format(new Date(currentRepair.created_at), "dd/MM/yyyy HH:mm")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -226,7 +226,7 @@ export function RepairModal({
                             <p className="text-sm text-gray-500">{currentRepair.approver.email}</p>
                             {currentRepair.approved_at && (
                               <p className="text-xs text-gray-400">
-                                Approved on {format(new Date(currentRepair.approved_at), "MMM dd, yyyy")}
+                                Approved on {format(new Date(currentRepair.approved_at), "dd/MM/yyyy")}
                               </p>
                             )}
                           </div>
@@ -260,13 +260,13 @@ export function RepairModal({
                         {currentRepair.estimated_completion_date && (
                           <p>
                             <span className="font-medium">Estimated:</span>{" "}
-                            {format(new Date(currentRepair.estimated_completion_date), "MMM dd, yyyy")}
+                            {format(new Date(currentRepair.estimated_completion_date), "dd/MM/yyyy")}
                           </p>
                         )}
                         {currentRepair.actual_completion_date && (
                           <p>
                             <span className="font-medium">Completed:</span>{" "}
-                            {format(new Date(currentRepair.actual_completion_date), "MMM dd, yyyy")}
+                            {format(new Date(currentRepair.actual_completion_date), "dd/MM/yyyy")}
                           </p>
                         )}
                       </div>
@@ -446,7 +446,7 @@ export function RepairModal({
                                     <div>
                                       <span className="font-medium text-blue-700">Repaired on:</span>
                                       <p className="text-blue-800">
-                                        {format(new Date(item.repaired_at), "MMM dd, yyyy 'at' HH:mm")}
+                                        {format(new Date(item.repaired_at), "dd/MM/yyyy HH:mm")}
                                       </p>
                                     </div>
                                   )}
