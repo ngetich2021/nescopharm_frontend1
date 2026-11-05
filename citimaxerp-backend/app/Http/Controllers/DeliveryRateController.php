@@ -79,7 +79,7 @@ class DeliveryRateController extends Controller
     }
 
     /**
-     * Create a new delivery rate (Warehouse Manager). Starts as 'pending' until the GM, a Director or an Accountant approves.
+     * Create a new delivery rate (Warehouse Manager or Accountant). Starts as 'pending' until the GM, a Director or an Accountant approves.
      */
     public function store(Request $request)
     {
