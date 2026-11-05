@@ -18,6 +18,7 @@ class DeliveryRate extends Model
         'description',
         'status',
         'created_by',
+        'last_edited_by',
         'approved_by',
         'approved_at',
         'approval_notes',

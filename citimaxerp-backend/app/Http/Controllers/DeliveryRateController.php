@@ -54,12 +54,33 @@ class DeliveryRateController extends Controller
         }
 
         $rates = $query->orderBy('transporter_name')->orderBy('zone')->get();
+        // The tab shows Approve from this, so it never disagrees with approve().
+        $rates->each(fn (DeliveryRate $rate) => $rate->setAttribute('approval_block', $this->approvalBlock($rate, $user)));
 
         return response()->json([
             'status' => 'success',
             'message' => 'Delivery rates retrieved successfully.',
             'delivery_rates' => $rates,
         ], 200);
+    }
+
+    /**
+     * Why $user may not approve this rate, or null when they may: an accountant never approves one
+     * they raised or last edited - another approver does.
+     */
+    protected function approvalBlock(DeliveryRate $rate, \App\Models\User $user): ?string
+    {
+        if (!\App\Models\Order::isAccountant($user)) {
+            return null;
+        }
+        if ($rate->created_by === $user->id) {
+            return 'You raised this delivery rate, so another approver (another accountant, the GM or a Director) must approve it.';
+        }
+        if ($rate->last_edited_by === $user->id) {
+            return 'You last edited this delivery rate, so another approver (another accountant, the GM or a Director) must approve it.';
+        }
+
+        return null;
     }
 
     public function show(Request $request, $id)
@@ -155,7 +176,7 @@ class DeliveryRateController extends Controller
         }
 
         // Editing an approved rate sends it back for re-approval.
-        $rate->update($request->only(['transporter_name', 'zone', 'rate_per_carton', 'description']));
+        $rate->update($request->only(['transporter_name', 'zone', 'rate_per_carton', 'description']) + ['last_edited_by' => $user->id]);
         if ($rate->status === 'approved') {
             $rate->update(['status' => 'pending', 'is_active' => false, 'approved_by' => null, 'approved_at' => null]);
         }
@@ -171,7 +192,7 @@ class DeliveryRateController extends Controller
     }
 
     /**
-     * Approve a delivery rate (GM, Director or Accountant).
+     * Approve a delivery rate (GM, Director or Accountant; an accountant never one they raised or edited).
      */
     public function approve(Request $request, $id)
     {
@@ -184,6 +205,9 @@ class DeliveryRateController extends Controller
 
         if (!$this->hasPermission($request, 'can_approve_delivery_rates', $user->company_id)) {
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized to approve delivery rates.'], 403);
+        }
+        if ($block = $this->approvalBlock($rate, $user)) {
+            return response()->json(['status' => 'failed', 'message' => $block], 403);
         }
 
         $rate->approve($user->id, $request->input('notes'));

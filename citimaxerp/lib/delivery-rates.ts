@@ -14,6 +14,8 @@ export interface DeliveryRate {
   approved_by: string | null;
   approved_at: string | null;
   approval_notes: string | null;
+  // From the server: why the signed-in user may not approve it (an accountant who raised or edited it).
+  approval_block?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

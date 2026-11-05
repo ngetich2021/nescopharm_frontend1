@@ -422,6 +422,10 @@ export function DeliveryRatesTab() {
 
               {canApprove && viewingRate.status === "pending" && (
                 <div className="border-t pt-4 space-y-4">
+                  {/* An accountant who raised or edited the rate waits for another approver. */}
+                  {viewingRate.approval_block && (
+                    <p className="rounded-md border bg-gray-50 p-2 text-sm text-gray-700">{viewingRate.approval_block}</p>
+                  )}
                   <div>
                     <Label htmlFor="approval_notes" className="text-xs text-muted-foreground">Comments (optional)</Label>
                     <Textarea
@@ -434,14 +438,16 @@ export function DeliveryRatesTab() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      onClick={() => handleApprove(viewingRate.id)}
-                      disabled={approvingId !== null}
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      {approvingId === viewingRate.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Approve
-                    </Button>
+                    {!viewingRate.approval_block && (
+                      <Button
+                        onClick={() => handleApprove(viewingRate.id)}
+                        disabled={approvingId !== null}
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                      >
+                        {approvingId === viewingRate.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Approve
+                      </Button>
+                    )}
                     <Button
                       onClick={() => setShowRejectModal(viewingRate.id)}
                       disabled={approvingId !== null}
