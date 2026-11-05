@@ -151,13 +151,13 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
     }
   }
 
-  // A customer's cheque raises a bounced cheque charge invoice; an approved one also comes back
+  // A customer's cheque raises a bounced cheque debit (DEB-001...); an approved one also comes back
   // off the invoices it paid (ChequeBounceService).
   const bounceConfirm = (cheque: Cheque) =>
     cheque.direction === "received"
       ? `Mark cheque ${cheque.cheque_number} as bounced?` +
         (cheque.status === "approved" ? " Its money will be taken back off the invoices it paid." : "") +
-        " The customer will be invoiced KES 2,000 bounced cheque charges."
+        " The customer will be charged KES 2,000 on a bounced cheque debit (DEB number)."
       : `Mark cheque ${cheque.cheque_number} as bounced?`
 
   const ActionsDropdown = ({ cheque }: { cheque: Cheque }) => {
@@ -581,7 +581,7 @@ function ChequeDetailsDialog({ cheque, onClose }: { cheque: Cheque | null; onClo
           {field("Issue Date", formatDate(cheque.issue_date))}
           {field("Maturity Date", formatDate(cheque.maturity_date))}
           {cheque.purchase_order?.order_number && field("Purchase Order", cheque.purchase_order.order_number)}
-          {cheque.bounce_charge_invoice?.invoice_number && field("Bounced Cheque Charges", cheque.bounce_charge_invoice.invoice_number)}
+          {cheque.bounce_charge_invoice?.invoice_number && field("Bounced Cheque Debit", cheque.bounce_charge_invoice.invoice_number)}
         </div>
 
         {cheque.direction === "received" && (

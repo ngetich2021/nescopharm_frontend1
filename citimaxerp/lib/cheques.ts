@@ -38,8 +38,15 @@ export interface Cheque {
   invoice_numbers?: string[]
   // The same invoices with the amount on each, where known. Empty for a bounced or cancelled cheque.
   invoice_lines?: { invoice_number: string; amount: number | null }[]
-  // The KES 2,000 bounced cheque charges invoice raised when a customer's cheque bounced.
-  bounce_charge_invoice?: { id: string; invoice_number: string } | null
+  // The KES 2,000 bounced cheque debit (DEB-001, DEB-002...) raised when a customer's cheque bounced.
+  bounce_charge_invoice?: {
+    id: string
+    invoice_number: string
+    invoice_date: string
+    total_amount: string | number
+    amount_paid: string | number
+    balance_amount: string | number
+  } | null
   supplier?: { id: string; name: string }
   purchase_order?: { id: string; order_number: string }
 }
@@ -142,7 +149,7 @@ export async function approveCheque(id: string): Promise<Cheque & { message?: st
   return { ...response.data, message: response.message }
 }
 
-// The message names any invoices it was taken back off and the bounced cheque charge invoice.
+// The message names any invoices it was taken back off and the bounced cheque debit.
 export async function bounceCheque(id: string): Promise<Cheque & { message?: string }> {
   const response = await apiCall<{ message: string; data: Cheque }>(`/cheques/${id}/bounce`, "POST", undefined, true)
   await invalidateChequesCache()

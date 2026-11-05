@@ -25,6 +25,10 @@ class Invoice extends Model
 
     public static function printedNumber(?string $stored, $fileNumber = null): ?string
     {
+        // A bounced cheque debit is always DEB-001, never an NSK number.
+        if ($stored && str_starts_with($stored, self::DEBIT_PREFIX)) {
+            return self::shortNumber($stored);
+        }
         $fileNumber = trim((string) $fileNumber);
         if (preg_match('/^\d+$/', $fileNumber)) {
             return self::LEGACY_PREFIX . str_pad(ltrim($fileNumber, '0') ?: '0', 4, '0', STR_PAD_LEFT);
@@ -36,6 +40,24 @@ class Invoice extends Model
     // Invoices dated from 2 Nov 2026 run from NSK/0432 upwards; earlier ones continue the old series.
     public const NEW_SERIES_FROM = '2026-11-02';
     public const NEW_SERIES_START = 432;
+
+    // A bounced cheque's KES 2,000 charge is a debit in its own series, stored DEB-9b267ea3-001 and
+    // printed DEB-001, so it takes no number from the invoices.
+    public const DEBIT_PREFIX = 'DEB-';
+
+    public static function nextDebitNumber(string $companyId): string
+    {
+        $prefix = self::DEBIT_PREFIX . substr($companyId, 0, 8) . '-';
+        $last = \Illuminate\Support\Facades\DB::table('invoices')
+            ->where('invoice_number', 'like', $prefix . '%')
+            // The longest first: DEB-...-1000 comes after DEB-...-999.
+            ->orderByRaw('length(invoice_number) desc, invoice_number desc')
+            ->lockForUpdate()
+            ->value('invoice_number');
+        $next = $last ? (int) substr($last, strlen($prefix)) + 1 : 1;
+
+        return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
+    }
 
     public static function nextFileNumber(string $companyId, $invoiceDate = null): int
     {
@@ -59,7 +81,8 @@ class Invoice extends Model
 
     /**
      * Invoices whose number matches a search, as printed or as typed: "NSK/0427", "nsk 427",
-     * "NSK427" and "0427" all find NSK/0427 (File No 427); "INV-0074" finds INV-...-0074.
+     * "NSK427" and "0427" all find NSK/0427 (File No 427); "INV-0074" finds INV-...-0074;
+     * "DEB-001" and "deb 1" find the debit DEB-001.
      */
     public function scopeWhereNumberMatches($query, string $term)
     {
@@ -69,6 +92,9 @@ class Invoice extends Model
                 ->orWhereRaw("file_number ~ '^[0-9]+$' AND ? || lpad(ltrim(file_number, '0'), 4, '0') ilike ?", [self::LEGACY_PREFIX, "%{$term}%"]);
             if (preg_match('/^(?:nsk\s*[\/\-]?\s*)?0*(\d+)$/i', $term, $m)) {
                 $q->orWhereRaw("file_number ~ '^[0-9]+$' AND file_number::int = ?", [(int) $m[1]]);
+            }
+            if (preg_match('/^deb\s*[\/\-]?\s*0*(\d+)$/i', $term, $m)) {
+                $q->orWhere('invoice_number', 'like', self::DEBIT_PREFIX . '%-' . str_pad($m[1], 3, '0', STR_PAD_LEFT));
             }
         });
 
@@ -95,10 +121,10 @@ class Invoice extends Model
         }, $lines);
     }
 
-    // INV-853b296e-0074 is INV-0074.
+    // INV-853b296e-0074 is INV-0074; DEB-853b296e-001 is DEB-001.
     public static function shortNumber(?string $stored): ?string
     {
-        return $stored && preg_match('/^(INV)-(?:[\w-]+)-(\d{4})$/', $stored, $matches) ? $matches[1] . '-' . $matches[2] : $stored;
+        return $stored && preg_match('/^(INV|DEB)-(?:[\w-]+)-(\d{3,})$/', $stored, $matches) ? $matches[1] . '-' . $matches[2] : $stored;
     }
 
     use HasFactory;
@@ -226,8 +252,8 @@ class Invoice extends Model
             $model->balance_amount = $model->outstanding();
 
             // An order's invoice is numbered NSK/0429, NSK/0430...: the next File No in its date's
-            // series - from NSK/0432 for invoices dated 2 Nov 2026 on (other invoices, e.g. bounced
-            // cheque charges, keep their INV number). It is filed under that number straight away;
+            // series - from NSK/0432 for invoices dated 2 Nov 2026 on (other invoices keep their INV
+            // number; bounced cheque debits are DEB-001, DEB-002...). It is filed under that number straight away;
             // if the old system already used it, the number is changed on the Filing page.
             if ($model->order_id && blank($model->file_number) && $model->company_id) {
                 $model->file_number = (string) self::nextFileNumber($model->company_id, $model->invoice_date);

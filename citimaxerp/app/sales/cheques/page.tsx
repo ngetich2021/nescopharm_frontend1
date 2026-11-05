@@ -6,7 +6,9 @@ import { useDataCache } from "@/lib/data-cache"
 import { Cheque, fetchCheques } from "@/lib/cheques"
 import { formatCurrency } from "@/lib/utils"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChequesTable } from "./cheques-table"
+import { BouncedDebitsTable } from "./bounced-debits-table"
 
 export default function ChequesPage() {
   const { data } = useDataCache<Cheque[]>(
@@ -88,9 +90,18 @@ export default function ChequesPage() {
           </Card>
         </div>
 
-        <div className="grid gap-4">
-          <ChequesTable initialCheques={cheques} />
-        </div>
+        <Tabs defaultValue="cheques" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="cheques">Cheques</TabsTrigger>
+            <TabsTrigger value="bounced-debits">Bounced Cheque Debit</TabsTrigger>
+          </TabsList>
+          <TabsContent value="cheques">
+            <ChequesTable initialCheques={cheques} />
+          </TabsContent>
+          <TabsContent value="bounced-debits">
+            <BouncedDebitsTable />
+          </TabsContent>
+        </Tabs>
       </div>
     </PermissionGuard>
   )

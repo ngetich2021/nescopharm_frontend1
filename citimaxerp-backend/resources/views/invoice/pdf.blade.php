@@ -93,6 +93,9 @@ body { font-family: 'Figtree'; background: #fff; }
                 <td class="header-right">
                     <div class="row"><span class="label">Invoice No.</span> <span class="value">{{ $invoice->invoice_number }}</span></div>
                     <div class="row"><span class="label">Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('j M Y') }}</span></div>
+                    @if($invoice->created_at)
+                    <div class="row"><span class="label">Invoice Created:</span> <span class="value">{{ $invoice->created_at->format('j M Y') }}</span></div>
+                    @endif
                     <div class="row"><span class="label">Due Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->due_date)->format('j M Y') }}</span></div>
                 </td>
             </tr>

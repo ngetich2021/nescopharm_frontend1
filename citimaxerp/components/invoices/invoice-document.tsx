@@ -99,9 +99,17 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         )}
 
         {/* Header */}
-        <div className="flex justify-between items-end mb-1">
+        <div className="grid grid-cols-[2fr_3fr] items-end mb-1">
           <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">INVOICE</h1>
-          <div className="flex flex-col items-end gap-0.5">
+          <div className="grid grid-cols-4 items-end">
+          {/* The day it was entered in the system, directly above the Dated box below. */}
+          {invoice.created_at && (
+            <div className="col-start-2 px-2 text-[11px] leading-tight text-gray-900">
+              <p className="text-[10px] font-semibold text-gray-500">Invoice Created</p>
+              <p>{new Date(invoice.created_at).toLocaleDateString()}</p>
+            </div>
+          )}
+          <div className="col-start-3 col-span-2 flex flex-col items-end gap-0.5">
             {copyLabel && (
               <p className="min-w-[11rem] border-2 border-gray-800 px-4 py-0.5 text-center text-sm font-bold leading-5 tracking-[0.3em] text-gray-900">{copyLabel}</p>
             )}
@@ -110,6 +118,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
                 Due Date: <span className="font-semibold text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
               </p>
             )}
+          </div>
           </div>
         </div>
 

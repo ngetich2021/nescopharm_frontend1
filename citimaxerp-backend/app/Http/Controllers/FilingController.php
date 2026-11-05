@@ -49,6 +49,8 @@ class FilingController extends Controller
             ->leftJoin('customers as c', 'c.id', '=', 'i.customer_id')
             ->leftJoin('orders as o', 'o.id', '=', 'i.order_id')
             ->where('i.company_id', $companyId)
+            // Bounced cheque debits are DEB-001 etc: they are not filed under an NSK number.
+            ->where('i.invoice_number', 'not like', Invoice::DEBIT_PREFIX . '%')
             ->select([
                 'i.id', 'i.invoice_number', 'i.invoice_date', 'i.due_date', 'i.status',
                 'i.total_amount', 'i.amount_paid', 'i.balance_amount', 'i.file_number', 'i.filed_at', 'i.created_at',
@@ -128,6 +130,9 @@ class FilingController extends Controller
         }
         $companyId = $request->user()->company_id;
         $invoice = Invoice::where('company_id', $companyId)->findOrFail($id);
+        if (str_starts_with((string) $invoice->getRawOriginal('invoice_number'), Invoice::DEBIT_PREFIX)) {
+            return response()->json(['message' => 'A bounced cheque debit keeps its DEB number and cannot be given a File No.'], 422);
+        }
 
         [$value, $error] = $this->normaliseFileNumber($request->input('file_number'), $this->maxFileNumber($companyId));
         if ($error) {
@@ -168,7 +173,7 @@ class FilingController extends Controller
         $apply = $request->boolean('apply');
 
         // Matched on the number as printed (INV-0074) or as stored (INV-9b267ea3-0074).
-        $all = DB::table('invoices')->where('company_id', $user->company_id)->get(['id', 'invoice_number', 'file_number'])->keyBy('id');
+        $all = DB::table('invoices')->where('company_id', $user->company_id)->where('invoice_number', 'not like', Invoice::DEBIT_PREFIX . '%')->get(['id', 'invoice_number', 'file_number'])->keyBy('id');
         $max = max(self::FILE_NUMBER_LIMIT, $all->count());
         $byNumber = collect();
         foreach ($all as $i) {

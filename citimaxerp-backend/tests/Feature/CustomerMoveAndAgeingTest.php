@@ -122,28 +122,38 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertSame($this->bungoma, CreditNote::find($response->json('data.id'))->customer_id);
     }
 
-    public function test_each_invoice_sits_in_one_range_by_age_from_its_invoice_date(): void
+    public function test_each_invoice_sits_in_one_range_by_the_days_past_its_due_date(): void
     {
-        // Ages on 2026-11-04: 10, 45, 75, 120. Due dates differ, and don't decide the range.
-        $this->invoice($this->kitale, '2026-10-25', 10, '2027-02-01');
-        $this->invoice($this->kitale, '2026-09-20', 20, '2026-09-21');
-        $this->invoice($this->kitale, '2026-08-21', 30, '2026-12-25');
-        $this->invoice($this->kitale, '2026-07-07', 40, '2026-11-30');
+        // Days past due on 2026-11-04: 10, 45, 75, 120. Invoice dates differ, and don't decide the range.
+        $this->invoice($this->kitale, '2026-10-20', 10, '2026-10-25');
+        $this->invoice($this->kitale, '2026-09-01', 20, '2026-09-20');
+        $this->invoice($this->kitale, '2026-05-01', 30, '2026-08-21');
+        $this->invoice($this->kitale, '2026-04-01', 40, '2026-07-07');
 
         $ageing = $this->ageing();
 
         $this->assertSame(['<30 Days', '30–60 Days', '60–90 Days', '>90 Days'], array_column($ageing['buckets'], 'label'));
         $this->assertSame([10.0, 20.0, 30.0, 40.0], array_column($ageing['buckets'], 'amount'));
         $this->assertSame([3, 2, 1, 0], array_column($ageing['rows'], 'bucket'));
-        $this->assertSame([120, 75, 45, 10], array_column($ageing['rows'], 'age_days'));
-        $this->assertSame('2026-11-30', $ageing['rows'][0]['due_date']);
+        $this->assertSame([120, 75, 45, 10], array_column($ageing['rows'], 'overdue_days'));
+        $this->assertSame('2026-07-07', $ageing['rows'][0]['due_date']);
+    }
+
+    public function test_an_invoice_not_yet_due_counts_as_zero_days_past_due(): void
+    {
+        $this->invoice($this->kitale, '2026-01-10', 10, '2027-02-01');
+
+        $row = $this->ageing()['rows'][0];
+
+        $this->assertSame(0, $row['overdue_days']);
+        $this->assertSame(0, $row['bucket']);
     }
 
     public function test_range_edges(): void
     {
         foreach (['2026-10-06' => 0, '2026-10-05' => 1, '2026-09-06' => 1, '2026-09-05' => 2, '2026-08-06' => 2, '2026-08-05' => 3] as $date => $bucket) {
-            // Ages 29, 30, 59, 60, 90, 91.
-            $this->invoice($this->kitale, $date, 1);
+            // Days past due 29, 30, 59, 60, 90, 91.
+            $this->invoice($this->kitale, $date, 1, $date);
         }
 
         $this->assertSame([3, 2, 2, 1, 1, 0], array_column($this->ageing()['rows'], 'bucket'));
@@ -172,7 +182,7 @@ class CustomerMoveAndAgeingTest extends TestCase
         $ageing = $this->ageing();
 
         $this->assertEqualsWithDelta(100, $ageing['credit_notes'], 0.01);
-        $this->assertEqualsWithDelta(200, $ageing['buckets'][1]['amount'], 0.01); // 34 days old
+        $this->assertEqualsWithDelta(200, $ageing['buckets'][0]['amount'], 0.01); // Not yet due
         $this->assertEqualsWithDelta(200, $ageing['total'], 0.01);
         $this->assertEquals(0.0, $ageing['unallocated']);
     }
@@ -186,7 +196,7 @@ class CustomerMoveAndAgeingTest extends TestCase
 
         $inSeptember = $this->ageing('2026-09-15');
         $this->assertSame('2026-09-15', $inSeptember['as_at']);
-        $this->assertEqualsWithDelta(100, $inSeptember['buckets'][2]['amount'], 0.01); // 76 days old
+        $this->assertEqualsWithDelta(100, $inSeptember['buckets'][1]['amount'], 0.01); // 45 days past due
         $this->assertEqualsWithDelta(100, $inSeptember['total'], 0.01);
     }
 
@@ -223,6 +233,64 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertNull(CreditNote::find($note->id));
 
         $this->deleteJson("/api/invoices/{$invoice->id}")->assertStatus(403);
+    }
+
+    public function test_a_bounced_cheque_debit_is_numbered_deb_and_takes_no_invoice_number(): void
+    {
+        $user = User::find($this->userId);
+        $this->assertSame('DEB-001', $this->bounce('2026-05-01', $user)['charge_invoice']->invoice_number);
+        $charge = $this->bounce('2026-05-02', $user)['charge_invoice'];
+
+        $this->assertSame('DEB-002', $charge->invoice_number);
+        $this->assertSame('DEB-' . substr($this->companyId, 0, 8) . '-002', $charge->getRawOriginal('invoice_number'));
+        $this->assertSame(0, Invoice::where('company_id', $this->companyId)->where('invoice_number', 'like', 'INV-%')->count());
+        $this->assertEqualsWithDelta(2000, (float) $charge->total_amount, 0.01);
+    }
+
+    public function test_a_debit_shows_its_number_on_the_statement_and_is_found_by_it(): void
+    {
+        $charge = $this->bounce('2026-05-01', User::find($this->userId))['charge_invoice'];
+
+        $references = array_column(app(CustomerStatementService::class)->generate(
+            $this->companyId,
+            $this->kitale,
+            Carbon::parse('2026-01-01')->startOfDay(),
+            Carbon::parse('2026-11-04')->endOfDay(),
+        )['transactions'], 'reference');
+
+        $this->assertContains('DEB-001', $references);
+        foreach (['DEB-001', 'deb 1', 'DEB001'] as $term) {
+            $this->assertSame($charge->id, Invoice::where('company_id', $this->companyId)->whereNumberMatches($term)->value('id'), $term);
+        }
+    }
+
+    public function test_a_debit_cannot_be_given_a_file_number(): void
+    {
+        $this->grant('can_view_filing');
+        $charge = $this->bounce('2026-05-01', User::find($this->userId))['charge_invoice'];
+
+        $this->patchJson("/api/filing/{$charge->id}", ['file_number' => '999'])->assertStatus(422);
+        $this->assertSame('DEB-001', $charge->fresh()->invoice_number);
+        $this->assertNotContains($charge->id, array_column($this->getJson('/api/filing')->assertOk()->json('invoices'), 'id'));
+    }
+
+    private function bounce(string $maturity, User $user): array
+    {
+        $cheque = Cheque::create([
+            'id' => (string) Str::uuid(),
+            'company_id' => $this->companyId,
+            'direction' => 'received',
+            'customer_id' => $this->kitale,
+            'cheque_number' => 'CHQ' . Str::random(6),
+            'bank_name' => 'Test Bank',
+            'amount' => 100,
+            'issue_date' => $maturity,
+            'maturity_date' => $maturity,
+            'status' => 'pending',
+            'created_by' => $this->userId,
+        ]);
+
+        return app(\App\Services\ChequeBounceService::class)->bounceReceived($cheque, $user);
     }
 
     private function ageing(?string $to = null): array

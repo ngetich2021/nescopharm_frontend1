@@ -79,13 +79,13 @@ export interface StatementOrder {
 export interface StatementAgeing {
   as_at: string
   buckets: { label: string; amount: number }[]
-  // Each unpaid invoice, in one bucket by its age from the invoice date.
+  // Each unpaid invoice, in one bucket by the days past its due date.
   rows: {
     invoice_id: string
     invoice_number: string
     invoice_date: string
     due_date: string
-    age_days: number
+    overdue_days: number
     bucket: number
     amount: number
   }[]

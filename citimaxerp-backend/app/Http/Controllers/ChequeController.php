@@ -63,7 +63,7 @@ class ChequeController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $query = Cheque::with(['customer:id,name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number', 'bounceChargeInvoice:id,invoice_number,file_number'])
+        $query = Cheque::with(['customer:id,name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number', 'bounceChargeInvoice:id,invoice_number,file_number,invoice_date,total_amount,amount_paid,balance_amount'])
             ->where('company_id', $user->company_id);
 
         if ($request->filled('status')) {
@@ -590,8 +590,8 @@ class ChequeController extends Controller
 
     /**
      * Mark a cheque as bounced (dishonoured). A customer's cheque may already be approved: its
-     * money comes back off the invoices it paid, and the customer is invoiced the bounced
-     * cheque charge (ChequeBounceService). A supplier cheque can only bounce while pending.
+     * money comes back off the invoices it paid, and the customer owes the bounced cheque
+     * debit, DEB-001 etc (ChequeBounceService). A supplier cheque can only bounce while pending.
      */
     public function bounce(Request $request, string $id): JsonResponse
     {
@@ -618,7 +618,7 @@ class ChequeController extends Controller
             'message' => "Cheque {$cheque->cheque_number} marked as bounced"
                 . ($reversed ? "; {$reversed}" : '')
                 . ($moved ? "; oldest invoices paid first: {$moved}" : '')
-                . ($charge ? "; charge invoice {$charge->invoice_number} of " . number_format((float) $charge->total_amount, 2) . ' raised' : ''),
+                . ($charge ? "; bounced cheque debit {$charge->invoice_number} of " . number_format((float) $charge->total_amount, 2) . ' raised' : ''),
             'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number,file_number']),
             'reversed' => $result['reversed'],
             'charge_invoice' => $charge ? ['id' => $charge->id, 'invoice_number' => $charge->invoice_number, 'total_amount' => $charge->total_amount] : null,

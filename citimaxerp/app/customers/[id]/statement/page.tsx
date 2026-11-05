@@ -202,9 +202,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
     if (ageing) {
       rows.push([`2. ACCOUNTS RECEIVABLE AGEING ANALYSIS (as at ${formatDate(ageing.as_at)})`])
-      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Age (Days)", ...ageing.buckets.map((b) => b.label), "Balance (KES)"])
+      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Days Past Due", ...ageing.buckets.map((b) => b.label), "Balance (KES)"])
       ageing.rows.forEach((r, i) => {
-        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.age_days, ...ageing.buckets.map((_, b) => (b === r.bucket ? r.amount.toFixed(2) : "")), r.amount.toFixed(2)])
+        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.overdue_days, ...ageing.buckets.map((_, b) => (b === r.bucket ? r.amount.toFixed(2) : "")), r.amount.toFixed(2)])
       })
       rows.push(["", "Total", "", "", "", ...ageing.buckets.map((b) => b.amount.toFixed(2)), ageingBase.toFixed(2)])
       rows.push(["", "% of Total", "", "", "", ...ageing.buckets.map((b) => (ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%")), ""])
@@ -551,7 +551,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
               <p className="text-xs text-gray-500 mb-2">
-                As at {formatDate(ageing.as_at)}, each unpaid invoice by its age from the invoice date
+                As at {formatDate(ageing.as_at)}, each unpaid invoice by the days past its due date
                 {ageing.credit_notes > 0 && `, after credit notes of KES ${formatAmount(ageing.credit_notes)}`}
               </p>
               <div className="overflow-x-auto">
@@ -562,7 +562,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                       <th className={TH}>Invoice No.</th>
                       <th className={TH}>Invoice Date</th>
                       <th className={TH}>Due Date</th>
-                      <th className={`${TH} text-right`}>Age (Days)</th>
+                      <th className={`${TH} text-right`}>Days Past Due</th>
                       {ageing.buckets.map((b) => (
                         <th key={b.label} className={`${TH} text-right`}>{b.label}</th>
                       ))}
@@ -576,7 +576,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                         <td className={TD}>{r.invoice_number}</td>
                         <td className={TD}>{formatDate(r.invoice_date)}</td>
                         <td className={TD}>{formatDate(r.due_date)}</td>
-                        <td className={`${TD} text-right`}>{r.age_days}</td>
+                        <td className={`${TD} text-right`}>{r.overdue_days}</td>
                         {ageing.buckets.map((b, index) => (
                           <td key={b.label} className={`${TD} text-right`}>{index === r.bucket ? formatAmount(r.amount) : ""}</td>
                         ))}

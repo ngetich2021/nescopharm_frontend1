@@ -249,7 +249,7 @@ class CustomerAccountController extends Controller
     public function update(Request $request, $id)
     {
         $user = $request->user();
-        // Approvers (GM) set the granted terms; accountants maintain the same
+        // Approvers (GM, accountants) set the granted terms; accountants maintain the same
         // customer file from the signed hard copy, so either right may edit.
         if (!$this->hasPermission($request, 'can_update_accounts', $user->company_id)
             && !$this->hasPermission($request, 'can_approve_account', $user->company_id)) {
@@ -602,7 +602,7 @@ class CustomerAccountController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Credit terms update request submitted successfully. Awaiting GM approval.',
+                'message' => 'Credit terms update request submitted successfully. Awaiting approval.',
                 'data' => [
                     'approval_request' => $approval,
                     'account_info' => [

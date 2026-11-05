@@ -389,8 +389,8 @@ class CustomerStatementService
 
     /**
      * What the customer owed at the statement date, invoice by invoice. Each unpaid invoice sits
-     * in one range by its age from the invoice date, moves along as it gets older, and drops off
-     * once paid. Worked out from the documents up to that date, not today's balances, so an older
+     * in one range by the days past its due date (not yet due counts as 0), moves along as it gets
+     * more overdue, and drops off once paid. Worked out from the documents up to that date, not today's balances, so an older
      * statement ages as it stood then. Each invoice is reduced by its own credit notes, then all
      * other money (receipts, unused credit) goes on the oldest invoices first. Anything left is
      * unallocated. An invoice with no due date is due after the customer's $creditDays.
@@ -433,11 +433,12 @@ class CustomerStatementService
                 continue;
             }
             $invoiceDate = Carbon::parse($inv->invoice_date)->startOfDay();
-            $age = max(0, (int) $invoiceDate->diffInDays($asAt->copy()->startOfDay(), false));
+            $dueDate = $inv->due_date ? Carbon::parse($inv->due_date)->startOfDay() : $invoiceDate->copy()->addDays($creditDays);
+            $overdueDays = max(0, (int) $dueDate->diffInDays($asAt->copy()->startOfDay(), false));
             $index = match (true) {
-                $age < 30 => 0,
-                $age < 60 => 1,
-                $age <= 90 => 2,
+                $overdueDays < 30 => 0,
+                $overdueDays < 60 => 1,
+                $overdueDays <= 90 => 2,
                 default => 3,
             };
             $buckets[$index]['amount'] += $left;
@@ -445,8 +446,8 @@ class CustomerStatementService
                 'invoice_id' => $inv->id,
                 'invoice_number' => $inv->invoice_number,
                 'invoice_date' => $invoiceDate->toDateString(),
-                'due_date' => ($inv->due_date ? Carbon::parse($inv->due_date) : $invoiceDate->copy()->addDays($creditDays))->toDateString(),
-                'age_days' => $age,
+                'due_date' => $dueDate->toDateString(),
+                'overdue_days' => $overdueDays,
                 'bucket' => $index,
                 'amount' => $left,
             ];

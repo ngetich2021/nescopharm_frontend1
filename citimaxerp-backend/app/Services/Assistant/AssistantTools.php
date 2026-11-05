@@ -27,6 +27,7 @@ class AssistantTools
         'stock_on_hand' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
         'stock_alerts' => ['can_view_inventory_menu'],
         'list_invoices' => ['can_view_sales_menu'],
+        'list_bounced_debits' => ['can_view_sales_menu'],
         'list_orders' => ['can_view_sales_menu'],
         'sales_summary' => ['can_view_sales_menu', 'can_view_reports_menu'],
         'customer_account' => ['can_view_customers_menu', 'can_view_sales_menu'],
@@ -84,6 +85,11 @@ class AssistantTools
             ], []],
             'stock_alerts' => ['Alerts only (not the stock list): products at or below their reorder level or out of stock, batches expiring soon, and expired batches still holding stock.', [
                 'expiring_within_days' => ['type' => 'integer', 'description' => 'Batches expiring within this many days (default 90)'],
+            ], []],
+            'list_bounced_debits' => ['Bounced cheque debits (DEB-001, DEB-002...), the KES 2,000 charge on each bounced customer cheque, earliest first, with the cheque, what was paid and the balance. Use for bounced cheques, DEB numbers and what customers owe on them.', [
+                'search' => ['type' => 'string', 'description' => 'Debit number (DEB-001), cheque number or customer name'],
+                'status' => ['type' => 'string', 'enum' => ['any', 'unpaid', 'paid'], 'description' => 'Default any'],
+                'limit' => ['type' => 'integer', 'description' => 'Max debits (default 25, max 100)'],
             ], []],
             'list_invoices' => ['Sales invoices, newest first, plus latest_nsk (the highest NSK number issued). Use for "latest invoice number" (answer with latest_nsk), an invoice number (NSK/0427), a customer\'s invoices, or unpaid/overdue invoices.', $range + [
                 'search' => ['type' => 'string', 'description' => 'Invoice number (NSK/0427, 427) or customer name'],
@@ -548,6 +554,49 @@ class AssistantTools
             'due_date' => optional($i->due_date)->toDateString(),
             'payment_type' => $i->payment_type,
         ])->values()];
+    }
+
+    protected function list_bounced_debits(array $args): array
+    {
+        $search = trim((string) ($args['search'] ?? ''));
+        $debits = \App\Models\Cheque::with(['customer:id,name,business_name', 'bounceChargeInvoice'])
+            ->where('company_id', $this->companyId)
+            ->where('direction', 'received')
+            ->where('status', 'bounced')
+            ->whereNotNull('bounce_charge_invoice_id')
+            ->get()
+            ->sortBy(fn ($c) => [(int) substr((string) $c->bounceChargeInvoice?->invoice_number, 4), (string) $c->id])
+            ->filter(function ($c) use ($search, $args) {
+                $balance = (float) $c->bounceChargeInvoice?->balance_amount;
+                $status = $args['status'] ?? 'any';
+                if (($status === 'unpaid' && $balance <= 0.005) || ($status === 'paid' && $balance > 0.005)) {
+                    return false;
+                }
+                if ($search === '') {
+                    return true;
+                }
+                $number = (int) preg_replace('/\D/', '', $search);
+                return (preg_match('/^deb/i', $search) && (int) substr((string) $c->bounceChargeInvoice?->invoice_number, 4) === $number)
+                    || stripos((string) $c->cheque_number, $search) !== false
+                    || stripos((string) self::customerName($c->customer), $search) !== false;
+            })
+            ->values();
+
+        return [
+            'count' => $debits->count(),
+            'total_balance' => self::money($debits->sum(fn ($c) => (float) $c->bounceChargeInvoice?->balance_amount)),
+            'debits' => $debits->take($this->limit($args, 25, 100))->map(fn ($c) => [
+                'number' => $c->bounceChargeInvoice?->invoice_number,
+                'date' => optional($c->bounceChargeInvoice?->invoice_date)->toDateString(),
+                'customer' => self::customerName($c->customer),
+                'cheque_number' => $c->cheque_number,
+                'bank' => $c->bank_name,
+                'cheque_amount' => self::money($c->amount),
+                'debit' => self::money($c->bounceChargeInvoice?->total_amount),
+                'paid' => self::money($c->bounceChargeInvoice?->amount_paid),
+                'balance' => self::money($c->bounceChargeInvoice?->balance_amount),
+            ])->values(),
+        ];
     }
 
     protected function list_orders(array $args): array

@@ -14,8 +14,8 @@ use RuntimeException;
 /**
  * A customer's cheque that the bank dishonoured. If it was already approved, the money it put on
  * invoices is taken back off them (they owe it again) and its receipt is marked failed, which
- * removes the receipt from the ledger. Either way the customer is invoiced the bounced cheque
- * charge, once per cheque.
+ * removes the receipt from the ledger. Either way the customer owes the bounced cheque charge,
+ * once per cheque: a debit numbered DEB-001, DEB-002... that takes no number from the invoices.
  */
 class ChequeBounceService
 {
@@ -113,7 +113,7 @@ class ChequeBounceService
             'total_amount' => 0,
             'amount_paid' => 0,
             'balance_amount' => 0,
-            'invoice_number' => $this->nextInvoiceNumber($cheque->company_id),
+            'invoice_number' => Invoice::nextDebitNumber($cheque->company_id),
         ]);
 
         InvoiceLineItem::create([
@@ -131,20 +131,5 @@ class ChequeBounceService
         $invoice->calculateTotals();
 
         return $invoice->fresh();
-    }
-
-    // Same sequence as InvoiceController::generateInvoiceNumber.
-    protected function nextInvoiceNumber(string $companyId): string
-    {
-        $prefix = 'INV-' . substr($companyId, 0, 8) . '-';
-        $last = DB::table('invoices')
-            ->where('company_id', $companyId)
-            ->where('invoice_number', 'like', $prefix . '%')
-            ->orderBy('invoice_number', 'desc')
-            ->lockForUpdate()
-            ->value('invoice_number');
-        $next = $last ? (int) substr($last, strlen($prefix)) + 1 : 1;
-
-        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 }
