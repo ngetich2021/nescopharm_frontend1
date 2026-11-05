@@ -293,6 +293,27 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertSame('Syria Pharmacy', (new Customer(['name' => 'Syria Pharmacy', 'business_name' => null]))->display_name);
     }
 
+    public function test_the_assistant_lists_bounced_cheque_debits(): void
+    {
+        Customer::whereKey($this->kitale)->update(['business_name' => 'Kitale Pharmacy Ltd']);
+        $user = User::find($this->userId);
+        $this->bounce('2026-05-01', $user);
+        $paid = $this->bounce('2026-05-02', $user)['charge_invoice'];
+        $paid->update(['amount_paid' => 2000]);
+
+        $tools = new \ReflectionClass(\App\Services\Assistant\AssistantTools::class);
+        $instance = $tools->newInstanceWithoutConstructor();
+        $tools->getProperty('companyId')->setValue($instance, $this->companyId);
+        $list = fn (array $args) => (new \ReflectionMethod($instance, 'list_bounced_debits'))->invoke($instance, $args);
+
+        $all = $list([]);
+        $this->assertSame(2, $all['count']);
+        $this->assertSame(['DEB-001', 'DEB-002'], $all['debits']->pluck('number')->all());
+        $this->assertSame('Kitale Pharmacy Ltd', $all['debits'][0]['customer']);
+        $this->assertSame(1, $list(['status' => 'unpaid'])['count']);
+        $this->assertSame('DEB-002', $list(['search' => 'DEB-002'])['debits'][0]['number']);
+    }
+
     public function test_a_statement_period_reads_dd_mm_yyyy(): void
     {
         $this->assertSame('01/09/2026 - 30/09/2026', app(CustomerStatementService::class)->formatPeriodLabel(Carbon::parse('2026-09-01'), Carbon::parse('2026-09-30')));
