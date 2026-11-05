@@ -1,4 +1,5 @@
 "use client";
+import { matchesDocNumber } from "@/lib/utils"
 import { useState, useEffect, Suspense } from "react";
 import {
   listOrderDispatches,
@@ -210,6 +211,7 @@ export default function DispatchPage() {
     return (
       dispatch.dispatch_number?.toLowerCase().includes(q) ||
       dispatch.order?.order_number?.toLowerCase().includes(q) ||
+      matchesDocNumber(dispatch.order?.invoice?.invoice_number, search) ||
       dispatch.order?.customer?.name?.toLowerCase().includes(q) ||
       dispatch.created_by?.first_name?.toLowerCase().includes(q) ||
       dispatch.created_by?.last_name?.toLowerCase().includes(q) ||

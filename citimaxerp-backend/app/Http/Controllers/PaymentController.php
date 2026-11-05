@@ -59,7 +59,7 @@ class PaymentController extends Controller
 
         try {
             $user = $request->user();
-            $query = Payment::with(['order', 'customer']);
+            $query = Payment::with(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'customer']);
 
             // Always default to user's company
             $companyId = $user->company_id;
@@ -137,7 +137,7 @@ class PaymentController extends Controller
         try {
             $user = $request->user();
             $query = Payment::where('id', $id)
-                ->with(['order', 'customer', 'invoice']);
+                ->with(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'customer', 'invoice']);
 
             if (!$this->hasPermission($request, 'can_manage_all_payments')) {
                 $query->where('company_id', $user->company_id);

@@ -1,5 +1,6 @@
 "use client";
 
+import { orderRef } from "@/lib/order-ref"
 import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import {
@@ -502,7 +503,7 @@ export function CustomerProfileModal({
                             {orders.slice(0, 3).map((order) => (
                               <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg">
                                 <div>
-                                  <div className="font-medium">Order {order.order_number}</div>
+                                  <div className="font-medium">{orderRef(order as any)}</div>
                                   <div className="text-sm text-gray-500">
                                     {format(new Date(order.created_at), "dd/MM/yyyy")}
                                   </div>

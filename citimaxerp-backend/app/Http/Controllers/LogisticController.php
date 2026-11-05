@@ -69,7 +69,7 @@ class LogisticController extends Controller
         }
 
         // Eager load orderDispatch and its related order
-        $query = Logistic::with(['orderDispatch.order', 'deliveryPerson', 'deliveryNoteReviewedBy:id,first_name,last_name']);
+        $query = Logistic::with(['orderDispatch.order', 'orderDispatch.order.invoice:id,order_id,invoice_number,file_number', 'deliveryPerson', 'deliveryNoteReviewedBy:id,first_name,last_name']);
         $query->where('company_id', $user->company_id);
 
         if ($request->filled('delivery_status')) {
@@ -148,7 +148,7 @@ class LogisticController extends Controller
             ], 403);
         }
         $query = Logistic::where('id', $id)
-            ->with(['orderDispatch.order', 'deliveryPerson', 'company'])
+            ->with(['orderDispatch.order', 'orderDispatch.order.invoice:id,order_id,invoice_number,file_number', 'deliveryPerson', 'company'])
             ->where('company_id', $user->company_id);
         $logistic = $query->first();
         if (!$logistic) {

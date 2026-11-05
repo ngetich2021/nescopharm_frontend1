@@ -519,6 +519,7 @@ class CustomerController extends Controller
                     'orders' => function ($query) {
                         $query->select('id', 'customer_id', 'order_number', 'total_amount', 'status', 'created_at', 'updated_at');
                     },
+                    'orders.invoice:id,order_id,invoice_number,file_number',
                     'orders.payments' => function ($query) {
                         $query->select('id', 'order_id', 'amount_paid', 'payment_method', 'status', 'created_at');
                     },

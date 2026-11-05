@@ -1,5 +1,6 @@
 "use client"
 
+import { orderRef } from "@/lib/order-ref"
 import { forwardRef, useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { sizedName } from "@/lib/product-sizes"
@@ -112,9 +113,9 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
     const referenceCells = [
       { label: "Delivery Note No.", value: dispatch.dispatch_number },
       { label: "Dated", value: dateStr },
-      { label: "Reference No. & Date", value: dispatch.order?.order_number ? `${dispatch.order.order_number} dt. ${dateStr}` : "N/A" },
+      { label: "Reference No. & Date", value: dispatch.order?.order_number ? `${orderRef(dispatch.order as any)} dt. ${dateStr}` : "N/A" },
       { label: "Mode/Terms of Payment", value: dispatch.order?.payment_status ? dispatch.order.payment_status.replace(/^\w/, c => c.toUpperCase()) : "N/A" },
-      { label: "Buyer's Order No.", value: dispatch.order?.order_number || "N/A" },
+      { label: "Buyer's Order No.", value: orderRef(dispatch.order as any) || "N/A" },
       { label: "Other References", value: dispatch.logistic?.tracking_number || "N/A" },
       { label: "Dispatch Doc No.", value: dispatch.dispatch_number },
       { label: "Dated", value: dateStr },

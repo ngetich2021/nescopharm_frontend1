@@ -1,5 +1,6 @@
 "use client"
 
+import { orderRef } from "@/lib/order-ref"
 import { useState, useEffect, useCallback } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
@@ -342,7 +343,7 @@ export function LogisticsTable() {
                   }
                 >
                   <TableCell className="font-semibold text-primary">
-                    {entry.order?.order_number || entry.order_dispatch?.dispatch_number || "—"}
+                    {orderRef((entry.order ?? (entry.order_dispatch as any)?.order) as any) || entry.order_dispatch?.dispatch_number || "—"}
                   </TableCell>
                   <TableCell>
                     <div>
@@ -467,7 +468,7 @@ export function LogisticsTable() {
             <DialogDescription>
               {viewingEntry && (
                 <span>
-                  {viewingEntry.order?.order_number || viewingEntry.order_dispatch?.dispatch_number || "Logistics Entry"}
+                  {orderRef((viewingEntry.order ?? (viewingEntry.order_dispatch as any)?.order) as any) || viewingEntry.order_dispatch?.dispatch_number || "Logistics Entry"}
                 </span>
               )}
             </DialogDescription>
@@ -728,7 +729,7 @@ export function LogisticsTable() {
             <DialogDescription>
               {updateEntry && (
                 <span>
-                  {updateEntry.order?.order_number || updateEntry.order_dispatch?.dispatch_number || "Logistics Entry"} — {updateEntry.recipient_name || "N/A"}
+                  {orderRef((updateEntry.order ?? (updateEntry.order_dispatch as any)?.order) as any) || updateEntry.order_dispatch?.dispatch_number || "Logistics Entry"} — {updateEntry.recipient_name || "N/A"}
                 </span>
               )}
             </DialogDescription>

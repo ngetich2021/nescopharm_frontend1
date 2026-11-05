@@ -1,5 +1,6 @@
 "use client";
 
+import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect } from "react";
@@ -478,8 +479,8 @@ export function DispatchDetailsSheet({
                  <CardContent className="pt-4 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                        <div>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Order Number</p>
-                          <p className="mt-1 font-semibold text-gray-900">{localDispatch.order?.order_number}</p>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice No.</p>
+                          <p className="mt-1 font-semibold text-gray-900">{orderRef(localDispatch.order as any)}</p>
                        </div>
                        <div>
                           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</p>

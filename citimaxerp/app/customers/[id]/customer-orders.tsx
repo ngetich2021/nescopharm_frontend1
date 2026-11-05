@@ -1,5 +1,6 @@
 "use client"
 
+import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -63,7 +64,7 @@ export function CustomerOrders({ customerId, initialOrders }: CustomerOrdersProp
       const query = searchQuery.toLowerCase()
       result = result.filter(
         (order) =>
-          order.order_number?.toLowerCase().includes(query) || order.tracking_number?.toLowerCase().includes(query),
+          order.order_number?.toLowerCase().includes(query) || orderRef(order as any)?.toLowerCase().includes(query) || order.tracking_number?.toLowerCase().includes(query),
       )
     }
 
@@ -139,7 +140,7 @@ export function CustomerOrders({ customerId, initialOrders }: CustomerOrdersProp
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order Number</TableHead>
+                    <TableHead>Invoice No.</TableHead>
                     <TableHead>Tracking Number</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Items</TableHead>
@@ -155,7 +156,7 @@ export function CustomerOrders({ customerId, initialOrders }: CustomerOrdersProp
                       className="cursor-pointer hover:bg-gray-100"
                       onClick={() => handleOrderClick(order.id)}
                     >
-                      <TableCell className="font-medium">{order.order_number}</TableCell>
+                      <TableCell className="font-medium">{orderRef(order as any)}</TableCell>
                       <TableCell>{order.tracking_number || "N/A"}</TableCell>
                       <TableCell>{displayDate(new Date(order.created_at))}</TableCell>
                       <TableCell>

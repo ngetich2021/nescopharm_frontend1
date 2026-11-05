@@ -45,13 +45,15 @@ class OrderDispatchController extends Controller
         if (!$next) {
             return;
         }
-        $orderNumber = $dispatch->order?->order_number;
+        $dispatch->order?->loadMissing('invoice:id,order_id,invoice_number,file_number');
+        $invoiceNumber = $dispatch->order?->invoice?->invoice_number;
+        $orderNumber = $invoiceNumber && str_starts_with($invoiceNumber, \App\Models\Invoice::LEGACY_PREFIX) ? $invoiceNumber : $dispatch->order?->order_number;
         $customer = $dispatch->order?->customer;
         $customerName = $customer ? ($customer->business_name ?: $customer->name) : null;
         app(\App\Services\NotificationService::class)->notifyUser($next->id, new \App\Notifications\SystemAlert(
             'approval',
             "Dispatch {$dispatch->dispatch_number} awaits your approval",
-            'Dispatch' . ($orderNumber ? " for order {$orderNumber}" : '') . ($customerName ? " ({$customerName})" : '') . ' is waiting on your approval.',
+            'Dispatch' . ($orderNumber ? " for {$orderNumber}" : '') . ($customerName ? " ({$customerName})" : '') . ' is waiting on your approval.',
             "/dispatch",
             ['type' => 'dispatch_pending', 'dispatch_id' => $dispatch->id],
         ), $actorId);
@@ -92,6 +94,7 @@ class OrderDispatchController extends Controller
 
         $query = OrderDispatch::with([
             'order.customer',
+            'order.invoice:id,order_id,invoice_number,file_number',
             'items.product.priceTiers',
             'items.variant',
             'items.orderItem:id,price_label,price_unit',
@@ -191,6 +194,7 @@ class OrderDispatchController extends Controller
 
         $dispatch = OrderDispatch::with([
             'order.customer',
+            'order.invoice:id,order_id,invoice_number,file_number',
             'order.invoiceApprover:id,first_name,last_name',
             'order.orderItems.product',
             'order.orderItems.variant',
@@ -496,7 +500,7 @@ class OrderDispatchController extends Controller
 
             $dispatch->save();
 
-            $dispatch->load(['order', 'items', 'deliveryLocation']);
+            $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items', 'deliveryLocation']);
             $dispatch->approver_details = $dispatch->approver_users;
             $dispatch->current_approver = $dispatch->getCurrentApprover();
 
@@ -621,7 +625,7 @@ class OrderDispatchController extends Controller
 
             $this->notifyNextDispatchApprover($dispatch, $user->id);
 
-            $dispatch->load(['order', 'items', 'deliveryLocation']);
+            $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items', 'deliveryLocation']);
             $dispatch->approver_details = $dispatch->approver_users;
             $dispatch->current_approver = $dispatch->getCurrentApprover();
 
@@ -699,7 +703,7 @@ class OrderDispatchController extends Controller
                 $this->notifyNextDispatchApprover($dispatch, $user->id);
             }
 
-            $dispatch->load(['order', 'items', 'deliveryLocation']);
+            $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items', 'deliveryLocation']);
             $dispatch->approver_details = $dispatch->approver_users;
             $dispatch->current_approver = $dispatch->getCurrentApprover();
             $dispatch->approval_progress = $dispatch->getApprovalProgress();
@@ -790,7 +794,7 @@ class OrderDispatchController extends Controller
                 "/dispatch", $user->id, $request->reason,
             );
 
-            $dispatch->load(['order', 'items', 'deliveryLocation']);
+            $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items', 'deliveryLocation']);
             $dispatch->approver_details = $dispatch->approver_users;
 
             return response()->json([
@@ -903,7 +907,7 @@ class OrderDispatchController extends Controller
 
             DB::commit();
 
-            $dispatch->load(['order', 'items', 'deliveryLocation', 'logistic.deliveryPerson']);
+            $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items', 'deliveryLocation', 'logistic.deliveryPerson']);
 
             return response()->json([
                 'success' => true,
@@ -1012,7 +1016,7 @@ class OrderDispatchController extends Controller
 
             DB::commit();
 
-            $dispatch->load(['order', 'items.product', 'deliveryLocation', 'logistic']);
+            $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items.product', 'deliveryLocation', 'logistic']);
 
             return response()->json([
                 'success' => true,

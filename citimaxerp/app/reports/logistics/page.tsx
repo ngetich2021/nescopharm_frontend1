@@ -84,7 +84,7 @@ export default function LogisticsReportPage() {
 
   const efficiencyColumns = [
     { accessorKey: "dispatch_number", header: sortable("Dispatch") },
-    { accessorKey: "order_number", header: sortable("Order") },
+    { accessorKey: "order_number", header: sortable("Invoice") },
     { accessorKey: "customer", header: sortable("Customer") },
     { accessorKey: "county", header: sortable("County"), cell: ({ row }: any) => row.original.county || "-" },
     {

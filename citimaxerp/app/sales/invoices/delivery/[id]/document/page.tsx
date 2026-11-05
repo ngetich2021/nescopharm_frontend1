@@ -1,5 +1,6 @@
 "use client"
 
+import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -67,7 +68,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
       details: [
         ["Transporter", invoice.transporter_name || "-"],
         ["Date", displayDate(new Date(invoice.invoice_date || invoice.created_at))],
-        ["Order", invoice.order_dispatch?.order?.order_number || invoice.order_reference || "-"],
+        ["Order", orderRef(invoice.order_dispatch?.order as any) || invoice.order_reference || "-"],
         ["Status", invoice.status],
       ],
       headers: ["S/No", "Zone", "Cartons", "Rate per Carton", "Total"],
@@ -147,7 +148,7 @@ export default function DeliveryInvoiceDocumentPage({ params }: { params: Promis
   }
 
   const company = invoice.company
-  const orderNumber = invoice.order_dispatch?.order?.order_number || invoice.order_dispatch?.order_id || "-"
+  const orderNumber = orderRef(invoice.order_dispatch?.order as any) || invoice.order_dispatch?.order_id || "-"
   const buyer = buildBuyerBlock(invoice.order_dispatch?.order?.customer)
 
   return (

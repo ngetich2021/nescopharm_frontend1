@@ -1,5 +1,6 @@
 "use client";
 
+import { orderRef } from "@/lib/order-ref"
 import { InvoiceTotals } from "@/components/invoices/invoice-totals"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react";
@@ -53,7 +54,7 @@ import { ALL_ROWS, TablePager } from "@/components/ui/table-pager";
 
 // Imported invoices for deliveries made before the system have no order, only what the old records said.
 const orderLabel = (invoice: DeliveryInvoice) =>
-  invoice.order_dispatch?.order?.order_number || invoice.order_reference || invoice.order_dispatch?.order_id || "—";
+  orderRef(invoice.order_dispatch?.order as any) || invoice.order_reference || invoice.order_dispatch?.order_id || "—";
 
 // 12/07/2026
 const shortDate = (date?: string | null) => {

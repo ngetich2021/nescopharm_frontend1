@@ -185,10 +185,14 @@ class SupplierController extends Controller
             ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
             ->where('d.supplier_id', $supplier->id)->where('d.status', '!=', 'cancelled')
             ->select('d.invoice_number', 'd.transporter_invoice_number', 'd.invoice_date', 'd.created_at', 'd.zone',
-                'd.number_of_cartons', 'd.total_amount', 'd.order_reference', 'o.order_number', DB::raw("coalesce(nullif(trim(c.business_name), ''), c.name) as customer_name"))
+                'd.number_of_cartons', 'd.total_amount', 'd.order_reference', 'o.order_number', DB::raw("coalesce(nullif(trim(c.business_name), ''), c.name) as customer_name"),
+                DB::raw('(SELECT i.file_number FROM invoices i WHERE i.order_id = o.id ORDER BY i.created_at LIMIT 1) as invoice_file_number'))
             ->get();
         foreach ($deliveries as $d) {
-            $what = $d->order_number ? "Order {$d->order_number}" . ($d->customer_name ? " - {$d->customer_name}" : '') : $d->order_reference;
+            $sale = preg_match('/^\d+$/', trim((string) $d->invoice_file_number))
+                ? 'Invoice ' . \App\Models\Invoice::printedNumber(null, $d->invoice_file_number)
+                : "Order {$d->order_number}";
+            $what = $d->order_number ? $sale . ($d->customer_name ? " - {$d->customer_name}" : '') : $d->order_reference;
             $entries->push([
                 'date' => substr((string) ($d->invoice_date ?? $d->created_at), 0, 10),
                 'type' => 'bill',

@@ -116,6 +116,7 @@ export interface OrderDispatch {
 
   // Relations
   order: {
+    invoice?: { invoice_number?: string | null } | null;
     id: string;
     order_number: string;
     customer_id: string;

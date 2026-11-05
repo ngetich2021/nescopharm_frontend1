@@ -881,7 +881,8 @@ class ReportService
             ->get([
                 'order_dispatches.id', 'order_dispatches.dispatch_number', 'order_dispatches.status', 'order_dispatches.approval_status',
                 'order_dispatches.created_at', 'order_dispatches.final_approved_at', 'order_dispatches.actual_delivery_date',
-                'orders.order_number', DB::raw("COALESCE(NULLIF(TRIM(customers.business_name), ''), customers.name) as customer"),
+                'orders.order_number', DB::raw('(SELECT i.file_number FROM invoices i WHERE i.order_id = orders.id ORDER BY i.created_at LIMIT 1) as invoice_file_number'),
+                DB::raw("COALESCE(NULLIF(TRIM(customers.business_name), ''), customers.name) as customer"),
                 'customers.county', 'customers.region',
             ]);
 
@@ -897,7 +898,8 @@ class ReportService
         $data = $rows->map(fn ($d) => [
             'id' => $d->id,
             'dispatch_number' => $d->dispatch_number,
-            'order_number' => $d->order_number,
+            // Known by its invoice: NSK/0427.
+            'order_number' => preg_match('/^\d+$/', trim((string) $d->invoice_file_number)) ? \App\Models\Invoice::printedNumber(null, $d->invoice_file_number) : $d->order_number,
             'customer' => $d->customer,
             'county' => $d->county,
             'region' => $d->region,

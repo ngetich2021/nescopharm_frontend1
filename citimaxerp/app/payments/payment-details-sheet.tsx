@@ -1,5 +1,6 @@
 "use client"
 
+import { orderRef } from "@/lib/order-ref"
 import { useEffect, useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -103,7 +104,7 @@ export function PaymentDetailsSheet({ paymentId, isOpen, onClose }: PaymentDetai
       `Customer: ${customerDisplayName}`,
       customer?.phone ? `Phone: ${customer.phone}` : null,
       customer?.email ? `Email: ${customer.email}` : null,
-      order?.order_number ? `Order: ${order.order_number}` : null,
+      order?.order_number ? `Invoice: ${orderRef(order as any)}` : null,
       payment.transaction_id ? `Transaction ID: ${payment.transaction_id}` : null,
       payment.gateway_reference ? `Reference: ${payment.gateway_reference}` : null,
       "------------------------------",
@@ -138,7 +139,7 @@ export function PaymentDetailsSheet({ paymentId, isOpen, onClose }: PaymentDetai
             <div><strong>Payment method:</strong> ${formatMetaLabel(payment.payment_method)}</div>
             <div><strong>Transaction ID:</strong> ${payment.transaction_id || "N/A"}</div>
             <div><strong>Reference:</strong> ${payment.gateway_reference || "N/A"}</div>
-            <div><strong>Order:</strong> ${order?.order_number || "N/A"}</div>
+            <div><strong>Invoice:</strong> ${orderRef(order as any) || "N/A"}</div>
           </div>
           <div style="padding-top: 18px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 13px;">
             Thank you for your payment.
@@ -235,8 +236,8 @@ export function PaymentDetailsSheet({ paymentId, isOpen, onClose }: PaymentDetai
 
                 <div className="grid gap-4 px-6 py-5 md:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Order</p>
-                    <p className="mt-2 text-lg font-semibold text-slate-900">{order?.order_number || "Not linked"}</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Invoice</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-900">{orderRef(order as any) || "Not linked"}</p>
                     <p className="mt-1 text-sm text-slate-600">Order total: {normalizedOrderAmount}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -316,7 +317,7 @@ export function PaymentDetailsSheet({ paymentId, isOpen, onClose }: PaymentDetai
                     </div>
                     <div>
                       <p className="text-sm text-slate-500">Order number</p>
-                      <p className="mt-1 font-semibold text-slate-900">{order?.order_number || "N/A"}</p>
+                      <p className="mt-1 font-semibold text-slate-900">{orderRef(order as any) || "N/A"}</p>
                     </div>
                     <div>
                       <p className="text-sm text-slate-500">Order total</p>

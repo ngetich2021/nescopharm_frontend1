@@ -1,5 +1,6 @@
 "use client";
 
+import { orderRef } from "@/lib/order-ref"
 import { useState } from "react";
 import * as React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -70,7 +71,7 @@ export function DispatchTable({
           <TableHeader>
             <TableRow>
               <TableHead className="font-semibold">Dispatch #</TableHead>
-              <TableHead className="font-semibold">Order / Customer</TableHead>
+              <TableHead className="font-semibold">Invoice / Customer</TableHead>
               <TableHead className="font-semibold">Payment Status</TableHead>
               <TableHead className="font-semibold">Items</TableHead>
               <TableHead className="font-semibold">Dispatch Status</TableHead>
@@ -113,7 +114,7 @@ export function DispatchTable({
                     </TableCell>
                     <TableCell>
                        <div className="flex flex-col">
-                        <span className="font-medium text-sm">{dispatch.order?.order_number}</span>
+                        <span className="font-medium text-sm">{orderRef(dispatch.order as any)}</span>
                         <span className="text-xs text-muted-foreground">{dispatch.order?.customer ? getCustomerDisplayName(dispatch.order.customer) : ""}</span>
                        </div>
                     </TableCell>

@@ -37,7 +37,7 @@ class DeliveryInvoiceController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view delivery invoices.'], 403);
         }
 
-        $query = DeliveryInvoice::with(['orderDispatch.order.customer', 'deliveryRate', 'createdBy', 'paidBy', 'logistic.deliveryPerson:id,full_name,phone_number'])
+        $query = DeliveryInvoice::with(['orderDispatch.order.customer', 'orderDispatch.order.invoice:id,order_id,invoice_number,file_number', 'deliveryRate', 'createdBy', 'paidBy', 'logistic.deliveryPerson:id,full_name,phone_number'])
             ->where('company_id', $user->company_id);
 
         // Status filter
@@ -55,9 +55,10 @@ class DeliveryInvoiceController extends Controller
                   ->orWhere('zone', 'ilike', "%{$search}%")
                   ->orWhere('order_reference', 'ilike', "%{$search}%")
                   ->orWhereHas('orderDispatch.order', function ($subQ) use ($search) {
-                      $subQ->where('order_number', 'ilike', "%{$search}%");
+                      $subQ->where('order_number', 'ilike', "%{$search}%")
+                          ->orWhereHas('invoice', fn ($iq) => $iq->whereNumberMatches($search));
                   })
-                  ->orWhereHas('orderDispatch.order.customer', function ($subQ) use ($search) {
+                  ->orWhereHas('orderDispatch.order.customer', 'orderDispatch.order.invoice:id,order_id,invoice_number,file_number', function ($subQ) use ($search) {
                       $subQ->where('name', 'ilike', "%{$search}%")->orWhere('business_name', 'ilike', "%{$search}%");
                   });
             });

@@ -1,5 +1,7 @@
 "use client"
 
+import { matchesDocNumber } from "@/lib/utils"
+import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import type React from "react"
 
@@ -171,6 +173,7 @@ export function PaymentsTable() {
         (payment.transaction_id && payment.transaction_id.toLowerCase().includes(search.toLowerCase())) ||
         (getPaymentCustomerDisplayName(payment).toLowerCase().includes(search.toLowerCase())) ||
         (payment.customer?.business_name && payment.customer.business_name.toLowerCase().includes(search.toLowerCase())) ||
+        matchesDocNumber((payment.order as any)?.invoice?.invoice_number, search) ||
         (payment.order?.order_number && payment.order.order_number.toLowerCase().includes(search.toLowerCase()))
       )
   )
@@ -356,7 +359,7 @@ export function PaymentsTable() {
                 </TableHead>
                 <TableHead className="font-semibold">Transaction ID</TableHead>
                 <TableHead className="font-semibold">Customer</TableHead>
-                <TableHead className="font-semibold">Order #</TableHead>
+                <TableHead className="font-semibold">Invoice #</TableHead>
                 <TableHead className="font-semibold">Amount</TableHead>
                 <TableHead className="font-semibold">Method</TableHead>
                 <TableHead className="font-semibold">Date</TableHead>
@@ -418,7 +421,7 @@ export function PaymentsTable() {
                     </TableCell>
                     <TableCell className="font-medium">{payment.transaction_id || "N/A"}</TableCell>
                     <TableCell>{getPaymentCustomerDisplayName(payment)}</TableCell>
-                    <TableCell>{payment.order?.order_number || "N/A"}</TableCell>
+                    <TableCell>{orderRef(payment.order as any) || "N/A"}</TableCell>
                     <TableCell>{formatCurrency(payment.amount_paid || "0")}</TableCell>
                     <TableCell>{paymentMethodLabel(payment.payment_method)}</TableCell>
                     <TableCell>{payment.payment_date ? displayDate(new Date(payment.payment_date)) : displayDate(new Date(payment.created_at))}</TableCell>

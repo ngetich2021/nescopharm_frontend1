@@ -1,5 +1,6 @@
 "use client"
 
+import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -62,7 +63,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       details: [
         ["Customer", buildBuyerBlock(mergeCustomerSources(loaded.customerDetails, d.order?.customer as CustomerAddressSource | null)).name || "-"],
         ["Date", displayDate(new Date(d.dispatch_date || d.created_at))],
-        ["Order", (d.order as any)?.order_number || "-"],
+        ["Invoice", orderRef(d.order as any) || "-"],
       ],
       headers: ["S/No", "Description of Goods", "Pieces per Pack", "Packs", "Pieces"],
       rows: lines.map((l, i) => [
