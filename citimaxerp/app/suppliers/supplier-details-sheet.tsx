@@ -31,12 +31,11 @@ import { EditSupplierSheet } from "./components/edit-supplier-sheet"
 
 const money = (n: number) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-// 12-Jul-26
+// 12/07/2026
 function shortDate(date: string): string {
   const d = new Date(date)
   if (isNaN(d.getTime())) return date
-  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]
-  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`
+  return displayDate(d)
 }
 
 interface SupplierDetailsSheetProps {

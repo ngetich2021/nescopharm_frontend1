@@ -1,5 +1,6 @@
 "use client";
 
+import { InvoiceTotals } from "@/components/invoices/invoice-totals"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -54,13 +55,12 @@ import { ALL_ROWS, TablePager } from "@/components/ui/table-pager";
 const orderLabel = (invoice: DeliveryInvoice) =>
   invoice.order_dispatch?.order?.order_number || invoice.order_reference || invoice.order_dispatch?.order_id || "—";
 
-// 12-Jul-26
+// 12/07/2026
 const shortDate = (date?: string | null) => {
   if (!date) return "—";
   const d = new Date(date);
   if (isNaN(d.getTime())) return date;
-  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`;
+  return displayDate(d);
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -101,6 +101,7 @@ export function DeliveryInvoicesTable() {
   const [perPage, setPerPage] = useState(20);
   const [pagination, setPagination] = useState({ total: 0, per_page: 20, current_page: 1, last_page: 0, from: 0, to: 0 });
   const [pendingCount, setPendingCount] = useState(0);
+  const [totals, setTotals] = useState({ count: 0, total: 0, paid: 0, unpaid: 0 });
 
   const canPay = hasPermission(userProfile as any, "can_pay_delivery_invoices");
 
@@ -126,6 +127,7 @@ export function DeliveryInvoicesTable() {
       setInvoices(response.data || []);
       setPagination(response.pagination);
       setPendingCount(response.pending_count ?? response.data.filter((i) => i.status === "pending").length);
+      if (response.totals) setTotals(response.totals);
     } catch (error) {
       console.error("Failed to load delivery invoices", error);
       toast({ title: "Error", description: "Failed to load delivery invoices", variant: "destructive" });
@@ -248,6 +250,8 @@ export function DeliveryInvoicesTable() {
 
   return (
     <div className="space-y-4">
+      <InvoiceTotals loading={loading} count={totals.count} total={totals.total} paid={totals.paid} unpaid={totals.unpaid} />
+
       {pendingCount > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
           <strong>{pendingCount}</strong> delivery invoice{pendingCount > 1 ? "s" : ""} awaiting payment. Dispatches stay held until paid.

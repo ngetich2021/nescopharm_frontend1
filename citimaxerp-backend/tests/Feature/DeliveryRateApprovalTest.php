@@ -108,6 +108,61 @@ class DeliveryRateApprovalTest extends TestCase
         $this->postJson("/api/delivery-rates/{$own}/approve")->assertOk();
     }
 
+    public function test_delivery_invoice_totals_follow_the_search(): void
+    {
+        $user = $this->userWith('Accountant');
+        Sanctum::actingAs($user);
+        $permission = Permission::firstOrCreate(
+            ['key' => 'can_view_delivery_invoices'],
+            ['id' => (string) Str::uuid(), 'name' => 'can_view_delivery_invoices', 'category' => 'test', 'is_system' => true, 'is_active' => true],
+        );
+        $user->role->permissions()->syncWithoutDetaching([$permission->id]);
+
+        $invoice = function (string $transporter, float $total, string $status) use ($user) {
+            DB::table('delivery_invoices')->insert([
+                'id' => (string) Str::uuid(),
+                'company_id' => $this->companyId,
+                'invoice_number' => 'DI-T' . Str::random(8),
+                'transporter_name' => $transporter,
+                'zone' => 'nairobi',
+                'number_of_cartons' => 1,
+                'rate_per_carton' => $total,
+                'total_amount' => $total,
+                'status' => $status,
+                'created_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        };
+        $invoice('Imevo Limited', 100, 'paid');
+        $invoice('Imevo Limited', 50, 'pending');
+        $invoice('Imevo Limited', 999, 'cancelled');
+        $invoice('Other Movers', 7, 'pending');
+
+        $this->getJson('/api/delivery-invoices')->assertOk()
+            ->assertJsonPath('totals', ['count' => 3, 'total' => 157, 'paid' => 100, 'unpaid' => 57]);
+        // Any case finds them, and the figures become Imevo's.
+        $this->getJson('/api/delivery-invoices?search=imevo&per_page=1')->assertOk()
+            ->assertJsonPath('totals', ['count' => 2, 'total' => 150, 'paid' => 100, 'unpaid' => 50]);
+    }
+
+    public function test_supplier_invoice_totals_follow_the_filters(): void
+    {
+        $user = $this->userWith('Accountant');
+        Sanctum::actingAs($user);
+        foreach (['can_view_accounts_payable', 'can_view_suppliers', 'can_view_supplier_payments'] as $key) {
+            $permission = Permission::firstOrCreate(
+                ['key' => $key],
+                ['id' => (string) Str::uuid(), 'name' => $key, 'category' => 'test', 'is_system' => true, 'is_active' => true],
+            );
+            $user->role->permissions()->syncWithoutDetaching([$permission->id]);
+        }
+
+        $totals = $this->getJson('/api/finance/accounts-payable?search=nothing-matches-this')->assertOk()->json('totals');
+
+        $this->assertEquals(['billed' => 0, 'paid' => 0, 'owed' => 0, 'debit_notes' => 0], $totals);
+    }
+
     public function test_an_accountant_may_still_reject_a_rate_they_raised(): void
     {
         $id = $this->raise($this->userWith('Accountant'));

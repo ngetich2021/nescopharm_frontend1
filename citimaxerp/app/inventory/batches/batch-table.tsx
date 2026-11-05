@@ -1,5 +1,6 @@
 "use client"
 
+import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, useMemo, Fragment } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -52,12 +53,11 @@ function ExpiryCell({ date }: { date?: string }) {
   return <div className="whitespace-nowrap"><div className={days <= 90 ? "font-medium text-amber-600" : "text-gray-900"}>{label}</div><div className={`text-xs ${tone}`}>{days} days left</div></div>
 }
 
-// 12-Jul-26: short enough to stay on one line.
+// 12/07/2026
 function shortDate(date: string): string {
   const d = new Date(date)
   if (isNaN(d.getTime())) return "-"
-  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]
-  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`
+  return displayDate(d)
 }
 
 // Helper function to check if a batch matches search criteria

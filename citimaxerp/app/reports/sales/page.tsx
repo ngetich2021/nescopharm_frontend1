@@ -348,11 +348,10 @@ export default function SalesReportPage() {
     debit: ledgerRows.reduce((s, r) => s + Number(r.debit || 0), 0),
     credit: ledgerRows.reduce((s, r) => s + Number(r.credit || 0), 0),
   }), [ledgerRows])
-  // 02-Oct-26
+  // 02/10/2026
   const ledgerDate = (iso?: string) => {
     if (!iso) return "-"
-    const d = new Date(`${iso}T00:00:00`)
-    return `${String(d.getDate()).padStart(2, "0")}-${d.toLocaleString("en-GB", { month: "short" })}-${String(d.getFullYear()).slice(-2)}`
+    return displayDate(iso)
   }
   const amount = (v: any) => Number(v) ? Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""
   // Not sortable: the balance runs down the rows in date order.

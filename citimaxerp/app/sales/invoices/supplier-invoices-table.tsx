@@ -1,5 +1,7 @@
 "use client";
 
+import { InvoiceTotals } from "@/components/invoices/invoice-totals"
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,13 +20,12 @@ import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { RecordSupplierInvoice, SupplierInvoicesImport } from "./supplier-invoices-actions";
 
-// 12-Jul-26
+// 12/07/2026
 const shortDate = (date?: string | null) => {
   if (!date) return "—";
   const d = new Date(date);
   if (isNaN(d.getTime())) return date;
-  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`;
+  return displayDate(d);
 };
 
 // 15/10/2026 - day first, the format the import reads back.
@@ -66,7 +67,7 @@ export function SupplierInvoicesTable() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [pagination, setPagination] = useState({ total: 0, per_page: 20, current_page: 1, last_page: 1, from: 0, to: 0 });
-  const [totals, setTotals] = useState({ billed: 0, paid: 0, owed: 0 });
+  const [totals, setTotals] = useState({ billed: 0, paid: 0, owed: 0, debit_notes: 0 });
   const [viewing, setViewing] = useState<SupplierBill | null>(null);
   const [reload, setReload] = useState(0);
   const [deleting, setDeleting] = useState(false);
@@ -144,6 +145,15 @@ export function SupplierInvoicesTable() {
 
   return (
     <div className="space-y-4">
+      <InvoiceTotals
+        loading={loading}
+        count={pagination.total}
+        total={kind === "debit_note" ? totals.debit_notes : totals.billed}
+        paid={totals.paid}
+        unpaid={totals.owed}
+        unpaidNote={kind === "all" && totals.debit_notes > 0 ? `Debit notes of ${money(totals.debit_notes)} are listed apart` : undefined}
+      />
+
       {totals.owed > 0 && kind !== "debit_note" && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
           <strong>{money(totals.owed)}</strong> still owed to suppliers on these invoices. Pay them from Supplier Payments (Record Payment, then tick the invoices).

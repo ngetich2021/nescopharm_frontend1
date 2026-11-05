@@ -49,16 +49,16 @@ class DeliveryInvoiceController extends Controller
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
-                $q->where('invoice_number', 'like', "%{$search}%")
-                  ->orWhere('transporter_invoice_number', 'like', "%{$search}%")
-                  ->orWhere('transporter_name', 'like', "%{$search}%")
-                  ->orWhere('zone', 'like', "%{$search}%")
+                $q->where('invoice_number', 'ilike', "%{$search}%")
+                  ->orWhere('transporter_invoice_number', 'ilike', "%{$search}%")
+                  ->orWhere('transporter_name', 'ilike', "%{$search}%")
+                  ->orWhere('zone', 'ilike', "%{$search}%")
                   ->orWhere('order_reference', 'ilike', "%{$search}%")
                   ->orWhereHas('orderDispatch.order', function ($subQ) use ($search) {
-                      $subQ->where('order_number', 'like', "%{$search}%");
+                      $subQ->where('order_number', 'ilike', "%{$search}%");
                   })
                   ->orWhereHas('orderDispatch.order.customer', function ($subQ) use ($search) {
-                      $subQ->where('name', 'like', "%{$search}%");
+                      $subQ->where('name', 'ilike', "%{$search}%")->orWhere('business_name', 'ilike', "%{$search}%");
                   });
             });
         }
@@ -102,6 +102,12 @@ class DeliveryInvoiceController extends Controller
         $page = max(1, (int) $request->input('page', 1));
         // All of them, not just this page's, for the "awaiting payment" note.
         $pendingCount = (clone $query)->reorder()->where('status', 'pending')->count();
+        // Everything matching the search, all pages. A cancelled invoice is not owed or counted.
+        $totals = (clone $query)->reorder()->toBase()->selectRaw("
+            count(*) filter (where status <> 'cancelled') as n,
+            coalesce(sum(total_amount) filter (where status <> 'cancelled'), 0) as total,
+            coalesce(sum(total_amount) filter (where status = 'paid'), 0) as paid,
+            coalesce(sum(total_amount) filter (where status not in ('paid', 'cancelled')), 0) as unpaid")->first();
         $invoices = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
         return response()->json([
@@ -117,6 +123,12 @@ class DeliveryInvoiceController extends Controller
                 'to' => min($page * $perPage, $total),
             ],
             'pending_count' => $pendingCount,
+            'totals' => [
+                'count' => (int) $totals->n,
+                'total' => round((float) $totals->total, 2),
+                'paid' => round((float) $totals->paid, 2),
+                'unpaid' => round((float) $totals->unpaid, 2),
+            ],
         ], 200);
     }
 

@@ -93,7 +93,8 @@ class AccountsPayableController extends Controller
         $totals = $totalsQuery->selectRaw("count(*) as n,
             coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.total_amount end), 0) as billed,
             coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.paid_amount end), 0) as paid,
-            coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.balance_amount end), 0) as owed")->first();
+            coalesce(sum(case when {$kindSql} = 'debit_note' then 0 else accounts_payable.balance_amount end), 0) as owed,
+            coalesce(sum(case when {$kindSql} = 'debit_note' then accounts_payable.total_amount else 0 end), 0) as debit_notes")->first();
 
         $perPage = $request->input('per_page') === 'all' ? max((int) $totals->n, 1) : (int) $request->input('per_page', 20);
         $bills = $query->orderBy('accounts_payable.invoice_date', 'desc')->orderBy('accounts_payable.invoice_number', 'desc')
@@ -150,7 +151,7 @@ class AccountsPayableController extends Controller
                 'total' => $bills->total(), 'per_page' => $bills->perPage(), 'current_page' => $bills->currentPage(),
                 'last_page' => $bills->lastPage(), 'from' => $bills->firstItem() ?? 0, 'to' => $bills->lastItem() ?? 0,
             ],
-            'totals' => ['billed' => round((float) $totals->billed, 2), 'paid' => round((float) $totals->paid, 2), 'owed' => round((float) $totals->owed, 2)],
+            'totals' => ['billed' => round((float) $totals->billed, 2), 'paid' => round((float) $totals->paid, 2), 'owed' => round((float) $totals->owed, 2), 'debit_notes' => round((float) $totals->debit_notes, 2)],
         ]);
     }
 

@@ -226,7 +226,7 @@ export interface SupplierBill {
 export interface SupplierBillsResponse {
     data: SupplierBill[];
     pagination: { total: number; per_page: number; current_page: number; last_page: number; from: number; to: number };
-    totals: { billed: number; paid: number; owed: number };
+    totals: { billed: number; paid: number; owed: number; debit_notes: number };
 }
 
 export async function getSupplierBills(params: {

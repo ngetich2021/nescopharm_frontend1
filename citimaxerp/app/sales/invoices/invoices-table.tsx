@@ -1,5 +1,6 @@
 "use client"
 
+import { InvoiceTotals } from "@/components/invoices/invoice-totals"
 import { useState, useEffect } from "react"
 import { matchesDocNumber } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Eye,
@@ -18,9 +19,6 @@ import {
   Search,
   Filter,
   MoreHorizontal,
-  Receipt,
-  DollarSign,
-  Calendar,
   Mail,
   MessageCircle,
   ChevronLeft,
@@ -334,14 +332,13 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
     }
   }
 
-  // Calculate summary statistics - use all invoices for summary (not just current page)
-  const totalInvoices = invoices.length
-  const totalAmount = invoices.reduce((sum, inv) => {
-    const amount = parseInvoiceAmount(inv.total_amount)
-    return sum + amount
-  }, 0)
-  const paidInvoices = invoices.filter(inv => inv.status === 'paid').length
-  const overdueInvoices = invoices.filter(inv => inv.status === 'overdue').length
+  // What the list is showing now, all pages: these follow the search and filters. A cancelled
+  // invoice is listed but owes nothing.
+  const countedInvoices = filteredInvoices.filter((inv) => !["cancelled", "void"].includes(inv.status))
+  const sumOf = (pick: (inv: Invoice) => unknown) => countedInvoices.reduce((sum, inv) => sum + parseInvoiceAmount(pick(inv) as any), 0)
+  const totalValue = sumOf((inv) => inv.total_amount)
+  const paidValue = sumOf((inv) => (inv as any).amount_paid ?? 0)
+  const creditedValue = sumOf((inv) => (inv as any).amount_credited ?? 0)
 
   // What the customer still owes: payments and credit notes taken off the total.
   const getInvoiceBalance = (invoice: Invoice): number => {
@@ -360,88 +357,14 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
-            <Receipt className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-16 mb-1" />
-                <Skeleton className="h-3 w-24" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{totalInvoices}</div>
-                <p className="text-xs text-muted-foreground">All time invoices</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-24 mb-1" />
-                <Skeleton className="h-3 w-28" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
-                <p className="text-xs text-muted-foreground">Total billed amount</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Paid Invoices</CardTitle>
-            <Receipt className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-12 mb-1" />
-                <Skeleton className="h-3 w-28" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{paidInvoices}</div>
-                <p className="text-xs text-muted-foreground">Successfully paid</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-            <Calendar className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-12 mb-1" />
-                <Skeleton className="h-3 w-20" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{overdueInvoices}</div>
-                <p className="text-xs text-muted-foreground">Past due date</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <InvoiceTotals
+        loading={isLoading}
+        count={countedInvoices.length}
+        total={totalValue}
+        paid={paidValue}
+        unpaid={countedInvoices.reduce((sum, inv) => sum + getInvoiceBalance(inv), 0)}
+        unpaidNote={creditedValue > 0.005 ? `After ${formatCurrency(creditedValue)} of credit notes` : undefined}
+      />
 
       {/* Header and Actions */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">

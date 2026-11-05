@@ -1,5 +1,6 @@
 "use client";
 
+import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -20,12 +21,11 @@ import { useOptionalAuth } from "@/lib/auth-context";
 
 const money = (n: number) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// 12-Jul-26
+// 12/07/2026
 const shortDate = (date: string) => {
   const d = new Date(date);
   if (isNaN(d.getTime())) return date;
-  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  return `${String(d.getDate()).padStart(2, "0")}-${month}-${String(d.getFullYear()).slice(-2)}`;
+  return displayDate(d);
 };
 
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));

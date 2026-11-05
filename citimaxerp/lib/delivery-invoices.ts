@@ -82,6 +82,8 @@ export interface DeliveryInvoicesResponse {
   };
   // Every pending invoice matching the filters, not only this page's.
   pending_count?: number;
+  // Everything matching the search, all pages; a cancelled invoice is not counted.
+  totals?: { count: number; total: number; paid: number; unpaid: number };
 }
 
 export async function getDeliveryInvoices(params?: {
@@ -107,6 +109,7 @@ export async function getDeliveryInvoices(params?: {
     data: response.data || [],
     pagination: response.pagination || { total: 0, per_page: 20, current_page: 1, last_page: 0, from: 0, to: 0 },
     pending_count: response.pending_count,
+    totals: response.totals,
   };
 }
 
