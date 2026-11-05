@@ -1,5 +1,6 @@
 "use client";
 
+import { getCustomerDisplayName } from "@/lib/customers"
 import { useState, useEffect } from "react";
 import { 
   Dialog, 
@@ -130,7 +131,7 @@ export function CreateLogisticsModal({
         delivery_status: "dispatched",
         tracking_number: `TRK-${Date.now()}`,
         // Recipient info from customer
-        recipient_name: customer?.name || "",
+        recipient_name: customer ? getCustomerDisplayName(customer) : "",
         recipient_phone: customer?.phone || "",
         // Delivery address: prefer the dispatch's delivery_location, fall back to the customer's address
         delivery_address: assembledAddress,

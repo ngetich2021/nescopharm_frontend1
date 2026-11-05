@@ -477,7 +477,7 @@ class ChatController extends Controller
 
             $customerData = [
                 'id' => $customer->id,
-                'name' => $customer->name,
+                'name' => $customer->display_name,
                 'phone' => $customer->phone,
                 'email' => $customer->email,
                 'status' => $customer->status,
@@ -618,7 +618,7 @@ class ChatController extends Controller
                 [
                     'customer_id' => $customer->id,
                     'platform_user_id' => $platformUserId,
-                    'customer_name' => $customer->name,
+                    'customer_name' => $customer->display_name,
                     'customer_phone' => $customer->phone,
                     'customer_email' => $customer->email,
                     'status' => 'active',
@@ -1004,7 +1004,7 @@ class ChatController extends Controller
                 $searchResults[$variation] = [
                     'found' => !is_null($customer),
                     'customer_id' => $customer?->id,
-                    'customer_name' => $customer?->name,
+                    'customer_name' => $customer?->display_name,
                 ];
             }
 

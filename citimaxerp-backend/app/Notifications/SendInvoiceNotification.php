@@ -37,7 +37,7 @@ class SendInvoiceNotification extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject('Your Invoice #' . $invoice->invoice_number)
-            ->greeting('Hello ' . ($invoice->customer->name ?? ''))
+            ->greeting('Hello ' . ($invoice->customer->display_name ?? ''))
             ->line('You have a new invoice from ' . ($invoice->company->name ?? 'our company') . '.')
             ->line('Invoice Number: ' . $invoice->invoice_number)
             ->line('Total Amount: ' . number_format($invoice->total_amount, 2) . ' ' . $invoice->currency)

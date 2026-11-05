@@ -636,7 +636,7 @@ class EtimsProvider implements TaxComplianceProvider
         return array_filter([
             'sale_date' => optional($invoice->invoice_date)->format('Y-m-d'),
             'customer_tin' => $customerTin,
-            'customer_name' => $invoice->customer?->name,
+            'customer_name' => $invoice->customer?->display_name,
             'trader_invoice_number' => $invoice->invoice_number,
             'payment_type_code' => $invoice->metadata['etims_payment_type'] ?? '01', // default cash
             'invoice_status_code' => '02', // approved

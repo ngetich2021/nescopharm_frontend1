@@ -1,5 +1,6 @@
 "use client"
 
+import { getCustomerDisplayName } from "@/lib/customers"
 import { DialogTrigger } from "@/components/ui/dialog"
 import { useEffect, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -1246,7 +1247,7 @@ export function CustomerProfile({ customerId, isOpen, onClose }: CustomerProfile
             </TabsContent>
 
             <TabsContent value="account" className="p-0 m-0">
-              <CustomerAccount customerId={customerId} customerName={customer?.name || ""} />
+              <CustomerAccount customerId={customerId} customerName={customer ? getCustomerDisplayName(customer) : ""} />
             </TabsContent>
 
             <TabsContent value="credit" className="p-0 m-0">

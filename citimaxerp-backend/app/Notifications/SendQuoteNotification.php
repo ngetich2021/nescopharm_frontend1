@@ -37,7 +37,7 @@ class SendQuoteNotification extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject('Your Quote #' . $quote->quote_number)
-            ->greeting('Hello ' . ($quote->customer->name ?? $quote->one_time_customer_name ?? ''))
+            ->greeting('Hello ' . ($quote->customer->display_name ?? $quote->one_time_customer_name ?? ''))
             ->line('You have received a new quotation from ' . ($quote->company->name ?? 'our company') . '.')
             ->line('Quote Number: ' . $quote->quote_number)
             ->line('Total Amount: ' . number_format($quote->final_amount, 2) . ' ' . $quote->currency)

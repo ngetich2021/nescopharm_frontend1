@@ -63,7 +63,7 @@ class ChequeController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $query = Cheque::with(['customer:id,name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number', 'bounceChargeInvoice:id,invoice_number,file_number,invoice_date,total_amount,amount_paid,balance_amount'])
+        $query = Cheque::with(['customer:id,name,business_name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number', 'bounceChargeInvoice:id,invoice_number,file_number,invoice_date,total_amount,amount_paid,balance_amount'])
             ->where('company_id', $user->company_id);
 
         if ($request->filled('status')) {
@@ -134,7 +134,7 @@ class ChequeController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $cheque = Cheque::with(['customer:id,name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number'])
+        $cheque = Cheque::with(['customer:id,name,business_name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number'])
             ->where('company_id', $user->company_id)
             ->findOrFail($id);
         $this->attachInvoiceNumbers(collect([$cheque]));
@@ -484,7 +484,7 @@ class ChequeController extends Controller
                 'message' => 'Cheque approved: ' . ($applied ?: 'nothing applied to invoices')
                     . ($result['left_as_credit'] > 0.005 ? '; ' . number_format($result['left_as_credit'], 2) . ' kept as customer credit' : '')
                     . ($moved ? "; oldest invoices paid first: {$moved}" : ''),
-                'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number,file_number']),
+                'data' => $cheque->fresh(['customer:id,name,business_name', 'invoice:id,invoice_number,file_number']),
                 'allocations' => $result['allocations'],
                 'left_as_credit' => $result['left_as_credit'],
             ]);
@@ -582,7 +582,7 @@ class ChequeController extends Controller
             }
         });
 
-        $fresh = $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number']);
+        $fresh = $cheque->fresh(['customer:id,name,business_name', 'invoice:id,invoice_number,file_number', 'supplier:id,name', 'purchaseOrder:id,order_number']);
         $this->attachInvoiceNumbers(collect([$fresh]));
 
         return response()->json(['message' => "Cheque {$fresh->cheque_number} updated", 'data' => $fresh]);
@@ -619,7 +619,7 @@ class ChequeController extends Controller
                 . ($reversed ? "; {$reversed}" : '')
                 . ($moved ? "; oldest invoices paid first: {$moved}" : '')
                 . ($charge ? "; bounced cheque debit {$charge->invoice_number} of " . number_format((float) $charge->total_amount, 2) . ' raised' : ''),
-            'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number,file_number']),
+            'data' => $cheque->fresh(['customer:id,name,business_name', 'invoice:id,invoice_number,file_number']),
             'reversed' => $result['reversed'],
             'charge_invoice' => $charge ? ['id' => $charge->id, 'invoice_number' => $charge->invoice_number, 'total_amount' => $charge->total_amount] : null,
         ]);
@@ -666,7 +666,7 @@ class ChequeController extends Controller
 
         return response()->json([
             'message' => "Cheque marked as {$newStatus}",
-            'data' => $cheque->fresh(['customer:id,name', 'invoice:id,invoice_number,file_number']),
+            'data' => $cheque->fresh(['customer:id,name,business_name', 'invoice:id,invoice_number,file_number']),
         ]);
     }
 }

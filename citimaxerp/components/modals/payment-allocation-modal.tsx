@@ -125,7 +125,7 @@ export function PaymentAllocationModal({
         .map((invoice: any) => ({
           id: invoice.id,
           invoice_number: invoice.invoice_number || `INV-${invoice.id}`,
-          customer_name: invoice.customer?.name,
+          customer_name: invoice.customer ? getCustomerDisplayName(invoice.customer) : undefined,
           total_amount: invoice.total_amount?.toString() || "0",
           outstanding_balance: invoice.balance_amount?.toString() || "0",
           due_date: invoice.due_date

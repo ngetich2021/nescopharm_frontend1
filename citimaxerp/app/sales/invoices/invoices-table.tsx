@@ -77,6 +77,7 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
   } = useDataCache<{ data: Invoice[], meta?: any }>(
     'invoices',
     () => fetchInvoices({
+      exclude_debits: true,
       // Remove pagination parameters to fetch all data
       search: searchTerm || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,

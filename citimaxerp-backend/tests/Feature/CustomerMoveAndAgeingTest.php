@@ -274,6 +274,25 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertNotContains($charge->id, array_column($this->getJson('/api/filing')->assertOk()->json('invoices'), 'id'));
     }
 
+    public function test_sales_invoices_leave_debits_out_but_the_customers_invoices_keep_them(): void
+    {
+        $this->grant('can_view_invoices');
+        $invoice = $this->invoice($this->kitale, '2026-09-01', 100);
+        $charge = $this->bounce('2026-05-01', User::find($this->userId))['charge_invoice'];
+
+        $listed = array_column($this->getJson('/api/invoices?exclude_debits=1')->assertOk()->json('data'), 'id');
+        $this->assertContains($invoice->id, $listed);
+        $this->assertNotContains($charge->id, $listed);
+
+        $this->assertContains($charge->id, array_column($this->getJson("/api/invoices?customer_id={$this->kitale}")->assertOk()->json('data'), 'id'));
+    }
+
+    public function test_a_customer_is_named_by_their_business_name(): void
+    {
+        $this->assertSame('Racecourse Hospital Ltd', (new Customer(['name' => 'David Momanyi', 'business_name' => 'Racecourse Hospital Ltd']))->display_name);
+        $this->assertSame('Syria Pharmacy', (new Customer(['name' => 'Syria Pharmacy', 'business_name' => null]))->display_name);
+    }
+
     private function bounce(string $maturity, User $user): array
     {
         $cheque = Cheque::create([

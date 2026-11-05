@@ -307,7 +307,7 @@ class DeliveryInvoiceController extends Controller
             $invoice->transporter_name,
             $invoice->transporter_invoice_number,
             $invoice->orderDispatch?->order?->order_number,
-            $invoice->orderDispatch?->order?->customer?->name ?? $invoice->order_reference,
+            $invoice->orderDispatch?->order?->customer?->display_name ?? $invoice->order_reference,
             $invoice->zone ? ucfirst($invoice->zone) : null,
             $invoice->number_of_cartons,
             $invoice->rate_per_carton !== null ? (float) $invoice->rate_per_carton : null,

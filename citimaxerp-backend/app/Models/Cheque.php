@@ -61,7 +61,7 @@ class Cheque extends Model
      */
     public function getPayeeDisplayNameAttribute(): ?string
     {
-        return $this->supplier?->name ?? $this->customer?->name ?? $this->payee_name;
+        return $this->supplier?->name ?? $this->customer?->display_name ?? $this->payee_name;
     }
 
     public function getAttachmentUrlAttribute(): ?string

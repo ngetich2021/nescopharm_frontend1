@@ -42,7 +42,7 @@ import {
 import { CustomerAccount } from "@/app/customers/[id]/customer-account";
 import { CustomerReceipts } from "@/app/customers/[id]/customer-receipts";
 import { getDocuments, type Document as CustomerDocument } from "@/lib/documents";
-import { type Customer, getCustomerProfile, createCustomerNote, type CustomerProfileData } from "@/lib/customers";
+import { type Customer, getCustomerDisplayName, getCustomerProfile, createCustomerNote, type CustomerProfileData } from "@/lib/customers";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
@@ -483,7 +483,7 @@ export function CustomerProfileModal({
                 </TabsList>
 
                 <TabsContent value="account" className="[&>div]:p-0">
-                  <CustomerAccount customerId={currentCustomer.id} customerName={currentCustomer.name || ""} />
+                  <CustomerAccount customerId={currentCustomer.id} customerName={getCustomerDisplayName(currentCustomer)} />
                 </TabsContent>
 
                 <TabsContent value="orders" className="space-y-4">

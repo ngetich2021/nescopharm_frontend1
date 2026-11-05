@@ -10,7 +10,7 @@ import { Activity, CheckCircle2, RotateCcw, Loader2, FileText } from "lucide-rea
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { fetchQuotes, confirmQuote, requestQuoteChanges, type Quote } from "@/lib/quotes"
-import { getCustomers, type Customer } from "@/lib/customers"
+import { getCustomers, getCustomerDisplayName, type Customer } from "@/lib/customers"
 import { useCart } from "./pos-interface"
 
 // Only these states mean "still needs tracking" - accepted/rejected/expired
@@ -125,7 +125,7 @@ export function MyActivityPanel() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="text-sm font-medium">{quote.quote_number}</div>
-                        <div className="text-xs text-muted-foreground">{quote.customer?.name || "Unknown customer"}</div>
+                        <div className="text-xs text-muted-foreground">{quote.customer ? getCustomerDisplayName(quote.customer) : "Unknown customer"}</div>
                       </div>
                       <Badge variant="outline" className={meta.className}>{meta.label}</Badge>
                     </div>
@@ -189,7 +189,7 @@ export function MyActivityPanel() {
                   >
                     <span className="flex items-center gap-1.5">
                       <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      {c.name}
+                      {getCustomerDisplayName(c)}
                     </span>
                     <Badge variant="outline" className="text-[11px] bg-blue-50 text-blue-800 border-blue-300">
                       {c.approval_status!.replace(/_/g, " ")}

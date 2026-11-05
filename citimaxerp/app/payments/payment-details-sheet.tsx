@@ -36,14 +36,7 @@ function getStatusBadgeClass(status: string) {
 
 function getPaymentCustomerDisplayName(payment: Payment | null) {
   const customer = payment?.customer ?? payment?.customers
-  const customerType = customer?.customer_type?.toLowerCase()
-  const isBusinessCustomer = customerType === "company" || customerType === "business"
-
-  if (isBusinessCustomer) {
-    return customer?.business_name || customer?.name || "N/A"
-  }
-
-  return customer?.name || "N/A"
+  return customer?.business_name?.trim() || customer?.name || "N/A"
 }
 
 function getPaymentOrder(payment: Payment | null) {

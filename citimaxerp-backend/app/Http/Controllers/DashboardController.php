@@ -1184,8 +1184,7 @@ class DashboardController extends Controller
             ->get([
                 'id',
                 DB::raw("CASE
-                    WHEN LOWER(COALESCE(customer_type, '')) IN ('business', 'company')
-                        AND NULLIF(TRIM(business_name), '') IS NOT NULL
+                    WHEN NULLIF(TRIM(business_name), '') IS NOT NULL
                     THEN business_name
                     ELSE name
                 END as name"),
@@ -1222,8 +1221,7 @@ class DashboardController extends Controller
             ->selectRaw('
                 customers.id,
                 CASE
-                    WHEN LOWER(COALESCE(customers.customer_type, \'\')) IN (\'business\', \'company\')
-                        AND NULLIF(TRIM(customers.business_name), \'\') IS NOT NULL
+                    WHEN NULLIF(TRIM(customers.business_name), \'\') IS NOT NULL
                     THEN customers.business_name
                     ELSE customers.name
                 END as name,

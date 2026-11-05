@@ -820,7 +820,7 @@ class MetaChatService
                 'platform' => $platform,
                 'platform_conversation_id' => $platformConversationId,
                 'platform_user_id' => $platformUserId,
-                'customer_name' => $customer->name,
+                'customer_name' => $customer->display_name,
                 'customer_phone' => $customer->phone,
                 'customer_email' => $customer->email,
                 'customer_profile_picture' => $this->getCustomerProfilePicture($platform, $platformUserId),
@@ -1063,7 +1063,7 @@ class MetaChatService
         foreach ($conversations as $conversation) {
             $conversation->update([
                 'customer_id' => $customer->id,
-                'customer_name' => $customer->name,
+                'customer_name' => $customer->display_name,
                 'customer_phone' => $customer->phone,
                 'customer_email' => $customer->email,
             ]);

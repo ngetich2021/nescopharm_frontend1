@@ -201,6 +201,10 @@ class InvoiceController extends Controller
                 if ($request->has('customer_id')) {
                     $query->where('customer_id', $request->customer_id);
                 }
+                // Sales > Invoices leaves bounced cheque debits out: they are on Cheques > Bounced Cheque Debit.
+                if ($request->boolean('exclude_debits')) {
+                    $query->where('invoice_number', 'not like', Invoice::DEBIT_PREFIX . '%');
+                }
                 // Filter by sales rep
                 if ($request->has('sales_rep_id')) {
                     $query->where('sales_rep_id', $request->sales_rep_id);
@@ -1038,7 +1042,7 @@ class InvoiceController extends Controller
                     'platform' => 'whatsapp',
                     'platform_user_id' => $whatsappPhone,
                 ], [
-                    'customer_name' => $customer->name,
+                    'customer_name' => $customer->display_name,
                     'customer_phone' => $whatsappPhone,
                     'status' => 'active',
                     // Provide a default value for NOT NULL field
@@ -1866,7 +1870,7 @@ class InvoiceController extends Controller
                     'company_id' => $companyId,
                     'direction' => 'issued',
                     'customer_id' => $payment->customer_id,
-                    'payee_name' => $customer->name ?? null,
+                    'payee_name' => $customer->display_name ?? null,
                     'payment_refund_id' => $refund->id,
                     'cheque_number' => $request->input('cheque_number'),
                     'bank_name' => $request->input('bank_name'),

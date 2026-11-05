@@ -47,14 +47,7 @@ import { paymentMethodLabel } from "@/lib/payment-methods"
 
 function getPaymentCustomerDisplayName(payment: Payment) {
   const customer = payment.customer
-  const customerType = customer?.customer_type?.toLowerCase()
-  const isBusinessCustomer = customerType === "company" || customerType === "business"
-
-  if (isBusinessCustomer) {
-    return customer?.business_name || customer?.name || "N/A"
-  }
-
-  return customer?.name || "N/A"
+  return customer?.business_name?.trim() || customer?.name || "N/A"
 }
 
 export function PaymentsTable() {

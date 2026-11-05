@@ -222,6 +222,8 @@ export interface InvoiceStatistics {
 
 export async function fetchInvoices(params?: {
   customer_id?: string;
+  // Leave out bounced cheque debits (DEB-001...), which have their own tab under Cheques.
+  exclude_debits?: boolean;
   status?: string;
   type?: string;
   date_from?: string;

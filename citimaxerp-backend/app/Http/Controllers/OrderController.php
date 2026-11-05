@@ -1378,7 +1378,7 @@ class OrderController extends Controller
                     'vehicle_id' => $request->input('vehicle_id'),
                     'tracking_number' => $trackingNumber,
                     'delivery_status' => 'dispatched',
-                    'recipient_name' => $customer->name,
+                    'recipient_name' => $customer->display_name,
                     'recipient_phone' => $customer->phone,
                     'delivery_address' => $this->formatDeliveryAddress($deliveryLocation),
                     'city' => $deliveryLocation->city,

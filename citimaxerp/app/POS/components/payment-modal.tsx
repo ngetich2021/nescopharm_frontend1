@@ -689,7 +689,7 @@ export function PaymentModal({ isOpen, onClose, cartItems, customer, onPaymentCo
                 >
                   <option value="">Select customer...</option>
                   {customerList.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ""}</option>
+                    <option key={c.id} value={c.id}>{getCustomerDisplayName(c)} {c.phone ? `(${c.phone})` : ""}</option>
                   ))}
                 </select>
                 <Button type="button" size="sm" variant="outline" onClick={() => setShowNewCustomerForm(v => !v)}>

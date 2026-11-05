@@ -37,6 +37,16 @@ class Customer extends Model
 
     protected $dates = ['deleted_at'];
 
+    /**
+     * The customer's name wherever one is shown: always the business / company name. `name` often
+     * holds the contact person, so it is only the fallback when no business name was captured.
+     * Partial selects must include business_name.
+     */
+    public function getDisplayNameAttribute(): string
+    {
+        return trim((string) ($this->business_name ?: $this->name));
+    }
+
     // Always append total_spend and total_orders to model output
     protected $appends = ['total_spend', 'total_orders'];
 

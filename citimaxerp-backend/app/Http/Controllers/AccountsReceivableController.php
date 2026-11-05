@@ -475,7 +475,7 @@ class AccountsReceivableController extends Controller
             'account_id' => $arAccount->id,
             'type' => 'debit',
             'amount' => $receivable->total_amount,
-            'description' => 'Invoice to ' . $receivable->customer->name,
+            'description' => 'Invoice to ' . $receivable->customer->display_name,
             'company_id' => auth()->user()->company_id,
         ]);
 
@@ -552,7 +552,7 @@ class AccountsReceivableController extends Controller
             'account_id' => $cashAccount->id,
             'type' => 'debit',
             'amount' => $paymentData['payment_amount'],
-            'description' => 'Payment from ' . $receivable->customer->name,
+            'description' => 'Payment from ' . $receivable->customer->display_name,
             'company_id' => auth()->user()->company_id,
         ]);
 

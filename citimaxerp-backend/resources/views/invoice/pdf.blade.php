@@ -86,7 +86,7 @@ body { font-family: 'Figtree'; background: #fff; }
                 <td class="header-left">
                     <div class="billed-to">BILLED TO:</div>
                     <div style="font-size: 1.08rem; font-weight: 500; color: #232c36;">
-                        {{ $invoice->customer->name ?? '' }}<br>
+                        {{ $invoice->customer->display_name ?? '' }}<br>
                         {{ $invoice->customer->phone ?? '' }}
                     </div>
                 </td>
@@ -94,7 +94,7 @@ body { font-family: 'Figtree'; background: #fff; }
                     <div class="row"><span class="label">Invoice No.</span> <span class="value">{{ $invoice->invoice_number }}</span></div>
                     <div class="row"><span class="label">Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('j M Y') }}</span></div>
                     @if($invoice->created_at)
-                    <div class="row"><span class="label">Invoice Created:</span> <span class="value">{{ $invoice->created_at->format('j M Y') }}</span></div>
+                    <div class="row"><span class="label">Invoice Date:</span> <span class="value">{{ $invoice->created_at->format('j M Y') }}</span></div>
                     @endif
                     <div class="row"><span class="label">Due Date:</span> <span class="value">{{ \Carbon\Carbon::parse($invoice->due_date)->format('j M Y') }}</span></div>
                 </td>

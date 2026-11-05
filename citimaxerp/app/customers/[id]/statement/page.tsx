@@ -159,7 +159,8 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const transactions = statement.transactions ?? []
   const totalDebits = transactions.reduce((s, t) => s + toNumber(t.debit), 0)
   const totalCredits = transactions.reduce((s, t) => s + toNumber(t.credit), 0)
-  const ageing = statement.ageing
+  // Only when something is due: a customer with no unpaid invoices has no ageing section at all.
+  const ageing = statement.ageing?.rows.length ? statement.ageing : null
   const ageingBase = ageing ? ageing.buckets.reduce((s, b) => s + b.amount, 0) : 0
   const pendingBills = include.outstanding ? statement.pending_bills ?? [] : []
   const pendingTotal = pendingBills.reduce((sum, bill) => sum + toNumber(bill.pending_amount), 0)
@@ -215,7 +216,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     }
 
     if (pendingBills.length > 0) {
-      rows.push(["3. OUTSTANDING INVOICES"])
+      rows.push([`${ageing ? 3 : 2}. OUTSTANDING INVOICES`])
       rows.push(["Invoice Date", "Invoice No.", "Invoice Amount", "Balance Due", "Due Date", "Days Overdue"])
       for (const b of pendingBills) {
         rows.push([formatDate(b.invoice_date), b.invoice_number, toNumber(b.opening_amount).toFixed(2), toNumber(b.pending_amount).toFixed(2), formatDate(b.due_date), b.overdue_days])
@@ -583,11 +584,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                         <td className={`${TD} text-right`}>{formatAmount(r.amount)}</td>
                       </tr>
                     ))}
-                    {ageing.rows.length === 0 && (
-                      <tr>
-                        <td className={`${TD} italic text-gray-600`} colSpan={6 + ageing.buckets.length}>No unpaid invoices.</td>
-                      </tr>
-                    )}
                     <tr className="font-semibold">
                       <td className={TD} colSpan={5}>Total</td>
                       {ageing.buckets.map((b) => (
@@ -627,7 +623,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           {/* 3. Outstanding Invoices */}
           {pendingBills.length > 0 && (
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
-              <h2 className="text-base print:text-[11px] font-bold mb-2 print:mb-1">3. Outstanding Invoices</h2>
+              <h2 className="text-base print:text-[11px] font-bold mb-2 print:mb-1">{ageing ? 3 : 2}. Outstanding Invoices</h2>
               <div className="overflow-x-auto">
                 <table className={TABLE}>
                   <thead>

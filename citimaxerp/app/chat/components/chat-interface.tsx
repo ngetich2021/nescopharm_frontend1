@@ -1,5 +1,6 @@
 "use client";
 
+import { getCustomerDisplayName } from "@/lib/customers"
 import { useState, useEffect } from "react";
 import { getConversations, getConversation, getCustomerByPhone } from "@/lib/chat-api";
 import { ConversationList } from "./conversation-list";
@@ -160,7 +161,7 @@ export function ChatInterface() {
     const newConv: Conversation = {
       id: `${Date.now()}`,
       customer_id: `c${Date.now()}`,
-      customer_name: selectedCustomer.name,
+      customer_name: getCustomerDisplayName(selectedCustomer),
       customer_email: selectedCustomer.email,
       customer_phone: selectedCustomer.phone,
       whatsapp_id: selectedCustomer.phone.replace("+", ""),
@@ -249,7 +250,7 @@ export function ChatInterface() {
                       className={`p-2 cursor-pointer hover:bg-blue-50 ${selectedCustomer?.id === c.id ? "bg-blue-100" : ""}`}
                       onClick={() => setSelectedCustomer(c)}
                     >
-                      <div className="font-medium text-sm">{c.name}</div>
+                      <div className="font-medium text-sm">{getCustomerDisplayName(c)}</div>
                       <div className="text-xs text-gray-500">{c.phone} {c.email}</div>
                     </div>
                   ))}

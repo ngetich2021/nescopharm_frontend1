@@ -109,7 +109,7 @@ export function CreateLogisticsSheet({ isOpen, onOpenChange, onLogisticsCreated 
         const customer = selectedDispatch.order.customer
         setFormData((prev) => ({
           ...prev,
-          recipient_name: customer.name || "",
+          recipient_name: getCustomerDisplayName(customer),
           recipient_phone: customer.phone || "",
           delivery_address: selectedDispatch.delivery_location?.address || "",
         }))

@@ -1702,7 +1702,7 @@ class QuoteController extends Controller
                     'platform' => 'whatsapp',
                     'platform_user_id' => $whatsappPhone,
                 ], [
-                    'customer_name' => $customer->name,
+                    'customer_name' => $customer->display_name,
                     'customer_phone' => $whatsappPhone,
                     'status' => 'active',
                     // Provide a default value for NOT NULL field

@@ -418,7 +418,7 @@ class AccountingIntegrationService
                 'account_id' => $arAccountId,
                 'debit_amount' => $totalAmount,
                 'credit_amount' => 0,
-                'description' => "Invoice {$invoice->invoice_number} - " . ($invoice->customer->name ?? 'Customer'),
+                'description' => "Invoice {$invoice->invoice_number} - " . ($invoice->customer->display_name ?? 'Customer'),
                 'contact_id' => $invoice->customer_id,
                 'contact_type' => Customer::class,
             ],
