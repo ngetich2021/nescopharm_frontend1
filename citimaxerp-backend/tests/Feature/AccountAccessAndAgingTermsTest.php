@@ -113,7 +113,7 @@ class AccountAccessAndAgingTermsTest extends TestCase
 
     /* ---------- aging ---------- */
 
-    public function test_a_30_day_invoice_91_days_old_is_61_days_overdue_and_sits_in_61_to_90(): void
+    public function test_a_30_day_invoice_91_days_old_is_61_days_overdue_and_sits_over_90_by_age(): void
     {
         Carbon::setTestNow('2026-11-06 10:00:00');
         $this->allowViewingAging();
@@ -126,7 +126,7 @@ class AccountAccessAndAgingTermsTest extends TestCase
         $this->assertSame(91, $row['age_days']);
         $this->assertSame(30, $row['terms_days']);
         $this->assertSame(61, $row['days_past_due']);
-        $this->assertSame('61_90', $row['bucket']);
+        $this->assertSame('over_90', $row['bucket']);
     }
 
     public function test_an_invoice_cannot_be_due_before_its_terms_run_out(): void
