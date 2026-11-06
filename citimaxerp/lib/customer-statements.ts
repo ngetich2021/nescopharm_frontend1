@@ -41,6 +41,8 @@ export interface PendingBill {
   opening_amount: string | number
   pending_amount: string | number
   due_date: string
+  terms_days: number
+  age_days: number
   overdue_days: number
 }
 
@@ -85,6 +87,8 @@ export interface StatementAgeing {
     invoice_number: string
     invoice_date: string
     due_date: string
+    terms_days: number
+    age_days: number
     overdue_days: number
     bucket: number
     amount: number

@@ -95,6 +95,7 @@ class CustomerStatementService
             ->get(['id', 'invoice_number', 'file_number', 'invoice_date', 'total_amount', 'balance_amount', 'due_date'])
             ->map(function ($invoice) {
                 $dueDate = $invoice->due_date ? Carbon::parse($invoice->due_date) : Carbon::parse($invoice->invoice_date)->addDays(30);
+                $invoiceDate = Carbon::parse($invoice->invoice_date)->startOfDay();
                 $overdueDays = (int) max(0, $dueDate->copy()->startOfDay()->diffInDays(today(), false));
                 return [
                     'invoice_id' => $invoice->id,
@@ -104,6 +105,8 @@ class CustomerStatementService
                     'opening_amount' => $invoice->total_amount,
                     'pending_amount' => $invoice->balance_amount,
                     'due_date' => $dueDate->toDateString(),
+                    'terms_days' => max(0, (int) $invoiceDate->diffInDays($dueDate->copy()->startOfDay(), false)),
+                    'age_days' => max(0, (int) $invoiceDate->diffInDays(today(), false)),
                     'overdue_days' => $overdueDays,
                 ];
             });
@@ -389,8 +392,8 @@ class CustomerStatementService
 
     /**
      * What the customer owed at the statement date, invoice by invoice. Each unpaid invoice sits
-     * in one range by the days past its due date (not yet due counts as 0), moves along as it gets
-     * more overdue, and drops off once paid. Worked out from the documents up to that date, not today's balances, so an older
+     * in one range by the days past its due date (invoice age less terms: 91 - 30 = 61; not yet due
+     * counts as 0), moves along as it gets more overdue, and drops off once paid. Worked out from the documents up to that date, not today's balances, so an older
      * statement ages as it stood then. Each invoice is reduced by its own credit notes, then all
      * other money (receipts, unused credit) goes on the oldest invoices first. Anything left is
      * unallocated. An invoice with no due date is due after the customer's $creditDays.
@@ -447,6 +450,8 @@ class CustomerStatementService
                 'invoice_number' => $inv->invoice_number,
                 'invoice_date' => $invoiceDate->toDateString(),
                 'due_date' => $dueDate->toDateString(),
+                'terms_days' => max(0, (int) $invoiceDate->diffInDays($dueDate, false)),
+                'age_days' => max(0, (int) $invoiceDate->diffInDays($asAt->copy()->startOfDay(), false)),
                 'overdue_days' => $overdueDays,
                 'bucket' => $index,
                 'amount' => $left,

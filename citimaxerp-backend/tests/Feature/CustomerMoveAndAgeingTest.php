@@ -139,6 +139,18 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertSame('2026-07-07', $ageing['rows'][0]['due_date']);
     }
 
+    public function test_a_30_day_invoice_91_days_old_shows_its_age_terms_and_61_days_past_due(): void
+    {
+        $this->invoice($this->kitale, '2026-08-05', 10, '2026-09-04');
+
+        $row = $this->ageing()['rows'][0];
+
+        $this->assertSame(91, $row['age_days']);
+        $this->assertSame(30, $row['terms_days']);
+        $this->assertSame(61, $row['overdue_days']);
+        $this->assertSame(2, $row['bucket']);
+    }
+
     public function test_an_invoice_not_yet_due_counts_as_zero_days_past_due(): void
     {
         $this->invoice($this->kitale, '2026-01-10', 10, '2027-02-01');
