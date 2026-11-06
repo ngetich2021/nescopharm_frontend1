@@ -14,7 +14,7 @@ import { buildBuyerBlock } from "@/lib/customer-address"
 import { ArrowLeft, Download, Printer, Loader2, FileSpreadsheet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, filePeriod, printWithFileName } from "@/lib/document-names"
-import { fixTextOffset } from "@/lib/pdf-capture"
+import { addCanvasToPdf, fixTextOffset } from "@/lib/pdf-capture"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
@@ -283,24 +283,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
       const margin = 8
       const pageWidth = pdf.internal.pageSize.getWidth()
       const pageHeight = pdf.internal.pageSize.getHeight()
-      const imgWidth = pageWidth - margin * 2
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      const usableHeight = pageHeight - margin * 2
-      const imgData = canvas.toDataURL("image/png")
 
-      // Long statements span multiple A4 pages rather than being shrunk onto one.
-      let offset = 0
-      let page = 0
-      while (offset < imgHeight) {
-        if (page > 0) pdf.addPage()
-        pdf.addImage(imgData, "PNG", margin, margin - offset, imgWidth, imgHeight)
-        pdf.setFillColor(255, 255, 255)
-        pdf.rect(0, 0, pageWidth, margin, "F")
-        pdf.rect(0, pageHeight - margin, pageWidth, margin, "F")
-        offset += usableHeight
-        page++
-      }
-      const pageCount = page
+      // Long statements span multiple A4 pages, breaking between rows, rather than being shrunk onto one.
+      const pageCount = addCanvasToPdf(pdf, canvas, statementRef.current, margin)
       for (let i = 1; i <= pageCount; i++) {
         pdf.setPage(i)
         pdf.setFontSize(8)
