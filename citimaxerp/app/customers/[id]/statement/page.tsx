@@ -204,23 +204,23 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
 
     if (ageing) {
       rows.push([`2. ACCOUNTS RECEIVABLE AGEING ANALYSIS (as at ${formatDate(ageing.as_at)})`])
-      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Terms (days)", "Invoice Age (days)", "Days Past Due", ...ageing.buckets.map((b) => b.label), "Balance (KES)"])
+      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Days Past Due", ...ageing.buckets.map((b) => b.label), "Balance (KES)"])
       ageing.rows.forEach((r, i) => {
-        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.terms_days, r.age_days, r.overdue_days, ...ageing.buckets.map((_, b) => (b === r.bucket ? r.amount.toFixed(2) : "")), r.amount.toFixed(2)])
+        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.overdue_days, ...ageing.buckets.map((_, b) => (b === r.bucket ? r.amount.toFixed(2) : "")), r.amount.toFixed(2)])
       })
-      rows.push(["", "Total", "", "", "", "", "", ...ageing.buckets.map((b) => b.amount.toFixed(2)), ageingBase.toFixed(2)])
-      rows.push(["", "% of Total", "", "", "", "", "", ...ageing.buckets.map((b) => (ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%")), ""])
-      if (ageing.unallocated !== 0) rows.push(["", "Unallocated payments / credits", "", "", "", "", "", ...ageing.buckets.map(() => ""), ageing.unallocated.toFixed(2)])
-      if (ageing.credit_notes > 0) rows.push(["", "Credit notes already taken off the above", "", "", "", "", "", ...ageing.buckets.map(() => ""), ageing.credit_notes.toFixed(2)])
-      rows.push(["", "Total Outstanding", "", "", "", "", "", ...ageing.buckets.map(() => ""), ageing.total.toFixed(2)])
+      rows.push(["", "Total", "", "", "", ...ageing.buckets.map((b) => b.amount.toFixed(2)), ageingBase.toFixed(2)])
+      rows.push(["", "% of Total", "", "", "", ...ageing.buckets.map((b) => (ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%")), ""])
+      if (ageing.unallocated !== 0) rows.push(["", "Unallocated payments / credits", "", "", "", ...ageing.buckets.map(() => ""), ageing.unallocated.toFixed(2)])
+      if (ageing.credit_notes > 0) rows.push(["", "Credit notes already taken off the above", "", "", "", ...ageing.buckets.map(() => ""), ageing.credit_notes.toFixed(2)])
+      rows.push(["", "Total Outstanding", "", "", "", ...ageing.buckets.map(() => ""), ageing.total.toFixed(2)])
       rows.push([])
     }
 
     if (pendingBills.length > 0) {
       rows.push([`${ageing ? 3 : 2}. OUTSTANDING INVOICES`])
-      rows.push(["S/No", "Invoice Date", "Invoice No.", "Invoice Amount", "Balance Due", "Due Date", "Terms (days)", "Invoice Age (days)", "Days Overdue"])
+      rows.push(["S/No", "Invoice Date", "Invoice No.", "Invoice Amount", "Balance Due", "Due Date", "Days Overdue"])
       pendingBills.forEach((b, i) => {
-        rows.push([i + 1, formatDate(b.invoice_date), b.invoice_number, toNumber(b.opening_amount).toFixed(2), toNumber(b.pending_amount).toFixed(2), formatDate(b.due_date), b.terms_days, b.age_days, b.overdue_days])
+        rows.push([i + 1, formatDate(b.invoice_date), b.invoice_number, toNumber(b.opening_amount).toFixed(2), toNumber(b.pending_amount).toFixed(2), formatDate(b.due_date), b.overdue_days])
       })
       rows.push(["", "", "Total", "", pendingTotal.toFixed(2)])
       rows.push([])
@@ -553,7 +553,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
               <p className="text-xs text-gray-500 mb-2">
-                As at {formatDate(ageing.as_at)}, each unpaid invoice by the days past its due date (invoice age less terms)
+                As at {formatDate(ageing.as_at)}, each unpaid invoice by the days past its due date
                 {ageing.credit_notes > 0 && `, after credit notes of KES ${formatAmount(ageing.credit_notes)}`}
               </p>
               <div className="overflow-x-auto">
@@ -564,8 +564,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                       <th className={TH}>Invoice No.</th>
                       <th className={TH}>Invoice Date</th>
                       <th className={TH}>Due Date</th>
-                      <th className={`${TH} text-right`}>Terms (days)</th>
-                      <th className={`${TH} text-right`}>Invoice Age (days)</th>
                       <th className={`${TH} text-right`}>Days Past Due</th>
                       {ageing.buckets.map((b) => (
                         <th key={b.label} className={`${TH} text-right`}>{b.label}</th>
@@ -580,8 +578,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                         <td className={TD}>{r.invoice_number}</td>
                         <td className={TD}>{formatDate(r.invoice_date)}</td>
                         <td className={TD}>{formatDate(r.due_date)}</td>
-                        <td className={`${TD} text-right`}>{r.terms_days}</td>
-                        <td className={`${TD} text-right`}>{r.age_days}</td>
                         <td className={`${TD} text-right`}>{r.overdue_days}</td>
                         {ageing.buckets.map((b, index) => (
                           <td key={b.label} className={`${TD} text-right`}>{index === r.bucket ? formatAmount(r.amount) : ""}</td>
@@ -590,14 +586,14 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                       </tr>
                     ))}
                     <tr className="font-semibold">
-                      <td className={TD} colSpan={7}>Total</td>
+                      <td className={TD} colSpan={5}>Total</td>
                       {ageing.buckets.map((b) => (
                         <td key={b.label} className={`${TD} text-right`}>{formatAmount(b.amount)}</td>
                       ))}
                       <td className={`${TD} text-right`}>{formatAmount(ageingBase)}</td>
                     </tr>
                     <tr>
-                      <td className={`${TD} text-gray-600`} colSpan={7}>% of Total</td>
+                      <td className={`${TD} text-gray-600`} colSpan={5}>% of Total</td>
                       {ageing.buckets.map((b) => (
                         <td key={b.label} className={`${TD} text-right text-gray-600`}>
                           {ageingBase > 0 ? `${((b.amount / ageingBase) * 100).toFixed(1)}%` : "0.0%"}
@@ -607,7 +603,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                     </tr>
                     {ageing.unallocated !== 0 && (
                       <tr>
-                        <td className={`${TD} italic text-gray-600`} colSpan={7 + ageing.buckets.length}>
+                        <td className={`${TD} italic text-gray-600`} colSpan={5 + ageing.buckets.length}>
                           {ageing.unallocated < 0 ? "Less: unallocated payments / credits" : "Add: unallocated balance"}
                         </td>
                         <td className={`${TD} text-right`}>{formatAmount(ageing.unallocated)}</td>
@@ -616,7 +612,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                   </tbody>
                   <tfoot>
                     <tr className="font-bold">
-                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap" colSpan={7 + ageing.buckets.length}>Total Outstanding</td>
+                      <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap" colSpan={5 + ageing.buckets.length}>Total Outstanding</td>
                       <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(ageing.total)}</td>
                     </tr>
                   </tfoot>
@@ -639,8 +635,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                       <th className={`${TH} text-right w-28`}>Invoice Amt</th>
                       <th className={`${TH} text-right w-28`}>Balance Due</th>
                       <th className={`${TH} w-24`}>Due Date</th>
-                      <th className={`${TH} text-right`}>Terms (days)</th>
-                      <th className={`${TH} text-right`}>Invoice Age (days)</th>
                       <th className={`${TH} text-right w-24`}>Days Overdue</th>
                     </tr>
                   </thead>
@@ -653,8 +647,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                         <td className={`${TD} text-right`}>{formatAmount(bill.opening_amount)}</td>
                         <td className={`${TD} text-right`}>{formatAmount(bill.pending_amount)}</td>
                         <td className={TD}>{formatDate(bill.due_date)}</td>
-                        <td className={`${TD} text-right`}>{bill.terms_days}</td>
-                        <td className={`${TD} text-right`}>{bill.age_days}</td>
                         <td className={`${TD} text-right ${bill.overdue_days > 0 ? "text-red-700 font-semibold" : ""}`}>
                           {bill.overdue_days > 0 ? bill.overdue_days : "—"}
                         </td>
@@ -665,7 +657,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
                     <tr className="font-semibold">
                       <td colSpan={4} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">Total</td>
                       <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(pendingTotal)}</td>
-                      <td colSpan={4} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap"></td>
+                      <td colSpan={2} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap"></td>
                     </tr>
                   </tfoot>
                 </table>
