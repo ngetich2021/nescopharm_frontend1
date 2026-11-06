@@ -88,6 +88,15 @@ Route::pattern('payroll', '[0-9a-fA-F\-]{36}');
 Route::post('/register', [UserController::class, 'createNewUser'])->middleware('throttle:register');
 Route::post('/login', [UserController::class, 'login']);
 
+// Public deploy check: the assistant's code loads on this server. Says nothing about any data.
+Route::get('/assistant/health', function () {
+    try {
+        return response()->json(['assistant' => class_exists(\App\Services\Assistant\AssistantKnowledge::class) && class_exists(\App\Services\Assistant\AssistantTools::class) ? 'ok' : 'missing']);
+    } catch (\Throwable $e) {
+        return response()->json(['assistant' => 'broken'], 500);
+    }
+});
+
 // Company branding assets (logo/letterhead), served with CORS headers so they can
 // load into <img crossorigin> for PDF export. This must be an actual route (not a
 // static public/ file) because php artisan serve serves existing public/ files
