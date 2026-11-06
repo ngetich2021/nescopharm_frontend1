@@ -569,14 +569,14 @@ class Invoice extends Model
 
     // Scopes
     /**
-     * The invoices Sales > Invoices lists. Whatever else counts invoices (aging, the dashboard) starts
-     * from this, whatever their status: an unpaid invoice is saved as "draft" and is still owed.
+     * Everything a customer can owe on: the invoices in Sales > Invoices and the bounced cheque
+     * debits, whatever their status (an unpaid invoice is saved as "draft" and is still owed).
+     * Aging and the dashboard both start from this.
      */
-    public function scopeInInvoicesList($query)
+    public function scopeOwedByCustomers($query)
     {
         return $query->where('type', '!=', 'credit_note')
-            ->where('status', '!=', 'cancelled')
-            ->where('invoice_number', 'not like', self::DEBIT_PREFIX . '%');
+            ->where('status', '!=', 'cancelled');
     }
 
     public function scopeOverdue($query)

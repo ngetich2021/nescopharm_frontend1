@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -161,6 +161,8 @@ const day = (d: string | null) => (d ? format(new Date(d), "dd/MM/yyyy") : "-")
 const partyKey = (r: { partyId: string | null; party: string }) => r.partyId ?? r.party
 // Search ignores capitals and punctuation, and takes the words in any order: "ram kitale".
 const searchable = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+// A bounced cheque debit says so; its number alone does not.
+const lineName = (r: { number: string }) => (r.number.startsWith("DEB-") ? `${r.number} (bounced cheque)` : r.number)
 const pct = (part: number, whole: number) => (whole ? `${((part / whole) * 100).toFixed(1)}%` : "0.0%")
 
 function toTrackerRows(details: AgingDetail[]): TrackerRow[] {
@@ -368,6 +370,13 @@ function AgingContent() {
   const shownParties = useMemo(() => new Set(shownTracker.map(partyKey)), [shownTracker])
   const shownSummary = useMemo(() => summaryRows.filter((r) => shownParties.has(partyKey(r))), [summaryRows, shownParties])
 
+  // Each customer's unpaid invoices and debits, oldest first, listed under their line on the summary.
+  const invoicesByParty = useMemo(() => {
+    const lines = new Map<string, TrackerRow[]>()
+    for (const r of trackerRows) lines.set(partyKey(r), [...(lines.get(partyKey(r)) ?? []), r])
+    return lines
+  }, [trackerRows])
+
   // What each customer owes in all, due or not.
   const outstandingByParty = useMemo(() => {
     const totals = new Map<string, number>()
@@ -465,9 +474,16 @@ function AgingContent() {
         title: `${title} Ageing - ${activeTab === "receivables" ? "Collection" : "Supplier"} Summary`,
         subtitle: asAt,
         headers: ["S/No", partyLabel, "Terms (days)", "Total Outstanding", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Collection Notes / Promise Date"],
-        rows: shownSummary.map((r, i) => [
-          i + 1, r.party, r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
-          r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action, noteText(r),
+        rows: shownSummary.flatMap((r, i) => [
+          [
+            i + 1, r.party, r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
+            r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action, noteText(r),
+          ],
+          ...(invoicesByParty.get(partyKey(r)) ?? []).map((line, j) => [
+            `${i + 1}.${j + 1}`, `${lineName(line)}, ${day(line.invoiceDate)}`, line.terms, line.balance, line.notYetDue, line.overdue,
+            ...BUCKET_KEYS.map((k) => (line.bucket === k ? line.balance : 0)),
+            line.daysOverdue || "", day(line.dueDate), "", "", STATUS_META[line.status].label, "",
+          ]),
         ]),
         footer: [
           ["", "TOTAL", "", summaryTotals.balance, summaryTotals.notYetDue, summaryTotals.overdue, summaryTotals.buckets.current, summaryTotals.buckets["31_60"], summaryTotals.buckets["61_90"], summaryTotals.buckets.over_90, "", "", summaryTotals.pdCheques, summaryTotals.overdueNetOfPd, "", ""],
@@ -482,7 +498,7 @@ function AgingContent() {
       subtitle: asAt,
       headers: ["S/No", partyLabel, `${partyLabel} Total Outstanding`, "Invoice / Ref", "Invoice Date", "Terms (days)", "Due Date", "Amount", "Paid", "Credit Notes", "Balance Due", "Invoice Age (days)", "Days Overdue", "Days to Due", "Not Yet Due", "Overdue Amount", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Status"],
       rows: shownTracker.map((r, i) => [
-        i + 1, r.party, outstandingByParty.get(partyKey(r)) ?? 0, r.number, day(r.invoiceDate), r.terms, day(r.dueDate), r.amount, r.paid, r.credited, r.balance,
+        i + 1, r.party, outstandingByParty.get(partyKey(r)) ?? 0, lineName(r), day(r.invoiceDate), r.terms, day(r.dueDate), r.amount, r.paid, r.credited, r.balance,
         r.age, r.daysOverdue, r.daysToDue, r.notYetDue, r.overdue,
         ...BUCKET_KEYS.map((k) => (r.bucket === k ? r.balance : 0)), STATUS_META[r.status].label,
       ]),
@@ -612,7 +628,8 @@ function AgingContent() {
           </TableHeader>
           <TableBody>
             {summaryPager.pageRows.map((r, i) => (
-              <TableRow key={partyKey(r)} className={rowClick} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: null })}>
+              <Fragment key={partyKey(r)}>
+              <TableRow className={`${rowClick} bg-muted/30`} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: null })}>
                 <TableCell className="text-center">{summaryPager.start + i + 1}</TableCell>
                 <TableCell className="font-medium">
                   <span className="text-primary hover:underline">{r.party}</span>
@@ -630,6 +647,29 @@ function AgingContent() {
                 <TableCell className={`text-xs ${r.actionSet ? "font-semibold text-slate-800" : ""}`}>{r.action}</TableCell>
                 <TableCell>{promiseBadge(r)}</TableCell>
               </TableRow>
+              {(invoicesByParty.get(partyKey(r)) ?? []).map((line, j) => (
+                <TableRow key={line.id} className={`${rowClick} text-xs`} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: line.id })}>
+                  <TableCell className="text-center text-muted-foreground">{summaryPager.start + i + 1}.{j + 1}</TableCell>
+                  <TableCell>
+                    <span className="font-mono whitespace-nowrap">{lineName(line)}</span>
+                    <span className="block text-muted-foreground">{day(line.invoiceDate)}</span>
+                  </TableCell>
+                  <TableCell className={num}>{line.terms}</TableCell>
+                  <TableCell className={num}>{money(line.balance)}</TableCell>
+                  <TableCell className={num}>{line.notYetDue ? money(line.notYetDue) : "-"}</TableCell>
+                  <TableCell className={`${num} ${line.overdue > 0 ? "text-red-700" : ""}`}>{line.overdue ? money(line.overdue) : "-"}</TableCell>
+                  {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{line.bucket === k ? money(line.balance) : "-"}</TableCell>)}
+                  <TableCell className={num}>{line.daysOverdue || "-"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{day(line.dueDate)}</TableCell>
+                  <TableCell className={num}>-</TableCell>
+                  <TableCell className={num}>-</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`whitespace-nowrap ${STATUS_META[line.status].className}`}>{STATUS_META[line.status].label}</Badge>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              ))}
+              </Fragment>
             ))}
             <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
@@ -695,7 +735,7 @@ function AgingContent() {
                 <TableCell className="text-center">{trackerPager.start + i + 1}</TableCell>
                 <TableCell className="font-medium"><span className="text-primary hover:underline">{r.party}</span></TableCell>
                 <TableCell className={`${num} font-semibold`}>{money(outstandingByParty.get(partyKey(r)) ?? 0)}</TableCell>
-                <TableCell className="font-mono whitespace-nowrap">{r.number}</TableCell>
+                <TableCell className="font-mono whitespace-nowrap">{lineName(r)}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.invoiceDate)}</TableCell>
                 <TableCell className={num}>{r.terms}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.dueDate)}</TableCell>
@@ -841,7 +881,7 @@ function AgingContent() {
                   </CardTitle>
                   <CardDescription>
                     {activeView === "summary"
-                      ? `One line per ${partyLabel.toLowerCase()}, most overdue first. Click a ${partyLabel.toLowerCase()} for the full breakdown, invoices and collection notes. Export has every column.`
+                      ? `Each ${partyLabel.toLowerCase()}, most overdue first, with its unpaid invoices${activeTab === "receivables" ? " and bounced cheques" : ""} under it. Click a line for the full breakdown and collection notes. Export has every column.`
                       : `Every unpaid invoice, by ${partyLabel.toLowerCase()} and oldest first. Click a line to see its ${partyLabel.toLowerCase()} and add a note. Export has every column.`}
                   </CardDescription>
                 </div>

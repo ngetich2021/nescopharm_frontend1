@@ -120,7 +120,7 @@ class AgingController extends Controller
             ->all();
     }
 
-    /** What customers owe: every invoice in Sales > Invoices with a balance, dated on or before the date. */
+    /** What customers owe: every invoice and bounced cheque debit with a balance, dated on or before the date. */
     public function receivables(Request $request)
     {
         if (!$this->canView($request, 'can_view_accounts_receivable')) {
@@ -130,7 +130,7 @@ class AgingController extends Controller
 
         $rows = Invoice::with('customer:id,name,business_name,trading_name,contact_person_name')
             ->where('company_id', $request->user()->company_id)
-            ->inInvoicesList()
+            ->owedByCustomers()
             ->where('balance_amount', '>', 0.009)
             ->whereDate('invoice_date', '<=', $asOf)
             ->orderBy('due_date')
