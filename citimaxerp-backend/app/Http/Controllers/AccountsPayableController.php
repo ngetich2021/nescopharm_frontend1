@@ -41,7 +41,7 @@ class AccountsPayableController extends Controller
      * Display a listing of accounts payable.
      */
     /**
-     * Supplier invoices (bills) and debit notes, newest first, for Sales > Invoices > Supplier Invoices.
+     * Supplier invoices (bills) and debit notes, newest first, for Suppliers > Supplier Invoices.
      * Each row carries its supplier, what is paid and still owed, and the supplier payments that paid it.
      * kind = bill | debit_note; status = paid | part_paid | unpaid (bills only); per_page = number or "all".
      */

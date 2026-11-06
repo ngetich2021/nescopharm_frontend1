@@ -1,23 +1,14 @@
 "use client"
 
 import { InvoicesTable } from "./invoices-table"
-import { DeliveryInvoicesTable } from "./delivery-invoices-table"
-import { useState, useEffect } from "react"
 import { fetchInvoices } from "@/lib/invoices"
 import { useDataCache } from "@/lib/data-cache"
 import { PermissionGuard } from "@/components/PermissionGuard"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useAuth } from "@/lib/auth-context"
-import { hasPermission } from "@/lib/rbac"
-import { FileText, Receipt, Truck } from "lucide-react"
-import { SupplierInvoicesTable } from "./supplier-invoices-table"
 
 export default function InvoicesPage() {
   // Use the data cache hook for invoices
   const {
     data: invoicesResponse,
-    isLoading: isLoadingInvoices,
-    refetch: refreshInvoices
   } = useDataCache<{ data: import('@/lib/invoices').Invoice[], meta?: any }>(
     'invoices',
     fetchInvoices,
@@ -27,11 +18,6 @@ export default function InvoicesPage() {
   )
 
   const invoices = invoicesResponse?.data || [];
-  const { userProfile } = useAuth();
-  const canViewDeliveryInvoices = hasPermission(userProfile as any, "can_view_delivery_invoices");
-  // Supplier bills: whoever sees supplier payments or the payables books.
-  const canViewSupplierInvoices = ["can_view_payments", "can_view_accounts_payable", "can_view_accounts"]
-    .some((p) => hasPermission(userProfile as any, p));
 
   return (
     <PermissionGuard permissions={["can_view_sales_menu", "can_view_invoices", "can_manage_system", "can_manage_company"]}>
@@ -41,46 +27,7 @@ export default function InvoicesPage() {
           <h1 className="text-2xl sm:text-3xl font-bold">Invoices</h1>
         </div>
 
-        {canViewDeliveryInvoices || canViewSupplierInvoices ? (
-          <Tabs defaultValue="invoices" className="space-y-6">
-            <TabsList>
-              <TabsTrigger value="invoices" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Invoices
-              </TabsTrigger>
-              {canViewDeliveryInvoices && (
-                <TabsTrigger value="delivery-invoices" className="flex items-center gap-2">
-                  <Truck className="h-4 w-4" />
-                  Delivery Invoices
-                </TabsTrigger>
-              )}
-              {canViewSupplierInvoices && (
-                <TabsTrigger value="supplier-invoices" className="flex items-center gap-2">
-                  <Receipt className="h-4 w-4" />
-                  Supplier Invoices
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-            <TabsContent value="invoices">
-              <InvoicesTable initialInvoices={invoices} />
-            </TabsContent>
-
-            {canViewDeliveryInvoices && (
-              <TabsContent value="delivery-invoices">
-                <DeliveryInvoicesTable />
-              </TabsContent>
-            )}
-
-            {canViewSupplierInvoices && (
-              <TabsContent value="supplier-invoices">
-                <SupplierInvoicesTable />
-              </TabsContent>
-            )}
-          </Tabs>
-        ) : (
-          <InvoicesTable initialInvoices={invoices} />
-        )}
+        <InvoicesTable initialInvoices={invoices} />
       </div>
     </PermissionGuard>
   )

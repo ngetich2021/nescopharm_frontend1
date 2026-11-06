@@ -200,7 +200,7 @@ export interface SupplierInvoicePaid {
     applied: boolean;
 }
 
-/** A supplier invoice (bill) or debit note, as Sales > Invoices > Supplier Invoices lists it. */
+/** A supplier invoice (bill) or debit note, as Suppliers > Supplier Invoices lists it. */
 export interface SupplierBill {
     id: string;
     kind: "bill" | "debit_note";

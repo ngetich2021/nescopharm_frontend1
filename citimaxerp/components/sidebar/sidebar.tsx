@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useAuth } from "@/lib/auth-context" // Import useAuth
 import { hasPermission } from "@/lib/rbac" // Import hasPermission
+import { SUPPLIERS_PAGE_PERMISSIONS } from "@/lib/suppliers-access"
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
@@ -117,7 +118,7 @@ function Sidebar() {
   }
 
   // Define nav items with their required permissions (store removed)
-  const navItems: { name: string; href: string; icon: React.ElementType; permission: string }[] = [
+  const navItems: { name: string; href: string; icon: React.ElementType; permission: string; anyPermission?: string[] }[] = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "can_view_dashboard_menu" },
     { name: "CRM", href: "/customers", icon: Users, permission: "can_view_customers_menu" },
     // { name: "Logistics", href: "/logistics", icon: Truck, permission: "can_view_logistics_menu" },
@@ -129,7 +130,7 @@ function Sidebar() {
     { name: "Filing", href: "/filing", icon: FolderOpen, permission: "can_view_filing" },
     { name: "eTIMS", href: "/etims", icon: ShieldCheck, permission: "can_view_sales_menu" },
     { name: "Payments", href: "/supplier-payments", icon: Banknote, permission: "can_view_payments_menu" },
-    { name: "Suppliers", href: "/suppliers", icon: Truck, permission: "can_view_suppliers_menu" },
+    { name: "Suppliers", href: "/suppliers", icon: Truck, permission: "can_view_suppliers_menu", anyPermission: SUPPLIERS_PAGE_PERMISSIONS },
     { name: "Purchase Orders", href: "/purchase-orders", icon: Package, permission: "can_view_purchase_orders_menu" },
     { name: "Expenses", href: "/expenses", icon: ReceiptText, permission: "can_view_expenses_menu" },
     { name: "Finance", href: "/finance", icon: Calculator, permission: "can_view_finance_menu" },
@@ -516,7 +517,7 @@ function Sidebar() {
           {navItems
             .filter(item => item.name !== "Dashboard" && item.name !== "CRM" && item.name !== "Inventory" && item.name !== "Product Receipts" && item.name !== "HR & Payroll")
             .map((item) =>
-              hasPermission(userProfile as any, item.permission) ? (
+              (item.anyPermission ?? [item.permission]).some((p) => hasPermission(userProfile as any, p)) ? (
                 <li key={item.name}>
                   <Link
                     href={item.href}
