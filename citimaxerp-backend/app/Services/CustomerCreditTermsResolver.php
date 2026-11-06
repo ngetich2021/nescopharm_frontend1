@@ -32,7 +32,7 @@ class CustomerCreditTermsResolver
         // credit_days was never set, so the order and its invoice carry the same days.
         $account = $customer->account;
         $creditDays = $isCredit && $account
-            ? ($account->credit_days ?? (is_numeric($account->credit_period_required) ? (int) $account->credit_period_required : null))
+            ? $account->creditPeriodDays()
             : null;
 
         if ($isCredit) {

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
@@ -243,11 +244,10 @@ class Invoice extends Model
     {
         parent::boot();
 
-        // Never due before the terms run out, whichever screen or import saved it.
+        // The customer's Credit Period decides when an invoice is due, whichever screen or import saved it.
         static::saving(function ($model) {
-            $earliest = $model->termsDueDate();
-            if ($earliest && (!$model->due_date || $model->due_date->copy()->startOfDay()->lt($earliest))) {
-                $model->due_date = $earliest->toDateString();
+            if (!$model->exists || $model->isDirty(['invoice_date', 'customer_id', 'due_date', 'credit_terms_days', 'payment_terms'])) {
+                $model->applyCreditPeriod();
             }
         });
 
@@ -299,6 +299,79 @@ class Invoice extends Model
                 $model->status = $model->isOverdue() ? 'overdue' : $model->status;
             }
         });
+    }
+
+    /**
+     * Due = invoice date + the customer's Credit Period. A bounced cheque debit stays due on receipt,
+     * and a customer with no Credit Period keeps the invoice's own terms, never due before they run out.
+     */
+    private function applyCreditPeriod(): void
+    {
+        if ($this->type === 'credit_note' || str_starts_with((string) $this->invoice_number, self::DEBIT_PREFIX)) {
+            return;
+        }
+
+        $period = $this->customer_id ? CustomerAccount::creditPeriodFor($this->customer_id) : null;
+        if ($period === null) {
+            $earliest = $this->termsDueDate();
+            if ($earliest && (!$this->due_date || $this->due_date->copy()->startOfDay()->lt($earliest))) {
+                $this->due_date = $earliest->toDateString();
+            }
+            return;
+        }
+
+        if ($this->invoice_date) {
+            $this->due_date = Carbon::parse($this->invoice_date)->addDays($period)->toDateString();
+            $this->credit_terms_days = $period;
+            if (!preg_match('/^\s*paid/i', (string) $this->payment_terms) || (float) $this->outstanding() > 0.005) {
+                $this->payment_terms = "Net {$period}";
+            }
+        }
+    }
+
+    /**
+     * Puts existing invoices on their customer's Credit Period (one customer's, or everyone's),
+     * without touching the ledger. Returns how many moved.
+     */
+    public static function syncCreditPeriods(?string $customerId = null): int
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            return 0;
+        }
+
+        $due = 'i.invoice_date::date + p.days';
+        $terms = "CASE WHEN COALESCE(i.balance_amount, 0) <= 0.005 AND i.payment_terms ILIKE 'paid%' THEN i.payment_terms ELSE 'Net ' || p.days END";
+
+        return DB::update("
+            WITH p AS (
+                SELECT DISTINCT ON (customer_id) customer_id,
+                       COALESCE(credit_days, substring(credit_period_required::text from '^\s*([0-9]{1,4})\s*(?:[Dd][Aa][Yy][Ss]?)?\s*$')::int) AS days
+                FROM customer_accounts
+                ORDER BY customer_id, updated_at DESC NULLS LAST
+            )
+            UPDATE invoices i
+            SET due_date = {$due},
+                credit_terms_days = p.days,
+                payment_terms = {$terms},
+                status = CASE
+                    WHEN i.status IN ('overdue', 'sent', 'partially_paid') AND COALESCE(i.balance_amount, 0) > 0.005 THEN
+                        CASE WHEN {$due} < CURRENT_DATE THEN 'overdue'
+                             WHEN COALESCE(i.amount_paid, 0) + COALESCE(i.amount_credited, 0) > 0.005 THEN 'partially_paid'
+                             ELSE 'sent' END
+                    ELSE i.status
+                END
+            FROM p
+            WHERE p.customer_id = i.customer_id
+              AND p.days IS NOT NULL
+              AND i.invoice_date IS NOT NULL
+              AND i.status <> 'cancelled'
+              AND COALESCE(i.type, '') <> 'credit_note'
+              AND COALESCE(i.invoice_number, '') NOT LIKE '" . self::DEBIT_PREFIX . "%'
+              AND (i.customer_id = ? OR ? IS NULL)
+              AND (i.due_date IS NULL OR i.due_date::date <> {$due}
+                   OR i.credit_terms_days IS DISTINCT FROM p.days
+                   OR i.payment_terms IS DISTINCT FROM {$terms})
+        ", [$customerId, $customerId]);
     }
 
     /** The invoice date plus its credit terms (credit_terms_days, or "Net 30"); null when it has none. */

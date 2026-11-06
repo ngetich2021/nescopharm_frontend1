@@ -112,8 +112,7 @@ class InvoiceController extends Controller
         $account = $customer->account;
         $creditDays = null;
         if ($isCredit && $account) {
-            $creditDays = $account->credit_days
-                ?? (is_numeric($account->credit_period_required) ? (int) $account->credit_period_required : null);
+            $creditDays = $account->creditPeriodDays();
         }
 
         if ($isCredit) {

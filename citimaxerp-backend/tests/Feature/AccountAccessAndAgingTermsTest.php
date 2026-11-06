@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\CustomerAccount;
 use App\Models\Invoice;
 use App\Models\Role;
 use App\Models\User;
@@ -146,6 +147,101 @@ class AccountAccessAndAgingTermsTest extends TestCase
 
         $this->assertSame('2026-10-01', $later->due_date->toDateString());
         $this->assertSame('2026-08-07', $cash->due_date->toDateString());
+    }
+
+    /* ---------- the customer's Credit Period ---------- */
+
+    private function creditPeriod(?int $days, ?string $formFigure = null): CustomerAccount
+    {
+        $probe = $this->invoice('2026-08-07', '2026-08-07');
+        $id = (string) Str::uuid();
+        DB::table('customer_accounts')->insert([
+            'id' => $id, 'account_number' => 'T-' . Str::random(10), 'customer_id' => $probe->customer_id, 'credit_days' => $days, 'credit_period_required' => $formFigure,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return CustomerAccount::findOrFail($id);
+    }
+
+    public function test_the_credit_period_decides_the_due_date_whatever_the_invoice_says(): void
+    {
+        $this->creditPeriod(90);
+
+        foreach ([['2026-09-06', 'Net 30'], ['2027-05-01', 'Net 365'], [null, 'Due on Receipt']] as [$due, $terms]) {
+            $invoice = $this->invoice('2026-08-07', $due, ['payment_terms' => $terms, 'credit_terms_days' => 30]);
+
+            $this->assertSame('2026-11-05', $invoice->due_date->toDateString());
+            $this->assertSame(90, $invoice->credit_terms_days);
+            $this->assertSame('Net 90', $invoice->payment_terms);
+        }
+    }
+
+    public function test_the_form_figure_is_the_period_when_credit_days_was_never_set(): void
+    {
+        $account = $this->creditPeriod(null, '60');
+
+        foreach (['60', '60 days', '60days', ' 60 Days '] as $figure) {
+            $account->credit_period_required = $figure;
+            $this->assertSame(60, $account->creditPeriodDays(), $figure);
+        }
+
+        $account->credit_period_required = 'as agreed';
+        $this->assertNull($account->creditPeriodDays());
+
+        $this->assertSame('2026-10-06', $this->invoice('2026-08-07', '2026-08-07')->due_date->toDateString());
+    }
+
+    public function test_syncing_reads_a_period_written_in_words(): void
+    {
+        Carbon::setTestNow('2026-11-06 10:00:00');
+        $invoice = $this->invoice('2026-08-07', '2026-08-07');
+        DB::table('customer_accounts')->insert([
+            'id' => (string) Str::uuid(), 'account_number' => 'T-' . Str::random(10), 'customer_id' => $invoice->customer_id, 'credit_period_required' => '90 Days',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        Invoice::syncCreditPeriods($invoice->customer_id);
+
+        $this->assertSame('2026-11-05', $invoice->refresh()->due_date->toDateString());
+        $this->assertSame('Net 90', $invoice->payment_terms);
+    }
+
+    public function test_a_debit_stays_due_on_receipt(): void
+    {
+        $this->creditPeriod(60);
+
+        $debit = $this->invoice('2026-08-07', '2026-08-07', ['invoice_number' => Invoice::DEBIT_PREFIX . Str::random(8), 'payment_terms' => 'Due on receipt', 'credit_terms_days' => 0]);
+
+        $this->assertSame('2026-08-07', $debit->due_date->toDateString());
+        $this->assertSame('Due on receipt', $debit->payment_terms);
+    }
+
+    public function test_changing_the_credit_period_moves_invoices_and_their_status_but_not_debits(): void
+    {
+        Carbon::setTestNow('2026-11-06 10:00:00');
+        $account = $this->creditPeriod(30);
+        $invoice = $this->invoice('2026-08-07', null);
+        $debit = $this->invoice('2026-08-07', '2026-08-07', ['invoice_number' => Invoice::DEBIT_PREFIX . Str::random(8), 'payment_terms' => 'Due on receipt']);
+        DB::table('invoices')->where('id', $invoice->id)->update(['status' => 'overdue']);
+
+        $account->credit_days = 120;
+        $account->save();
+
+        $invoice->refresh();
+        $this->assertSame('2026-12-05', $invoice->due_date->toDateString());
+        $this->assertSame('Net 120', $invoice->payment_terms);
+        $this->assertSame('sent', $invoice->status);
+        $this->assertSame('2026-08-07', $debit->refresh()->due_date->toDateString());
+
+        // A shorter period makes it overdue again.
+        $account->credit_days = 30;
+        $account->save();
+        $this->assertSame('overdue', $invoice->refresh()->status);
+    }
+
+    public function test_a_customer_with_no_credit_period_keeps_the_invoices_terms(): void
+    {
+        $this->assertSame('2026-10-01', $this->invoice('2026-08-07', '2026-10-01', ['payment_terms' => 'Net 30'])->due_date->toDateString());
     }
 
     /* ---------- forgot password ---------- */

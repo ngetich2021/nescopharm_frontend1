@@ -28,6 +28,31 @@ class CustomerAccount extends Model
         'rejected_by_users'
     ];
 
+    protected static function booted()
+    {
+        // A changed Credit Period moves the customer's invoices with it.
+        static::saved(function (self $account) {
+            if ($account->customer_id && $account->wasChanged(['credit_days', 'credit_period_required'])) {
+                Invoice::syncCreditPeriods($account->customer_id);
+            }
+        });
+    }
+
+    /** The customer's Credit Period in days: credit_days, else the Credit Appraisal Form's "60" or "60 days"; null if neither. */
+    public function creditPeriodDays(): ?int
+    {
+        if ($this->credit_days !== null) {
+            return (int) $this->credit_days;
+        }
+
+        return preg_match('/^\s*(\d{1,4})\s*(days?)?\s*$/i', (string) $this->credit_period_required, $m) ? (int) $m[1] : null;
+    }
+
+    public static function creditPeriodFor(string $customerId): ?int
+    {
+        return static::where('customer_id', $customerId)->latest('updated_at')->first(['id', 'credit_days', 'credit_period_required'])?->creditPeriodDays();
+    }
+
     /**
      * Handle currently_defaulted boolean conversion for PostgreSQL
      */

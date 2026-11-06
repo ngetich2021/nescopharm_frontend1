@@ -1092,7 +1092,7 @@ class DataImportController extends Controller
             // Same rule as a live invoice: credit customers get their GM-approved days.
             $isCredit = $customer->payment_method === 'credit';
             $creditDays = $isCredit && $customer->account
-                ? ($customer->account->credit_days ?? (is_numeric($customer->account->credit_period_required) ? (int) $customer->account->credit_period_required : null))
+                ? $customer->account->creditPeriodDays()
                 : null;
             $dueDate = $this->date($cell('due_date'));
             if ($dueDate === false) {
