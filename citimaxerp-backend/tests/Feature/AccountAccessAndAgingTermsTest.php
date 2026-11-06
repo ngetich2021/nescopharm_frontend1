@@ -129,6 +129,32 @@ class AccountAccessAndAgingTermsTest extends TestCase
         $this->assertSame('over_90', $row['bucket']);
     }
 
+    public function test_aging_uses_the_invoices_in_sales_invoices_whatever_their_status(): void
+    {
+        Carbon::setTestNow('2026-11-06 10:00:00');
+        $this->allowViewingAging();
+        Sanctum::actingAs($this->user());
+
+        $unpaid = $this->invoice('2026-10-01', '2026-12-01', ['total_amount' => 300, 'subtotal' => 300]);
+        DB::table('invoices')->where('id', $unpaid->id)->update(['status' => 'draft']);
+        $cancelled = $this->invoice('2026-10-01', '2026-12-01');
+        DB::table('invoices')->where('id', $cancelled->id)->update(['status' => 'cancelled']);
+        $debit = $this->invoice('2026-10-01', '2026-10-01', ['invoice_number' => Invoice::DEBIT_PREFIX . Str::random(8)]);
+
+        $response = $this->getJson('/api/finance/accounts-receivable/aging-report?as_of_date=2026-11-06')->assertOk();
+        $ids = collect($response->json('detail_report'))->pluck('receivable.id');
+
+        $this->assertTrue($ids->contains($unpaid->id));
+        $this->assertFalse($ids->contains($cancelled->id));
+        $this->assertFalse($ids->contains($debit->id));
+        $this->assertEqualsWithDelta(300, $response->json('summary.not_yet_due'), 0.01);
+        $this->assertEqualsWithDelta(300, $response->json('summary.total_outstanding'), 0.01);
+
+        $listed = Invoice::where('company_id', $this->companyId)->inInvoicesList()->pluck('id');
+        $this->assertTrue($listed->contains($unpaid->id));
+        $this->assertFalse($listed->contains($debit->id));
+    }
+
     public function test_an_invoice_cannot_be_due_before_its_terms_run_out(): void
     {
         foreach ([

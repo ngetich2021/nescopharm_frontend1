@@ -555,10 +555,9 @@ class DashboardController extends Controller
 
         $previousExpenses = $this->spending($companyId, $previousDateRange)->sum('amount');
 
-        // Outstanding invoices: what customers still owe on live sales invoices, from any date.
+        // Outstanding invoices: what customers still owe on the invoices in Sales > Invoices, from any date.
         $outstandingInvoices = Invoice::where('company_id', $companyId)
-            ->where('type', '!=', 'credit_note')
-            ->whereNotIn('status', ['draft', 'cancelled'])
+            ->inInvoicesList()
             ->where('balance_amount', '>', 0)
             ->selectRaw('
                 COUNT(*) as count,

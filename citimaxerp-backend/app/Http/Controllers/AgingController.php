@@ -120,7 +120,7 @@ class AgingController extends Controller
             ->all();
     }
 
-    /** What customers owe: every live sales invoice with a balance, dated on or before the date. */
+    /** What customers owe: every invoice in Sales > Invoices with a balance, dated on or before the date. */
     public function receivables(Request $request)
     {
         if (!$this->canView($request, 'can_view_accounts_receivable')) {
@@ -128,17 +128,16 @@ class AgingController extends Controller
         }
         $asOf = Carbon::parse($request->input('as_of_date', now()->toDateString()))->toDateString();
 
-        $rows = Invoice::with('customer:id,name,business_name')
+        $rows = Invoice::with('customer:id,name,business_name,trading_name,contact_person_name')
             ->where('company_id', $request->user()->company_id)
-            ->where('type', '!=', 'credit_note')
-            ->whereNotIn('status', ['draft', 'cancelled'])
+            ->inInvoicesList()
             ->where('balance_amount', '>', 0.009)
             ->whereDate('invoice_date', '<=', $asOf)
             ->orderBy('due_date')
             ->get()
             ->map(fn ($inv) => [
                 'id' => $inv->id,
-                'customer' => ['id' => $inv->customer_id, 'name' => $inv->customer ? ($inv->customer->business_name ?: $inv->customer->name) : 'Unknown customer'],
+                'customer' => ['id' => $inv->customer_id, 'name' => $inv->customer ? ($inv->customer->business_name ?: $inv->customer->name) : 'Unknown customer', 'also_known_as' => $inv->customer ? trim("{$inv->customer->name} {$inv->customer->trading_name} {$inv->customer->contact_person_name}") : ''],
                 'invoice_number' => $inv->invoice_number,
                 'invoice_date' => Carbon::parse($inv->invoice_date)->toDateString(),
                 // No due date means it was due on the day.

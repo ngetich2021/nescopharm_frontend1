@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -67,7 +67,7 @@ interface AgingEntry {
   status: string
 }
 
-type Party = { id: string | null; name: string }
+type Party = { id: string | null; name: string; also_known_as?: string }
 
 interface AgingDetail {
   receivable?: AgingEntry & { customer: Party }
@@ -102,6 +102,7 @@ interface TrackerRow {
   id: string
   partyId: string | null
   party: string
+  partyAlso: string
   number: string
   invoiceDate: string
   terms: number
@@ -157,6 +158,9 @@ const STATUS_META: Record<AgingDetail["status"], { label: string; className: str
 
 const money = (n: number) => n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const day = (d: string | null) => (d ? format(new Date(d), "dd/MM/yyyy") : "-")
+const partyKey = (r: { partyId: string | null; party: string }) => r.partyId ?? r.party
+// Search ignores capitals and punctuation, and takes the words in any order: "ram kitale".
+const searchable = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 const pct = (part: number, whole: number) => (whole ? `${((part / whole) * 100).toFixed(1)}%` : "0.0%")
 
 function toTrackerRows(details: AgingDetail[]): TrackerRow[] {
@@ -168,6 +172,7 @@ function toTrackerRows(details: AgingDetail[]): TrackerRow[] {
       id: entry.id,
       partyId: party?.id ?? null,
       party: party?.name ?? "-",
+      partyAlso: party?.also_known_as ?? "",
       number: entry.invoice_number,
       invoiceDate: entry.invoice_date,
       terms: d.terms_days,
@@ -277,10 +282,16 @@ function AgingContent() {
 
   /* ---------- fetch ---------- */
 
-  const fetchData = async (tab: ActiveTab, date: string) => {
+  // Silent: a refresh in the background, which keeps the page in place and stays quiet on failure.
+  const latestRequest = useRef("")
+  const fetchData = async (tab: ActiveTab, date: string, silent = false) => {
+    const request = `${tab}|${date}`
+    latestRequest.current = request
     try {
-      setIsLoading(true)
-      setError(null)
+      if (!silent) {
+        setIsLoading(true)
+        setError(null)
+      }
 
       const endpoint =
         tab === "receivables"
@@ -288,22 +299,41 @@ function AgingContent() {
           : `/finance/accounts-payable/aging-report?as_of_date=${date}`
 
       const res = await apiCall<AgingReport>(endpoint, "GET")
+      if (latestRequest.current !== request) return
       if (tab === "receivables") {
         setReceivableData(res)
       } else {
         setPayableData(res)
       }
     } catch (err: any) {
+      if (silent) return
       const msg = err?.message || "Failed to load aging report"
       setError(msg)
       toast({ title: "Error", description: msg, variant: "destructive" })
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }
 
   useEffect(() => {
     fetchData(activeTab, asOfDate)
+  }, [activeTab, asOfDate])
+
+  // Always current: a payment or new invoice shows without reloading, on coming back to the page and every minute.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return
+      fetchData(activeTab, asOfDate, true)
+      loadNotes(activeTab)
+    }
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    const timer = setInterval(refresh, 60000)
+    return () => {
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+      clearInterval(timer)
+    }
   }, [activeTab, asOfDate])
 
   /* ---------- derived ---------- */
@@ -326,14 +356,51 @@ function AgingContent() {
   )
 
   const q = search.trim().toLowerCase()
-  const shownTracker = useMemo(
-    () => (q ? trackerRows.filter((r) => r.party.toLowerCase().includes(q) || matchesDocNumber(r.number, search) || r.number.toLowerCase().includes(q)) : trackerRows),
-    [trackerRows, q, search],
+  const shownTracker = useMemo(() => {
+    const words = searchable(search).split(" ").filter(Boolean)
+    if (!q) return trackerRows
+    return trackerRows.filter((r) => {
+      const names = searchable(`${r.party} ${r.partyAlso}`)
+      return (words.length > 0 && words.every((w) => names.includes(w))) || matchesDocNumber(r.number, search) || r.number.toLowerCase().includes(q)
+    })
+  }, [trackerRows, q, search])
+  // A customer found by name or by one of its invoices shows whole on the summary.
+  const shownParties = useMemo(() => new Set(shownTracker.map(partyKey)), [shownTracker])
+  const shownSummary = useMemo(() => summaryRows.filter((r) => shownParties.has(partyKey(r))), [summaryRows, shownParties])
+
+  // What each customer owes in all, due or not.
+  const outstandingByParty = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const r of trackerRows) totals.set(partyKey(r), (totals.get(partyKey(r)) ?? 0) + r.balance)
+    return totals
+  }, [trackerRows])
+
+  // The cards at the top follow what is listed.
+  const cardRows = useMemo(
+    () => (activeView === "summary" ? trackerRows.filter((r) => shownParties.has(partyKey(r))) : shownTracker),
+    [activeView, trackerRows, shownTracker, shownParties],
   )
-  const shownSummary = useMemo(
-    () => (q ? summaryRows.filter((r) => r.party.toLowerCase().includes(q)) : summaryRows),
-    [summaryRows, q],
-  )
+  const cardBuckets = useMemo(() => {
+    const buckets = Object.fromEntries(BUCKET_KEYS.map((k) => [k, { min: 0, max: null, amount: 0, count: 0 }])) as unknown as AgingBuckets
+    for (const r of cardRows) {
+      buckets[r.bucket].amount += r.balance
+      buckets[r.bucket].count++
+    }
+    return buckets
+  }, [cardRows])
+  const cardSummary = useMemo(() => {
+    const parties = new Map(cardRows.map((r) => [partyKey(r), r.partyId]))
+    const cheques = data?.pd_cheques ?? {}
+    return {
+      total_outstanding: cardRows.reduce((s, r) => s + r.balance, 0),
+      total_invoices: cardRows.length,
+      overdue: cardRows.reduce((s, r) => s + r.overdue, 0),
+      not_yet_due: cardRows.reduce((s, r) => s + r.notYetDue, 0),
+      pd_cheques_held: [...parties.values()].reduce((s, id) => s + (id ? cheques[id] ?? 0 : 0), 0),
+      as_of_date: asOfDate,
+      parties: parties.size,
+    }
+  }, [cardRows, data, asOfDate])
 
   const sum = <T,>(rows: T[], f: (r: T) => number) => rows.reduce((s, r) => s + f(r), 0)
   const summaryTotals = {
@@ -373,7 +440,6 @@ function AgingContent() {
   const summaryPager = usePaged(shownSummary, 20, `${activeTab}|${q}`)
   const trackerPager = usePaged(shownTracker, 20, `${activeTab}|${q}`)
 
-  const partyKey = (r: { partyId: string | null; party: string }) => r.partyId ?? r.party
   const openView: PartyView | null = useMemo(() => {
     if (!openParty) return null
     const s = summaryRows.find((r) => partyKey(r) === openParty.key)
@@ -398,7 +464,7 @@ function AgingContent() {
         fileName: `${title.toLowerCase()}-ageing-summary-${asOfDate}`,
         title: `${title} Ageing - ${activeTab === "receivables" ? "Collection" : "Supplier"} Summary`,
         subtitle: asAt,
-        headers: ["S/No", partyLabel, "Terms (days)", "Total Balance Due", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Collection Notes / Promise Date"],
+        headers: ["S/No", partyLabel, "Terms (days)", "Total Outstanding", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Collection Notes / Promise Date"],
         rows: shownSummary.map((r, i) => [
           i + 1, r.party, r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
           r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action, noteText(r),
@@ -414,17 +480,17 @@ function AgingContent() {
       fileName: `${title.toLowerCase()}-invoice-tracker-${asOfDate}`,
       title: `${title} Ageing - Invoice Tracker`,
       subtitle: asAt,
-      headers: ["S/No", partyLabel, "Invoice / Ref", "Invoice Date", "Terms (days)", "Due Date", "Amount", "Paid", "Credit Notes", "Balance Due", "Invoice Age (days)", "Days Overdue", "Days to Due", "Not Yet Due", "Overdue Amount", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Status"],
+      headers: ["S/No", partyLabel, `${partyLabel} Total Outstanding`, "Invoice / Ref", "Invoice Date", "Terms (days)", "Due Date", "Amount", "Paid", "Credit Notes", "Balance Due", "Invoice Age (days)", "Days Overdue", "Days to Due", "Not Yet Due", "Overdue Amount", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Status"],
       rows: shownTracker.map((r, i) => [
-        i + 1, r.party, r.number, day(r.invoiceDate), r.terms, day(r.dueDate), r.amount, r.paid, r.credited, r.balance,
+        i + 1, r.party, outstandingByParty.get(partyKey(r)) ?? 0, r.number, day(r.invoiceDate), r.terms, day(r.dueDate), r.amount, r.paid, r.credited, r.balance,
         r.age, r.daysOverdue, r.daysToDue, r.notYetDue, r.overdue,
         ...BUCKET_KEYS.map((k) => (r.bucket === k ? r.balance : 0)), STATUS_META[r.status].label,
       ]),
       footer: [[
-        "", "TOTAL", "", "", "", "", trackerTotals.amount, trackerTotals.paid, trackerTotals.credited, trackerTotals.balance, "", "", "",
+        "", "TOTAL", "", "", "", "", "", trackerTotals.amount, trackerTotals.paid, trackerTotals.credited, trackerTotals.balance, "", "", "",
         trackerTotals.notYetDue, trackerTotals.overdue, ...BUCKET_KEYS.map((k) => trackerTotals.buckets[k]), "",
       ]],
-      moneyColumns: [6, 7, 8, 9, 13, 14, 15, 16, 17, 18],
+      moneyColumns: [2, 7, 8, 9, 10, 14, 15, 16, 17, 18, 19],
     }
   })
 
@@ -460,13 +526,14 @@ function AgingContent() {
     )
   }
 
-  function renderSummaryCard(summary: AgingReport["summary"]) {
+  function renderSummaryCard(summary: AgingReport["summary"] & { parties: number }) {
     const stats = [
       { label: "Not Yet Due", value: formatCurrency(summary.not_yet_due ?? 0), className: "text-emerald-700" },
-      { label: "Overdue", value: formatCurrency(summary.overdue ?? 0), className: "text-red-700" },
+      { label: "Overdue (Currently Due)", value: formatCurrency(summary.overdue ?? 0), className: "text-red-700" },
       { label: "% Overdue", value: pct(summary.overdue ?? 0, summary.total_outstanding), className: "text-red-700" },
       { label: "PD Cheques Held", value: formatCurrency(summary.pd_cheques_held ?? 0), className: "text-slate-800" },
       { label: "Total Invoices", value: String(summary.total_invoices), className: "text-slate-800" },
+      { label: activeTab === "receivables" ? "Customers" : "Suppliers", value: String(summary.parties), className: "text-slate-800" },
     ]
     return (
       <Card className="border-none shadow-md">
@@ -478,6 +545,7 @@ function AgingContent() {
             <div>
               <p className="text-sm font-medium text-muted-foreground">Total Outstanding</p>
               <p className="text-2xl font-bold text-slate-800 tabular-nums">{formatCurrency(summary.total_outstanding)}</p>
+              <p className="text-xs text-muted-foreground">All unpaid, due or not{q ? `, for "${search.trim()}"` : ""}</p>
             </div>
           </div>
           {stats.map((s) => (
@@ -530,7 +598,7 @@ function AgingContent() {
               <TableHead className="w-[60px] text-center">S/No</TableHead>
               <TableHead className="min-w-[220px]">{partyLabel}</TableHead>
               <TableHead className="text-right">Terms (days)</TableHead>
-              <TableHead className="text-right">Total Balance Due</TableHead>
+              <TableHead className="text-right">Total Outstanding</TableHead>
               <TableHead className="text-right">Not Yet Due</TableHead>
               <TableHead className="text-right">Total Overdue</TableHead>
               {BUCKET_KEYS.map((k) => <TableHead key={k} className="text-right whitespace-nowrap">{BUCKET_META[k].short}</TableHead>)}
@@ -603,6 +671,7 @@ function AgingContent() {
             <TableRow>
               <TableHead className="w-[60px] text-center">S/No</TableHead>
               <TableHead className="min-w-[220px]">{partyLabel}</TableHead>
+              <TableHead className="text-right whitespace-nowrap">{partyLabel} Total Outstanding</TableHead>
               <TableHead>Invoice / Ref</TableHead>
               <TableHead>Invoice Date</TableHead>
               <TableHead className="text-right">Terms (days)</TableHead>
@@ -625,6 +694,7 @@ function AgingContent() {
               <TableRow key={r.id} className={rowClick} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: r.id })}>
                 <TableCell className="text-center">{trackerPager.start + i + 1}</TableCell>
                 <TableCell className="font-medium"><span className="text-primary hover:underline">{r.party}</span></TableCell>
+                <TableCell className={`${num} font-semibold`}>{money(outstandingByParty.get(partyKey(r)) ?? 0)}</TableCell>
                 <TableCell className="font-mono whitespace-nowrap">{r.number}</TableCell>
                 <TableCell className="whitespace-nowrap">{day(r.invoiceDate)}</TableCell>
                 <TableCell className={num}>{r.terms}</TableCell>
@@ -647,7 +717,7 @@ function AgingContent() {
             <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
               <TableCell>TOTAL ({shownTracker.length})</TableCell>
-              <TableCell colSpan={4} />
+              <TableCell colSpan={5} />
               <TableCell className={num}>{money(trackerTotals.amount)}</TableCell>
               <TableCell className={num}>{money(trackerTotals.paid)}</TableCell>
               <TableCell className={num}>{money(trackerTotals.credited)}</TableCell>
@@ -738,8 +808,8 @@ function AgingContent() {
         {/* Data content */}
         {!isLoading && data && (
           <>
-            {renderKpiCards(data.aging_buckets)}
-            {renderSummaryCard(data.summary)}
+            {renderKpiCards(cardBuckets)}
+            {renderSummaryCard(cardSummary)}
 
             <Card>
               <CardHeader className="space-y-4">
@@ -756,7 +826,7 @@ function AgingContent() {
                       <Input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder={activeView === "summary" ? `Search ${partyLabel.toLowerCase()}` : `Search ${partyLabel.toLowerCase()} or invoice (NSK/0427)`}
+                        placeholder={`Search ${partyLabel.toLowerCase()} or invoice (NSK/0427)`}
                         className="pl-8 w-72"
                       />
                     </div>
