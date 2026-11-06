@@ -122,9 +122,9 @@ class CustomerMoveAndAgeingTest extends TestCase
         $this->assertSame($this->bungoma, CreditNote::find($response->json('data.id'))->customer_id);
     }
 
-    public function test_each_invoice_sits_in_one_range_by_the_days_past_its_due_date(): void
+    public function test_each_invoice_sits_in_one_range_by_its_age_from_the_invoice_date(): void
     {
-        // Days past due on 2026-11-04: 10, 45, 75, 120. Invoice dates differ, and don't decide the range.
+        // On 2026-11-04 the ages are 15, 64, 187, 217 and the days past due 10, 45, 75, 120.
         $this->invoice($this->kitale, '2026-10-20', 10, '2026-10-25');
         $this->invoice($this->kitale, '2026-09-01', 20, '2026-09-20');
         $this->invoice($this->kitale, '2026-05-01', 30, '2026-08-21');
@@ -133,36 +133,36 @@ class CustomerMoveAndAgeingTest extends TestCase
         $ageing = $this->ageing();
 
         $this->assertSame(['<30 Days', '30–60 Days', '60–90 Days', '>90 Days'], array_column($ageing['buckets'], 'label'));
-        $this->assertSame([10.0, 20.0, 30.0, 40.0], array_column($ageing['buckets'], 'amount'));
-        $this->assertSame([3, 2, 1, 0], array_column($ageing['rows'], 'bucket'));
+        $this->assertSame([10.0, 0.0, 20.0, 70.0], array_column($ageing['buckets'], 'amount'));
+        $this->assertSame([3, 3, 2, 0], array_column($ageing['rows'], 'bucket'));
         $this->assertSame([120, 75, 45, 10], array_column($ageing['rows'], 'overdue_days'));
         $this->assertSame('2026-07-07', $ageing['rows'][0]['due_date']);
     }
 
-    public function test_a_30_day_invoice_91_days_old_is_61_days_past_due(): void
+    public function test_a_60_day_invoice_121_days_old_is_61_days_past_due_and_sits_over_90(): void
     {
-        $this->invoice($this->kitale, '2026-08-05', 10, '2026-09-04');
+        $this->invoice($this->kitale, '2026-07-06', 10, '2026-09-04');
 
         $row = $this->ageing()['rows'][0];
 
         $this->assertSame(61, $row['overdue_days']);
-        $this->assertSame(2, $row['bucket']);
+        $this->assertSame(3, $row['bucket']);
     }
 
-    public function test_an_invoice_not_yet_due_counts_as_zero_days_past_due(): void
+    public function test_an_invoice_not_yet_due_counts_as_zero_days_past_due_but_still_ages(): void
     {
         $this->invoice($this->kitale, '2026-01-10', 10, '2027-02-01');
 
         $row = $this->ageing()['rows'][0];
 
         $this->assertSame(0, $row['overdue_days']);
-        $this->assertSame(0, $row['bucket']);
+        $this->assertSame(3, $row['bucket']);
     }
 
     public function test_range_edges(): void
     {
         foreach (['2026-10-06' => 0, '2026-10-05' => 1, '2026-09-06' => 1, '2026-09-05' => 2, '2026-08-06' => 2, '2026-08-05' => 3] as $date => $bucket) {
-            // Days past due 29, 30, 59, 60, 90, 91.
+            // Ages 29, 30, 59, 60, 90, 91.
             $this->invoice($this->kitale, $date, 1, $date);
         }
 
@@ -192,7 +192,7 @@ class CustomerMoveAndAgeingTest extends TestCase
         $ageing = $this->ageing();
 
         $this->assertEqualsWithDelta(100, $ageing['credit_notes'], 0.01);
-        $this->assertEqualsWithDelta(200, $ageing['buckets'][0]['amount'], 0.01); // Not yet due
+        $this->assertEqualsWithDelta(200, $ageing['buckets'][1]['amount'], 0.01); // 34 days old, not yet due
         $this->assertEqualsWithDelta(200, $ageing['total'], 0.01);
         $this->assertEquals(0.0, $ageing['unallocated']);
     }
@@ -206,7 +206,7 @@ class CustomerMoveAndAgeingTest extends TestCase
 
         $inSeptember = $this->ageing('2026-09-15');
         $this->assertSame('2026-09-15', $inSeptember['as_at']);
-        $this->assertEqualsWithDelta(100, $inSeptember['buckets'][1]['amount'], 0.01); // 45 days past due
+        $this->assertEqualsWithDelta(100, $inSeptember['buckets'][2]['amount'], 0.01); // 76 days old then
         $this->assertEqualsWithDelta(100, $inSeptember['total'], 0.01);
     }
 

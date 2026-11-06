@@ -389,8 +389,8 @@ class CustomerStatementService
 
     /**
      * What the customer owed at the statement date, invoice by invoice. Each unpaid invoice sits
-     * in one range by the days past its due date (invoice age less terms: 91 - 30 = 61; not yet due
-     * counts as 0), moves along as it gets more overdue, and drops off once paid. Worked out from the documents up to that date, not today's balances, so an older
+     * in one range by its age, counted from the invoice date (121 days old sits under >90), and
+     * separately shows its days past due (not yet due counts as 0). It moves along as it gets older, and drops off once paid. Worked out from the documents up to that date, not today's balances, so an older
      * statement ages as it stood then. Each invoice is reduced by its own credit notes, then all
      * other money (receipts, unused credit) goes on the oldest invoices first. Anything left is
      * unallocated. An invoice with no due date is due after the customer's $creditDays.
@@ -435,10 +435,11 @@ class CustomerStatementService
             $invoiceDate = Carbon::parse($inv->invoice_date)->startOfDay();
             $dueDate = $inv->due_date ? Carbon::parse($inv->due_date)->startOfDay() : $invoiceDate->copy()->addDays($creditDays);
             $overdueDays = max(0, (int) $dueDate->diffInDays($asAt->copy()->startOfDay(), false));
+            $ageDays = max(0, (int) $invoiceDate->diffInDays($asAt->copy()->startOfDay(), false));
             $index = match (true) {
-                $overdueDays < 30 => 0,
-                $overdueDays < 60 => 1,
-                $overdueDays <= 90 => 2,
+                $ageDays < 30 => 0,
+                $ageDays < 60 => 1,
+                $ageDays <= 90 => 2,
                 default => 3,
             };
             $buckets[$index]['amount'] += $left;

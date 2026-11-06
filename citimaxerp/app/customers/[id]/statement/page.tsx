@@ -553,7 +553,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
               <p className="text-xs text-gray-500 mb-2">
-                As at {formatDate(ageing.as_at)}, each unpaid invoice by the days past its due date
+                As at {formatDate(ageing.as_at)}, each unpaid invoice by its age from the invoice date
                 {ageing.credit_notes > 0 && `, after credit notes of KES ${formatAmount(ageing.credit_notes)}`}
               </p>
               <div className="overflow-x-auto">
