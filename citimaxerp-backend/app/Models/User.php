@@ -74,7 +74,7 @@ class User extends Authenticatable implements MustVerifyEmail
         static::saving(function ($user) {
             if ($user->isDirty('email') && !empty($user->email)) {
                 $exists = static::withTrashed()
-                    ->where('email', $user->email)
+                    ->whereRaw('lower(email) = ?', [strtolower(trim($user->email))])
                     ->when($user->exists, function ($q) use ($user) {
                         $q->where('id', '!=', $user->id);
                     })

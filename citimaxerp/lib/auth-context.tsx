@@ -89,7 +89,7 @@ interface AuthContextType {
   isLoading: boolean // Global loading state for auth/profile readiness
   companyId: string | null
   storeId: string | null // storeId is not directly from API user, might need separate fetch or derivation
-  signUp: (email: string, password: string, userData: any, companyData: any) => Promise<any>
+  signUp: (email: string, userData: any, companyData: any) => Promise<any>
   signIn: (email: string, password: string) => Promise<any>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<any>
@@ -243,52 +243,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return error?.message || "An unexpected error occurred. Please try again."
   }
 
-  const signUp = async (email: string, password: string, userData: any, companyData: any) => {
+  // Creates the company and its first user. The password is set from the link emailed to them,
+  // so nobody is logged in yet.
+  const signUp = async (email: string, userData: any, companyData: any) => {
     clearAuthState() // Clear any existing auth state
-    setIsLoading(true) // Start loading
-
     try {
-      const response = await apiCall<ApiUser>(
+      const response = await apiCall<any>(
         "/register",
         "POST",
         {
-          email: email,
-          password: password,
-          password_confirmation: password, // API expects password_confirmation
-          first_name: userData.firstName, // Pass first name separately
-          last_name: userData.lastName, // Pass last name separately
-          phone: userData.phone || null, // Pass phone number
-          company_name: companyData.name, // Pass company name directly
-          // company_email and company_phone are collected by UI but not in sample API payload
-          // If your API requires these, they need to be added here.
+          email,
+          first_name: userData.firstName,
+          last_name: userData.lastName,
+          phone: userData.phone,
+          company_name: companyData.name,
+          company_email: companyData.email || null,
+          company_phone: companyData.phone || null,
         },
         false,
-      ) // No auth required for signup
-
-      if (response.status === "success" && response.data?.user && response.data?.token) {
-        // Store token securely
-        storeToken(response.data.token)
-        
-        // Store user data securely
-        storeUserData(response.data.user)
-        
-        setUser(response.data.user)
-        setUserProfile(response.data.user)
-        setCompanyId(response.data.user.company?.id || null)
-        
-        // Initialize auth monitoring
-        initializeAuthMonitoring()
-        
-        return { data: response.data.user, error: null }
-      } else {
-        // This path should ideally be caught by apiCall's error handling, but as a fallback
-        throw new Error((response.message as string) || "Signup failed with no specific message.")
-      }
+      )
+      return { data: response, error: null }
     } catch (error: any) {
-      const friendlyError = getUserFriendlyError(error)
-      return { data: null, error: { message: friendlyError } }
-    } finally {
-      setIsLoading(false) // End loading
+      return { data: null, error: { message: getUserFriendlyError(error) } }
     }
   }
 

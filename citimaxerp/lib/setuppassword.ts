@@ -31,9 +31,6 @@ export async function setPassword(userId: string, data: SetPasswordPayload): Pro
       if (error.message.includes("Invalid or expired token") || error.message.includes("Token has expired")) {
         throw new Error("This password reset link has expired or is invalid. Please request a new one.")
       }
-      if (error.message.includes("Email not verified")) {
-        throw new Error("Your email address has not been verified. Please verify your email first.")
-      }
       throw new Error(error.message)
     }
     throw new Error("Failed to set password. Please try again.")

@@ -56,8 +56,8 @@ class AgingController extends Controller
     }
 
     /**
-     * As the collections workbook reads it: the 0-30 / 31-60 / 61-90 / >90 buckets age each invoice
-     * from its invoice date (as Tally does); "not yet due" and "overdue" go by the due date (terms).
+     * The 0-30 / 31-60 / 61-90 / >90 buckets count the days past each invoice's due date (invoice
+     * date + terms), as do "not yet due" and "overdue"; one not yet due sits in the first bucket.
      * $pdCheques: cheques still held (pending), per customer or supplier id.
      */
     private function report(array $rows, string $key, string $asOf, array $pdCheques = []): array
@@ -72,7 +72,7 @@ class AgingController extends Controller
             $age = max(0, (int) $invoiceDate->diffInDays($asAt, false));
             $toDue = (int) $asAt->diffInDays($dueDate, false);
             $daysOverdue = max(0, -$toDue);
-            $bucket = $this->bucketFor($age);
+            $bucket = $this->bucketFor($daysOverdue);
             $buckets[$bucket]['amount'] = round($buckets[$bucket]['amount'] + $row['balance_amount'], 2);
             $buckets[$bucket]['count']++;
             if ($daysOverdue > 0) {

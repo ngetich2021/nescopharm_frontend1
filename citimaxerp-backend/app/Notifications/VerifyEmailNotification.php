@@ -3,20 +3,23 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\URL;
 
-class VerifyEmailNotification extends Notification implements ShouldQueue
+/**
+ * The emailed link to the set-password page, for a new account or a forgotten password. Using it
+ * also confirms the email address. Sent straight away, not queued, so a failure is told to the
+ * person waiting for it.
+ */
+class VerifyEmailNotification extends Notification
 {
     use Queueable;
 
-    protected $passwordSetupUrl;
+    public const SETUP = 'setup';
+    public const RESET = 'reset';
 
-    public function __construct($passwordSetupUrl)
+    public function __construct(public string $passwordSetupUrl, public string $purpose = self::SETUP)
     {
-        $this->passwordSetupUrl = $passwordSetupUrl;
     }
 
     public function via($notifiable)
@@ -26,16 +29,18 @@ class VerifyEmailNotification extends Notification implements ShouldQueue
 
     public function toMail($notifiable)
     {
-        $url = URL::temporarySignedRoute(
-            'verification.verify',
-            now()->addMinutes(60),
-            ['id' => $notifiable->id, 'hash' => sha1($notifiable->email)]
-        );
+        if ($this->purpose === self::RESET) {
+            return (new MailMessage)
+                ->subject('Reset Your Password')
+                ->line('We received a request to reset the password for your account.')
+                ->action('Reset Password', $this->passwordSetupUrl)
+                ->line('This link works for 24 hours. If you did not ask for it, you can ignore this email and your password stays the same.');
+        }
 
         return (new MailMessage)
-            ->subject('Verify Your Email Address')
-            ->line('Please click the button below to verify your email address. You will be redirected to set your password immediately after verification.')
-            ->action('Verify & Set Password', $url)
-            ->line('If you did not create an account, no further action is required.');
+            ->subject('Set Your Password')
+            ->line('Your account is ready. Click the button below to confirm your email address and set your password.')
+            ->action('Set Password', $this->passwordSetupUrl)
+            ->line('This link works for 24 hours. After that, use "Forgot password" on the login page to get a new one. If you did not expect this email, you can ignore it.');
     }
 }

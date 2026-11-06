@@ -227,8 +227,9 @@ async function apiCall<T>(
             .flat()
             .join(", ") || "An unknown API error occurred."
 
-      // Handle 401 Unauthorized - Session expired
-      if (response.status === 401) {
+      // Handle 401 Unauthorized - Session expired. A public call has no session: a wrong
+      // password on the login page keeps its own message.
+      if (response.status === 401 && requiresAuth) {
         // Clear auth state
         if (typeof window !== "undefined") {
           localStorage.removeItem("token")

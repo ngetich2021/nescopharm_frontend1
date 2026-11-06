@@ -85,7 +85,7 @@ use App\Http\Controllers\SopCommentController;
 // accidentally treated as a payroll id by resource routes (prevents collisions).
 Route::pattern('payroll', '[0-9a-fA-F\-]{36}');
 
-Route::post('/register', [UserController::class, 'createNewUser']);
+Route::post('/register', [UserController::class, 'createNewUser'])->middleware('throttle:register');
 Route::post('/login', [UserController::class, 'login']);
 
 // Company branding assets (logo/letterhead), served with CORS headers so they can
@@ -94,8 +94,8 @@ Route::post('/login', [UserController::class, 'login']);
 // directly, bypassing all middleware/headers entirely.
 Route::get('/company-assets/{filename}', [CompanyController::class, 'asset']);
 Route::withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class, 'auth:sanctum'])->group(function () {
-    Route::post('/users/send-password-reset-link', [UserController::class, 'sendPasswordResetLink']);
-    Route::post('/users/{userId}/set-password', [UserController::class, 'setPasswordAfterVerification']);
+    Route::post('/users/send-password-reset-link', [UserController::class, 'sendPasswordResetLink'])->middleware('throttle:password-email');
+    Route::post('/users/{userId}/set-password', [UserController::class, 'setPasswordAfterVerification'])->middleware('throttle:set-password');
 });
 
 // Temporary signed SOP document access (frontend viewer fallback without auth headers)
@@ -677,66 +677,13 @@ Route::post('mpesa-transactions/stk-callback', [MpesaTransactionController::clas
 Route::post('mpesa-transactions/incoming', [MpesaTransactionController::class, 'handleIncomingPayment']);
 
 
-Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) {
-    $user = User::find($id);
-
-    if (!$user) {
-        $frontendUrl = config('app.frontend_url', 'https://cherry360.africa');
-        if ($request->expectsJson()) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'User not found'
-            ], 404);
-        }
-        return redirect($frontendUrl . '/sign-in?error=user_not_found');
-    }
-
-    // Use the frontend URL stored with the user (from when they were created)
-    $frontendUrl = $user->frontend_url ?? config('app.frontend_url', 'https://cherry360.africa');
-    $frontendUrl = rtrim($frontendUrl, '/');
-
-    if (!hash_equals($hash, sha1($user->email))) {
-        if ($request->expectsJson()) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Invalid verification link'
-            ], 400);
-        }
-        return redirect($frontendUrl . '/sign-in?error=invalid_link');
-    }
-
-    if ($user->hasVerifiedEmail()) {
-        if ($request->expectsJson()) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Email already verified'
-            ], 200);
-        }
-        // Redirect to password setup page if already verified
-        return redirect($frontendUrl . '/set-password?token=' . $user->password_setup_token . '&id=' . $user->id);
-    }
-
-    try {
-        $user->forceFill(['email_verified' => true])->save();
-    } catch (\Exception $e) {
-        Log::error('Failed to verify email for user ID: ' . $id . '. Error: ' . $e->getMessage());
-        if ($request->expectsJson()) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Failed to verify email'
-            ], 500);
-        }
-        return redirect($frontendUrl . '/sign-in?error=verification_failed');
-    }
-
+// Links in emails sent before 2026-11-06 came here and handed the password token to anyone who knew
+// the user's id and email. Emails now go straight to the set-password page; old links ask for a new one.
+Route::get('/email/verify/{id}/{hash}', function (Request $request) {
     if ($request->expectsJson()) {
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Email verified successfully'
-        ], 200);
+        return response()->json(['status' => 'failed', 'message' => 'This link is out of date. Please request a new one.'], 410);
     }
-    // Redirect to password setup page after successful verification
-    return redirect($frontendUrl . '/set-password?token=' . $user->password_setup_token . '&id=' . $user->id);
+    return redirect(\App\Support\FrontendUrl::for($request) . '/forgot-password?expired=1');
 })->name('verification.verify');
 
 Route::middleware('auth:sanctum')->group(function () {

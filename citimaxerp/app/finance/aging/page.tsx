@@ -143,10 +143,10 @@ interface SummaryRow {
 const BUCKET_KEYS: BucketKey[] = ["current", "31_60", "61_90", "over_90"]
 
 const BUCKET_META: Record<BucketKey, { label: string; short: string; color: string; icon: React.ElementType }> = {
-  current: { label: "Current (0-30)", short: "0-30 days", color: "bg-emerald-100 text-emerald-600", icon: Clock },
-  "31_60": { label: "31 - 60 days", short: "31-60 days", color: "bg-yellow-100 text-yellow-600", icon: Clock },
-  "61_90": { label: "61 - 90 days", short: "61-90 days", color: "bg-orange-100 text-orange-600", icon: AlertTriangle },
-  over_90: { label: "Over 90 days", short: ">90 days", color: "bg-red-100 text-red-600", icon: AlertTriangle },
+  current: { label: "Current (0-30 past due)", short: "0-30 days", color: "bg-emerald-100 text-emerald-600", icon: Clock },
+  "31_60": { label: "31 - 60 days past due", short: "31-60 days", color: "bg-yellow-100 text-yellow-600", icon: Clock },
+  "61_90": { label: "61 - 90 days past due", short: "61-90 days", color: "bg-orange-100 text-orange-600", icon: AlertTriangle },
+  over_90: { label: "Over 90 days past due", short: ">90 days", color: "bg-red-100 text-red-600", icon: AlertTriangle },
 }
 
 const STATUS_META: Record<AgingDetail["status"], { label: string; className: string }> = {
@@ -450,7 +450,7 @@ function AgingContent() {
                   {formatCurrency(bucket.amount)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {bucket.count} {bucket.count === 1 ? "invoice" : "invoices"} · by invoice age
+                  {bucket.count} {bucket.count === 1 ? "invoice" : "invoices"} · from the terms date
                 </p>
               </CardContent>
             </Card>

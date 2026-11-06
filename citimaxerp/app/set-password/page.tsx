@@ -41,8 +41,7 @@ function SetPasswordContent() {
 
   useEffect(() => {
     if (validationAttempts >= 3) {
-      toast({ title: "Invalid link", description: "Password setup link is invalid or expired.", variant: "destructive" })
-      router.push("/sign-in")
+      router.push("/forgot-password?expired=1")
       return
     }
     const t = searchParams.get("token")
@@ -52,8 +51,7 @@ function SetPasswordContent() {
       const timer = setTimeout(() => setValidationAttempts((p) => p + 1), 200)
       return () => clearTimeout(timer)
     } else {
-      toast({ title: "Invalid link", description: "Missing token or user ID.", variant: "destructive" })
-      router.push("/sign-in")
+      router.push("/forgot-password?expired=1")
     }
   }, [searchParams, validationAttempts])
 
@@ -90,7 +88,7 @@ function SetPasswordContent() {
       const msg = err.message || "An unexpected error occurred."
       if (msg.includes("expired") || msg.includes("invalid")) {
         toast({ title: "Link expired", description: "Redirecting to request a new one...", variant: "destructive" })
-        setTimeout(() => router.push("/forgot-password"), 2000)
+        setTimeout(() => router.push("/forgot-password?expired=1"), 2000)
       } else {
         toast({ title: "Failed", description: msg, variant: "destructive" })
       }

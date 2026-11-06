@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
@@ -16,6 +16,12 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [linkExpired, setLinkExpired] = useState(false)
+
+  // Sent here from an expired or already used link.
+  useEffect(() => {
+    setLinkExpired(new URLSearchParams(window.location.search).has("expired"))
+  }, [])
 
   const validateEmail = () => {
     if (!email.trim()) { setError("Email address is required"); return false }
@@ -29,10 +35,10 @@ export default function ForgotPasswordPage() {
     if (!validateEmail()) return
     setIsLoading(true)
     try {
-      const response = await sendPasswordResetLink(email)
+      const response = await sendPasswordResetLink(email.trim())
       if (response.status === "success") {
         setSuccess(true)
-        toast({ title: "Reset link sent!", description: "Check your email for the password reset link." })
+        toast({ title: "Request received", description: "Check your email for the password reset link." })
       } else {
         const msg = typeof response.message === "string" ? response.message : Object.values(response.message).flat().join(", ")
         toast({ title: "Failed to send reset link", description: msg, variant: "destructive" })
@@ -94,6 +100,12 @@ export default function ForgotPasswordPage() {
                   Enter your email and we&apos;ll send you a link to reset your password
                 </p>
               </div>
+
+              {linkExpired && (
+                <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  That link has expired or was already used. Enter your email to get a new one.
+                </p>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Email */}
@@ -173,7 +185,7 @@ export default function ForgotPasswordPage() {
                   Check your email
                 </h1>
                 <p className="text-gray-500 mt-1.5 text-[15px]">
-                  We&apos;ve sent a password reset link to
+                  If this email has an account, we&apos;ve sent a password reset link to
                 </p>
                 <p className="text-gray-900 font-semibold text-[15px] mt-0.5">
                   {email}
@@ -192,7 +204,7 @@ export default function ForgotPasswordPage() {
               >
                 {[
                   "Check your email inbox (and spam folder)",
-                  "Click the password reset link",
+                  "Click the password reset link (it works for 24 hours)",
                   "Create a new password",
                   "Sign in with your new password",
                 ].map((step, i) => (

@@ -71,6 +71,9 @@ return [
 
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
 
+    // Our other sites an emailed link may open, comma separated (see App\Support\FrontendUrl).
+    'frontend_urls' => array_filter(array_map('trim', explode(',', env('FRONTEND_URLS', 'https://citimaxerp-demo.vercel.app')))),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

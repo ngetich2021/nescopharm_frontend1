@@ -16,8 +16,6 @@ type Step = 1 | 2 | 3 | 4
 interface FormData {
   // Step 1: Account
   email: string
-  password: string
-  confirmPassword: string
   // Step 2: Personal
   firstName: string // Kept for UI input
   lastName: string // Kept for UI input
@@ -37,8 +35,6 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState<FormData>({
     email: "",
-    password: "",
-    confirmPassword: "",
     firstName: "",
     lastName: "",
     phone: "",
@@ -48,34 +44,28 @@ export default function SignUpPage() {
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [emailSent, setEmailSent] = useState(false)
 
   const steps = [
-    { number: 1, title: "Account", icon: Mail, description: "Create your login credentials" },
+    { number: 1, title: "Account", icon: Mail, description: "Your login email" },
     { number: 2, title: "Personal", icon: User, description: "Tell us about yourself" },
     { number: 3, title: "Company", icon: Building2, description: "Set up your company" },
     { number: 4, title: "Complete", icon: CheckCircle, description: "Review and finish" },
   ]
 
   const validateStep = (step: Step): boolean => {
-    console.log(`SignUpPage: Validating step ${step}`)
     const newErrors: Record<string, string> = {}
 
     switch (step) {
       case 1:
         if (!formData.email.trim()) newErrors.email = "Email is required"
         else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "Please enter a valid email"
-
-        if (!formData.password) newErrors.password = "Password is required"
-        else if (formData.password.length < 6) newErrors.password = "Password must be at least 6 characters"
-
-        if (formData.password !== formData.confirmPassword) {
-          newErrors.confirmPassword = "Passwords don't match"
-        }
         break
 
       case 2:
         if (!formData.firstName.trim()) newErrors.firstName = "First name is required"
         if (!formData.lastName.trim()) newErrors.lastName = "Last name is required"
+        if (!formData.phone.trim()) newErrors.phone = "Phone number is required"
         break
 
       case 3:
@@ -88,7 +78,6 @@ export default function SignUpPage() {
 
     setErrors(newErrors)
     const isValid = Object.keys(newErrors).length === 0
-    console.log(`SignUpPage: Step ${step} validation result: ${isValid ? "Success" : "Failed"}`, newErrors)
     return isValid
   }
 
@@ -98,62 +87,34 @@ export default function SignUpPage() {
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
     }
-    console.log(`SignUpPage: Input changed for ${field}: ${value}`)
   }
 
   const nextStep = () => {
-    console.log(`SignUpPage: Attempting to go to next step from ${currentStep}`)
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, 4) as Step)
-      console.log(`SignUpPage: Moved to step ${Math.min(currentStep + 1, 4)}`)
     } else {
-      console.log(`SignUpPage: Validation failed for step ${currentStep}. Cannot proceed.`)
     }
   }
 
   const prevStep = () => {
-    console.log(`SignUpPage: Attempting to go to previous step from ${currentStep}`)
     setCurrentStep((prev) => Math.max(prev - 1, 1) as Step)
-    console.log(`SignUpPage: Moved to step ${Math.max(currentStep - 1, 1)}`)
   }
 
   const handleSubmit = async () => {
-    console.log("SignUpPage: Attempting to submit form.")
     if (!validateStep(3)) {
-      console.log("SignUpPage: Final validation failed for step 3. Aborting submission.")
       return
     }
 
     setIsLoading(true)
-    console.log("SignUpPage: Setting isLoading to true.")
 
     try {
-      // The API's /register endpoint expects a single 'name' field
-      const userDataForApi = {
-        firstName: formData.firstName, // Kept for UI input
-        lastName: formData.lastName, // Kept for UI input
-        phone: formData.phone,
-      }
-
-      const companyDataForApi = {
-        name: formData.companyName,
-        email: formData.companyEmail || formData.email,
-        phone: formData.companyPhone,
-        description: `${formData.companyName} - Created during signup`,
-      }
-
-      console.log("SignUpPage: Calling useAuth signUp with:", {
-        email: formData.email,
-        userData: userDataForApi,
-        companyData: companyDataForApi,
-      })
-
-      // The signUp function in auth-context will now handle mapping firstName/lastName to 'name'
-      // and using the placeholder company_id.
-      const { data, error } = await signUp(formData.email, formData.password, userDataForApi, companyDataForApi)
+      const { error } = await signUp(
+        formData.email.trim(),
+        { firstName: formData.firstName.trim(), lastName: formData.lastName.trim(), phone: formData.phone.trim() },
+        { name: formData.companyName.trim(), email: formData.companyEmail.trim(), phone: formData.companyPhone.trim() },
+      )
 
       if (error) {
-        console.error("SignUpPage: Signup failed from useAuth:", error)
         toast({
           title: "Signup failed",
           description: error.message || "Something went wrong. Please try again.",
@@ -162,19 +123,8 @@ export default function SignUpPage() {
         return
       }
 
-      console.log("SignUpPage: Signup successful!", data)
-      toast({
-        title: "Welcome aboard! 🎉",
-        description: "Your account has been created successfully.",
-      })
-
-      // Small delay for better UX
-      console.log("SignUpPage: Redirecting to dashboard in 1 second...")
-      setTimeout(() => {
-        router.push("/dashboard")
-      }, 1000)
+      setEmailSent(true)
     } catch (error: any) {
-      console.error("SignUpPage: Unexpected error during handleSubmit:", error)
       toast({
         title: "Signup failed",
         description: "An unexpected error occurred. Please try again.",
@@ -182,7 +132,6 @@ export default function SignUpPage() {
       })
     } finally {
       setIsLoading(false)
-      console.log("SignUpPage: Setting isLoading to false.")
     }
   }
 
@@ -195,7 +144,7 @@ export default function SignUpPage() {
             <div className="text-center mb-6">
               <Mail className="h-12 w-12 text-blue-600 mx-auto mb-3" />
               <h3 className="text-xl font-semibold">Create Your Account</h3>
-              <p className="text-gray-600">Start with your email and a secure password</p>
+              <p className="text-gray-600">We&apos;ll email you a link to set your password</p>
             </div>
 
             <div>
@@ -210,32 +159,6 @@ export default function SignUpPage() {
                 autoFocus
               />
               {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email}</p>}
-            </div>
-
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleInputChange("password", e.target.value)}
-                className={errors.password ? "border-red-500" : ""}
-                placeholder="At least 6 characters"
-              />
-              {errors.password && <p className="text-sm text-red-500 mt-1">{errors.password}</p>}
-            </div>
-
-            <div>
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                className={errors.confirmPassword ? "border-red-500" : ""}
-                placeholder="Repeat your password"
-              />
-              {errors.confirmPassword && <p className="text-sm text-red-500 mt-1">{errors.confirmPassword}</p>}
             </div>
           </div>
         )
@@ -285,8 +208,10 @@ export default function SignUpPage() {
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => handleInputChange("phone", e.target.value)}
+                className={errors.phone ? "border-red-500" : ""}
                 placeholder="+254712345678"
               />
+              {errors.phone && <p className="text-sm text-red-500 mt-1">{errors.phone}</p>}
             </div>
           </div>
         )
@@ -382,9 +307,9 @@ export default function SignUpPage() {
                   <h3 className="text-sm font-medium text-blue-800">What happens next?</h3>
                   <div className="mt-2 text-sm text-blue-700">
                     <ul className="list-disc list-inside space-y-1">
-                      <li>Your account will be created instantly</li>
-                      <li>You'll be assigned admin privileges for your company</li>
-                      <li>You can start using all features immediately</li>
+                      <li>We&apos;ll email you a link to set your password (it works for 24 hours)</li>
+                      <li>You&apos;ll be the administrator for your company</li>
+                      <li>Then log in with your email and new password</li>
                     </ul>
                   </div>
                 </div>
@@ -397,6 +322,26 @@ export default function SignUpPage() {
 
   const progress = (currentStep / 4) * 100
 
+  if (emailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <Mail className="h-12 w-12 text-blue-600 mx-auto mb-3" />
+            <CardTitle>Check your email</CardTitle>
+            <CardDescription>
+              Your account is created. We sent a link to set your password to <span className="font-semibold text-gray-900">{formData.email.trim()}</span>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-center text-sm text-gray-600">
+            <p>Look in your spam folder if it isn&apos;t in your inbox. The link works for 24 hours.</p>
+            <Button className="w-full" onClick={() => router.push("/sign-in")}>Go to login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -406,10 +351,10 @@ export default function SignUpPage() {
         </div>
         {/* Header */}
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">Join Cherry CRM</h2>
+          <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">Join CitiMax ERP</h2>
           <p className="mt-2 text-sm text-gray-600">
             Already have an account?{" "}
-            <Link href="/" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link href="/sign-in" className="font-medium text-blue-600 hover:text-blue-500">
               Sign in here
             </Link>
           </p>

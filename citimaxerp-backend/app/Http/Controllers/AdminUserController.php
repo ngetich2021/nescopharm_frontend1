@@ -214,7 +214,7 @@ class AdminUserController extends Controller
             ], 400);
         }
 
-        if (User::withTrashed()->where('email', $request->email)->exists()) {
+        if (User::withTrashed()->whereRaw('lower(email) = ?', [strtolower(trim($request->email))])->exists()) {
             return response()->json([
                 'status' => 'failed',
                 'message' => ['email' => ['This email is already taken, including by a deactivated or terminated account. Use a different email or restore the deleted account.']]
@@ -228,6 +228,7 @@ class AdminUserController extends Controller
             if ($company && $company->currentSubscription && $company->currentSubscription->plan) {
                 $maxUsers = $company->currentSubscription->plan->max_users;
                 if ($maxUsers && $company->users()->count() >= $maxUsers) {
+                    DB::rollBack();
                     return response()->json([
                         'status' => 'failed',
                         'message' => 'Company has reached its user limit for the current subscription plan'
@@ -238,14 +239,14 @@ class AdminUserController extends Controller
             $user = User::create([
                 'id' => (string) Str::uuid(),
                 'company_id' => $request->company_id,
-                'email' => $request->email,
+                'email' => strtolower(trim($request->email)),
                 'password' => Hash::make($request->password),
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name,
                 'phone' => $request->phone,
                 'role_id' => $request->role_id,
                 'is_active' => filter_var($request->input('is_active', true), FILTER_VALIDATE_BOOLEAN),
-                'email_verified' => filter_var($request->input('email_verified', false), FILTER_VALIDATE_BOOLEAN),
+                'email_verified' => filter_var($request->input('email_verified', true), FILTER_VALIDATE_BOOLEAN), // No email goes out here: unverified could never log in.
                 'avatar_url' => $request->avatar_url,
                 'created_at' => now(),
                 'updated_at' => now(),

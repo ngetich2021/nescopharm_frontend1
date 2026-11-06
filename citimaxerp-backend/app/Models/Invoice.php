@@ -243,6 +243,14 @@ class Invoice extends Model
     {
         parent::boot();
 
+        // Never due before the terms run out, whichever screen or import saved it.
+        static::saving(function ($model) {
+            $earliest = $model->termsDueDate();
+            if ($earliest && (!$model->due_date || $model->due_date->copy()->startOfDay()->lt($earliest))) {
+                $model->due_date = $earliest->toDateString();
+            }
+        });
+
         static::creating(function ($model) {
             if (empty($model->id)) {
                 $model->id = (string) Str::uuid();
@@ -291,6 +299,19 @@ class Invoice extends Model
                 $model->status = $model->isOverdue() ? 'overdue' : $model->status;
             }
         });
+    }
+
+    /** The invoice date plus its credit terms (credit_terms_days, or "Net 30"); null when it has none. */
+    public function termsDueDate(): ?Carbon
+    {
+        $days = (int) $this->credit_terms_days;
+        if ($days <= 0 && preg_match('/^\s*net\s+(\d{1,4})\s*$/i', (string) $this->payment_terms, $m)) {
+            $days = (int) $m[1];
+        }
+
+        return $days > 0 && $this->invoice_date
+            ? Carbon::parse($this->invoice_date)->startOfDay()->addDays($days)
+            : null;
     }
 
     /** What is still owed: the total less money received and credit notes applied. */

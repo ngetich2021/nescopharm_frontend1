@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Role;
 use App\Models\User;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -383,13 +385,28 @@ class UserController extends Controller
         return $this->softDelete($id, $request);
     }
 
+    /** Emails are one address whatever the capitals; Postgres compares them exactly. */
+    private function normalizeEmail(Request $request): void
+    {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
+        }
+    }
+
+    private function emailQuery(string $email)
+    {
+        return User::withTrashed()->whereRaw('lower(email) = ?', [Str::lower(trim($email))]);
+    }
+
     /**
-     * Reset password (send reset link to email)
+     * Forgot password: email a link to set a new one. The reply is the same whether or not the
+     * address has an account, so the form can't be used to find out who has one.
      */
     public function sendPasswordResetLink(Request $request)
     {
+        $this->normalizeEmail($request);
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
         ]);
         if ($validator->fails()) {
             return response()->json([
@@ -397,37 +414,34 @@ class UserController extends Controller
                 'message' => $validator->errors()
             ], 400);
         }
-        $user = User::where('email', $request->input('email'))->first();
-        if (!$user) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'User not found.'
-            ], 404);
+
+        $user = $this->emailQuery($request->input('email'))->first();
+        // A deactivated or terminated account can't log in, so it gets no link either.
+        if ($user && !$user->trashed() && $user->is_active) {
+            $token = Str::random(64);
+            $user->forceFill([
+                'password_setup_token' => $token,
+                'password_setup_token_expires_at' => now()->addHours(24),
+            ])->save();
+
+            $url = FrontendUrl::for($request) . "/set-password?token={$token}&id={$user->id}";
+            try {
+                Notification::send($user, new VerifyEmailNotification($url, VerifyEmailNotification::RESET));
+            } catch (\Throwable $e) {
+                Log::error('Password reset email failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => 'We could not send the email just now. Please try again in a few minutes.',
+                ], 503);
+            }
         }
-        // Generate a new password setup token
-        $passwordSetupToken = Str::random(64);
-        $passwordSetupTokenExpires = now()->addHours(24);
-        $user->password_setup_token = $passwordSetupToken;
-        $user->password_setup_token_expires_at = $passwordSetupTokenExpires;
-        
-        // Try to use the stored frontend URL, or detect from request
-        $frontendUrl = $user->frontend_url ?? $request->header('Origin') ?? $request->header('Referer') ?? config('app.frontend_url', 'https://cherry360.africa');
-        // Clean the URL to get just the base
-        if (filter_var($frontendUrl, FILTER_VALIDATE_URL)) {
-            $parsedUrl = parse_url($frontendUrl);
-            $frontendUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
-        }
-        $frontendUrl = rtrim($frontendUrl, '/');
-        
-        $user->save();
-        
-        $passwordSetupUrl = $frontendUrl . "/set-password?token=$passwordSetupToken&id={$user->id}";
-        Notification::send($user, new VerifyEmailNotification($passwordSetupUrl));
+
         return response()->json([
             'status' => 'success',
-            'message' => 'Password reset link sent to email.'
+            'message' => 'If that email has an account, a password reset link has been sent to it.',
         ], 200);
     }
+
     public function __construct()
     {
         $this->middleware('auth:sanctum')->except(['createNewUser', 'login', 'setPasswordAfterVerification']);
@@ -438,12 +452,14 @@ class UserController extends Controller
      */
     public function createInternalUser(Request $request)
     {
+        $this->normalizeEmail($request);
         $validator = Validator::make($request->all(), [
             'email' => 'required|email|unique:users,email',
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'phone' => 'nullable|string|max:50',
             'role_id' => 'nullable|uuid|exists:roles,id',
+            'is_active' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -464,11 +480,20 @@ class UserController extends Controller
             ], 403);
         }
 
+        // Only one of this company's roles (or a shared one) can be given.
+        $roleId = $request->input('role_id');
+        if ($roleId && !Role::where('id', $roleId)->where(fn ($q) => $q->where('company_id', $companyId)->orWhereNull('company_id'))->exists()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => ['role_id' => ['That role does not belong to this company.']]
+            ], 400);
+        }
+
         // Explicit soft-delete aware email check (defense-in-depth).
         // The `unique:users,email` validator already counts soft-deleted rows via
         // the query builder, but this makes the intent explicit and provides a
         // clearer error when the DB unique constraint is the final guard.
-        if (User::withTrashed()->where('email', $request->input('email'))->exists()) {
+        if ($this->emailQuery($request->input('email'))->exists()) {
             return response()->json([
                 'status' => 'failed',
                 'message' => ['email' => ['This email is already taken, including by a deactivated or terminated account. Use a different email or restore the deleted account.']]
@@ -481,17 +506,10 @@ class UserController extends Controller
             $passwordSetupTokenExpires = now()->addHours(24);
 
             // Ensure booleans are cast as proper PostgreSQL-compatible values
-            $isActive = filter_var(true, FILTER_VALIDATE_BOOLEAN);
+            $isActive = $request->boolean('is_active', true);
             $emailVerified = filter_var(false, FILTER_VALIDATE_BOOLEAN);
 
-            // Detect frontend URL from the request
-            $frontendUrl = $request->header('Origin') ?? $request->header('Referer') ?? config('app.frontend_url', 'https://cherry360.africa');
-            // Clean the URL to get just the base
-            if (filter_var($frontendUrl, FILTER_VALIDATE_URL)) {
-                $parsedUrl = parse_url($frontendUrl);
-                $frontendUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
-            }
-            $frontendUrl = rtrim($frontendUrl, '/');
+            $frontendUrl = FrontendUrl::for($request);
 
             $user = User::create([
                 'id' => (string) Str::uuid(),
@@ -501,6 +519,7 @@ class UserController extends Controller
                 'first_name' => $request->input('first_name'),
                 'last_name' => $request->input('last_name'),
                 'phone' => $request->input('phone'),
+                'role_id' => $roleId,
                 'is_active' => $isActive,
                 'email_verified' => $emailVerified,
                 'password_setup_token' => $passwordSetupToken,
@@ -532,15 +551,17 @@ class UserController extends Controller
                     'message' => ['email' => ['This email is already taken, including by a deactivated or terminated account.']]
                 ], 400);
             }
+            Log::error('User creation failed', ['error' => $qe->getMessage()]);
             return response()->json([
                 'status' => 'failed',
-                'message' => 'User creation failed: ' . $qe->getMessage()
+                'message' => 'The user could not be created. Please try again.'
             ], 500);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('User creation failed', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',
-                'message' => 'User creation failed: ' . $e->getMessage()
+                'message' => 'The user could not be created because the email could not be sent. Please check the address and try again.'
             ], 500);
         }
     }
@@ -655,12 +676,15 @@ class UserController extends Controller
 
     public function createNewUser(Request $request)
     {
+        $this->normalizeEmail($request);
         $validator = Validator::make($request->all(), [
             'email' => 'required|email|unique:users,email',
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'phone' => 'required|string|max:50',
             'company_name' => 'required|string|max:255|unique:companies,name',
+            'company_email' => 'nullable|email|max:255',
+            'company_phone' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -671,7 +695,7 @@ class UserController extends Controller
         }
 
         // Explicit withTrashed check before creating company (avoid orphan company on duplicate)
-        if (User::withTrashed()->where('email', $request->input('email'))->exists()) {
+        if ($this->emailQuery($request->input('email'))->exists()) {
             return response()->json([
                 'status' => 'failed',
                 'message' => ['email' => ['This email is already taken, including by a deactivated or terminated account. Use a different email or restore the deleted account.']]
@@ -684,6 +708,8 @@ class UserController extends Controller
             $company = Company::create([
                 'id' => (string) Str::uuid(),
                 'name' => $request->input('company_name'),
+                'email' => $request->input('company_email') ?: $request->input('email'),
+                'phone' => $request->input('company_phone') ?: $request->input('phone'),
                 'is_active' => true,
             ]);
 
@@ -696,14 +722,7 @@ class UserController extends Controller
             $isActive = filter_var(true, FILTER_VALIDATE_BOOLEAN);
             $emailVerified = filter_var(false, FILTER_VALIDATE_BOOLEAN);
 
-            // Detect frontend URL from the request
-            $frontendUrl = $request->header('Origin') ?? $request->header('Referer') ?? config('app.frontend_url', 'https://cherry360.africa');
-            // Clean the URL to get just the base
-            if (filter_var($frontendUrl, FILTER_VALIDATE_URL)) {
-                $parsedUrl = parse_url($frontendUrl);
-                $frontendUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
-            }
-            $frontendUrl = rtrim($frontendUrl, '/');
+            $frontendUrl = FrontendUrl::for($request);
 
             // Create user with company_id, no password yet
             $user = User::create([
@@ -746,15 +765,17 @@ class UserController extends Controller
                     'message' => ['email' => ['This email is already taken, including by a deactivated or terminated account.']]
                 ], 400);
             }
+            Log::error('Registration failed', ['error' => $qe->getMessage()]);
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Registration failed: ' . $qe->getMessage()
+                'message' => 'Your account could not be created. Please try again.'
             ], 500);
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Registration failed', ['error' => $e->getMessage()]);
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Registration failed: ' . $e->getMessage()
+                'message' => 'Your account could not be created because the email could not be sent. Please check the address and try again.'
             ], 500);
         }
     }
@@ -774,7 +795,7 @@ class UserController extends Controller
         }
 
         // Include trashed check for terminated accounts
-        $user = User::withTrashed()->where('email', $request->input('email'))->first();
+        $user = $this->emailQuery($request->input('email'))->first();
 
         if (!$user) {
             return response()->json([
@@ -795,7 +816,7 @@ class UserController extends Controller
         if (empty($user->password) || is_null($user->password)) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Please set your password using the link sent to your email before logging in.',
+                'message' => 'Please set your password using the link sent to your email before logging in. If it has expired, use Forgot password to get a new one.',
             ], 403);
         }
 
@@ -816,7 +837,7 @@ class UserController extends Controller
         if (!$user->hasVerifiedEmail()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Please verify your email address.',
+                'message' => 'Please confirm your email address: use Forgot password to get a link.',
             ], 403);
         }
 
@@ -893,39 +914,35 @@ class UserController extends Controller
             ], 400);
         }
 
-        $user = User::find($userId);
-        if (!$user) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'User not found.',
-            ], 404);
-        }
+        $invalid = response()->json([
+            'status' => 'failed',
+            'message' => 'Invalid or expired token.',
+        ], 400);
 
-        // Validate the token and expiry
-        if (!$user->password_setup_token || $user->password_setup_token !== $request->token) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Invalid or expired token.',
-            ], 400);
+        $user = Str::isUuid($userId) ? User::find($userId) : null;
+        if (!$user || !$user->password_setup_token || !hash_equals($user->password_setup_token, (string) $request->input('token'))) {
+            return $invalid;
         }
         if ($user->password_setup_token_expires_at && now()->greaterThan($user->password_setup_token_expires_at)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Token has expired.',
-            ], 400);
+            return $invalid;
         }
-        // Optionally, check email_verified if required
-        if (!$user->email_verified) {
+        if (!$user->is_active) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Email not verified.',
+                'message' => 'Account is inactive. Please contact support.',
             ], 403);
         }
 
-        $user->password = Hash::make($request->password);
-        $user->password_setup_token = null;
-        $user->password_setup_token_expires_at = null;
-        $user->save();
+        // The link only reaches this person's mailbox, so using it also confirms the address.
+        $user->forceFill([
+            'password' => Hash::make($request->input('password')),
+            'password_setup_token' => null,
+            'password_setup_token_expires_at' => null,
+            'email_verified' => true,
+        ])->save();
+
+        // Anyone still logged in with the old password is signed out.
+        $user->tokens()->delete();
 
         return response()->json([
             'status' => 'success',
