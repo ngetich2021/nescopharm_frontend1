@@ -14,6 +14,8 @@ import { dispatchItemUnit, piecesPerPack } from "@/lib/price-codes"
 import { format } from "date-fns"
 import { Loader2 } from "lucide-react"
 import { ScanMeFooter } from "@/components/scan-me-footer"
+// Same Terms of Delivery line as the invoice.
+import { RETURN_POLICY_LINE } from "@/components/invoices/invoice-document"
 
 export interface DeliveryNoteLoaded {
   dispatch: OrderDispatch
@@ -201,7 +203,7 @@ export const DeliveryNoteDocument = forwardRef<HTMLDivElement, DeliveryNoteDocum
         <div className="border border-t-0 border-gray-300 px-1.5 py-0.5 text-xs leading-tight">
           <p className="text-[10px] text-gray-500">Terms of Delivery</p>
           <p className="font-bold text-gray-900 break-words">
-            Returns Shall Only Be Accepted Within 7 Days From Delivery Date
+            {RETURN_POLICY_LINE}
           </p>
         </div>
 
