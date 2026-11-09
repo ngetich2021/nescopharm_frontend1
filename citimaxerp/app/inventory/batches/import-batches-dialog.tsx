@@ -101,8 +101,9 @@ export function ImportBatchesDialog({ onImported }: { onImported: () => void }) 
           <DialogDescription>
             Upload the sheet from <b>Export All as Excel</b> after editing it, or any sheet whose first row has
             <b> Item Description</b> and <b>Batch Number</b>. Batches are linked to products by Item Description
-            (plus Size for sized products), and a batch already in the system is updated in place. Products must
-            exist already.
+            (plus Size for sized products). A row with the same Item Description, Batch Number and <b>Received Date</b> as
+            a batch in the system updates that batch; a different Received Date adds a new batch, so a new delivery
+            can reuse an old batch number. Products must exist already.
           </DialogDescription>
         </DialogHeader>
 

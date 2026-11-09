@@ -1314,9 +1314,36 @@ class ProductController extends Controller
 
         // Suppliers reuse batch numbers across different products, so a batch is only the same batch within one product/size.
         $batchKey = fn ($productId, $variantId, $batchNumber) => $productId . '|' . ($variantId ?? '') . '|' . $batchNumber;
-        $existingBatchNumbers = InventoryBatch::where('company_id', $companyId)
-            ->get(['id', 'product_id', 'variant_id', 'batch_number'])
-            ->mapWithKeys(fn ($b) => [$batchKey($b->product_id, $b->variant_id, $b->batch_number) => $b->id]);
+        // One product can hold several batches with the same number (a supplier repeats it on a
+        // later delivery). Each sheet row must land on its own batch, never all on one - that
+        // overwrote a new 2,750 delivery with the old sold-out row on 09/11/2026. So keep every
+        // batch per key, and give each row an unused one, preferring the same received date.
+        $existingBatches = InventoryBatch::where('company_id', $companyId)
+            ->orderBy('created_at')
+            ->get(['id', 'product_id', 'variant_id', 'batch_number', 'received_date', 'quantity_received', 'quantity_available', 'expiry_date'])
+            ->groupBy(fn ($b) => $batchKey($b->product_id, $b->variant_id, $b->batch_number));
+        $existingBatchNumbers = $existingBatches->map(fn ($group) => $group->first()->id);
+        $usedBatchIds = [];
+        // A row is the batch with the same Item Description, Batch Number and Received Date. With a
+        // received date that no batch of that number has, it is a new delivery: a new batch. Only a
+        // row with no received date falls back to the first unused batch with the number. When
+        // several share all three (one batch number delivered 10 times in a day), the row goes to
+        // the one it already matches best - same quantities, then same expiry - so re-uploading a
+        // sheet leaves every batch as it was instead of swapping quantities between them.
+        $takeBatch = function (string $key, ?string $receivedDate, array $row) use ($existingBatches, &$usedBatchIds) {
+            $free = ($existingBatches->get($key) ?? collect())->reject(fn ($b) => isset($usedBatchIds[$b->id]));
+            if ($receivedDate) {
+                $free = $free->filter(fn ($b) => optional($b->received_date)->toDateString() === $receivedDate);
+            }
+            $score = fn ($b) => ((int) $b->quantity_available === $row['available'] ? 4 : 0)
+                + ((int) $b->quantity_received === $row['received'] ? 2 : 0)
+                + ($row['expiry'] && optional($b->expiry_date)->toDateString() === $row['expiry'] ? 1 : 0);
+            $pick = $free->sortByDesc($score)->first();
+            if ($pick) {
+                $usedBatchIds[$pick->id] = true;
+            }
+            return $pick?->id;
+        };
 
         DB::beginTransaction();
         try {
@@ -1436,7 +1463,11 @@ class ProductController extends Controller
                     'notes' => $cell('notes') ?: null,
                 ];
 
-                $existingBatchId = $existingBatchNumbers->get($batchKey($product->id, $variant?->id, $batchNumber));
+                $existingBatchId = $takeBatch($batchKey($product->id, $variant?->id, $batchNumber), $date($cell('received_date')), [
+                    'available' => (int) round($qtyAvailable),
+                    'received' => (int) round($qtyReceived),
+                    'expiry' => $expiry,
+                ]);
                 if ($existingBatchId) {
                     $batch = InventoryBatch::find($existingBatchId);
                     // Only update the fields the user actually supplied so a
@@ -1479,6 +1510,8 @@ class ProductController extends Controller
                     if (!$dryRun) {
                         $batch->save();
                         $existingBatchNumbers->put($batchKey($product->id, $variant?->id, $batchNumber), $batch->id);
+                        // A second row with this number in the same sheet is another batch, not this one.
+                        $usedBatchIds[$batch->id] = true;
                         // Keep the product's rolled-up stock_quantity honest -
                         // it's the sum of its batches' quantity_available.
                         $target = $variant ?? $product;
