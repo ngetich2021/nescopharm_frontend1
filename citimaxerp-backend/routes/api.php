@@ -181,6 +181,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('employee-portal/daily-reports', [EmployeeSelfServiceController::class, 'dailyReportIndex']);
     Route::post('employee-portal/daily-reports', [EmployeeSelfServiceController::class, 'dailyReportStore']);
     Route::delete('employee-portal/daily-reports/{id}', [EmployeeSelfServiceController::class, 'dailyReportDestroy']);
+    Route::get('employee-portal/daily-report-draft', [EmployeeSelfServiceController::class, 'dailyReportDraftShow']);
+    Route::put('employee-portal/daily-report-draft', [EmployeeSelfServiceController::class, 'dailyReportDraftSave']);
+    Route::get('employee-portal/staff-activity', [EmployeeSelfServiceController::class, 'staffActivity']);
 
     // Time Entries
     Route::apiResource('time-entries', TimeEntryController::class);

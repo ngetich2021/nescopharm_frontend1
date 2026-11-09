@@ -191,7 +191,11 @@ class NotificationService
                 [$permission],
                 new SystemAlert('approval', "{$label} request from {$employeeName}", $summary, $url, ['type' => $pendingType, 'request_id' => $request->id]),
                 $request->created_by,
-                [$namedApproverId],
+                // Any Director may decide it, so all of them are told (never about their own request).
+                array_diff(
+                    array_merge([$namedApproverId], DailyReportRoutingService::directorIds($request->company_id)),
+                    [$employee?->user_id],
+                ),
             );
             return;
         }

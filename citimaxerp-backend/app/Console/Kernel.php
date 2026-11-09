@@ -22,6 +22,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('orders:purge-declined')->everyFiveMinutes()->withoutOverlapping();
         $schedule->command('customers:generate-statements')->monthlyOn(1, '01:00');
 
+        // Daily work reports close at 12 midnight (Nairobi): reminders at 8 PM and 10 PM to anyone
+        // who hasn't sent theirs, then at midnight whatever was written is forwarded.
+        $schedule->command('daily-reports:remind')->dailyAt('20:00')->timezone('Africa/Nairobi');
+        $schedule->command('daily-reports:remind')->dailyAt('22:00')->timezone('Africa/Nairobi');
+        $schedule->command('daily-reports:close')->dailyAt('00:00')->timezone('Africa/Nairobi')->withoutOverlapping();
+
         // Recover eTIMS invoices left locked by an interrupted worker.
         $schedule->job(new EtimsReaperJob())->everyFiveMinutes()->withoutOverlapping();
     }

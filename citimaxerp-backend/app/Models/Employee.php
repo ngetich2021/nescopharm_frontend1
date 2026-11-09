@@ -132,6 +132,11 @@ class Employee extends Model
     }
 
     // The login connected to this employee for the employee portal.
+    public function leaveRequests()
+    {
+        return $this->hasMany(LeaveRequest::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');

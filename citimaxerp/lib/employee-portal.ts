@@ -53,6 +53,41 @@ export async function deleteEmployeePortalDailyReport(id: string): Promise<void>
   await apiCall<any>(`/employee-portal/daily-reports/${id}`, "DELETE");
 }
 
+export type DailyReportDraft = {
+  report_date: string;
+  entries: DailyWorkReportEntry[];
+  key_achievements: string;
+  pending_work: string;
+  saved_at?: string;
+};
+
+/** The day's report as last saved on the server (forwarded as it stands at the 12 midnight close). */
+export async function getEmployeePortalDailyReportDraft(date: string): Promise<DailyReportDraft | null> {
+  const response = await apiCall<{ draft: DailyReportDraft | null }>(`/employee-portal/daily-report-draft?date=${encodeURIComponent(date)}`, "GET");
+  return response.draft || null;
+}
+
+export async function saveEmployeePortalDailyReportDraft(data: DailyReportDraft): Promise<void> {
+  await apiCall<any>("/employee-portal/daily-report-draft", "PUT", data);
+}
+
+export type StaffActivity = {
+  date: string;
+  daily_report_status: {
+    submitted: { employee: string; status: string; auto_submitted: boolean; submitted_at: string }[];
+    missing: { employee: string; has_draft: boolean }[];
+  };
+  daily_reports: DailyWorkReport[];
+  leave_requests: LeaveRequest[];
+  salary_advances: SalaryAdvanceRequest[];
+};
+
+/** Every employee's portal activity - GM and Directors only. */
+export async function getStaffActivity(date?: string): Promise<StaffActivity> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : "";
+  return apiCall<StaffActivity>(`/employee-portal/staff-activity${query}`, "GET");
+}
+
 export async function createEmployeePortalDailyReport(data: {
   report_date: string;
   designation?: string;

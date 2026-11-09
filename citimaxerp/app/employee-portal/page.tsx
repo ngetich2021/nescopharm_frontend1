@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { StaffActivityPanel } from "./StaffActivityPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,11 +19,13 @@ import {
   getEmployeePortalProfile,
   getEmployeePortalSalaryAdvances,
   getEmployeePortalDailyReports,
+  getEmployeePortalDailyReportDraft,
+  saveEmployeePortalDailyReportDraft,
 } from "@/lib/employee-portal";
 import { getLeaveRequests, approveLeaveRequest, updateLeaveRequest, balanceAfter, emptyLeaveForm, formatDuration, leavePayload, leaveTypeLabel, reasonCategoryLabel } from "@/lib/leave";
 import { LeaveFormFields } from "@/app/hr/leave-management/components/LeaveFormFields";
 import { getSalaryAdvances, approveSalaryAdvance, updateSalaryAdvance } from "@/lib/salary-advance";
-import { getDailyReports, approveDailyReport, rejectDailyReport, isSunday, getEntriesForDate, saveDraftReport, getDraftReport, clearDraftReport, isFormComplete, shouldAutoSubmit } from "@/lib/daily-reports";
+import { getDailyReports, approveDailyReport, rejectDailyReport, isSunday, getEntriesForDate, saveDraftReport, getDraftReport, clearDraftReport, isFormComplete } from "@/lib/daily-reports";
 import { useAuth } from "@/lib/auth-context";
 import type { Employee } from "@/lib/employees";
 import type { LeaveBalance, LeaveRequest } from "@/lib/leave";
@@ -59,11 +62,17 @@ function getStatusClass(status?: string | null) {
 export default function EmployeePortalPage() {
   const { toast } = useToast();
   const { hasPermission, user } = useAuth();
-  const canApproveLeave = hasPermission("can_approve_leave");
-  const canApproveSalary = hasPermission("can_approve_salary_changes");
-  // Only Directors approve staff daily reports (the permission alone no longer does).
-  const isDirector = user?.role?.name?.trim().toLowerCase() === 'director';
+  // Any Director decides leave, salary advances and daily reports (never their own).
+  const roleName = user?.role?.name?.trim().toLowerCase();
+  const isDirector = roleName === 'director';
+  const isGm = roleName === 'gm';
+  const canApproveLeave = hasPermission("can_approve_leave") || isDirector;
+  const canApproveSalary = hasPermission("can_approve_salary_changes") || isDirector;
   const canApproveDailyReports = isDirector;
+  const anyDirector = isDirector ? "Any other Director" : "Any Director";
+  const [activeTab, setActiveTab] = useState("leave");
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftLoaded = useRef(false);
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
@@ -154,9 +163,34 @@ export default function EmployeePortalPage() {
     }
   };
 
+  // Restores the day's report as last saved (on the server, or this browser if newer).
+  const loadDraftFor = async (date: string) => {
+    draftLoaded.current = false;
+    try {
+      const server = await getEmployeePortalDailyReportDraft(date);
+      const local = getDraftReport(date);
+      const pick = local && (!server?.saved_at || new Date(local.savedAt) > new Date(server.saved_at)) ? local : server;
+      if (pick) {
+        setDailyReportForm((prev) => prev.report_date === date ? {
+          report_date: date,
+          entries: pick.entries?.length ? pick.entries : prev.entries,
+          key_achievements: pick.key_achievements || "",
+          pending_work: pick.pending_work || "",
+        } : prev);
+      }
+    } catch {
+      // No profile / offline: the form simply starts empty.
+    } finally {
+      draftLoaded.current = true;
+    }
+  };
+
   useEffect(() => {
     loadData();
     loadPendingApprovals();
+    loadDraftFor(dailyReportForm.report_date);
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab) setActiveTab(tab);
   }, []);
 
   const handleApproveLeave = async (id: string) => {
@@ -245,30 +279,35 @@ export default function EmployeePortalPage() {
   };
 
   const handleDailyReportDateChange = (date: string) => {
-    setDailyReportForm((prev) => ({
-      ...prev,
+    setDailyReportForm({
       report_date: date,
       entries: getEntriesForDate(date).map((entry) => ({ ...entry })),
-    }));
-
-    // Load any existing draft for this date
-    const draft = getDraftReport(date);
-    if (draft) {
-      setDailyReportForm((prev) => ({
-        ...prev,
-        ...draft,
-        report_date: date,
-      }));
-    }
+      key_achievements: "",
+      pending_work: "",
+    });
+    loadDraftFor(date);
   };
 
-  const handleSaveDraft = () => {
+  const saveDraftToServer = (form: typeof dailyReportForm) =>
+    saveEmployeePortalDailyReportDraft({
+      report_date: form.report_date,
+      entries: form.entries,
+      key_achievements: form.key_achievements,
+      pending_work: form.pending_work,
+    });
+
+  const handleSaveDraft = async () => {
     if (!dailyReportForm.report_date) {
       toast({ title: "Error", description: "Please select a report date.", variant: "destructive" });
       return;
     }
     saveDraftReport(dailyReportForm.report_date, dailyReportForm);
-    toast({ title: "Draft saved", description: "Your progress has been saved." });
+    try {
+      await saveDraftToServer(dailyReportForm);
+      toast({ title: "Draft saved", description: "Saved. If you don't submit it, it is sent as it stands at 12 midnight." });
+    } catch (error: any) {
+      toast({ title: "Draft saved on this device only", description: error.message || "Could not reach the server.", variant: "destructive" });
+    }
   };
 
   const handleEditReport = (report: DailyWorkReport) => {
@@ -346,13 +385,8 @@ export default function EmployeePortalPage() {
       }
 
       clearDraftReport(dailyReportForm.report_date);
-      const today = new Date().toISOString().split('T')[0];
-      setDailyReportForm({
-        report_date: today,
-        entries: getEntriesForDate(today).map((entry) => ({ ...entry })),
-        key_achievements: "",
-        pending_work: "",
-      });
+      // Back to today, with whatever is already saved for it.
+      handleDailyReportDateChange(new Date().toISOString().split('T')[0]);
       loadData();
     } catch (error: any) {
       if (!isAutoSubmit) {
@@ -363,19 +397,18 @@ export default function EmployeePortalPage() {
     }
   };
 
-  // Auto-submit at 8:00 PM regardless of completion
+  // Saves what's typed to the server a moment after each change, so the 12 midnight close
+  // (run on the server) forwards it even if this page is closed.
   useEffect(() => {
-    if (!dailyReportForm.report_date || dailyReportForm.entries.length === 0) return;
-
-    const checkAndAutoSubmit = () => {
-      if (shouldAutoSubmit()) {
-        handleDailyReportSubmit(null as any, true);
-      }
-    };
-
-    const timer = setInterval(checkAndAutoSubmit, 60000); // Check every minute
-    return () => clearInterval(timer);
-  }, [dailyReportForm]);
+    if (!employee || !draftLoaded.current || !dailyReportForm.report_date || isSunday(dailyReportForm.report_date)) return;
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    const form = dailyReportForm;
+    draftTimer.current = setTimeout(() => {
+      saveDraftReport(form.report_date, form);
+      saveDraftToServer(form).catch(() => {});
+    }, 1500);
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
+  }, [dailyReportForm, employee]);
 
   const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -533,11 +566,15 @@ export default function EmployeePortalPage() {
         </Card>
       );
 
+  // The GM and the Directors see every employee's portal activity.
+  const staffActivityPanel = (isGm || isDirector) && <StaffActivityPanel />;
+
   if (!employee) {
     return (
       <div className="space-y-6">
         <div className="p-6 text-sm text-muted-foreground">No employee profile is linked to this login. HR links each login to its employee record.</div>
         {approvalsPanel}
+        {staffActivityPanel}
       </div>
     );
   }
@@ -595,6 +632,7 @@ export default function EmployeePortalPage() {
       </div>
 
       {approvalsPanel}
+      {staffActivityPanel}
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <Card className="shadow-sm">
@@ -631,22 +669,14 @@ export default function EmployeePortalPage() {
                 <CalendarDays className="h-4 w-4 text-emerald-700" />
                 <p className="text-sm font-semibold">Leave Approver</p>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {employee.leave_approver
-                  ? `${employee.leave_approver.first_name} ${employee.leave_approver.last_name}`.trim()
-                  : "No leave approver has been assigned yet."}
-              </p>
+              <p className="mt-2 text-sm text-muted-foreground">{anyDirector}</p>
             </div>
             <div className="rounded-2xl border p-4">
               <div className="flex items-center gap-2">
                 <Briefcase className="h-4 w-4 text-emerald-700" />
                 <p className="text-sm font-semibold">Salary Advance Approver</p>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {employee.salary_advance_approver
-                  ? `${employee.salary_advance_approver.first_name} ${employee.salary_advance_approver.last_name}`.trim()
-                  : "No salary advance approver has been assigned yet."}
-              </p>
+              <p className="mt-2 text-sm text-muted-foreground">{anyDirector}</p>
             </div>
             <div className="rounded-2xl border p-4">
               <div className="flex items-center gap-2">
@@ -654,14 +684,14 @@ export default function EmployeePortalPage() {
                 <p className="text-sm font-semibold">Daily Report Approver</p>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Sent to the Directors for approval.
+                {isDirector ? "Self-certified (you are a Director)" : "Any Director"} · closes at 12 midnight
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="leave" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="leave">Leave</TabsTrigger>
           <TabsTrigger value="salary">Salary Advance</TabsTrigger>
@@ -828,7 +858,7 @@ export default function EmployeePortalPage() {
 
                 <div className="space-y-2">
                   <Label>Work / Activity Log</Label>
-                  <p className="text-xs text-muted-foreground">You can save your progress and submit later. The form will auto-submit at 8:00 PM daily (except Sundays).</p>
+                  <p className="text-xs text-muted-foreground">Your writing is saved as you type. Reports close at 12 midnight: anything not submitted by then is sent to the Directors as it stands (Sundays need no report).</p>
                   <div className="space-y-4">
                     {dailyReportForm.entries.map((entry, index) => (
                       <div key={index} className="space-y-2 rounded-xl border p-4">
@@ -911,7 +941,8 @@ export default function EmployeePortalPage() {
                         <div className="flex-1 space-y-1">
                           <p className="text-sm font-semibold">{report.reportDate}</p>
                           <p className="text-xs text-muted-foreground">
-                            {report.approverRole ? `Approver: ${report.approverRole}` : "Self-certified"}
+                            {report.approverRole ? `Approver: Any ${report.approverRole}` : "Self-certified"}
+                            {report.autoSubmitted ? " · sent at midnight" : ""}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">

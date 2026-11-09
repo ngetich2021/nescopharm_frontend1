@@ -193,6 +193,8 @@ class DailyWorkReportController extends Controller
             'pendingWork' => $r->pending_work,
             'remarks' => $r->remarks,
             'status' => $r->status,
+            // Sent by the 12 midnight close rather than by the employee.
+            'autoSubmitted' => (bool) $r->auto_generated,
             'approverRole' => $r->approver_role,
             // Whether the signed-in user may approve/reject it (Directors only).
             'canAct' => $r->status === 'pending' && self::userCanAct(auth()->user(), $r),

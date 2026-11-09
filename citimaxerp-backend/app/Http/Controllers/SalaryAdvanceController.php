@@ -30,7 +30,9 @@ class SalaryAdvanceController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $canViewAll = $this->hasPermission($request, 'can_view_salary_advance_menu', $user->company_id);
+        // Directors approve any employee's salary advance, so they see every request.
+        $canViewAll = $this->hasPermission($request, 'can_view_salary_advance_menu', $user->company_id)
+            || \App\Services\DailyReportRoutingService::isDirector($user);
         $canManageCompany = $this->hasPermission($request, 'can_manage_company', $user->company_id);
 
         if (!$canViewAll && !$canManageCompany) {
@@ -134,7 +136,10 @@ class SalaryAdvanceController extends Controller
         if (!$advance) {
             return response()->json(['status' => 'failed', 'message' => 'Salary advance not found.'], 404);
         }
-        if (!$this->hasPermission($request, 'can_view_salary_advance_menu', $advance->company_id)) {
+        // A Director without HR menu access may still decide (approve/reject) the request.
+        $directorDecisionOnly = array_keys($request->all()) === ['status']
+            && \App\Services\DailyReportRoutingService::directorCanDecide($request->user(), $advance->employee);
+        if (!$directorDecisionOnly && !$this->hasPermission($request, 'can_view_salary_advance_menu', $advance->company_id)) {
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
         }
 
@@ -158,7 +163,8 @@ class SalaryAdvanceController extends Controller
         // with menu access to this generic edit endpoint.
         if ($request->filled('status') && in_array($request->input('status'), ['approved', 'rejected']) && $request->input('status') !== $advance->status) {
             $advance->loadMissing('employee');
-            $isAssignedApprover = optional($advance->employee)->salary_advance_approver_id === $request->user()->id;
+            $isAssignedApprover = optional($advance->employee)->salary_advance_approver_id === $request->user()->id
+                || \App\Services\DailyReportRoutingService::directorCanDecide($request->user(), $advance->employee);
             if (!$this->hasPermission($request, 'can_approve_salary_changes', $advance->company_id) && !$isAssignedApprover) {
                 return response()->json(['status' => 'failed', 'message' => 'Unauthorized to approve or reject this salary advance.'], 403);
             }
@@ -201,7 +207,8 @@ class SalaryAdvanceController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Salary advance not found.'], 404);
         }
         $advance->loadMissing('employee');
-        $isAssignedApprover = optional($advance->employee)->salary_advance_approver_id === $request->user()->id;
+        $isAssignedApprover = optional($advance->employee)->salary_advance_approver_id === $request->user()->id
+            || \App\Services\DailyReportRoutingService::directorCanDecide($request->user(), $advance->employee);
 
         if (!$this->hasPermission($request, 'can_approve_salary_changes', $advance->company_id) && !$isAssignedApprover) {
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);

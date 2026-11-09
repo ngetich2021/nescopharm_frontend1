@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Services\DailyReportRoutingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -30,7 +31,9 @@ class LeaveController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $canViewAll = $this->hasPermission($request, 'can_view_leave_management_menu', $user->company_id);
+        // Directors approve any employee's leave, so they see every request.
+        $canViewAll = $this->hasPermission($request, 'can_view_leave_management_menu', $user->company_id)
+            || DailyReportRoutingService::isDirector($user);
         $canManageCompany = $this->hasPermission($request, 'can_manage_company', $user->company_id);
 
         if (!$canViewAll && !$canManageCompany) {
@@ -129,7 +132,10 @@ class LeaveController extends Controller
         if (!$leaveRequest) {
             return response()->json(['status' => 'failed', 'message' => 'Leave request not found.'], 404);
         }
-        if (!$this->hasPermission($request, 'can_view_leave_management_menu', $leaveRequest->company_id)) {
+        // A Director without HR menu access may still decide (approve/reject) the request.
+        $directorDecisionOnly = array_keys($request->all()) === ['status']
+            && DailyReportRoutingService::directorCanDecide($request->user(), $leaveRequest->employee);
+        if (!$directorDecisionOnly && !$this->hasPermission($request, 'can_view_leave_management_menu', $leaveRequest->company_id)) {
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
         }
 
@@ -165,7 +171,8 @@ class LeaveController extends Controller
         // bypassing the stricter dedicated approve() endpoint below entirely.
         if ($request->filled('status') && in_array($request->input('status'), ['approved', 'rejected']) && $request->input('status') !== $leaveRequest->status) {
             $leaveRequest->loadMissing('employee');
-            $isAssignedApprover = optional($leaveRequest->employee)->leave_approver_id === $request->user()->id;
+            $isAssignedApprover = optional($leaveRequest->employee)->leave_approver_id === $request->user()->id
+                || DailyReportRoutingService::directorCanDecide($request->user(), $leaveRequest->employee);
             if (!$this->hasPermission($request, 'can_approve_leave', $leaveRequest->company_id) && !$isAssignedApprover) {
                 return response()->json(['status' => 'failed', 'message' => 'Unauthorized to approve or reject this leave request.'], 403);
             }
@@ -213,7 +220,8 @@ class LeaveController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Leave request not found.'], 404);
         }
         $leaveRequest->loadMissing('employee');
-        $isAssignedApprover = optional($leaveRequest->employee)->leave_approver_id === $request->user()->id;
+        $isAssignedApprover = optional($leaveRequest->employee)->leave_approver_id === $request->user()->id
+            || DailyReportRoutingService::directorCanDecide($request->user(), $leaveRequest->employee);
 
         if (!$this->hasPermission($request, 'can_approve_leave', $leaveRequest->company_id) && !$isAssignedApprover) {
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyWorkReport;
+use App\Models\DailyWorkReportDraft;
+use App\Services\DailyReportRoutingService;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\SalaryAdvance;
@@ -207,31 +209,10 @@ class EmployeeSelfServiceController extends Controller
             ], 422);
         }
 
-        // Routing is based on the employee the report is for
-        $routing = \App\Services\DailyReportRoutingService::resolveApprover($employee, $user);
-
-        // Get designation from request, employee position, or user's role
-        $designation = $request->input('designation') ?: $employee->position ?: ($user->role?->name ?? null);
-
-        $report = DailyWorkReport::create([
-            'company_id' => $employee->company_id,
-            'employee_id' => $employee->id,
-            'report_date' => $request->report_date,
-            'designation' => $designation,
-            'department' => $request->input('department') ?: $employee->department,
-            'entries' => $request->input('entries', []),
-            'key_achievements' => $request->input('key_achievements'),
-            'pending_work' => $request->input('pending_work'),
-            'status' => $routing['auto_approve'] ? 'approved' : 'pending',
-            'approver_role' => $routing['role'],
-            'approver_id' => $routing['user_id'],
-            'approved_by' => $routing['auto_approve'] ? $user->id : null,
-            'approved_at' => $routing['auto_approve'] ? now() : null,
-            'created_by' => $user->id,
-        ]);
+        $report = DailyWorkReport::submitFor($employee, $user, $request->only(['report_date', 'designation', 'department', 'entries', 'key_achievements', 'pending_work']));
         $report->load('approver', 'approvedBy');
 
-        $routingMessage = $routing['auto_approve']
+        $routingMessage = $report->approver_role === null
             ? 'Your report has been self-certified as you are a Director.'
             : 'Sent to the Directors for approval.';
 
@@ -266,6 +247,112 @@ class EmployeeSelfServiceController extends Controller
             'status' => 'success',
             'message' => 'Daily work report deleted successfully.',
         ], 200);
+    }
+
+    /** The signed-in employee's server draft for ?date= (null when none). */
+    public function dailyReportDraftShow(Request $request)
+    {
+        $employee = $this->resolveEmployee($request);
+        if (!$employee) {
+            return response()->json(['status' => 'failed', 'message' => 'No employee profile is linked to this login.'], 404);
+        }
+        $request->validate(['date' => 'required|date']);
+
+        $draft = DailyWorkReportDraft::where('employee_id', $employee->id)->whereDate('report_date', $request->input('date'))->first();
+
+        return response()->json([
+            'status' => 'success',
+            'draft' => $draft ? [
+                'report_date' => $draft->report_date->toDateString(),
+                'entries' => $draft->entries ?? [],
+                'key_achievements' => $draft->key_achievements ?? '',
+                'pending_work' => $draft->pending_work ?? '',
+                'saved_at' => $draft->updated_at,
+            ] : null,
+        ]);
+    }
+
+    /** Saves the report being written, so the midnight close can forward it if it is never submitted. */
+    public function dailyReportDraftSave(Request $request)
+    {
+        $employee = $this->resolveEmployee($request);
+        if (!$employee) {
+            return response()->json(['status' => 'failed', 'message' => 'No employee profile is linked to this login.'], 404);
+        }
+        $data = $request->validate([
+            'report_date' => 'required|date',
+            'entries' => 'nullable|array',
+            'entries.*.time' => 'nullable|string',
+            'entries.*.activity' => 'nullable|string',
+            'key_achievements' => 'nullable|string',
+            'pending_work' => 'nullable|string',
+        ]);
+
+        $submitted = DailyWorkReport::where('employee_id', $employee->id)->whereDate('report_date', $data['report_date'])->exists();
+        if ($submitted) {
+            return response()->json(['status' => 'success', 'message' => 'This day\'s report is already submitted.', 'saved' => false]);
+        }
+
+        $draft = DailyWorkReportDraft::firstOrNew(['employee_id' => $employee->id, 'report_date' => $data['report_date']]);
+        $draft->fill([
+            'company_id' => $employee->company_id,
+            'user_id' => $request->user()->id,
+            'entries' => $data['entries'] ?? [],
+            'key_achievements' => $data['key_achievements'] ?? null,
+            'pending_work' => $data['pending_work'] ?? null,
+        ]);
+        $draft->save();
+
+        return response()->json(['status' => 'success', 'saved' => true, 'saved_at' => $draft->updated_at]);
+    }
+
+    /**
+     * Everyone's portal activity, for the GM and the Directors: who has / hasn't sent the day's
+     * daily report, and the latest daily reports, leave requests and salary advances.
+     */
+    public function staffActivity(Request $request)
+    {
+        $user = $request->user()->load('role');
+        if (!DailyReportRoutingService::isGm($user) && !DailyReportRoutingService::isDirector($user)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM and the Directors see staff activity.'], 403);
+        }
+
+        $companyId = $user->company_id;
+        $date = $request->filled('date')
+            ? Carbon::parse($request->input('date'))->toDateString()
+            : now(DailyWorkReport::TIMEZONE)->toDateString();
+
+        $reportsThatDay = DailyWorkReport::where('company_id', $companyId)->whereDate('report_date', $date)->get()->keyBy('employee_id');
+        $drafts = DailyWorkReportDraft::where('company_id', $companyId)->whereDate('report_date', $date)->pluck('employee_id')->flip();
+        $name = fn ($e) => trim($e->first_name . ' ' . $e->last_name);
+
+        $expected = DailyWorkReport::expectedEmployees($companyId, $date);
+        $submitted = $reportsThatDay->map(fn ($r) => [
+            'employee' => $r->employee ? $name($r->employee) : '',
+            'status' => $r->status,
+            'auto_submitted' => (bool) $r->auto_generated,
+            'submitted_at' => $r->created_at,
+        ])->sortBy('employee')->values();
+        $missing = $expected->reject(fn ($e) => $reportsThatDay->has($e->id))
+            ->map(fn ($e) => ['employee' => $name($e), 'has_draft' => $drafts->has($e->id)])
+            ->values();
+
+        $reportController = new DailyWorkReportController();
+
+        return response()->json([
+            'status' => 'success',
+            'date' => $date,
+            'daily_report_status' => ['submitted' => $submitted, 'missing' => $missing],
+            'daily_reports' => DailyWorkReport::with(['employee', 'approver', 'approvedBy'])
+                ->where('company_id', $companyId)->orderByDesc('report_date')->orderByDesc('created_at')->limit(50)->get()
+                ->map(fn ($r) => $reportController->formatReport($r)),
+            'leave_requests' => LeaveRequest::with(['employee', 'approvedBy'])
+                ->where('company_id', $companyId)->latest()->limit(30)->get()
+                ->map(fn ($lr) => $lr->toApiArray()),
+            'salary_advances' => SalaryAdvance::with('employee')
+                ->where('company_id', $companyId)->latest()->limit(30)->get()
+                ->map(fn ($adv) => $this->formatAdvance($adv)),
+        ]);
     }
 
     private function resolveEmployee(Request $request): ?Employee

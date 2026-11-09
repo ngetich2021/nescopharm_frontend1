@@ -15,6 +15,40 @@ class DailyReportRoutingService
         return $role !== null && strcasecmp(trim($role), self::APPROVER_ROLE) === 0;
     }
 
+    public static function isDirector(?User $user): bool
+    {
+        return $user !== null && self::isApproverRole(optional($user->role)->name);
+    }
+
+    /** The General Manager sees every employee's portal activity (but approves only what their permissions allow). */
+    public static function isGm(?User $user): bool
+    {
+        $role = optional($user?->role)->name;
+        return $role !== null && strcasecmp(trim($role), 'GM') === 0;
+    }
+
+    /**
+     * Leave and salary advances go to any Director, like daily reports: any Director in the
+     * company may decide an employee's request, except their own (another Director does that).
+     */
+    public static function directorCanDecide(?User $user, ?Employee $employee): bool
+    {
+        return self::isDirector($user)
+            && $employee !== null
+            && $employee->company_id === $user->company_id
+            && $employee->user_id !== $user->id;
+    }
+
+    /** Active Directors' user ids, for notifying them of new requests. */
+    public static function directorIds(string $companyId): array
+    {
+        return User::where('company_id', $companyId)
+            ->whereRaw('is_active = true')
+            ->whereHas('role', fn ($q) => $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(self::APPROVER_ROLE)]))
+            ->pluck('id')
+            ->all();
+    }
+
     /**
      * Role-based routing for daily work reports (unlike leave/salary, which
      * use a fixed per-employee approver FK): every report, the GM's included,

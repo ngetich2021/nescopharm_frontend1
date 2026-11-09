@@ -17,6 +17,8 @@ export interface DailyWorkReport {
   pendingWork: string | null;
   remarks: string | null;
   status: string;
+  /** Sent by the 12 midnight close, as it stood, rather than by the employee. */
+  autoSubmitted?: boolean;
   approverRole: string | null;
   /** The signed-in user may approve/reject it: only Directors approve daily reports. */
   canAct?: boolean;
@@ -130,13 +132,5 @@ export function isFormComplete(entries: DailyWorkReportEntry[], keyAchievements:
   return hasAllEntries && hasAchievements && hasPendingWork;
 }
 
-export function shouldAutoSubmit(): boolean {
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-
-  // Don't auto-submit on Sundays
-  if (dayOfWeek === 0) return false;
-
-  // Auto-submit at 8:00 PM (20:00)
-  return now.getHours() >= 20;
-}
+// The 12 midnight close (forwarding unsent reports) runs on the server - see
+// daily-reports:close - so it happens whether or not anyone has the page open.
