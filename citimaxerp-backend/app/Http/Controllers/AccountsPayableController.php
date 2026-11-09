@@ -57,8 +57,10 @@ class AccountsPayableController extends Controller
         $kindSql = "coalesce(accounts_payable.metadata::jsonb->>'kind', 'bill')";
         $query = AccountsPayable::query()
             ->leftJoin('suppliers', 'suppliers.id', '=', 'accounts_payable.vendor_id')
+            ->leftJoin('users as recorder', 'recorder.id', '=', 'accounts_payable.created_by')
             ->where('accounts_payable.company_id', $user->company_id)
-            ->select('accounts_payable.*', 'suppliers.name as supplier_name');
+            ->select('accounts_payable.*', 'suppliers.name as supplier_name',
+                DB::raw("trim(coalesce(recorder.first_name, '') || ' ' || coalesce(recorder.last_name, '')) as recorded_by_name"));
 
         if ($request->filled('supplier_id')) {
             $query->where('accounts_payable.vendor_id', $request->input('supplier_id'));
@@ -119,6 +121,9 @@ class AccountsPayableController extends Controller
                 'supplier_invoice_number' => $b->vendor_invoice_number,
                 'supplier_id' => $b->vendor_id,
                 'supplier_name' => $b->supplier_name,
+                // Who recorded it, and when (an import is recorded under the person who ran it).
+                'recorded_by' => $b->recorded_by_name ?: null,
+                'recorded_at' => $b->created_at?->toDateTimeString(),
                 'invoice_date' => $b->invoice_date?->toDateString(),
                 'due_date' => $b->due_date?->toDateString(),
                 'description' => $b->description,

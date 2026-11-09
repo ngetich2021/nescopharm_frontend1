@@ -208,6 +208,8 @@ export interface SupplierBill {
     supplier_invoice_number: string | null;
     supplier_id: string;
     supplier_name: string | null;
+    recorded_by: string | null; // who entered it (an import: who ran it)
+    recorded_at: string | null;
     invoice_date: string | null;
     due_date: string | null;
     description: string | null;

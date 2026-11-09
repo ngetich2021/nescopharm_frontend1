@@ -260,9 +260,18 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                   <TableHead className="whitespace-nowrap">Date</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                  <TableHead>Paid By</TableHead>
+                  {fixedKind ? (
+                    <>
+                      <TableHead>From Receipt</TableHead>
+                      <TableHead>Recorded By</TableHead>
+                    </>
+                  ) : (
+                    <>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead>Paid By</TableHead>
+                    </>
+                  )}
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -277,11 +286,23 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                     <TableCell className="whitespace-nowrap">{shortDate(bill.invoice_date)}</TableCell>
                     <TableCell>{bill.supplier_name || "—"}</TableCell>
                     <TableCell className="text-right font-semibold whitespace-nowrap">{money(bill.total)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{bill.kind === "debit_note" ? "—" : money(bill.paid)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{bill.kind === "debit_note" ? "—" : money(bill.balance)}</TableCell>
-                    <TableCell className="max-w-[200px]">
-                      <span className="block truncate" title={paidByLabel(bill)}>{paidByLabel(bill) || "—"}</span>
-                    </TableCell>
+                    {fixedKind ? (
+                      <>
+                        <TableCell className="whitespace-nowrap">{bill.returns_receipt_number || <span className="text-muted-foreground">{bill.source?.startsWith("Tally") ? "Tally import" : "—"}</span>}</TableCell>
+                        <TableCell>
+                          {bill.recorded_by || "—"}
+                          {bill.recorded_at && <span className="block text-xs text-muted-foreground">{shortDate(bill.recorded_at)}</span>}
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell className="text-right whitespace-nowrap">{bill.kind === "debit_note" ? "—" : money(bill.paid)}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">{bill.kind === "debit_note" ? "—" : money(bill.balance)}</TableCell>
+                        <TableCell className="max-w-[200px]">
+                          <span className="block truncate" title={paidByLabel(bill)}>{paidByLabel(bill) || "—"}</span>
+                        </TableCell>
+                      </>
+                    )}
                     <TableCell>
                       <Badge className={STATUS[bill.status]?.className}>{STATUS[bill.status]?.label ?? bill.status}</Badge>
                     </TableCell>
@@ -333,6 +354,9 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                 )}
                 {viewing.description && (
                   <div className="col-span-2 sm:col-span-3"><Label className="text-xs text-muted-foreground">Description</Label><p>{viewing.description}</p></div>
+                )}
+                {viewing.recorded_by && (
+                  <div><Label className="text-xs text-muted-foreground">Recorded By</Label><p className="font-medium">{viewing.recorded_by}{viewing.recorded_at ? `, ${shortDate(viewing.recorded_at)}` : ""}</p></div>
                 )}
                 <div className="col-span-2 sm:col-span-3 text-xs text-muted-foreground">
                   {viewing.from_receipt
