@@ -132,7 +132,7 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
                     <TableHead>Batch</TableHead>
                     <TableHead className="text-right">Received</TableHead>
                     <TableHead className="text-right">Returned</TableHead>
-                    <TableHead className="text-right">In Stock</TableHead>
+                    <TableHead className="text-right">Left in Batch</TableHead>
                     <TableHead className="w-28">Return Qty</TableHead>
                     <TableHead className="text-right">Unit Cost</TableHead>
                     <TableHead className="text-right">Amount</TableHead>

@@ -414,7 +414,8 @@ export interface DebitNoteLine {
   received: number;
   returned: number;
   in_batch: number;
-  in_stock: number;
+  has_batch: boolean;
+  in_stock: number; // what of this receipt's batch is left (the item's stock when it came in without a batch)
   returnable: number;
   unit_price: number;
 }

@@ -67,8 +67,11 @@ class SupplierDebitNoteService
 
         return $items->values()->map(function (ProductReceiptItem $item, $i) use ($returned, $receipt) {
             $back = (int) ($returned[$item->id] ?? 0);
-            $inBatch = (int) $this->receiptBatches($receipt, $item)->sum('quantity_available');
-            $stock = (int) (($item->variant ?: $item->product)?->stock_quantity ?? 0);
+            $batches = $this->receiptBatches($receipt, $item);
+            $inBatch = (int) $batches->sum('quantity_available');
+            // Only this delivery's goods can go back: what is left in its batch. A line received
+            // without a batch falls back to the item's stock.
+            $stock = $batches->isNotEmpty() ? $inBatch : (int) (($item->variant ?: $item->product)?->stock_quantity ?? 0);
             return [
                 'receipt_item_id' => $item->id,
                 'product_id' => $item->product_id,
@@ -79,6 +82,7 @@ class SupplierDebitNoteService
                 'received' => (int) $item->quantity,
                 'returned' => $back,
                 'in_batch' => $inBatch,
+                'has_batch' => $batches->isNotEmpty(),
                 'in_stock' => $stock,
                 'returnable' => max(0, min((int) $item->quantity - $back, $stock)),
                 'unit_price' => round((float) $item->unit_price, 2),
@@ -112,7 +116,9 @@ class SupplierDebitNoteService
                 throw new \InvalidArgumentException("{$line['name']}: returning {$qty} but only {$left} of the {$line['received']} received are not yet returned.");
             }
             if ($qty > $line['in_stock']) {
-                throw new \InvalidArgumentException("{$line['name']}: only {$line['in_stock']} left in stock.");
+                throw new \InvalidArgumentException($line['has_batch']
+                    ? "{$line['name']}: only {$line['in_stock']} of batch {$line['batch_number']} from this receipt are left in stock (the rest are sold)."
+                    : "{$line['name']}: only {$line['in_stock']} left in stock.");
             }
         }
 
