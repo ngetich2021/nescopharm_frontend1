@@ -239,6 +239,7 @@ export interface SupplierBillsResponse {
 
 export async function getSupplierBills(params: {
     search?: string; kind?: string; status?: string; supplier_id?: string; page?: number; per_page?: number | "all";
+    returns_only?: 1; // only debit notes raised here for returned goods (SDEB/...)
 } = {}): Promise<SupplierBillsResponse> {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") qs.append(k, String(v)); });

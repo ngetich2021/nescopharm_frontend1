@@ -68,6 +68,11 @@ class AccountsPayableController extends Controller
         if (in_array($request->input('kind'), ['bill', 'debit_note'], true)) {
             $query->whereRaw("{$kindSql} = ?", [$request->input('kind')]);
         }
+        // Suppliers > Debit Notes: only those raised here for returned goods (SDEB/0001 on); ones brought
+        // across from Tally stay in the books and under Supplier Invoices > Debit notes.
+        if ($request->boolean('returns_only')) {
+            $query->whereRaw("coalesce(accounts_payable.metadata::jsonb->>'returns', '') = 'true'");
+        }
         $status = $request->input('status');
         if ($status === 'paid') {
             $query->where('accounts_payable.balance_amount', '<=', 0);

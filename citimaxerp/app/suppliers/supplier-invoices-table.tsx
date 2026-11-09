@@ -124,6 +124,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
     search: query || undefined,
     kind: kind === "all" ? undefined : kind,
     status: status === "all" ? undefined : status,
+    returns_only: fixedKind ? (1 as const) : undefined,
   });
 
   // Search as you type, a moment after the last key.
