@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { getDisbursedAllowances, type DisbursedAllowance } from "@/lib/employees"
+import { deleteOneTimeAllowance, getDisbursedAllowances, type DisbursedAllowance } from "@/lib/employees"
+import { OneTimeAllowanceButton } from "./one-time-allowance-dialog"
+import { displayDate } from "@/lib/date-format"
+import Link from "next/link"
+import { TrendingUp, Trash2 } from "lucide-react"
 import { documentFileName, sessionCompanyName } from "@/lib/document-names"
 
 type SortKey = "employee_number" | "employee_name" | "department" | "name" | "amount" | "is_taxable" | "updated_at"
@@ -76,6 +80,19 @@ export default function AllowancesPage() {
   const employeeCount = new Set(visible.map((r) => r.employee_id)).size
   const monthLabel = format(new Date(`${month}-01T00:00:00`), "MMMM yyyy")
 
+  const removeOneTime = async (r: DisbursedAllowance) => {
+    if (!window.confirm(`Remove ${r.name} of KES ${kes(r.amount)} for ${r.employee_name}?`)) return
+    try {
+      const res = await deleteOneTimeAllowance(r.id)
+      toast({ title: "Removed", description: res.message })
+      load()
+    } catch (e: any) {
+      toast({ title: "Not removed", description: e?.message, variant: "destructive" })
+    }
+  }
+
+  const typeLabel = (r: DisbursedAllowance) => (r.one_time ? `One-time ${r.date ? displayDate(new Date(r.date)) : ""}`.trim() : "Monthly")
+
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
     else {
@@ -88,8 +105,8 @@ export default function AllowancesPage() {
     fileName: documentFileName([sessionCompanyName(), `Disbursed Allowances ${month}`]),
     title: "Disbursed Allowances",
     subtitle: month,
-    headers: ["S/No", "Employee #", "Employee", "Department", "Position", "Allowance", "Amount (KES)", "Taxable", "Last Updated"],
-    moneyColumns: [6],
+    headers: ["S/No", "Employee #", "Employee", "Department", "Position", "Allowance", "Type", "Amount (KES)", "Taxable", "Last Updated"],
+    moneyColumns: [7],
     rows: visible.map((r, i) => [
       i + 1,
       r.employee_number ?? "",
@@ -97,11 +114,12 @@ export default function AllowancesPage() {
       r.department ?? "",
       r.position ?? "",
       r.name,
+      typeLabel(r),
       Number(r.amount) || 0,
       r.is_taxable ? "Yes" : "No",
       r.updated_at ? format(new Date(r.updated_at), "dd/MM/yyyy HH:mm") : "",
     ]),
-    footer: [["", "", "", "", "", "Total", total, "", ""]],
+    footer: [["", "", "", "", "", "", "Total", total, "", ""]],
   }))
 
   return (
@@ -110,10 +128,14 @@ export default function AllowancesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Allowances</h1>
           <p className="text-muted-foreground">
-            Allowances already paid out to employees outside payroll (marked &ldquo;Disbursed&rdquo; on the employee).
+            Allowances paid out to employees outside payroll: one-time ones added here, and monthly ones marked &ldquo;Disbursed&rdquo; on the employee.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <OneTimeAllowanceButton onSaved={load} />
+          <Button variant="outline" asChild>
+            <Link href="/reports/rep-roi"><TrendingUp className="mr-2 h-4 w-4" /> ROI for Reps</Link>
+          </Button>
           <Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="w-[170px]" aria-label="Month" />
           <Button variant="outline" onClick={load} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -185,21 +207,23 @@ export default function AllowancesPage() {
                       </button>
                     </TableHead>
                   ))}
+                  <TableHead>Type</TableHead>
+                  <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length + 1} className="py-10 text-center">
+                    <TableCell colSpan={COLUMNS.length + 3} className="py-10 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : visible.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length + 1} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={COLUMNS.length + 3} className="py-10 text-center text-muted-foreground">
                       {search
                         ? "No allowances match your search."
-                        : `No disbursed allowances for ${monthLabel}. Set an allowance's frequency to "Disbursed" on the employee to track it here.`}
+                        : `No allowances paid outside payroll for ${monthLabel}. Add one with "One-time Allowance", or set an allowance's frequency to "Disbursed" on the employee.`}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -222,6 +246,16 @@ export default function AllowancesPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {r.updated_at ? format(new Date(r.updated_at), "dd/MM/yyyy HH:mm") : "—"}
                       </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={r.one_time ? "border-blue-200 bg-blue-50 text-blue-700" : ""}>{typeLabel(r)}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.one_time && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => removeOneTime(r)} title="Remove">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -231,7 +265,7 @@ export default function AllowancesPage() {
                   <TableRow>
                     <TableCell colSpan={5} className="font-semibold">Total</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">{kes(total)}</TableCell>
-                    <TableCell colSpan={2} />
+                    <TableCell colSpan={4} />
                   </TableRow>
                 </TableFooter>
               )}

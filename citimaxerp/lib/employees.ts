@@ -323,7 +323,49 @@ export interface DisbursedAllowance {
   name: string;
   amount: number;
   is_taxable: boolean;
+  one_time?: boolean; // paid once, on `date` (added on HR > Allowances)
+  date?: string | null;
   updated_at: string | null;
+}
+
+/** An allowance paid once outside payroll; it counts in ROI for Reps on its date. */
+export async function createOneTimeAllowance(payload: {
+  employee_id: string; name: string; amount: number; date: string; is_taxable?: boolean;
+}): Promise<{ message: string }> {
+  return apiCall(`/employee-allowances/one-time`, 'POST', payload);
+}
+
+export async function deleteOneTimeAllowance(id: string): Promise<{ message: string }> {
+  return apiCall(`/employee-allowances/one-time/${id}`, 'DELETE');
+}
+
+export interface RepRoiRow {
+  rep_key: string;
+  name: string;
+  employee_number: string | null;
+  position: string | null;
+  linked: boolean;
+  period?: string;
+  period_start?: string;
+  period_end?: string;
+  allowance: number;
+  invoiced: number;
+  invoices: number;
+  roi: number | null; // KES invoiced per KES 1 of allowance
+}
+
+export interface RepRoiResponse {
+  date_from: string;
+  date_to: string;
+  group: "day" | "week" | "month";
+  reps: RepRoiRow[];
+  rows: RepRoiRow[];
+  totals: { allowance: number; invoiced: number; invoices: number; roi: number | null };
+}
+
+export async function getRepRoi(params: { date_from: string; date_to: string; group: "day" | "week" | "month" }): Promise<RepRoiResponse> {
+  const qs = new URLSearchParams(params as any).toString();
+  return apiCall<RepRoiResponse>(`/reports/rep-roi?${qs}`, 'GET');
 }
 
 export interface DisbursedAllowancesResponse {

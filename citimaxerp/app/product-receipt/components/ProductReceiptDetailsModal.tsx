@@ -18,7 +18,7 @@ import { getProductReceipt, productReceiptExport, ProductReceiptApiResponse } fr
 import { exportTable } from "@/lib/table-export";
 import { useAuth } from "@/lib/auth-context";
 import { ExportMenu } from "@/components/export-menu";
-import { Package, User, Store, FileText, Calendar, Hash, Eye, Edit, Download } from "lucide-react";
+import { Package, User, Store, FileText, Calendar, Hash, Eye, Edit, Download, Undo2 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { DocumentViewerModal } from "./DocumentViewerModal";
 
@@ -27,13 +27,15 @@ interface ProductReceiptDetailsModalProps {
   onOpenChange: (v: boolean) => void;
   receiptId: string | null;
   onEdit?: (receiptId: string) => void;
+  onDebitNote?: (receipt: { id: string; product_receipt_number?: string }) => void;
 }
 
-export function ProductReceiptDetailsModal({ 
-  open, 
-  onOpenChange, 
-  receiptId, 
-  onEdit 
+export function ProductReceiptDetailsModal({
+  open,
+  onOpenChange,
+  receiptId,
+  onEdit,
+  onDebitNote,
 }: ProductReceiptDetailsModalProps) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ProductReceiptApiResponse | null>(null);
@@ -423,6 +425,17 @@ export function ProductReceiptDetailsModal({
                     onExport={(format) => exportTable(format, productReceiptExport(receipt), userProfile?.company)}
                   />
                 </div>
+                <div className="flex gap-2">
+                {onDebitNote && (
+                  <Button
+                    variant="outline"
+                    className="border-[#E30040] text-[#E30040] hover:bg-[#E30040]/10"
+                    onClick={() => { onDebitNote({ id: receipt.id, product_receipt_number: receipt.product_receipt_number }); onOpenChange(false); }}
+                  >
+                    <Undo2 className="mr-2 h-4 w-4" />
+                    Debit Note
+                  </Button>
+                )}
                 {onEdit && (
                   <Button
                     onClick={handleEdit}
@@ -432,6 +445,7 @@ export function ProductReceiptDetailsModal({
                     Edit Receipt
                   </Button>
                 )}
+                </div>
               </div>
             </SheetFooter>
           )}

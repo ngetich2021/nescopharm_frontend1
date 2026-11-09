@@ -436,6 +436,17 @@ export async function getReceiptDebitNoteLines(receiptId: string): Promise<Recei
   return res.data;
 }
 
+export interface DebitableReceipt {
+  id: string; number: string; reference_number: string | null; date: string; supplier_name: string | null; items: number; goods: number;
+}
+
+/** A supplier's goods receipts, newest first, to pick the one goods go back from. */
+export async function getDebitableReceipts(supplierId?: string): Promise<DebitableReceipt[]> {
+  const qs = supplierId ? `?supplier_id=${encodeURIComponent(supplierId)}` : "";
+  const res = await apiCall<{ data: DebitableReceipt[] }>(`/whs/product-receipts/debitable${qs}`, "GET", undefined, true);
+  return res.data ?? [];
+}
+
 /** Send goods from a receipt back to the supplier (SDEB/0001): stock out, the supplier is debited. */
 export async function createReceiptDebitNote(receiptId: string, payload: {
   date: string;

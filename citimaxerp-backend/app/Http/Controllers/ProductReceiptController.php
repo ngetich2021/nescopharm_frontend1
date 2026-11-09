@@ -192,6 +192,36 @@ class ProductReceiptController extends Controller
             ->contains(fn ($p) => $this->hasPermission($request, $p, $companyId));
     }
 
+    /** A supplier's goods receipts, newest first, to pick the one goods are going back from (Suppliers > Debit Notes). */
+    public function debitableReceipts(Request $request)
+    {
+        $companyId = $request->user()->company_id;
+        if (!$this->canDebit($request, $companyId)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to raise debit notes.'], 403);
+        }
+        $rows = DB::table('product_receipts as r')
+            ->where('r.company_id', $companyId)
+            ->whereNotNull('r.supplier_id')
+            ->when($request->filled('supplier_id'), fn ($q) => $q->where('r.supplier_id', $request->input('supplier_id')))
+            ->leftJoin('suppliers as s', 's.id', '=', 'r.supplier_id')
+            ->select('r.id', 'r.product_receipt_number', 'r.reference_number', 'r.created_at', 's.name as supplier_name',
+                DB::raw('(SELECT COUNT(*) FROM product_receipt_items i WHERE i.product_receipt_id = r.id) as items'),
+                DB::raw('(SELECT COALESCE(SUM(COALESCE(i.quantity,0) * COALESCE(i.unit_price,0)),0) FROM product_receipt_items i WHERE i.product_receipt_id = r.id) as goods'))
+            ->orderByDesc('r.created_at')->limit(200)->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                // Shown as RCPT-0016, as the receipts list shows it.
+                'number' => (new ProductReceipt())->getProductReceiptNumberAttribute($r->product_receipt_number),
+                'reference_number' => $r->reference_number,
+                'date' => substr((string) $r->created_at, 0, 10),
+                'supplier_name' => $r->supplier_name,
+                'items' => (int) $r->items,
+                'goods' => round((float) $r->goods, 2),
+            ]);
+
+        return response()->json(['status' => 'success', 'data' => $rows]);
+    }
+
     /** The receipt's lines with what can still go back to the supplier, and the debit notes already raised on it. */
     public function debitNoteLines(Request $request, $id)
     {

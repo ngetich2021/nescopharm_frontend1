@@ -123,6 +123,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('employees/{id}/terminate', [EmployeeController::class, 'terminate']);
     Route::get('employees/{id}/linkable-users', [EmployeeController::class, 'linkableUsers']);
     Route::get('employee-allowances/disbursed', [\App\Http\Controllers\EmployeeAllowanceController::class, 'disbursed']);
+    Route::post('employee-allowances/one-time', [\App\Http\Controllers\EmployeeAllowanceController::class, 'storeOneTime']);
+    Route::delete('employee-allowances/one-time/{id}', [\App\Http\Controllers\EmployeeAllowanceController::class, 'destroyOneTime']);
+    Route::get('reports/rep-roi', [\App\Http\Controllers\EmployeeAllowanceController::class, 'repRoi']);
     Route::delete('employees/{id}', [EmployeeController::class, 'destroy']); // Delete employee
     Route::get('employment-types', [EmployeeController::class, 'getEmploymentTypes']); // Employment types
 
@@ -378,6 +381,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Product Receipt summary route (must be before resource route)
         Route::get('product-receipts/summary', [ProductReceiptController::class, 'getReceiptSummary'])->name('product-receipts.summary');
         Route::get('product-receipts/batch-summary', [ProductReceiptController::class, 'getBatchSummary'])->name('product-receipts.batch-summary');
+        Route::get('product-receipts/debitable', [ProductReceiptController::class, 'debitableReceipts']);
         Route::get('product-receipts/{id}/debit-note-lines', [ProductReceiptController::class, 'debitNoteLines']);
         Route::post('product-receipts/{id}/debit-notes', [ProductReceiptController::class, 'storeDebitNote']);
         Route::apiResource('product-receipts', ProductReceiptController::class);

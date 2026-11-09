@@ -2,7 +2,7 @@
 
 import { InvoiceTotals } from "@/components/invoices/invoice-totals"
 import { displayDate } from "@/lib/date-format"
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -56,13 +56,18 @@ const paidByLabel = (bill: SupplierBill) => bill.payments.map((p) => p.payment_n
  * What suppliers billed us (bills, e.g. PUR-131) and their debit notes, with what each payment put on
  * them. Bills are paid from Supplier Payments; this tab is where the invoices those payments pay are seen.
  */
-export function SupplierInvoicesTable() {
+export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
+  // "debit_note": the Debit Notes tab - only debit notes, no invoice filters or invoice buttons.
+  fixedKind?: "debit_note";
+  actions?: ReactNode; // shown in place of the invoice buttons
+  reloadKey?: number;
+} = {}) {
   const { toast } = useToast();
   const [bills, setBills] = useState<SupplierBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("bill");
+  const [kind, setKind] = useState<string>(fixedKind ?? "bill");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -143,7 +148,7 @@ export function SupplierInvoicesTable() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, kind, status, page, pageSize, reload]);
+  }, [query, kind, status, page, pageSize, reload, reloadKey]);
 
   // The import template's columns first (an exported sheet can be edited and imported back: a row
   // keeps its Invoice No. and updates that invoice), then what has been paid, which the import ignores.
@@ -203,29 +208,37 @@ export function SupplierInvoicesTable() {
                 />
               </div>
             </div>
-            <Select value={kind} onValueChange={setKind}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bill">Invoices</SelectItem>
-                <SelectItem value="debit_note">Debit notes</SelectItem>
-                <SelectItem value="all">Invoices + debit notes</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="unpaid">Unpaid</SelectItem>
-                <SelectItem value="part_paid">Part paid</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-              </SelectContent>
-            </Select>
+            {!fixedKind && (
+              <>
+                <Select value={kind} onValueChange={setKind}>
+                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bill">Invoices</SelectItem>
+                    <SelectItem value="debit_note">Debit notes</SelectItem>
+                    <SelectItem value="all">Invoices + debit notes</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                    <SelectItem value="part_paid">Part paid</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
             <ExportMenu onExport={exportList} disabled={bills.length === 0} />
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
-            <RecordSupplierInvoice onSaved={refresh} />
-            <SupplierInvoicesImport onImported={refresh} />
-            <ImportHistoryDialog kind="supplier_invoices" title="Supplier Invoice" />
+            {actions ?? (
+              <>
+                <RecordSupplierInvoice onSaved={refresh} />
+                <SupplierInvoicesImport onImported={refresh} />
+                <ImportHistoryDialog kind="supplier_invoices" title="Supplier Invoice" />
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -237,7 +250,7 @@ export function SupplierInvoicesTable() {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : bills.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-8">No supplier invoices{query || status !== "all" ? " match" : " yet"}.</p>
+            <p className="text-center text-sm text-muted-foreground py-8">{fixedKind ? "No debit notes" : "No supplier invoices"}{query || status !== "all" ? " match" : " yet"}.</p>
           ) : (
             <Table>
               <TableHeader>

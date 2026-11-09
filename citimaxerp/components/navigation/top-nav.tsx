@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Bell, Settings, LogOut, User, Loader2, FileText, ChevronDown, Package, ShoppingCart, Truck, ClipboardList, Users, CheckCheck, ClipboardCheck, CircleCheck, CircleX, Landmark, PackageX, HandCoins, Banknote } from "lucide-react" // Added icons
+import { Search, Bell, Settings, LogOut, User, Loader2, FileText, ChevronDown, Package, ShoppingCart, Truck, ClipboardList, Users, CheckCheck, ClipboardCheck, CircleCheck, CircleX, Landmark, PackageX, HandCoins, Banknote, TrendingUp } from "lucide-react" // Added icons
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -295,6 +295,12 @@ export function TopNav() {
                 <DropdownMenuItem onClick={() => router.push("/reports/sales")}>
                   <ShoppingCart className="mr-2 h-4 w-4" />
                   <span>Sales Reports</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission("can_view_reports_menu") && (
+                <DropdownMenuItem onClick={() => router.push("/reports/rep-roi")}>
+                  <TrendingUp className="mr-2 h-4 w-4" />
+                  <span>ROI for Reps</span>
                 </DropdownMenuItem>
               )}
               {(hasPermission("can_view_reports_menu") || hasPermission("can_view_logistics_reports")) && (

@@ -1,7 +1,8 @@
 "use client"
 import { Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Building2, Receipt, Truck } from "lucide-react"
+import { Building2, Receipt, Truck, Undo2 } from "lucide-react"
+import { SupplierDebitNotesTab } from "./supplier-debit-notes"
 import { SuppliersSummary } from "./suppliers-summary"
 import { SuppliersTable } from "./suppliers-table"
 import { SuppliersTableSkeleton } from "./suppliers-table-skeleton"
@@ -30,6 +31,7 @@ function SuppliersContent() {
     can(["can_view_suppliers_menu"]) && "suppliers",
     can(DELIVERY_INVOICE_PERMISSIONS) && "delivery-invoices",
     can(SUPPLIER_INVOICE_PERMISSIONS) && "supplier-invoices",
+    can(SUPPLIER_INVOICE_PERMISSIONS) && "debit-notes",
   ].filter(Boolean) as string[]
   const requested = searchParams.get("tab")
 
@@ -56,6 +58,12 @@ function SuppliersContent() {
             Supplier Invoices
           </TabsTrigger>
         )}
+        {tabs.includes("debit-notes") && (
+          <TabsTrigger value="debit-notes" className="flex items-center gap-2">
+            <Undo2 className="h-4 w-4" />
+            Debit Notes
+          </TabsTrigger>
+        )}
       </TabsList>
 
       {tabs.includes("suppliers") && (
@@ -74,6 +82,11 @@ function SuppliersContent() {
       {tabs.includes("supplier-invoices") && (
         <TabsContent value="supplier-invoices">
           <SupplierInvoicesTable />
+        </TabsContent>
+      )}
+      {tabs.includes("debit-notes") && (
+        <TabsContent value="debit-notes">
+          <SupplierDebitNotesTab />
         </TabsContent>
       )}
     </Tabs>

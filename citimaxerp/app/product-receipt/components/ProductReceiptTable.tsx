@@ -350,6 +350,7 @@ export default function ProductReceiptTable({
           if (!v) setSelectedId(null); 
         }} 
         receiptId={selectedId}
+        onDebitNote={(r) => setDebitReceipt(r)}
         onEdit={(receiptId: string) => {
           // Find the receipt object and call the edit handler
           const receipt = receipts.find(r => r.id === receiptId);
