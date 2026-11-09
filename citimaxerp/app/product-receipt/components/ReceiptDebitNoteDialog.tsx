@@ -87,7 +87,7 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Debit Note - Return to Supplier {info ? `(${info.next_number})` : ""}</DialogTitle>
           <DialogDescription>
@@ -133,7 +133,7 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
                     <TableHead className="text-right">Received</TableHead>
                     <TableHead className="text-right">Returned</TableHead>
                     <TableHead className="text-right">Left in Batch</TableHead>
-                    <TableHead className="w-28">Return Qty</TableHead>
+                    <TableHead className="min-w-[140px]">Return Qty</TableHead>
                     <TableHead className="text-right">Unit Cost</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
@@ -153,17 +153,21 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
                         <TableCell className="text-right">{l.received}</TableCell>
                         <TableCell className="text-right">{l.returned || "—"}</TableCell>
                         <TableCell className="text-right">{l.in_stock}</TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[140px]">
                           <Input
                             type="number"
+                            inputMode="numeric"
                             min={0}
                             max={l.returnable}
                             value={qty[l.receipt_item_id] ?? ""}
                             disabled={l.returnable <= 0 || !info.supplier_id}
                             onChange={(e) => setQty((p) => ({ ...p, [l.receipt_item_id]: e.target.value }))}
-                            className={over ? "border-red-500" : ""}
-                            placeholder={l.returnable > 0 ? `max ${l.returnable}` : "none"}
+                            className={`w-[130px] text-right text-base font-semibold text-foreground tabular-nums ${over ? "border-red-500 focus-visible:ring-red-500" : "border-gray-400"}`}
+                            placeholder="0"
                           />
+                          <span className={`block mt-1 text-xs ${over ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
+                            {l.returnable > 0 ? `max ${l.returnable.toLocaleString()}` : "nothing to return"}
+                          </span>
                         </TableCell>
                         <TableCell className="text-right whitespace-nowrap">{money(l.unit_price)}</TableCell>
                         <TableCell className="text-right whitespace-nowrap">{q > 0 ? money(q * l.unit_price) : "—"}</TableCell>
@@ -175,10 +179,10 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
             </div>
 
             <div className="flex justify-end">
-              <div className="w-64 space-y-1 text-sm">
-                <div className="flex justify-between"><span>Goods</span><span>{money(goods)}</span></div>
-                {info.vat_rate > 0 && <div className="flex justify-between"><span>VAT ({info.vat_rate}%)</span><span>{money(vat)}</span></div>}
-                <div className="flex justify-between font-bold border-t pt-1"><span>Debit {info.supplier_name || "supplier"}</span><span>{money(total)}</span></div>
+              <div className="w-full max-w-md space-y-1 text-sm">
+                <div className="flex justify-between gap-4"><span>Goods</span><span className="whitespace-nowrap tabular-nums">{money(goods)}</span></div>
+                {info.vat_rate > 0 && <div className="flex justify-between gap-4"><span>VAT ({info.vat_rate}%)</span><span className="whitespace-nowrap tabular-nums">{money(vat)}</span></div>}
+                <div className="flex justify-between gap-4 font-bold border-t pt-1"><span>Debit {info.supplier_name || "supplier"}</span><span className="whitespace-nowrap tabular-nums">{money(total)}</span></div>
               </div>
             </div>
 
@@ -186,7 +190,13 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
               <Label htmlFor="dn_reason">Reason</Label>
               <Textarea id="dn_reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Damaged, expired, wrong item, short-dated..." rows={2} />
             </div>
-            {tooMany && <p className="text-sm text-red-600">A quantity is more than can go back on that line.</p>}
+            {tooMany && (
+              <p className="text-sm text-red-600">
+                {lines.filter((l) => (Number(qty[l.receipt_item_id]) || 0) > l.returnable)
+                  .map((l) => `${l.name}: ${Number(qty[l.receipt_item_id]).toLocaleString()} entered, max ${l.returnable.toLocaleString()}`)
+                  .join("; ")}
+              </p>
+            )}
           </div>
         )}
 
