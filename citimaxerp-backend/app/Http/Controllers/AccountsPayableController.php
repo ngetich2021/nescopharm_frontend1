@@ -131,6 +131,12 @@ class AccountsPayableController extends Controller
                 'from_receipt' => ($meta['ledger'] ?? null) === 'receipt',
                 'tax_amount' => round((float) $b->tax_amount, 2),
                 'account_code' => $meta['debit_account_code'] ?? null,
+                // A debit note for goods sent back from a receipt: its item lines and the receipt.
+                'lines' => !empty($meta['returns']) ? array_values($b->line_items ?? []) : [],
+                'returns_receipt_number' => $meta['returns_receipt_number'] ?? null,
+                'reason' => $meta['reason'] ?? null,
+                // On a bill: what debit notes for returned goods took off it.
+                'debited' => round((float) ($meta['debited'] ?? 0), 2),
                 'payments' => ($payments->get($b->id) ?? collect())->map(fn ($p) => [
                     'id' => $p->id,
                     'payment_number' => $p->payment_number,
@@ -322,6 +328,12 @@ class AccountsPayableController extends Controller
         if ((float) $bill->paid_amount > 0.005
             || \App\Models\SupplierPaymentAllocation::where('invoice_type', 'bill')->where('invoice_id', $bill->id)->exists()) {
             return response()->json(['message' => "{$bill->invoice_number} has payments on it and cannot be deleted."], 422);
+        }
+
+        // A debit note for returned goods puts the stock back and the receipt's invoice is owed again.
+        if (!empty($bill->metadata['returns'])) {
+            app(\App\Services\SupplierDebitNoteService::class)->delete($bill);
+            return response()->json(['status' => 'success', 'message' => "Debit note {$bill->invoice_number} deleted: its stock is back and the supplier is owed again."]);
         }
 
         // Its journal entry is removed by LedgerSyncObserver.

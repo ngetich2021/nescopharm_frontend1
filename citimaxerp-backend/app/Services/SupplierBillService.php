@@ -73,7 +73,7 @@ class SupplierBillService
         if ($bill) {
             $bill->fill($fields);
             if ($bill->isDirty()) {
-                $bill->balance_amount = round($total - (float) $bill->paid_amount, 2);
+                $bill->balance_amount = round(max(0, $total - (float) $bill->paid_amount - (float) ($bill->metadata['debited'] ?? 0)), 2);
                 $bill->save();
             }
             return $bill;

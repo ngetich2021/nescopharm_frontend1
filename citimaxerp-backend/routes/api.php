@@ -378,6 +378,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // Product Receipt summary route (must be before resource route)
         Route::get('product-receipts/summary', [ProductReceiptController::class, 'getReceiptSummary'])->name('product-receipts.summary');
         Route::get('product-receipts/batch-summary', [ProductReceiptController::class, 'getBatchSummary'])->name('product-receipts.batch-summary');
+        Route::get('product-receipts/{id}/debit-note-lines', [ProductReceiptController::class, 'debitNoteLines']);
+        Route::post('product-receipts/{id}/debit-notes', [ProductReceiptController::class, 'storeDebitNote']);
         Route::apiResource('product-receipts', ProductReceiptController::class);
 
         // Breakage routes

@@ -185,6 +185,83 @@ class ProductReceiptController extends Controller
         ], 200);
     }
 
+    /** Who may send goods back to a supplier on a debit note. */
+    private function canDebit(Request $request, string $companyId): bool
+    {
+        return collect(['can_create_product_receipts', 'can_update_product_receipts', 'can_create_payments', 'can_create_accounts'])
+            ->contains(fn ($p) => $this->hasPermission($request, $p, $companyId));
+    }
+
+    /** The receipt's lines with what can still go back to the supplier, and the debit notes already raised on it. */
+    public function debitNoteLines(Request $request, $id)
+    {
+        $receipt = ProductReceipt::where('company_id', $request->user()->company_id)->find($id);
+        if (!$receipt) {
+            return response()->json(['status' => 'failed', 'message' => 'Receipt not found.'], 404);
+        }
+        if (!$this->canDebit($request, $receipt->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to raise debit notes.'], 403);
+        }
+        $service = app(\App\Services\SupplierDebitNoteService::class);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'receipt_number' => $receipt->product_receipt_number,
+                'reference_number' => $receipt->reference_number,
+                'supplier_id' => $receipt->supplier_id,
+                'supplier_name' => $receipt->supplier_id ? Supplier::whereKey($receipt->supplier_id)->value('name') : null,
+                'vat_rate' => $receipt->purchase_order_id ? (float) (\App\Models\PurchaseOrder::whereKey($receipt->purchase_order_id)->value('tax_rate') ?? 0) : 0.0,
+                'next_number' => $service->nextNumber($receipt->company_id),
+                'lines' => $service->returnableLines($receipt),
+                'debit_notes' => \App\Services\SupplierDebitNoteService::forReceipt($receipt->id)->orderBy('created_at')
+                    ->get(['id', 'invoice_number', 'invoice_date', 'total_amount'])
+                    ->map(fn ($n) => ['id' => $n->id, 'number' => $n->invoice_number, 'date' => $n->invoice_date?->toDateString(), 'total' => round((float) $n->total_amount, 2)]),
+            ],
+        ]);
+    }
+
+    /**
+     * Send goods from this receipt back to the supplier: a debit note (SDEB/0001) that takes the stock
+     * out of the receipt's batches, lowers what is owed on the receipt's supplier invoice and posts
+     * DR Payables / CR Inventory. Body: date, reason, supplier_reference, items[{receipt_item_id, quantity}].
+     */
+    public function storeDebitNote(Request $request, $id)
+    {
+        $receipt = ProductReceipt::where('company_id', $request->user()->company_id)->find($id);
+        if (!$receipt) {
+            return response()->json(['status' => 'failed', 'message' => 'Receipt not found.'], 404);
+        }
+        if (!$this->canDebit($request, $receipt->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to raise debit notes.'], 403);
+        }
+        $validator = Validator::make($request->all(), [
+            'date' => 'required|date',
+            'reason' => 'required|string|max:1000',
+            'supplier_reference' => 'nullable|string|max:255',
+            'items' => 'required|array|min:1',
+            'items.*.receipt_item_id' => 'required|string',
+            'items.*.quantity' => 'required|integer|min:0',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()->first()], 422);
+        }
+
+        try {
+            $note = app(\App\Services\SupplierDebitNoteService::class)->create(
+                $receipt, $request->input('items'), $request->only(['date', 'reason', 'supplier_reference']), $request->user()->id
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['status' => 'failed', 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Debit note {$note->invoice_number} raised: stock taken out and " . number_format((float) $note->total_amount, 2) . ' taken off what is owed to the supplier.',
+            'data' => ['id' => $note->id, 'invoice_number' => $note->invoice_number, 'total' => round((float) $note->total_amount, 2)],
+        ], 201);
+    }
+
     /**
      * Update a product receipt (only editable fields).
      */
@@ -208,6 +285,10 @@ class ProductReceiptController extends Controller
         }
 
         $data = $request->all();
+        // Its lines are what debit notes returned goods against; they stay as they are while one exists.
+        if (isset($data['items']) && ($dn = \App\Services\SupplierDebitNoteService::forReceipt($receipt->id)->value('invoice_number'))) {
+            return response()->json(['status' => 'failed', 'message' => "Goods from this receipt were returned on debit note {$dn}, so its items cannot be changed. Delete that debit note first (Suppliers > Supplier Invoices)."], 422);
+        }
         $user = $request->user();
         $uploadedDocumentUrl = null;
         if ($request->hasFile('document')) {
@@ -593,6 +674,9 @@ class ProductReceiptController extends Controller
                 'status' => 'failed',
                 'message' => 'Unauthorized to delete this product receipt.',
             ], 403);
+        }
+        if ($dn = \App\Services\SupplierDebitNoteService::forReceipt($receipt->id)->value('invoice_number')) {
+            return response()->json(['status' => 'failed', 'message' => "Goods from this receipt were returned on debit note {$dn}. Delete that debit note first (Suppliers > Supplier Invoices)."], 422);
         }
         $orderId = $receipt->purchase_order_id;
         $receipt->delete();

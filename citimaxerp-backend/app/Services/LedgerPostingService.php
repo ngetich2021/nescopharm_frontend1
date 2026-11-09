@@ -453,14 +453,21 @@ class LedgerPostingService
             }
             $payable = ['key' => 'accounts_payable', 'contact' => [$bill->vendor_id, Supplier::class],
                 'description' => ($isDebitNote ? 'Debit note' : 'Bill') . " {$ref} - {$supplierName}"];
+            // Goods sent back from a receipt (SupplierDebitNoteService): stock out at cost, its VAT back off Input VAT.
+            $vat = $this->money($bill->tax_amount);
+            $returnLines = $isDebitNote && !empty($meta['returns']) && $vat > 0
+                ? [$payable + ['debit' => $amount],
+                    $other + ['credit' => round($amount - $vat, 2)],
+                    ['key' => 'input_vat', 'credit' => $vat, 'description' => "Input VAT reversed - {$ref}"]]
+                : null;
             $desired = [
                 'date' => $bill->invoice_date ?? $bill->created_at,
                 'prefix' => $isDebitNote ? 'DN' : 'BILL',
                 'reference' => $ref,
                 'description' => ($isDebitNote ? 'Supplier debit note' : 'Supplier bill') . " {$ref} - {$supplierName}",
-                'lines' => $isDebitNote
+                'lines' => $returnLines ?? ($isDebitNote
                     ? [$payable + ['debit' => $amount], $other + ['credit' => $amount]]
-                    : [$other + ['debit' => $amount], $payable + ['credit' => $amount]],
+                    : [$other + ['debit' => $amount], $payable + ['credit' => $amount]]),
             ];
         }
 

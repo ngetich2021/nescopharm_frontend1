@@ -69,15 +69,20 @@ class AccountsPayable extends Model
         });
 
         static::updating(function ($model) {
-            // Auto-update balance when paid amount changes
-            if ($model->isDirty('paid_amount')) {
-                $model->balance_amount = $model->total_amount - $model->paid_amount;
-                
+            // Balance follows what is paid and what debit notes for returned goods took off (metadata.debited).
+            $debited = (float) ($model->metadata['debited'] ?? 0);
+            $debitedChanged = $model->isDirty('metadata')
+                && $debited != (float) ((json_decode((string) $model->getRawOriginal('metadata'), true) ?: [])['debited'] ?? 0);
+            if ($model->isDirty('paid_amount') || $debitedChanged) {
+                $model->balance_amount = round(max(0, (float) $model->total_amount - (float) $model->paid_amount - $debited), 2);
+
                 // Update status based on payment
                 if ($model->balance_amount <= 0) {
                     $model->status = 'paid';
                 } elseif ($model->paid_amount > 0) {
                     $model->status = $model->due_date < now() ? 'overdue' : 'pending';
+                } elseif ($model->status === 'paid') {
+                    $model->status = 'approved';
                 }
             }
         });

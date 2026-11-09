@@ -24,7 +24,7 @@ class InventoryMovementEtimsObserver
         $kind = match (true) {
             $movement->type === 'adjustment' => 'adjustment',
             in_array($movement->type, ['damage', 'expiry'], true) => 'breakage',
-            $movement->type === 'return' && $movement->reference_type === 'purchase_order_return' => 'supplier_return',
+            $movement->type === 'return' && in_array($movement->reference_type, ['purchase_order_return', 'supplier_debit_note'], true) => 'supplier_return',
             default => null,
         };
         if (!$kind || !$movement->product_id || !$movement->company_id) {

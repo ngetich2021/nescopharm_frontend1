@@ -73,8 +73,35 @@ export function SupplierInvoicesTable() {
   const [deleting, setDeleting] = useState(false);
   const refresh = () => setReload((n) => n + 1);
 
+  // A debit note for returned goods as its own document (logo-headed), for the supplier.
+  const exportDebitNote = useTableExport(() => {
+    const b = viewing!;
+    const goods = round2(b.total - (b.tax_amount || 0));
+    const footer: (string | number | null)[][] = [["", "Goods", "", b.lines.reduce((s, l) => s + l.quantity, 0), "", goods]];
+    if (b.tax_amount) footer.push(["", "VAT", "", null, "", b.tax_amount]);
+    footer.push(["", "Total debited", "", null, "", b.total]);
+    return {
+      fileName: `debit-note-${b.invoice_number.replace(/\//g, "-")}`,
+      title: `Debit Note ${b.invoice_number}`,
+      details: [
+        ["Supplier", b.supplier_name || "-"],
+        ["Date", shortDate(b.invoice_date)],
+        ["Goods received", b.returns_receipt_number || "-"],
+        ["Supplier's credit note", b.supplier_invoice_number || "-"],
+        ["Reason", b.reason || "-"],
+      ],
+      headers: ["S/No", "Description", "Batch", "Qty", "Unit Cost", "Amount"],
+      moneyColumns: [4, 5],
+      rows: b.lines.map((l, i) => [i + 1, l.name, l.batch_number || "", l.quantity, l.unit_price, l.amount]),
+      footer,
+    };
+  });
+
   const removeBill = async (bill: SupplierBill) => {
-    if (!window.confirm(`Delete supplier invoice ${bill.invoice_number}? Its entry in the books is removed too.`)) return;
+    const returns = bill.lines.length > 0;
+    if (!window.confirm(returns
+      ? `Delete debit note ${bill.invoice_number}? The returned stock goes back into its batches and the supplier is owed the ${money(bill.total)} again.`
+      : `Delete supplier invoice ${bill.invoice_number}? Its entry in the books is removed too.`)) return;
     setDeleting(true);
     try {
       const res = await deleteSupplierBill(bill.id);
@@ -283,7 +310,13 @@ export function SupplierInvoicesTable() {
                   <>
                     <div><Label className="text-xs text-muted-foreground">Paid</Label><p className="font-medium">{money(viewing.paid)}</p></div>
                     <div><Label className="text-xs text-muted-foreground">Balance</Label><p className="font-bold text-primary">{money(viewing.balance)}</p></div>
+                    {viewing.debited > 0 && (
+                      <div><Label className="text-xs text-muted-foreground">Debit notes (returns)</Label><p className="font-medium">{money(viewing.debited)}</p></div>
+                    )}
                   </>
+                )}
+                {viewing.returns_receipt_number && (
+                  <div><Label className="text-xs text-muted-foreground">Goods received</Label><p className="font-medium">{viewing.returns_receipt_number}</p></div>
                 )}
                 {viewing.description && (
                   <div className="col-span-2 sm:col-span-3"><Label className="text-xs text-muted-foreground">Description</Label><p>{viewing.description}</p></div>
@@ -294,6 +327,40 @@ export function SupplierInvoicesTable() {
                     : viewing.source ? `Source: ${viewing.source}` : null}
                 </div>
               </div>
+
+              {viewing.lines.length > 0 && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Goods returned</Label>
+                    <ExportMenu onExport={exportDebitNote} />
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">S/No</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Batch</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Unit Cost</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {viewing.lines.map((l, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell>{l.name}</TableCell>
+                          <TableCell>{l.batch_number || "—"}</TableCell>
+                          <TableCell className="text-right">{l.quantity}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">{money(l.unit_price)}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">{money(l.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {viewing.tax_amount > 0 && <p className="text-sm text-right mt-2">VAT {money(viewing.tax_amount)} · Total {money(viewing.total)}</p>}
+                </div>
+              )}
 
               {viewing.kind !== "debit_note" && (
                 <div className="border-t pt-4">
@@ -335,7 +402,7 @@ export function SupplierInvoicesTable() {
                 <div className="flex justify-end border-t pt-3">
                   <Button variant="outline" size="sm" className="text-red-600" disabled={deleting} onClick={() => removeBill(viewing)}>
                     {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                    Delete Invoice
+                    {viewing.kind === "debit_note" ? "Delete Debit Note" : "Delete Invoice"}
                   </Button>
                 </div>
               )}

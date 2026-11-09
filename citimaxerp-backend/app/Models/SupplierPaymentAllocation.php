@@ -99,7 +99,7 @@ class SupplierPaymentAllocation extends Model
             $invoice->paid_amount = $paid;
             if ($paid <= 0) {
                 // The model's own hook only handles part/fully paid.
-                $invoice->balance_amount = $invoice->total_amount;
+                $invoice->balance_amount = max(0, (float) $invoice->total_amount - (float) ($invoice->metadata['debited'] ?? 0));
                 $invoice->status = 'approved';
             }
             $invoice->save();

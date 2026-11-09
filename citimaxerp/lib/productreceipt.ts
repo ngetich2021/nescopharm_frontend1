@@ -403,6 +403,48 @@ export function productReceiptExport(receipt: ProductReceiptDetails): TableExpor
   };
 }
 
+/** A receipt line as the debit note form shows it: what came in, what already went back, what can still go. */
+export interface DebitNoteLine {
+  receipt_item_id: string;
+  product_id: string | null;
+  variant_id: string | null;
+  name: string;
+  batch_number: string | null;
+  expiry_date: string | null;
+  received: number;
+  returned: number;
+  in_batch: number;
+  in_stock: number;
+  returnable: number;
+  unit_price: number;
+}
+
+export interface ReceiptDebitNoteInfo {
+  receipt_number: string;
+  reference_number: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  vat_rate: number;
+  next_number: string;
+  lines: DebitNoteLine[];
+  debit_notes: { id: string; number: string; date: string | null; total: number }[];
+}
+
+export async function getReceiptDebitNoteLines(receiptId: string): Promise<ReceiptDebitNoteInfo> {
+  const res = await apiCall<{ data: ReceiptDebitNoteInfo }>(`/whs/product-receipts/${receiptId}/debit-note-lines`, "GET", undefined, true);
+  return res.data;
+}
+
+/** Send goods from a receipt back to the supplier (SDEB/0001): stock out, the supplier is debited. */
+export async function createReceiptDebitNote(receiptId: string, payload: {
+  date: string;
+  reason: string;
+  supplier_reference?: string;
+  items: { receipt_item_id: string; quantity: number }[];
+}): Promise<{ message: string; data: { id: string; invoice_number: string; total: number } }> {
+  return apiCall(`/whs/product-receipts/${receiptId}/debit-notes`, "POST", payload, true);
+}
+
 // View Product Receipt
 export async function getProductReceipt(id: string): Promise<ProductReceiptApiResponse> {
   console.log('getProductReceipt: fetching for id', id);

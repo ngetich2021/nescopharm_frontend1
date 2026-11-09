@@ -3,6 +3,7 @@ import { useState } from "react";
 import * as React from "react";
 import { format } from "date-fns";
 import { ProductReceiptDetailsModal } from "./ProductReceiptDetailsModal";
+import { ReceiptDebitNoteDialog } from "./ReceiptDebitNoteDialog";
 import { getProductReceipt, productReceiptExport } from "@/lib/productreceipt";
 import { exportTable, type ExportFormat } from "@/lib/table-export";
 import { useAuth } from "@/lib/auth-context";
@@ -31,6 +32,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Undo2,
   Package,
   Store,
   User
@@ -75,6 +77,7 @@ export default function ProductReceiptTable({
 }: ProductReceiptTableProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [debitReceipt, setDebitReceipt] = useState<any | null>(null);
   const { userProfile } = useAuth();
 
   // Every receipt matching the search, not just the page shown.
@@ -280,6 +283,7 @@ export default function ProductReceiptTable({
                             await exportTable(format, productReceiptExport(full), userProfile?.company);
                           }}
                           onEdit={() => onEditReceipt(receipt)}
+                          onDebitNote={() => setDebitReceipt(receipt)}
                           onDelete={() => onDeleteReceipt(receipt)}
                         />
                       </TableCell>
@@ -354,21 +358,29 @@ export default function ProductReceiptTable({
           }
         }}
       />
+      <ReceiptDebitNoteDialog
+        receipt={debitReceipt}
+        open={!!debitReceipt}
+        onOpenChange={(v) => { if (!v) setDebitReceipt(null); }}
+        onDone={onRefresh}
+      />
     </>
   );
 }
 
-function ActionsDropdown({ 
+function ActionsDropdown({
   receipt,
   onView,
   onDownload,
   onEdit,
+  onDebitNote,
   onDelete
 }: {
   receipt: any;
   onView: () => void;
   onDownload: (format: ExportFormat) => Promise<void>;
   onEdit: () => void;
+  onDebitNote: () => void;
   onDelete: () => void;
 }) {
   // Define action availability based on receipt status/conditions
@@ -393,6 +405,9 @@ function ActionsDropdown({
             <Edit className="h-4 w-4 mr-2" /> Edit Receipt
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={onDebitNote}>
+          <Undo2 className="h-4 w-4 mr-2" /> Debit Note (Return to Supplier)
+        </DropdownMenuItem>
         {canDelete && (
           <>
             <DropdownMenuSeparator />

@@ -219,6 +219,12 @@ export interface SupplierBill {
     from_receipt: boolean;
     tax_amount: number;
     account_code: string | null;
+    // A debit note for goods sent back from a receipt (SDEB/0001): its items, the receipt and why.
+    lines: { name: string; batch_number: string | null; expiry_date: string | null; quantity: number; unit_price: number; amount: number }[];
+    returns_receipt_number: string | null;
+    reason: string | null;
+    // On a bill: what such debit notes took off it.
+    debited: number;
     // The supplier payments that paid it, oldest first.
     payments: { id: string; payment_number: string | null; reference: string | null; date: string; method: string; status: string; amount: number; applied: boolean }[];
 }
