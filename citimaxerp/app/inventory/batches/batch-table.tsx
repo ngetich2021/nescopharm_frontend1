@@ -132,10 +132,11 @@ function batchToRow(batch: Batch): (string | number)[] {
   ]
 }
 
-// Fetch ALL batches (not just the current page) then export.
+// Every batch that still has stock (not just the current page). Used-up batches are left out, so
+// the sheet edited and imported back holds only live stock; they stay in the system for returns,
+// recalls and history, and a missing row leaves its batch unchanged on import.
 async function fetchAllAndExport(format: "csv" | "excel") {
-  // Fetch with a large per_page to get everything in one call
-  const all = await getBatches({ per_page: 100000 })
+  const all = await getBatches({ per_page: 100000, in_stock: true })
   const allBatches = all.data || []
 
   if (format === "csv") {
@@ -348,7 +349,7 @@ export function BatchTable({
   // the PDF is the same list for reading.
   const handleExport = async (format: ExportFormat) => {
     if (format !== "pdf") return fetchAllAndExport(format === "xlsx" ? "excel" : "csv")
-    const all = (await getBatches({ per_page: 100000 })).data || []
+    const all = (await getBatches({ per_page: 100000, in_stock: true })).data || []
     await exportTable("pdf", {
       fileName: documentFileName([sessionCompanyName(), "Product Batches", todayFileDate()]),
       title: "Product Batches",
@@ -464,11 +465,11 @@ export function BatchTable({
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="all">All with stock</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                   <SelectItem value="damaged">Damaged</SelectItem>
-                  <SelectItem value="sold_out">Sold Out</SelectItem>
+                  <SelectItem value="sold_out">Sold Out (used up)</SelectItem>
                   <SelectItem value="recalled">Recalled</SelectItem>
                 </SelectContent>
               </Select>

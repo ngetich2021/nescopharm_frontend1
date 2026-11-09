@@ -37,6 +37,8 @@ export async function getBatches(filters: {
   batch_number?: string
   search?: string
   in_stock?: boolean
+  /** Only batches with nothing left (the "Sold Out" view). */
+  used_up?: boolean
   sort_by?: string
   sort_order?: string
   page?: number

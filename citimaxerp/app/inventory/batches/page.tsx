@@ -30,9 +30,12 @@ export default function BatchesPage() {
     () => getBatches({
       page: currentPage,
       per_page: itemsPerPage,
-      in_stock: true,
+      // Used-up batches stay in the system (returns, recalls, sales history) but are hidden;
+      // the "Sold Out" filter is how to look them up.
+      in_stock: status !== "sold_out",
+      used_up: status === "sold_out" || undefined,
       search: search || undefined,
-      status: status === "all" ? undefined : status,
+      status: status === "all" || status === "sold_out" ? undefined : status,
     }),
     {
       expirationMs: 5 * 60 * 1000 // 5 minutes cache

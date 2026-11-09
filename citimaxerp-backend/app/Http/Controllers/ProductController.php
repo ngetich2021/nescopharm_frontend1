@@ -3327,6 +3327,12 @@ class ProductController extends Controller
                 $query->where('quantity_available', '>', 0);
             }
 
+            // Used-up batches (nothing left, whatever their status says): hidden from the normal
+            // list but kept for returns, recalls and sales history.
+            if ($request->boolean('used_up')) {
+                $query->where('quantity_available', '<=', 0);
+            }
+
             // Search across every page: batch/lot/serial number, product, size or supplier name.
             if ($request->filled('search')) {
                 $term = '%' . trim($request->search) . '%';
