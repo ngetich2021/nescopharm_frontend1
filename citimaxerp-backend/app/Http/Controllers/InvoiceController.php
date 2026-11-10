@@ -514,6 +514,15 @@ class InvoiceController extends Controller
 
             // Update line items if provided
             if ($request->has('line_items')) {
+                // Each line keeps the price code it was sold at (NSPO 128...): the form may not send it.
+                $codes = $invoice->lineItems()->get()
+                    ->filter(fn ($l) => !empty($l->metadata['price_label']))
+                    ->mapWithKeys(fn ($l) => [$l->product_id . '|' . $l->variant_id => $l->metadata['price_label']]);
+                if ($invoice->order_id) {
+                    $codes = \App\Models\OrderItem::where('order_id', $invoice->order_id)->whereNotNull('price_label')->where('price_label', '!=', '')->get()
+                        ->mapWithKeys(fn ($i) => [$i->product_id . '|' . $i->variant_id => $i->price_label])->merge($codes);
+                }
+
                 // Delete existing line items
                 $invoice->lineItems()->delete();
 
@@ -536,9 +545,11 @@ class InvoiceController extends Controller
                         'unit_price' => $lineItemData['unit_price'],
                         'discount_amount' => $lineItemData['discount_amount'] ?? 0,
                         'tax_rate' => \App\Services\TaxCompliance\EtimsTaxType::rate($taxTypeCode),
-                        'metadata' => array_merge($lineItemData['metadata'] ?? [], [
-                            'etims_tax_type_code' => $taxTypeCode,
-                        ]),
+                        'metadata' => array_merge(
+                            array_filter(['price_label' => $codes[($lineItemData['product_id'] ?? '') . '|' . ($lineItemData['variant_id'] ?? '')] ?? null]),
+                            $lineItemData['metadata'] ?? [],
+                            ['etims_tax_type_code' => $taxTypeCode],
+                        ),
                     ]);
                 }
 

@@ -41,7 +41,15 @@ class ProfitReportController extends Controller
             select i.id invoice_id, i.invoice_number, i.file_number, i.invoice_date, i.order_id, i.status, i.total_amount::float invoice_total,
                    coalesce(nullif(c.business_name, ''), c.name) customer,
                    li.product_id, li.description, li.unit, li.quantity::float q, li.unit_price::float p,
-                   coalesce(li.discount_amount, 0)::float d, coalesce(li.tax_amount, 0)::float t, coalesce(li.metadata::jsonb->>'price_label', '') label
+                   coalesce(li.discount_amount, 0)::float d, coalesce(li.tax_amount, 0)::float t,
+                   -- The code picked on the line: the invoice line's, else the order line's (some invoice
+                   -- paths, e.g. editing an invoice, rebuild lines without it; the order keeps it).
+                   coalesce(nullif(li.metadata::jsonb->>'price_label', ''), (
+                       select oi.price_label from order_items oi
+                       where oi.order_id = i.order_id and oi.product_id = li.product_id
+                         and coalesce(oi.variant_id::text, '') = coalesce(li.variant_id::text, '')
+                         and coalesce(oi.price_label, '') <> ''
+                       order by abs(oi.unit_price - li.unit_price) limit 1), '') label
             from invoice_line_items li
             join invoices i on i.id = li.invoice_id
             left join customers c on c.id = i.customer_id

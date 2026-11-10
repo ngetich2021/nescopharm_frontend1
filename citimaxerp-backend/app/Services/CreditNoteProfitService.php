@@ -53,10 +53,13 @@ class CreditNoteProfitService
             ->groupBy('product_id')->selectRaw('product_id, sum(greatest(quantity_received, 1) * unit_cost) / sum(greatest(quantity_received, 1)) c')
             ->pluck('c', 'product_id') : collect();
         $costPrice = $productIds ? DB::table('products')->whereIn('id', $productIds)->where('unit_cost', '>', 0)->pluck('unit_cost', 'id') : collect();
-        // The price code the credited item carried on its invoice.
-        $labels = $invoiceIds ? DB::table('invoice_line_items')->whereIn('invoice_id', $invoiceIds)->whereNotNull('product_id')
-            ->selectRaw("invoice_id, product_id, max(coalesce(metadata::jsonb->>'price_label', '')) label")
-            ->groupBy('invoice_id', 'product_id')->get()
+        // The price code the credited item carried: on its invoice line, else on its order line.
+        $labels = $invoiceIds ? DB::table('invoice_line_items as li')->join('invoices as i', 'i.id', '=', 'li.invoice_id')
+            ->whereIn('li.invoice_id', $invoiceIds)->whereNotNull('li.product_id')
+            ->selectRaw("li.invoice_id, li.product_id, max(coalesce(nullif(li.metadata::jsonb->>'price_label', ''), (
+                select oi.price_label from order_items oi where oi.order_id = i.order_id and oi.product_id = li.product_id
+                  and coalesce(oi.price_label, '') <> '' limit 1), '')) label")
+            ->groupBy('li.invoice_id', 'li.product_id')->get()
             ->mapWithKeys(fn ($r) => [$r->invoice_id . '|' . $r->product_id => trim($r->label)]) : collect();
 
         return array_map(function ($l) use ($returned, $batchCost, $costPrice, $labels) {
