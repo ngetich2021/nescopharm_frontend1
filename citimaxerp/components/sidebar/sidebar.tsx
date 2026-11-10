@@ -43,6 +43,7 @@ import {
   Layers,
   Wallet,
   Boxes,
+  BadgePercent,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -176,6 +177,7 @@ function Sidebar() {
     { name: "Inventory Reports", href: "/reports/inventory", icon: Package, permission: "can_view_reports_menu", extraPermission: "can_view_inventory_reports" },
     { name: "Sales Reports", href: "/reports/sales", icon: ShoppingCart, permission: "can_view_reports_menu" },
     { name: "ROI for Reps", href: "/reports/rep-roi", icon: TrendingUp, permission: "can_view_reports_menu" },
+    { name: "Profit", href: "/reports/profit", icon: BadgePercent, permission: "can_view_reports_menu" },
     { name: "Logistics Reports", href: "/reports/logistics", icon: Truck, permission: "can_view_reports_menu", extraPermission: "can_view_logistics_reports" },
     { name: "Procurement Reports", href: "/reports/procurement", icon: ClipboardList, permission: "can_view_reports_menu" },
     { name: "CRM Reports", href: "/reports/customers", icon: Users, permission: "can_view_reports_menu" },

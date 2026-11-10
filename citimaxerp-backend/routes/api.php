@@ -126,6 +126,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('employee-allowances/one-time', [\App\Http\Controllers\EmployeeAllowanceController::class, 'storeOneTime']);
     Route::delete('employee-allowances/one-time/{id}', [\App\Http\Controllers\EmployeeAllowanceController::class, 'destroyOneTime']);
     Route::get('reports/rep-roi', [\App\Http\Controllers\EmployeeAllowanceController::class, 'repRoi']);
+    Route::get('reports/profit', [\App\Http\Controllers\ProfitReportController::class, 'index']);
     Route::delete('employees/{id}', [EmployeeController::class, 'destroy']); // Delete employee
     Route::get('employment-types', [EmployeeController::class, 'getEmploymentTypes']); // Employment types
 
