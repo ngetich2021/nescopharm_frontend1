@@ -264,7 +264,8 @@ class AccountsPayableController extends Controller
                 'supplier_reference' => $note->vendor_invoice_number,
                 'reason' => $meta['reason'] ?? null,
                 'receipt_number' => $meta['returns_receipt_number'] ?? null,
-                'receipt_date' => $receipt?->receipt_date?->toDateString(),
+                // The receipt's own date when it has one, else the day it was entered.
+                'receipt_date' => ($receipt?->receipt_date ?? $receipt?->created_at)?->toDateString(),
                 'supplier' => $supplier ? [
                     'name' => $supplier->name,
                     'address' => $supplier->address,
