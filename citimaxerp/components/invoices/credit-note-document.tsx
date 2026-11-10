@@ -4,6 +4,7 @@ import { forwardRef } from "react"
 import type { CreditNoteDocumentData } from "@/lib/credit-notes"
 import { buildBuyerBlock } from "@/lib/customer-address"
 import { NoteDocument, formatNoteAmount, noteDate } from "@/components/documents/note-document"
+import { RETURN_POLICY_LINE } from "@/components/invoices/invoice-document"
 
 type Props = {
   note: CreditNoteDocumentData
@@ -14,8 +15,12 @@ type Props = {
 export const CreditNoteDocument = forwardRef<HTMLDivElement, Props>(function CreditNoteDocument({ note, companyPin }, ref) {
   const buyer = buildBuyerBlock(note.customer)
   const c = note.customer
-  const contact = [c?.business_name ? c?.name : null, c?.phone, c?.email].filter(Boolean).join(" · ")
+  // "0796984572 - Catherine Joel", as the paper credit note prints the contact.
+  const contact = [c?.phone, c?.business_name ? c?.name : null].filter(Boolean).join(" - ") || note.other_references || ""
   const original = [note.invoice_number, note.invoice_date ? `dt. ${noteDate(note.invoice_date)}` : ""].filter(Boolean).join(" ")
+  const buyersOrder = note.buyers_order_no
+    ? [note.buyers_order_no, note.buyers_order_date ? `dt. ${noteDate(note.buyers_order_date)}` : ""].filter(Boolean).join(" ")
+    : ""
   // Lines print quantity x rate; discount and VAT come off / on above the total.
   const adjustments = [
     ...(note.discount_amount > 0 ? [{ label: "Less Discount", value: `-${formatNoteAmount(note.discount_amount)}` }] : []),
@@ -29,15 +34,23 @@ export const CreditNoteDocument = forwardRef<HTMLDivElement, Props>(function Cre
       companyPin={companyPin}
       partyLabel="Buyer (Bill to)"
       party={{ name: buyer.name, addressLines: buyer.addressLines, pin: buyer.kraPin }}
+      // As the Tally credit note: the note, then the invoice's own references.
       cells={[
         { label: "Credit Note No.", value: note.number },
         { label: "Dated", value: noteDate(note.date) },
         { label: "Original Invoice No. & Date", value: original },
+        { label: "Mode/Terms of Payment", value: note.mode_of_payment || "" },
+        { label: "Buyer's Order No. & Date", value: buyersOrder },
         { label: "Other References", value: contact },
-        { label: "Status", value: note.status === "applied" ? "Credited" : note.status.charAt(0).toUpperCase() + note.status.slice(1) },
+        { label: "Dispatch Doc No.", value: note.dispatch_doc_no || "" },
         { label: "Prepared By", value: note.prepared_by || "" },
+        { label: "Dispatched through", value: note.dispatched_through || "" },
+        { label: "Destination", value: note.destination || "" },
       ]}
-      reason={{ label: "Reason for Credit", value: [note.reason, note.notes].filter(Boolean).join(" - ") }}
+      fullCells={[
+        { label: "Terms of Delivery", value: note.terms_of_delivery && !/returns?\b/i.test(note.terms_of_delivery) ? note.terms_of_delivery : RETURN_POLICY_LINE },
+        { label: "Reason for Credit", value: [note.reason, note.notes].filter(Boolean).join(" - ") },
+      ]}
       lines={note.lines.map((l) => ({
         name: l.name,
         batches: l.batches,

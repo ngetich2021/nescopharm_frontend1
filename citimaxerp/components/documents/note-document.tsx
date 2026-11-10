@@ -23,7 +23,7 @@ export type NoteDocumentProps = {
   partyLabel: string // "Supplier (Debit to)", "Buyer (Bill to)"
   party: { name: string; addressLines: string[]; pin: string | null }
   cells: NoteCell[] // two per row on the right: Note No., Dated, Original Invoice No. & Date ...
-  reason: NoteCell // the full-width cell under them
+  fullCells: NoteCell[] // full-width cells under them, e.g. Terms of Delivery, Reason
   lines: NoteLine[]
   adjustments: NoteCell[] // above the total, e.g. Discount, VAT
   total: number
@@ -38,7 +38,7 @@ export type NoteDocumentProps = {
  * payment details with the Scan me QR, declaration and signatory.
  */
 export const NoteDocument = forwardRef<HTMLDivElement, NoteDocumentProps>(function NoteDocument(
-  { title, company, companyPin, partyLabel, party, cells, reason, lines, adjustments, total, declaration, footer },
+  { title, company, companyPin, partyLabel, party, cells, fullCells, lines, adjustments, total, declaration, footer },
   ref,
 ) {
   const qty = lines.reduce((t, l) => t + l.quantity, 0)
@@ -100,10 +100,12 @@ export const NoteDocument = forwardRef<HTMLDivElement, NoteDocumentProps>(functi
                   ))}
                 </div>
               ))}
-              <div className={`${cell} flex-1`}>
-                <p className={label}>{reason.label}</p>
-                <p className="font-semibold break-words">{reason.value}</p>
-              </div>
+              {fullCells.map((c, i) => (
+                <div key={c.label} className={`${cell} ${i === fullCells.length - 1 ? "flex-1" : "border-b border-gray-500"}`}>
+                  <p className={label}>{c.label}</p>
+                  <p className="font-semibold break-words">{c.value}</p>
+                </div>
+              ))}
             </div>
           </div>
 

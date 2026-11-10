@@ -294,6 +294,15 @@ class CreditNoteController extends Controller
                 'invoice_number' => $note->invoice?->invoice_number,
                 'invoice_date' => $note->invoice?->invoice_date ? substr((string) $note->invoice->invoice_date, 0, 10) : null,
                 'prepared_by' => $by ? trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? '')) ?: ($by->name ?? null) : null,
+                // From the invoice it credits, as the Tally credit note prints them.
+                'mode_of_payment' => $note->invoice?->mode_of_payment,
+                'buyers_order_no' => $note->invoice?->buyers_order_no,
+                'buyers_order_date' => $note->invoice?->buyers_order_date ? substr((string) $note->invoice->buyers_order_date, 0, 10) : null,
+                'dispatch_doc_no' => $note->invoice?->dispatch_doc_no,
+                'dispatched_through' => $note->invoice?->dispatched_through,
+                'destination' => $note->invoice?->destination,
+                'terms_of_delivery' => $note->invoice?->terms_of_delivery,
+                'other_references' => $note->invoice?->other_references,
                 'company' => $company ? $company->only([
                     'id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postal_code', 'website',
                     'logo_url', 'letterhead_url', 'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch',

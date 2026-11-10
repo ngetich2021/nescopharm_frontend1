@@ -35,7 +35,7 @@ export const DebitNoteDocument = forwardRef<HTMLDivElement, Props>(function Debi
         { label: "Goods Received No.", value: note.receipt_number || "" },
         { label: "Prepared By", value: note.recorded_by || "" },
       ]}
-      reason={{ label: "Reason for Return", value: note.reason || "" }}
+      fullCells={[{ label: "Reason for Return", value: note.reason || "" }]}
       lines={note.lines.map((l) => ({
         name: l.name,
         batches: [{ batch_number: l.batch_number, expiry_date: l.expiry_date }],

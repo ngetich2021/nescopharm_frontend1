@@ -412,6 +412,15 @@ export interface CreditNoteDocumentData {
     invoice_number: string | null
     invoice_date: string | null
     prepared_by: string | null
+    // From the invoice it credits.
+    mode_of_payment: string | null
+    buyers_order_no: string | null
+    buyers_order_date: string | null
+    dispatch_doc_no: string | null
+    dispatched_through: string | null
+    destination: string | null
+    terms_of_delivery: string | null
+    other_references: string | null
     company: Partial<import("@/lib/company").Company> | null
     customer: {
         id: string; name: string; business_name?: string | null; customer_type?: string | null; address?: string | null
