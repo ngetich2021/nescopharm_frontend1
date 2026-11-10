@@ -48,8 +48,9 @@ class ProfitReportController extends Controller
             where i.company_id = ? and i.invoice_date between ? and ?
               and (i.type is null or i.type not in ('proforma', 'credit_note'))
               and coalesce(i.status, '') not in ('void', 'cancelled')
+              and i.invoice_number not like ?  -- bounced cheque charges (DEB-...) are not sales of goods
               and li.quantity > 0
-            order by i.invoice_date, i.invoice_number", [$companyId, $from, $to]);
+            order by i.invoice_date, i.invoice_number", [$companyId, $from, $to, Invoice::DEBIT_PREFIX . '%']);
 
         $orderIds = array_values(array_unique(array_filter(array_map(fn ($l) => $l->order_id, $lines))));
         $productIds = array_values(array_unique(array_filter(array_map(fn ($l) => $l->product_id, $lines))));
