@@ -25,7 +25,7 @@ class CreditNoteProfitService
             select cn.id credit_note_id, cn.credit_note_number, cn.credit_note_date, cn.invoice_id,
                    i.invoice_number, i.file_number, coalesce(nullif(c.business_name, ''), c.name) customer,
                    l.product_id, l.description, l.unit, l.quantity::float q, l.unit_price::float p,
-                   coalesce(l.discount_amount, 0)::float d
+                   coalesce(l.discount_amount, 0)::float d, coalesce(l.tax_amount, 0)::float t
             from credit_note_line_items l
             join credit_notes cn on cn.id = l.credit_note_id
             left join invoices i on i.id = cn.invoice_id
@@ -84,7 +84,8 @@ class CreditNoteProfitService
                 'unit' => $l->unit ?: 'pcs',
                 'quantity' => $l->q,
                 'unit_price' => round($l->p, 2),
-                'amount' => round($l->q * $l->p - $l->d, 2),
+                // As credited: after discount, including VAT (what the credit note and Sales Accounts show).
+                'amount' => round($l->q * $l->p - $l->d + $l->t, 2),
                 'cost' => $unit === null ? null : round($unit * $l->q, 2),
                 'cost_source' => $source,
             ];

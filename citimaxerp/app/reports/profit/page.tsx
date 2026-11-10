@@ -43,13 +43,13 @@ function PctBadge({ p }: { p: number | null }) {
 type View = "list" | "product" | "lines"
 type Group = { key: string; name: string; sub?: string; lines: number; quantity: number; sales: number; cost: number; costedSales: number; uncosted: number; profit: number; pct: number | null }
 
-/** Sums lines into a group: profit only on lines with a cost, so a missing cost never shows as profit. */
+/** Sums lines into a group. Profit = total value - cost value; lines with no cost recorded count at cost 0 and are flagged. */
 function summarise(key: string, name: string, rows: ProfitLine[], sub?: string): Group {
   const costed = rows.filter((r) => r.cost !== null)
   const sales = rows.reduce((s, r) => s + r.sales, 0)
   const cost = costed.reduce((s, r) => s + (r.cost ?? 0), 0)
   const costedSales = costed.reduce((s, r) => s + r.sales, 0)
-  const profit = costedSales - cost
+  const profit = sales - cost // TV - CV
   return { key, name, sub, lines: rows.length, quantity: rows.reduce((s, r) => s + r.quantity, 0), sales, cost, costedSales, uncosted: rows.length - costed.length, profit, pct: pct(profit, cost) }
 }
 
@@ -117,7 +117,7 @@ export default function ProfitReportPage() {
   const sorted = useMemo(() => {
     const val = (r: any) => r[sortKey]
     const rows: any[] = view === "lines"
-      ? filtered.map((l) => ({ ...l, profit: l.cost === null ? null : l.sales - l.cost, pct: l.cost === null ? null : pct(l.sales - l.cost, l.cost) }))
+      ? filtered.map((l) => ({ ...l, profit: l.sales - (l.cost ?? 0), pct: l.cost === null ? null : pct(l.sales - l.cost, l.cost) }))
       : groups
     return [...rows].sort((a, b) => {
       const av = val(a), bv = val(b)
@@ -140,7 +140,7 @@ export default function ProfitReportPage() {
     const costed = rows.filter((c) => c.cost !== null)
     const amount = rows.reduce((s, c) => s + c.amount, 0)
     const cost = costed.reduce((s, c) => s + (c.cost ?? 0), 0)
-    const profit = costed.reduce((s, c) => s + c.amount, 0) - cost
+    const profit = amount - cost // TV - CV
     return {
       rows, amount, cost, profit,
       quantity: rows.reduce((s, c) => s + c.quantity, 0),
@@ -176,7 +176,7 @@ export default function ProfitReportPage() {
         fileName: `profit-invoice-lines-${from}-to-${to}`,
         title: "Profit - Invoice Lines",
         subtitle: range,
-        headers: ["S/No", "Invoice", "Date", "Customer", "Item", "Price Code", "Qty", "Per", "Rate", "Sales", "Cost", "Profit", "Profit %", "Cost From"],
+        headers: ["S/No", "Invoice", "Date", "Customer", "Item", "Price Code", "Qty", "Per", "Rate", "Total Value", "Cost Value", "Profit (TV - CV)", "Profit %", "Cost From"],
         moneyColumns: [8, 9, 10, 11],
         rows: rows.map((r, i) => [i + 1, r.invoice_number, dmy(r.invoice_date), r.customer ?? "", r.description, r.price_code ?? "", r.quantity, r.unit, r.unit_price, r.sales, r.cost, r.profit, pctText(r.pct), SOURCES[r.cost_source]]),
         footer: [
@@ -193,7 +193,7 @@ export default function ProfitReportPage() {
       fileName: `profit-${view === "list" ? "by-price-list" : "by-product"}-${from}-to-${to}`,
       title: `Profit - ${viewName}`,
       subtitle: range,
-      headers: ["S/No", view === "list" ? "Price List" : "Item", ...(view === "product" ? ["Price Codes"] : []), "Lines", "Qty", "Sales", "Cost", "Profit", "Profit %"],
+      headers: ["S/No", view === "list" ? "Price List" : "Item", ...(view === "product" ? ["Price Codes"] : []), "Lines", "Qty", "Total Value", "Cost Value", "Profit (TV - CV)", "Profit %"],
       moneyColumns: view === "product" ? [5, 6, 7] : [4, 5, 6],
       rows: rows.map((r, i) => [i + 1, r.name, ...(view === "product" ? [r.sub ?? ""] : []), r.lines, r.quantity, r.sales, r.cost, r.profit, pctText(r.pct)]),
       footer: [
@@ -224,8 +224,8 @@ export default function ProfitReportPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Profit</h1>
             <p className="text-muted-foreground">
-              Sales at the invoice price (excl. VAT, after discounts) against what the goods cost, from {dmy(data?.earliest ?? "2026-11-01")} on.
-              Profit % = profit ÷ cost × 100.
+              Total value (TV) is each invoice line as billed, after discount, including VAT - a month's TV is its Sales Accounts total.
+              Cost value (CV) is what the goods cost. Profit = TV − CV; Profit % = profit ÷ CV × 100.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -237,14 +237,14 @@ export default function ProfitReportPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <Stat icon={<ShoppingCart className="h-5 w-5" />} tone="bg-blue-100 text-blue-700" label="Net sales (excl. VAT)" value={`KES ${kes(net.sales)}`} />
-          <Stat icon={<Coins className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" label="Cost of goods" value={`KES ${kes(net.cost)}`} />
+          <Stat icon={<ShoppingCart className="h-5 w-5" />} tone="bg-blue-100 text-blue-700" label="Net total value (incl. VAT)" value={`KES ${kes(net.sales)}`} />
+          <Stat icon={<Coins className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" label="Net cost value" value={`KES ${kes(net.cost)}`} />
           <Stat icon={<TrendingUp className="h-5 w-5" />} tone="bg-emerald-100 text-emerald-700" label="Net profit (after credit notes)" value={`KES ${kes(net.profit)}`} />
           <Stat icon={<Percent className="h-5 w-5" />} tone="bg-rose-100 text-rose-700" label="Profit % (on cost)" value={pctText(net.pct)} />
         </div>
         {totals.uncosted > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            {totals.uncosted} line{totals.uncosted === 1 ? " has" : "s have"} no cost anywhere (no batch cost or Cost Price), so {totals.uncosted === 1 ? "it is" : "they are"} left out of profit. Filter Cost From = No cost to see them.
+            {totals.uncosted} line{totals.uncosted === 1 ? " has" : "s have"} no cost recorded anywhere (no batch cost or Cost Price), so {totals.uncosted === 1 ? "it counts" : "they count"} at cost 0 and overstate profit. Filter Cost From = No cost to see them, and set their Cost Price.
           </p>
         )}
 
@@ -252,7 +252,7 @@ export default function ProfitReportPage() {
           <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
             {credits.numbers.join(", ")} (credit {credits.numbers.length === 1 ? "note" : "notes"} dated in this range) {credits.numbers.length === 1 ? "is" : "are"} deducted at the end of the table:
             KES {kes(credits.amount)} credited comes off sales and KES {kes(credits.cost)} cost of the goods back comes off cost.
-            {credits.uncosted > 0 && ` KES ${kes(credits.uncosted)} of it is on items with no cost anywhere, so it is left out of profit.`}
+            {credits.uncosted > 0 && ` KES ${kes(credits.uncosted)} of it is on items with no cost recorded, so it comes off profit in full - set their Cost Price to correct it.`}
           </p>
         )}
 
@@ -287,7 +287,7 @@ export default function ProfitReportPage() {
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">From</Label>
-                <Input type="date" min={data?.earliest} value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} className="w-[160px]" />
+                <Input type="date" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} className="w-[160px]" />
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">To</Label>
@@ -320,7 +320,7 @@ export default function ProfitReportPage() {
               </div>
             </div>
             {from < (data?.earliest ?? "") && (
-              <p className="text-xs text-muted-foreground">Sales before {dmy(data?.earliest)} never moved stock, so they have no cost: the report starts on {dmy(data?.earliest)}.</p>
+              <p className="text-xs text-muted-foreground">Sales before {dmy(data?.earliest)} never moved stock, so their cost is the item&apos;s batch cost or Cost Price (see Cost From).</p>
             )}
 
             {/* Scrolls inside a screen-high box with the heading pinned: the sideways scrollbar is always in view. */}
@@ -347,9 +347,9 @@ export default function ProfitReportPage() {
                       <Sortable k="quantity" label="Qty" right />
                     </>
                   )}
-                  <Sortable k="sales" label="Sales (KES)" right />
-                  <Sortable k="cost" label="Cost (KES)" right />
-                  <Sortable k="profit" label="Profit (KES)" right />
+                  <Sortable k="sales" label="Total Value (KES)" right />
+                  <Sortable k="cost" label="Cost Value (KES)" right />
+                  <Sortable k="profit" label="Profit (TV − CV)" right />
                   <Sortable k="pct" label="Profit %" right />
                   {view === "lines" && <Sortable k="cost_source" label="Cost From" />}
                 </TableRow>
@@ -386,7 +386,7 @@ export default function ProfitReportPage() {
                       <TableCell className="text-muted-foreground">{start + i + 1}</TableCell>
                       <TableCell className="min-w-[220px]">
                         <div className="font-medium">{r.name}</div>
-                        {r.uncosted > 0 && <div className="text-xs text-amber-700">{r.uncosted} line{r.uncosted === 1 ? "" : "s"} without a cost left out of profit</div>}
+                        {r.uncosted > 0 && <div className="text-xs text-amber-700">{r.uncosted} line{r.uncosted === 1 ? "" : "s"} with no cost recorded (counted at 0)</div>}
                       </TableCell>
                       {view === "product" && <TableCell className="whitespace-nowrap text-sm">{r.sub || <span className="text-muted-foreground">—</span>}</TableCell>}
                       <TableCell className="text-right tabular-nums">{r.lines}</TableCell>
@@ -419,7 +419,7 @@ export default function ProfitReportPage() {
                       <TableRow>
                         <TableCell colSpan={view === "lines" ? 6 : view === "product" ? 3 : 2} className="text-muted-foreground">
                           {creditLabel}
-                          {credits.uncosted > 0 && <span className="block text-xs text-amber-700">KES {kes(credits.uncosted)} on items without a cost: off sales, not off profit</span>}
+                          {credits.uncosted > 0 && <span className="block text-xs text-amber-700">KES {kes(credits.uncosted)} on items with no cost recorded</span>}
                         </TableCell>
                         {view !== "lines" && <TableCell />}
                         <TableCell className="text-right tabular-nums text-red-600">-{credits.quantity.toLocaleString()}</TableCell>

@@ -302,9 +302,24 @@ export default function InventoryReportPage() {
           { key: "sales_quantity", header: "Sold", align: "right", render: (r) => qty(r.sales_quantity), total: (rows) => qty(sumOf(rows, "sales_quantity")) },
           { key: "closing_stock", header: "Closing", align: "right", render: (r) => qty(r.closing_stock), total: (rows) => qty(sumOf(rows, "closing_stock")) },
           { key: "closing_stock_value", header: "Closing Value (KES)", align: "right", render: (r) => money(r.closing_stock_value), total: (rows) => money(sumOf(rows, "closing_stock_value")) },
+          // Total value (as invoiced, incl. VAT) - cost value = gross profit.
+          {
+            key: "sales_revenue",
+            header: "Total Value (KES)",
+            align: "right",
+            render: (r) => money(r.sales_revenue),
+            total: (rows) => money(rows.filter((r) => r.row_type !== "size").reduce((s, r) => s + Number(r.sales_revenue || 0), 0)),
+          },
+          {
+            key: "cost_of_sales",
+            header: "Cost Value (KES)",
+            align: "right",
+            render: (r) => money(r.cost_of_sales),
+            total: (rows) => money(rows.filter((r) => r.row_type !== "size").reduce((s, r) => s + Number(r.cost_of_sales || 0), 0)),
+          },
           {
             key: "gross_profit",
-            header: "Gross Profit (KES)",
+            header: "Gross Profit (TV - CV)",
             align: "right",
             render: (r) => <span className={cn(Number(r.gross_profit) < 0 && "text-red-600")}>{money(r.gross_profit)}</span>,
             total: (rows) => money(rows.filter((r) => r.row_type !== "size").reduce((s, r) => s + Number(r.gross_profit || 0), 0)),
@@ -386,16 +401,18 @@ export default function InventoryReportPage() {
   // Credit notes in the period (CN-0008...), deducted after the Total: the profit they gave up comes
   // off gross profit. Credited lines with no cost anywhere are left out of profit, as sales are.
   const cn_ = reportType === "stock_management" ? summary?.credit_notes : null
-  const creditRows: { label: string; profit: string; pct: string; bold?: boolean }[] = cn_
+  const creditRows: { label: string; value: string; cost: string; profit: string; pct: string; bold?: boolean }[] = cn_
     ? [
         {
           label: cn_.count > 0
             ? `Less credit notes (${(cn_.numbers ?? []).join(", ")}): KES ${money(cn_.amount)} credited${cn_.uncosted_amount > 0 ? `, ${money(cn_.uncosted_amount)} of it without a cost` : ""}`
             : "Less credit notes (none in this range)",
+          value: cn_.count > 0 ? `-${money(cn_.amount)}` : money(0),
+          cost: cn_.count > 0 ? `-${money(cn_.cost)}` : money(0),
           profit: cn_.count > 0 ? `-${money(cn_.profit)}` : money(0),
           pct: "",
         },
-        { label: "Net (after credit notes)", profit: money(summary?.net_gross_profit), pct: pctText(summary?.net_profit_pct ?? null), bold: true },
+        { label: "Net (after credit notes)", value: money(summary?.net_sales_value), cost: money(summary?.net_cost_value), profit: money(summary?.net_gross_profit), pct: pctText(summary?.net_profit_pct ?? null), bold: true },
       ]
     : []
 
@@ -428,7 +445,7 @@ export default function InventoryReportPage() {
               const t = i > 1 && c.total ? c.total(visibleRows) : ""
               return typeof t === "string" || typeof t === "number" ? t : "" // coloured totals (movement) stay off
             }),
-            ...creditRows.map((fr) => columns.map((c, i): ExportCell => (i === 1 ? fr.label : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""))),
+            ...creditRows.map((fr) => columns.map((c, i): ExportCell => (i === 1 ? fr.label : c.key === "sales_revenue" ? fr.value : c.key === "cost_of_sales" ? fr.cost : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""))),
           ]
         : undefined,
     }
@@ -649,7 +666,7 @@ export default function InventoryReportPage() {
                     <TableRow key={fr.label}>
                       {columns.map((c, i) => (
                         <TableCell key={c.key} className={cn("py-2 text-sm tabular-nums", fr.bold && "font-semibold", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                          {i === 1 ? <span className="whitespace-nowrap">{fr.label}</span> : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""}
+                          {i === 1 ? <span className="whitespace-nowrap">{fr.label}</span> : c.key === "sales_revenue" ? fr.value : c.key === "cost_of_sales" ? fr.cost : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""}
                         </TableCell>
                       ))}
                     </TableRow>

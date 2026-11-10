@@ -251,7 +251,7 @@ class ReportService
             ->select(
                 'order_items.variant_id',
                 DB::raw("{$soldBaseUnits} as quantity_sold"),
-                DB::raw('SUM(order_items.quantity * order_items.unit_price) as revenue')
+                DB::raw('SUM(order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0)) as revenue')
             )
             ->get()
             ->keyBy('variant_id');
@@ -272,7 +272,7 @@ class ReportService
             ->select(
                 'order_items.product_id',
                 DB::raw("{$soldBaseUnits} as quantity_sold"),
-                DB::raw('SUM(order_items.quantity * order_items.unit_price) as revenue')
+                DB::raw('SUM(order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0)) as revenue')
             )
             ->get()
             ->keyBy('product_id');
@@ -360,11 +360,16 @@ class ReportService
         // are left out of profit (their amount is shown), as sales without a cost are.
         $credits = collect(app(CreditNoteProfitService::class)->lines(
             $this->companyId, $dateFrom->toDateString(), $dateTo->toDateString(), $productIds->all()));
-        $costed = $credits->whereNotNull('cost');
-        $grossBefore = round($items->whereIn('row_type', ['item', 'parent'])->sum('gross_profit'), 2);
-        $creditProfit = round($costed->sum('amount') - $costed->sum('cost'), 2);
-        $costOfSales = round($items->whereIn('row_type', ['item', 'parent'])->sum('cost_of_sales'), 2);
-        $netCost = round($costOfSales - $costed->sum('cost'), 2);
+        // Profit = total value - cost value throughout, credit notes included (a credited line with no
+        // cost recorded takes its whole value off profit; the report flags it).
+        $top = $items->whereIn('row_type', ['item', 'parent']);
+        $salesValue = round($top->sum('sales_revenue'), 2);
+        $grossBefore = round($top->sum('gross_profit'), 2);
+        $costOfSales = round($top->sum('cost_of_sales'), 2);
+        $creditValue = round($credits->sum('amount'), 2);
+        $creditCost = round($credits->sum('cost'), 2);
+        $creditProfit = round($creditValue - $creditCost, 2);
+        $netCost = round($costOfSales - $creditCost, 2);
         $netProfit = round($grossBefore - $creditProfit, 2);
 
         return [
@@ -379,17 +384,20 @@ class ReportService
                 'total_closing_stock' => $summaryLines->sum('closing_stock'),
                 'total_closing_stock_value' => round($summaryLines->sum('closing_stock_value'), 2),
                 'total_sales_quantity' => $summaryLines->sum('sales_quantity'),
+                'total_sales_value' => $salesValue,
                 'total_gross_profit' => $grossBefore,
                 'total_cost_of_sales' => $costOfSales,
                 'total_profit_pct' => $costOfSales > 0 ? round($grossBefore / $costOfSales * 100, 1) : null,
                 'credit_notes' => [
                     'count' => $credits->pluck('credit_note_id')->unique()->count(),
                     'numbers' => $credits->pluck('credit_note_number')->unique()->values()->all(),
-                    'amount' => round($credits->sum('amount'), 2),
-                    'cost' => round($costed->sum('cost'), 2),
+                    'amount' => $creditValue,
+                    'cost' => $creditCost,
                     'profit' => $creditProfit,
                     'uncosted_amount' => round($credits->whereNull('cost')->sum('amount'), 2),
                 ],
+                'net_sales_value' => round($salesValue - $creditValue, 2),
+                'net_cost_value' => $netCost,
                 'net_gross_profit' => $netProfit,
                 'net_profit_pct' => $netCost > 0 ? round($netProfit / $netCost * 100, 1) : null,
                 'reorder_alert_count' => $summaryLines->where('needs_reorder', true)->count(),

@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\DB;
  *  1. the buying cost of the batches the stock actually left on the order's dispatch (the total cost
  *     that left, so pack/piece units cannot skew it), shared between lines of the same item;
  *  2. else the item's average batch cost; 3. else its Cost Price; else no cost (listed as such).
- * Sales are excluding VAT, after line discounts. Profit % = profit / cost x 100. Read-only.
- * Past sales (before the cutoff) never moved stock, so they have no cost and are not covered.
+ * Total value (TV) is each line as invoiced, after discount, including VAT, so a month's TV is the
+ * Sales Accounts total. Profit = TV - cost value (CV); Profit % = profit / CV x 100. Read-only.
+ * Sales before the cutoff never moved stock, so their cost is the item's batch cost or Cost Price.
  */
 class ProfitReportController extends Controller
 {
@@ -33,15 +34,14 @@ class ProfitReportController extends Controller
         $earliest = Order::HISTORICAL_CUTOFF;
         $from = Carbon::parse($request->input('date_from') ?: now()->startOfMonth())->toDateString();
         $to = Carbon::parse($request->input('date_to') ?: now())->toDateString();
-        if ($from < $earliest) {
-            $from = $earliest;
-        }
+        // Any range: sales before the go-live date never moved stock, so their cost comes from the
+        // item's batch cost or Cost Price (the "Cost from" column says which).
 
         $lines = DB::select("
-            select i.id invoice_id, i.invoice_number, i.file_number, i.invoice_date, i.order_id, i.status,
+            select i.id invoice_id, i.invoice_number, i.file_number, i.invoice_date, i.order_id, i.status, i.total_amount::float invoice_total,
                    coalesce(nullif(c.business_name, ''), c.name) customer,
                    li.product_id, li.description, li.unit, li.quantity::float q, li.unit_price::float p,
-                   coalesce(li.discount_amount, 0)::float d, coalesce(li.metadata::jsonb->>'price_label', '') label
+                   coalesce(li.discount_amount, 0)::float d, coalesce(li.tax_amount, 0)::float t, coalesce(li.metadata::jsonb->>'price_label', '') label
             from invoice_line_items li
             join invoices i on i.id = li.invoice_id
             left join customers c on c.id = i.customer_id
@@ -81,7 +81,8 @@ class ProfitReportController extends Controller
 
         $out = [];
         foreach ($lines as $l) {
-            $sales = round($l->q * $l->p - $l->d, 2);
+            // Total value as invoiced: after discount, including VAT (what Sales Accounts shows).
+            $sales = round($l->q * $l->p - $l->d + $l->t, 2);
             $k = $l->order_id . '|' . $l->product_id;
             if ($l->order_id && isset($moved[$k]) && $moved[$k]->q > 0) {
                 $cost = $moved[$k]->c * ($l->q / max($share[$k], 1e-9));
@@ -113,6 +114,24 @@ class ProfitReportController extends Controller
                 'cost' => $cost === null ? null : round($cost, 2),
                 'cost_source' => $source,
             ];
+        }
+
+        // VAT is rounded per line here and per invoice on the invoice, so each invoice's last line takes
+        // the cents that make its lines add up to the invoice total (Sales Accounts shows that total).
+        $totals = [];
+        $last = [];
+        foreach ($lines as $l) {
+            $totals[$l->invoice_id] = $l->invoice_total;
+        }
+        foreach ($out as $i => $row) {
+            $last[$row['invoice_id']] = $i;
+        }
+        foreach ($last as $invoiceId => $i) {
+            $sum = array_sum(array_map(fn ($r) => $r['invoice_id'] === $invoiceId ? $r['sales'] : 0, $out));
+            $diff = round((float) $totals[$invoiceId] - $sum, 2);
+            if ($diff != 0.0 && abs($diff) < 1) {
+                $out[$i]['sales'] = round($out[$i]['sales'] + $diff, 2);
+            }
         }
 
         return response()->json([
