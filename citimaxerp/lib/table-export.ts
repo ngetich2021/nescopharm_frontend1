@@ -47,8 +47,16 @@ async function loadImage(url: string): Promise<Brand["image"]> {
 async function loadBrand(companyId?: string, fallbackName = ""): Promise<Brand> {
   let company: Company | null = null
   try { company = companyId ? await getCompany(companyId) : null } catch { /* name only */ }
-  const brand: Brand = { name: company?.name || fallbackName }
-  for (const url of [company?.letterhead_url, company?.logo_url]) {
+  const name = company?.name || fallbackName
+  const brand: Brand = { name }
+  // The uploaded letterhead/logo first; the copies bundled with the app (the ones the delivery note
+  // falls back to) when those can't be fetched, so a document is never left without its letterhead.
+  const slug = name.toLowerCase().trim().split(/\s+/)[0]
+  const candidates = [
+    company?.letterhead_url, company?.logo_url,
+    slug && `/company/${slug}-letterhead.jpg`, "/company/nescopharm-letterhead.jpg",
+  ].filter((s, i, arr): s is string => !!s && arr.indexOf(s) === i)
+  for (const url of candidates) {
     if (!url) continue
     try { brand.image = await loadImage(url); break } catch { /* try the next one */ }
   }
@@ -218,6 +226,10 @@ async function exportPdf(data: TableExport, brand: Brand) {
   if (data.details?.length) {
     // Two columns of label: value pairs.
     const colWidth = (pageWidth - margin * 2) / 2
+    // Values start just past the longest label on their side, so a long label never touches its value.
+    pdf.setFont("helvetica", "bold").setFontSize(9)
+    const labelWidth = [0, 1].map((side) => Math.max(24, ...data.details!
+      .filter((_, i) => i % 2 === side).map(([label]) => pdf.getTextWidth(`${label}:`))) + 4)
     // Each row is as tall as its longest value, so a long note wraps instead of running under the table.
     let rowY = y + 4
     for (let i = 0; i < data.details.length; i += 2) {
@@ -225,8 +237,8 @@ async function exportPdf(data: TableExport, brand: Brand) {
       data.details.slice(i, i + 2).forEach(([label, value], side) => {
         const x = margin + side * colWidth
         pdf.setFont("helvetica", "bold").setFontSize(9).text(`${label}:`, x, rowY)
-        const lines: string[] = pdf.setFont("helvetica", "normal").splitTextToSize(String(value ?? ""), colWidth - 34)
-        pdf.text(lines, x + 32, rowY)
+        const lines: string[] = pdf.setFont("helvetica", "normal").splitTextToSize(String(value ?? ""), colWidth - labelWidth[side] - 4)
+        pdf.text(lines, x + labelWidth[side], rowY)
         rowLines = Math.max(rowLines, lines.length)
       })
       rowY += rowLines === 1 ? 5 : rowLines * 4 + 1
