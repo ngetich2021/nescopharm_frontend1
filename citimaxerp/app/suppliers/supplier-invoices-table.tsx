@@ -19,6 +19,9 @@ import { ImportHistoryDialog } from "@/components/import-history-dialog";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { RecordSupplierInvoice, SupplierInvoicesImport } from "./supplier-invoices-actions";
+import { FileText, Pencil } from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
+import { ReceiptDebitNoteDialog } from "@/app/product-receipt/components/ReceiptDebitNoteDialog";
 
 // 12/07/2026
 const shortDate = (date?: string | null) => {
@@ -76,31 +79,11 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
   const [viewing, setViewing] = useState<SupplierBill | null>(null);
   const [reload, setReload] = useState(0);
   const [deleting, setDeleting] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const { hasPermission } = usePermissions();
+  // GM, Director and Accountant to start ("Edit Debit Notes" on Users > Roles).
+  const canEditDebitNotes = hasPermission("can_edit_debit_notes");
   const refresh = () => setReload((n) => n + 1);
-
-  // A debit note for returned goods as its own document (logo-headed), for the supplier.
-  const exportDebitNote = useTableExport(() => {
-    const b = viewing!;
-    const goods = round2(b.total - (b.tax_amount || 0));
-    const footer: (string | number | null)[][] = [["", "Goods", "", b.lines.reduce((s, l) => s + l.quantity, 0), "", goods]];
-    if (b.tax_amount) footer.push(["", "VAT", "", null, "", b.tax_amount]);
-    footer.push(["", "Total debited", "", null, "", b.total]);
-    return {
-      fileName: `debit-note-${b.invoice_number.replace(/\//g, "-")}`,
-      title: `Debit Note ${b.invoice_number}`,
-      details: [
-        ["Supplier", b.supplier_name || "-"],
-        ["Date", shortDate(b.invoice_date)],
-        ["Goods received", b.returns_receipt_number || "-"],
-        ["Supplier's credit note", b.supplier_invoice_number || "-"],
-        ["Reason", b.reason || "-"],
-      ],
-      headers: ["S/No", "Description", "Batch", "Qty", "Unit Cost", "Amount"],
-      moneyColumns: [4, 5],
-      rows: b.lines.map((l, i) => [i + 1, l.name, l.batch_number || "", l.quantity, l.unit_price, l.amount]),
-      footer,
-    };
-  });
 
   const removeBill = async (bill: SupplierBill) => {
     const returns = bill.lines.length > 0;
@@ -370,7 +353,16 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                 <div className="border-t pt-4">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-semibold">Goods returned</Label>
-                    <ExportMenu onExport={exportDebitNote} />
+                    <div className="flex gap-2">
+                      {canEditDebitNotes && (
+                        <Button size="sm" variant="outline" onClick={() => setEditingNoteId(viewing.id)}>
+                          <Pencil className="h-4 w-4 mr-2" /> Edit
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => window.open(`/suppliers/debit-notes/${viewing.id}/document`, "_blank")}>
+                        <FileText className="h-4 w-4 mr-2" /> Debit Note (Print / Download)
+                      </Button>
+                    </div>
                   </div>
                   <Table>
                     <TableHeader>
@@ -378,6 +370,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                         <TableHead className="w-12">S/No</TableHead>
                         <TableHead>Description</TableHead>
                         <TableHead>Batch</TableHead>
+                        <TableHead>Expiry</TableHead>
                         <TableHead className="text-right">Qty</TableHead>
                         <TableHead className="text-right">Unit Cost</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
@@ -389,6 +382,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell>{l.name}</TableCell>
                           <TableCell>{l.batch_number || "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{shortDate(l.expiry_date)}</TableCell>
                           <TableCell className="text-right">{l.quantity}</TableCell>
                           <TableCell className="text-right whitespace-nowrap">{money(l.unit_price)}</TableCell>
                           <TableCell className="text-right whitespace-nowrap">{money(l.amount)}</TableCell>
@@ -448,6 +442,14 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
           )}
         </DialogContent>
       </Dialog>
+
+      <ReceiptDebitNoteDialog
+        receipt={null}
+        editNoteId={editingNoteId}
+        open={!!editingNoteId}
+        onOpenChange={(v) => { if (!v) setEditingNoteId(null); }}
+        onDone={() => { setViewing(null); refresh(); }}
+      />
     </div>
   );
 }

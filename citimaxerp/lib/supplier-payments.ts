@@ -246,6 +246,39 @@ export async function getSupplierBills(params: {
     return apiCall<SupplierBillsResponse>(`/finance/accounts-payable?${qs.toString()}`, "GET");
 }
 
+/** A debit note for returned goods (SDEB/0001) with what its printed document shows. */
+export interface DebitNoteDocumentData {
+    id: string;
+    company_id: string;
+    number: string;
+    date: string | null;
+    supplier_reference: string | null;
+    reason: string | null;
+    receipt_number: string | null;
+    receipt_date: string | null;
+    supplier: { name: string; address: string | null; phone: string | null; email: string | null; contact_person: string | null; kra_pin: string | null } | null;
+    lines: { name: string; batch_number: string | null; expiry_date: string | null; unit: string; quantity: number; unit_price: number; amount: number }[];
+    goods: number;
+    tax_amount: number;
+    total: number;
+    recorded_by: string | null;
+}
+
+export async function getDebitNoteDocument(id: string): Promise<DebitNoteDocumentData> {
+    const res = await apiCall<{ data: DebitNoteDocumentData }>(`/finance/accounts-payable/${id}/debit-note`, "GET");
+    return res.data;
+}
+
+/** Edit a debit note for returned goods (GM, Director, Accountant - "Edit Debit Notes"). */
+export async function updateDebitNote(id: string, payload: {
+    date: string;
+    reason: string;
+    supplier_reference?: string;
+    items: { receipt_item_id: string; quantity: number }[];
+}): Promise<{ message: string; data: { id: string; invoice_number: string; total: number } }> {
+    return apiCall(`/finance/accounts-payable/${id}/debit-note`, "PUT", payload);
+}
+
 export interface RecordSupplierBillPayload {
     supplier_id: string;
     supplier_invoice_number?: string;

@@ -228,6 +228,153 @@ class AccountsPayableController extends Controller
     }
 
     /**
+     * A debit note for returned goods (SDEB/0001) as its printed document needs it: the supplier's
+     * name, address and KRA PIN, the goods-received note and its date, and each line with its batch,
+     * expiry and unit (pcs, box ...).
+     */
+    public function debitNote(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        $allowed = collect(['can_view_accounts', 'can_view_accounts_payable', 'can_view_payments'])
+            ->contains(fn ($p) => $this->hasPermission($request, $p, $user->company_id));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view debit notes.', 'data' => null], 403);
+        }
+
+        $note = AccountsPayable::where('company_id', $user->company_id)->find($id);
+        $meta = $note?->metadata ?? [];
+        if (!$note || ($meta['kind'] ?? 'bill') !== 'debit_note') {
+            return response()->json(['status' => 'failed', 'message' => 'Debit note not found.', 'data' => null], 404);
+        }
+
+        $supplier = $note->vendor_id ? Supplier::find($note->vendor_id) : null;
+        $receipt = !empty($meta['returns_receipt_id']) ? \App\Models\ProductReceipt::find($meta['returns_receipt_id']) : null;
+        $lines = array_values($note->line_items ?? []);
+        $units = \App\Models\Product::whereIn('id', collect($lines)->pluck('product_id')->filter()->unique())
+            ->pluck('unit_of_measurement', 'id');
+        $recorder = $note->created_by ? DB::table('users')->where('id', $note->created_by)->first(['first_name', 'last_name']) : null;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'id' => $note->id,
+                'company_id' => $note->company_id,
+                'number' => $note->invoice_number,
+                'date' => $note->invoice_date?->toDateString(),
+                'supplier_reference' => $note->vendor_invoice_number,
+                'reason' => $meta['reason'] ?? null,
+                'receipt_number' => $meta['returns_receipt_number'] ?? null,
+                'receipt_date' => $receipt?->receipt_date?->toDateString(),
+                'supplier' => $supplier ? [
+                    'name' => $supplier->name,
+                    'address' => $supplier->address,
+                    'phone' => $supplier->phone,
+                    'email' => $supplier->email,
+                    'contact_person' => $supplier->contact_person,
+                    'kra_pin' => $supplier->tax_information,
+                ] : null,
+                'lines' => array_map(fn ($l) => [
+                    'name' => $l['name'] ?? 'Item',
+                    'batch_number' => $l['batch_number'] ?? null,
+                    'expiry_date' => $l['expiry_date'] ?? null,
+                    'unit' => (!empty($l['product_id']) ? $units->get($l['product_id']) : null) ?: 'pcs',
+                    'quantity' => (float) ($l['quantity'] ?? 0),
+                    'unit_price' => round((float) ($l['unit_price'] ?? 0), 2),
+                    'amount' => round((float) ($l['amount'] ?? 0), 2),
+                ], $lines),
+                'goods' => round((float) $note->total_amount - (float) $note->tax_amount, 2),
+                'tax_amount' => round((float) $note->tax_amount, 2),
+                'total' => round((float) $note->total_amount, 2),
+                'recorded_by' => $recorder ? trim("{$recorder->first_name} {$recorder->last_name}") : null,
+            ],
+        ]);
+    }
+
+    /** Who may edit a debit note for returned goods: "Edit Debit Notes" (GM, Director, Accountant to start). */
+    public const EDIT_DEBIT_NOTES = 'can_edit_debit_notes';
+
+    private function returnsNote(Request $request, string $id): ?AccountsPayable
+    {
+        $note = AccountsPayable::where('company_id', $request->user()->company_id)->find($id);
+
+        return $note && !empty(($note->metadata ?? [])['returns']) ? $note : null;
+    }
+
+    /** The receipt's lines for editing a debit note: this note's quantities count as not yet returned. */
+    public function debitNoteEditLines(Request $request, string $id): JsonResponse
+    {
+        if (!$this->hasPermission($request, self::EDIT_DEBIT_NOTES, $request->user()->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director or an Accountant (Edit Debit Notes) can edit debit notes.'], 403);
+        }
+        $note = $this->returnsNote($request, $id);
+        $service = app(\App\Services\SupplierDebitNoteService::class);
+        $receipt = $note ? $service->receiptOf($note) : null;
+        if (!$note || !$receipt) {
+            return response()->json(['status' => 'failed', 'message' => 'Debit note or its goods receipt not found.'], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'receipt_number' => $receipt->product_receipt_number,
+                'reference_number' => $receipt->reference_number,
+                'supplier_id' => $receipt->supplier_id,
+                'supplier_name' => $receipt->supplier_id ? Supplier::whereKey($receipt->supplier_id)->value('name') : null,
+                'vat_rate' => $receipt->purchase_order_id ? (float) (\App\Models\PurchaseOrder::whereKey($receipt->purchase_order_id)->value('tax_rate') ?? 0) : 0.0,
+                'next_number' => $note->invoice_number,
+                'lines' => $service->returnableLines($receipt, $note),
+                'debit_notes' => \App\Services\SupplierDebitNoteService::forReceipt($receipt->id)->whereKeyNot($note->id)->orderBy('created_at')
+                    ->get(['id', 'invoice_number', 'invoice_date', 'total_amount'])
+                    ->map(fn ($n) => ['id' => $n->id, 'number' => $n->invoice_number, 'date' => $n->invoice_date?->toDateString(), 'total' => round((float) $n->total_amount, 2)]),
+                'note' => [
+                    'date' => $note->invoice_date?->toDateString(),
+                    'reason' => ($note->metadata ?? [])['reason'] ?? null,
+                    'supplier_reference' => $note->vendor_invoice_number,
+                ],
+            ],
+        ]);
+    }
+
+    /** Edit a debit note for returned goods: date, reason, supplier's credit note no. and quantities. */
+    public function updateDebitNote(Request $request, string $id): JsonResponse
+    {
+        if (!$this->hasPermission($request, self::EDIT_DEBIT_NOTES, $request->user()->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only the GM, a Director or an Accountant (Edit Debit Notes) can edit debit notes.'], 403);
+        }
+        $note = $this->returnsNote($request, $id);
+        if (!$note) {
+            return response()->json(['status' => 'failed', 'message' => 'Debit note not found.'], 404);
+        }
+        $validator = Validator::make($request->all(), [
+            'date' => 'required|date',
+            'reason' => 'required|string|max:1000',
+            'supplier_reference' => 'nullable|string|max:255',
+            'items' => 'required|array|min:1',
+            'items.*.receipt_item_id' => 'required|string',
+            'items.*.quantity' => 'required|integer|min:0',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $note = app(\App\Services\SupplierDebitNoteService::class)->update($note, $request->input('items'), [
+                'date' => $request->input('date'),
+                'reason' => $request->input('reason'),
+                'supplier_reference' => $request->input('supplier_reference'),
+            ], $request->user()->id);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['status' => 'failed', 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Debit note {$note->invoice_number} updated: the stock, the receipt's invoice and the books follow the new quantities.",
+            'data' => ['id' => $note->id, 'invoice_number' => $note->invoice_number, 'total' => round((float) $note->total_amount, 2)],
+        ]);
+    }
+
+    /**
      * Display the specified accounts payable record.
      */
     public function show(Request $request, string $id): JsonResponse

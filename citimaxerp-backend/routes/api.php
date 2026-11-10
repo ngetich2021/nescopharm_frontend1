@@ -977,6 +977,9 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     Route::patch('collection-notes/{id}', [\App\Http\Controllers\CollectionNoteController::class, 'update']);
     Route::put('collection-actions', [\App\Http\Controllers\CollectionNoteController::class, 'setAction']);
     Route::get('accounts-payable-summary', [AccountsPayableController::class, 'getSummary']);
+    Route::get('accounts-payable/{id}/debit-note', [AccountsPayableController::class, 'debitNote']);
+    Route::get('accounts-payable/{id}/debit-note-lines', [AccountsPayableController::class, 'debitNoteEditLines']);
+    Route::put('accounts-payable/{id}/debit-note', [AccountsPayableController::class, 'updateDebitNote']);
     Route::apiResource('accounts-payable', AccountsPayableController::class);
     Route::post('accounts-payable/{id}/record-payment', [AccountsPayableController::class, 'recordPayment']);
 

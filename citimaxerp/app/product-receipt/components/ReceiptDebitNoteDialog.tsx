@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { displayDate } from "@/lib/date-format";
-import { createReceiptDebitNote, getReceiptDebitNoteLines, type ReceiptDebitNoteInfo } from "@/lib/productreceipt";
+import { createReceiptDebitNote, getDebitNoteEditLines, getReceiptDebitNoteLines, type ReceiptDebitNoteInfo } from "@/lib/productreceipt";
+import { updateDebitNote } from "@/lib/supplier-payments";
 
 const money = (n: number) => `KES ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -18,9 +19,11 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /**
  * Debit note on a goods receipt: goods sent back to the supplier. Each line's quantity comes out of
  * that receipt's batch and the supplier is debited (what is owed on the receipt's invoice comes down).
+ * With editNoteId it edits that debit note instead (GM, Director, Accountant): same form, filled in.
  */
-export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: {
+export function ReceiptDebitNoteDialog({ receipt, editNoteId, open, onOpenChange, onDone }: {
   receipt: { id: string; product_receipt_number?: string } | null;
+  editNoteId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDone?: () => void;
@@ -35,19 +38,27 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
   const [supplierRef, setSupplierRef] = useState("");
 
   useEffect(() => {
-    if (!open || !receipt) return;
+    if (!open || (!receipt && !editNoteId)) return;
     setInfo(null);
     setQty({});
     setReason("");
     setSupplierRef("");
     setDate(new Date().toISOString().slice(0, 10));
     setLoading(true);
-    getReceiptDebitNoteLines(receipt.id)
-      .then(setInfo)
-      .catch((e) => toast({ title: "Could not load the receipt", description: e?.message, variant: "destructive" }))
+    (editNoteId ? getDebitNoteEditLines(editNoteId) : getReceiptDebitNoteLines(receipt!.id))
+      .then((data) => {
+        setInfo(data);
+        if (editNoteId) {
+          setQty(Object.fromEntries(data.lines.filter((l) => (l.current ?? 0) > 0).map((l) => [l.receipt_item_id, String(l.current)])));
+          setReason(data.note?.reason || "");
+          setSupplierRef(data.note?.supplier_reference || "");
+          if (data.note?.date) setDate(data.note.date);
+        }
+      })
+      .catch((e) => toast({ title: editNoteId ? "Could not load the debit note" : "Could not load the receipt", description: e?.message, variant: "destructive" }))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, receipt?.id]);
+  }, [open, receipt?.id, editNoteId]);
 
   const lines = info?.lines ?? [];
   const goods = useMemo(
@@ -60,21 +71,24 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
   const anyQty = lines.some((l) => (Number(qty[l.receipt_item_id]) || 0) > 0);
 
   const save = async () => {
-    if (!receipt || !info) return;
+    if ((!receipt && !editNoteId) || !info) return;
     if (!reason.trim()) {
       toast({ title: "Reason needed", description: "Say why the goods are going back (e.g. damaged, expired, wrong item).", variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
-      const res = await createReceiptDebitNote(receipt.id, {
+      const payload = {
         date,
         reason: reason.trim(),
         supplier_reference: supplierRef.trim() || undefined,
         items: lines
           .map((l) => ({ receipt_item_id: l.receipt_item_id, quantity: Number(qty[l.receipt_item_id]) || 0 }))
           .filter((i) => i.quantity > 0),
-      });
+      };
+      const res = editNoteId
+        ? await updateDebitNote(editNoteId, { ...payload, supplier_reference: supplierRef.trim() })
+        : await createReceiptDebitNote(receipt!.id, payload);
       toast({ title: `Debit note ${res.data.invoice_number}`, description: res.message });
       onOpenChange(false);
       onDone?.();
@@ -89,7 +103,7 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Debit Note - Return to Supplier {info ? `(${info.next_number})` : ""}</DialogTitle>
+          <DialogTitle>{editNoteId ? "Edit Debit Note" : "Debit Note - Return to Supplier"} {info ? `(${info.next_number})` : ""}</DialogTitle>
           <DialogDescription>
             {info
               ? `${info.supplier_name || "No supplier"} · receipt ${info.receipt_number}${info.reference_number ? ` (ref ${info.reference_number})` : ""}. The quantities go out of stock and the supplier is debited.`
@@ -208,7 +222,7 @@ export function ReceiptDebitNoteDialog({ receipt, open, onOpenChange, onDone }: 
             className="bg-[#E30040] hover:bg-[#E30040]/90"
           >
             {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Raise Debit Note {total > 0 ? money(total) : ""}
+            {editNoteId ? "Save Debit Note" : "Raise Debit Note"} {total > 0 ? money(total) : ""}
           </Button>
         </DialogFooter>
       </DialogContent>

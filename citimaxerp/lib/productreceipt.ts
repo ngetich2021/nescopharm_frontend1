@@ -418,6 +418,7 @@ export interface DebitNoteLine {
   in_stock: number; // what of this receipt's batch is left (the item's stock when it came in without a batch)
   returnable: number;
   unit_price: number;
+  current?: number; // editing a debit note: what it returns on this line now
 }
 
 export interface ReceiptDebitNoteInfo {
@@ -429,6 +430,14 @@ export interface ReceiptDebitNoteInfo {
   next_number: string;
   lines: DebitNoteLine[];
   debit_notes: { id: string; number: string; date: string | null; total: number }[];
+  // When editing a debit note: what it says now.
+  note?: { date: string | null; reason: string | null; supplier_reference: string | null };
+}
+
+/** The receipt's lines for editing a debit note (its own quantities count as not yet returned, in `current`). */
+export async function getDebitNoteEditLines(noteId: string): Promise<ReceiptDebitNoteInfo> {
+  const res = await apiCall<{ data: ReceiptDebitNoteInfo }>(`/finance/accounts-payable/${noteId}/debit-note-lines`, "GET");
+  return res.data;
 }
 
 export async function getReceiptDebitNoteLines(receiptId: string): Promise<ReceiptDebitNoteInfo> {
