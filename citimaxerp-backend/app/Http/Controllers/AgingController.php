@@ -127,12 +127,16 @@ class AgingController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view receivables.'], 403);
         }
         $asOf = Carbon::parse($request->input('as_of_date', now()->toDateString()))->toDateString();
+        // A range (e.g. 12/12/2025 - 15/10/2027): invoices dated from date_from up to the as-of date,
+        // aged as at the as-of date. Without date_from, every invoice up to the as-of date.
+        $from = $request->filled('date_from') ? Carbon::parse($request->input('date_from'))->toDateString() : null;
 
         $rows = Invoice::with('customer:id,name,business_name,trading_name,contact_person_name')
             ->where('company_id', $request->user()->company_id)
             ->owedByCustomers()
             ->where('balance_amount', '>', 0.009)
             ->whereDate('invoice_date', '<=', $asOf)
+            ->when($from, fn ($q) => $q->whereDate('invoice_date', '>=', $from))
             ->orderBy('due_date')
             ->get()
             ->map(fn ($inv) => [
@@ -151,7 +155,10 @@ class AgingController extends Controller
             ->all();
 
         $companyId = $request->user()->company_id;
-        return response()->json($this->report($rows, 'receivable', $asOf, $this->chequesHeld($companyId, 'received', 'customer_id')));
+        $report = $this->report($rows, 'receivable', $asOf, $this->chequesHeld($companyId, 'received', 'customer_id'));
+        $report['summary']['date_from'] = $from;
+
+        return response()->json($report);
     }
 
     /**

@@ -250,6 +250,8 @@ function AgingContent() {
   const [activeView, setActiveView] = useState<ActiveView>(searchParams.get("view") === "tracker" ? "tracker" : "summary")
   const [search, setSearch] = useState("")
   const [asOfDate, setAsOfDate] = useState(format(new Date(), "yyyy-MM-dd"))
+  // Receivables range: invoices dated from this day up to the As of date (empty = from the start).
+  const [fromDate, setFromDate] = useState("")
   const [receivableData, setReceivableData] = useState<AgingReport | null>(null)
   const [payableData, setPayableData] = useState<AgingReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -297,7 +299,7 @@ function AgingContent() {
 
       const endpoint =
         tab === "receivables"
-          ? `/finance/accounts-receivable/aging-report?as_of_date=${date}`
+          ? `/finance/accounts-receivable/aging-report?as_of_date=${date}${fromDate ? `&date_from=${fromDate}` : ""}`
           : `/finance/accounts-payable/aging-report?as_of_date=${date}`
 
       const res = await apiCall<AgingReport>(endpoint, "GET")
@@ -319,7 +321,7 @@ function AgingContent() {
 
   useEffect(() => {
     fetchData(activeTab, asOfDate)
-  }, [activeTab, asOfDate])
+  }, [activeTab, asOfDate, fromDate])
 
   // Always current: a payment or new invoice shows without reloading, on coming back to the page and every minute.
   useEffect(() => {
@@ -336,7 +338,7 @@ function AgingContent() {
       document.removeEventListener("visibilitychange", refresh)
       clearInterval(timer)
     }
-  }, [activeTab, asOfDate])
+  }, [activeTab, asOfDate, fromDate])
 
   /* ---------- derived ---------- */
 
@@ -467,7 +469,8 @@ function AgingContent() {
 
   const title = activeTab === "receivables" ? "Receivables" : "Payables"
   const onExport = useTableExport(() => {
-    const asAt = `As at ${day(asOfDate)}${q ? ` - search "${search.trim()}"` : ""}`
+    const range = activeTab === "receivables" && fromDate ? `Invoices dated ${day(fromDate)} - ${day(asOfDate)}, aged as at ${day(asOfDate)}` : `As at ${day(asOfDate)}`
+    const asAt = `${range}${q ? ` - search "${search.trim()}"` : ""}`
     if (activeView === "summary") {
       return {
         fileName: `${title.toLowerCase()}-ageing-summary-${asOfDate}`,
@@ -795,7 +798,7 @@ function AgingContent() {
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm">
               <Hourglass className="h-4 w-4 text-amber-200" />
-              As of {day(asOfDate)}
+              {activeTab === "receivables" && fromDate ? `${day(fromDate)} - ${day(asOfDate)}` : `As of ${day(asOfDate)}`}
             </div>
           </div>
           <div className="absolute right-0 top-0 h-full w-1/3 bg-white/5 skew-x-12 transform" />
@@ -814,16 +817,39 @@ function AgingContent() {
             </TabsList>
           </Tabs>
 
-          <div>
-            <label className="text-sm font-medium mb-1 block text-muted-foreground">As of Date</label>
-            <div className="relative">
-              <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="date"
-                value={asOfDate}
-                onChange={(e) => setAsOfDate(e.target.value)}
-                className="pl-8 w-48"
-              />
+          <div className="flex flex-wrap items-end gap-3">
+            {activeTab === "receivables" && (
+              <div>
+                <label className="text-sm font-medium mb-1 block text-muted-foreground">From (invoice date)</label>
+                <div className="relative flex items-center gap-1">
+                  <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="date"
+                    value={fromDate}
+                    max={asOfDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="pl-8 w-48"
+                    aria-label="From invoice date"
+                  />
+                  {fromDate && (
+                    <button type="button" className="text-xs text-muted-foreground hover:text-foreground px-1" onClick={() => setFromDate("")}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-1 block text-muted-foreground">{activeTab === "receivables" ? "To / As of Date" : "As of Date"}</label>
+              <div className="relative">
+                <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={asOfDate}
+                  onChange={(e) => setAsOfDate(e.target.value)}
+                  className="pl-8 w-48"
+                />
+              </div>
             </div>
           </div>
         </div>
