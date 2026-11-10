@@ -664,9 +664,14 @@ export default function InventoryReportPage() {
                   {/* Credit notes dated in the period are deducted at the end: Less credit notes, then Net. */}
                   {creditRows.map((fr) => (
                     <TableRow key={fr.label}>
-                      {columns.map((c, i) => (
+                      {/* The label spans S/No, Item No. and Description and wraps there, so a long
+                          credit-note line never widens the narrow Item No. column. */}
+                      <TableCell colSpan={3} className={cn("py-2 text-sm", fr.bold && "font-semibold")}>
+                        {fr.label}
+                      </TableCell>
+                      {columns.slice(3).map((c) => (
                         <TableCell key={c.key} className={cn("py-2 text-sm tabular-nums", fr.bold && "font-semibold", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                          {i === 1 ? <span className="whitespace-nowrap">{fr.label}</span> : c.key === "sales_revenue" ? fr.value : c.key === "cost_of_sales" ? fr.cost : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""}
+                          {c.key === "sales_revenue" ? fr.value : c.key === "cost_of_sales" ? fr.cost : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""}
                         </TableCell>
                       ))}
                     </TableRow>
