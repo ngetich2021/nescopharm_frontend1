@@ -34,6 +34,9 @@ import {
   Search,
   TrendingUp,
   Wallet,
+  ArrowDown as SortDown,
+  ArrowUp as SortUp,
+  ArrowUpDown as SortBoth,
 } from "lucide-react"
 import { documentFileName, filePeriod, todayFileDate, sessionCompanyName } from "@/lib/document-names"
 
@@ -142,6 +145,8 @@ export default function InventoryReportPage() {
   const [dateFrom, setDateFrom] = useState(todayStr)
   const [dateTo, setDateTo] = useState(todayStr)
   const [search, setSearch] = useState("")
+  // Click a heading to sort by it (again to reverse); sizes stay under their item.
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null)
   const [reorderOnly, setReorderOnly] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(1)
@@ -192,7 +197,8 @@ export default function InventoryReportPage() {
     fetchReport()
   }, [fetchReport])
 
-  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, status, dateFrom, dateTo])
+  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, status, dateFrom, dateTo, sort])
+  useEffect(() => setSort(null), [reportType])
 
   const columns = useMemo<Column[]>(() => {
     const serialNo: Column = {
@@ -387,7 +393,18 @@ export default function InventoryReportPage() {
         return keptSizes.length ? [head, ...keptSizes] : null
       })
       .filter((g): g is Row[] => g !== null)
-  }, [data, search, reorderOnly, reportType])
+      .sort((a, b) => {
+        if (!sort) return 0
+        const av = a[0][sort.key], bv = b[0][sort.key]
+        const blank = (v: unknown) => v === null || v === undefined || v === ""
+        if (blank(av) || blank(bv)) return blank(av) === blank(bv) ? 0 : blank(av) ? 1 : -1 // blanks last
+        const na = Number(av), nb = Number(bv)
+        const cmp = !Number.isNaN(na) && !Number.isNaN(nb) && typeof av !== "boolean"
+          ? na - nb
+          : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" })
+        return sort.dir === "asc" ? cmp : -cmp
+      })
+  }, [data, search, reorderOnly, reportType, sort])
 
   const visibleRows = useMemo(() => visibleGroups.flat(), [visibleGroups])
   const totalGroups = visibleGroups.length
@@ -400,19 +417,31 @@ export default function InventoryReportPage() {
 
   // Credit notes in the period (CN-0008...), deducted after the Total: the profit they gave up comes
   // off gross profit. Credited lines with no cost anywhere are left out of profit, as sales are.
-  const cn_ = reportType === "stock_management" ? summary?.credit_notes : null
-  const creditRows: { label: string; value: string; cost: string; profit: string; pct: string; bold?: boolean }[] = cn_
+  // Gross, credit notes and Net all follow the rows showing (search, category, store, reorder filter):
+  // each item row carries its own credit notes, so searching one item deducts only that item's.
+  const shown = useMemo(() => {
+    if (reportType !== "stock_management") return null
+    const top = visibleRows.filter((r) => r.row_type !== "size")
+    const sum = (key: string) => top.reduce((s, r) => s + Number(r[key] || 0), 0)
+    const value = sum("sales_revenue"), cost = sum("cost_of_sales"), profit = sum("gross_profit")
+    const cValue = sum("credited_value"), cCost = sum("credited_cost"), cUncosted = sum("credited_uncosted")
+    const numbers = Array.from(new Set(top.flatMap((r) => (r.credit_notes as string[] | undefined) ?? []))).sort()
+    const netCost = cost - cCost
+    const netProfit = profit - (cValue - cCost)
+    return { cValue, cCost, cUncosted, numbers, netValue: value - cValue, netCost, netProfit, netPct: netCost > 0 ? Math.round((netProfit / netCost) * 1000) / 10 : null }
+  }, [reportType, visibleRows])
+  const creditRows: { label: string; value: string; cost: string; profit: string; pct: string; bold?: boolean }[] = shown
     ? [
         {
-          label: cn_.count > 0
-            ? `Less credit notes (${(cn_.numbers ?? []).join(", ")}): KES ${money(cn_.amount)} credited${cn_.uncosted_amount > 0 ? `, ${money(cn_.uncosted_amount)} of it without a cost` : ""}`
-            : "Less credit notes (none in this range)",
-          value: cn_.count > 0 ? `-${money(cn_.amount)}` : money(0),
-          cost: cn_.count > 0 ? `-${money(cn_.cost)}` : money(0),
-          profit: cn_.count > 0 ? `-${money(cn_.profit)}` : money(0),
+          label: shown.numbers.length
+            ? `Less credit notes (${shown.numbers.join(", ")}): KES ${money(shown.cValue)} credited${shown.cUncosted > 0 ? `, ${money(shown.cUncosted)} of it without a cost` : ""}`
+            : "Less credit notes (none for these items in this range)",
+          value: shown.cValue ? `-${money(shown.cValue)}` : money(0),
+          cost: shown.cCost ? `-${money(shown.cCost)}` : money(0),
+          profit: shown.cValue ? `-${money(shown.cValue - shown.cCost)}` : money(0),
           pct: "",
         },
-        { label: "Net (after credit notes)", value: money(summary?.net_sales_value), cost: money(summary?.net_cost_value), profit: money(summary?.net_gross_profit), pct: pctText(summary?.net_profit_pct ?? null), bold: true },
+        { label: "Net (after credit notes)", value: money(shown.netValue), cost: money(shown.netCost), profit: money(shown.netProfit), pct: pctText(shown.netPct), bold: true },
       ]
     : []
 
@@ -469,10 +498,10 @@ export default function InventoryReportPage() {
           <SummaryCard label="Closing Value" value={`KES ${money(summary.total_closing_stock_value)}`} hint="at buying price" icon={<Wallet className="h-5 w-5" />} />
           <SummaryCard
             label="Gross Profit"
-            value={`KES ${money(summary.net_gross_profit ?? summary.total_gross_profit)}`}
+            value={`KES ${money(shown ? shown.netProfit : summary.total_gross_profit)}`}
             hint={[
-              summary.net_profit_pct !== null && summary.net_profit_pct !== undefined ? `${pctText(summary.net_profit_pct)} on cost` : null,
-              summary.credit_notes?.count ? "after credit notes" : null,
+              shown?.netPct !== null && shown?.netPct !== undefined ? `${pctText(shown.netPct)} on cost` : null,
+              shown?.numbers.length ? "after credit notes" : null,
               period ? `${period.date_from} to ${period.date_to}` : null,
             ].filter(Boolean).join(" · ")}
             icon={<TrendingUp className="h-5 w-5" />}
@@ -599,7 +628,20 @@ export default function InventoryReportPage() {
                 <TableRow>
                   {columns.map((c) => (
                     <TableHead key={c.key} className={cn("whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-gray-600", c.align === "right" && "text-right", c.align === "center" && "text-center", c.className)}>
-                      {c.header}
+                      {c.key === "_sno" ? c.header : (
+                        <button
+                          type="button"
+                          title="Sort"
+                          onClick={() => setSort((cur) => cur?.key === c.key
+                            ? { key: c.key, dir: cur.dir === "asc" ? "desc" : "asc" }
+                            // numbers start highest first, text A-Z
+                            : { key: c.key, dir: ["name", "item_no", "sku", "category", "store", "reference", "type", "nearest_expiry", "movement_date"].includes(c.key) ? "asc" : "desc" })}
+                          className={cn("inline-flex items-center gap-1 uppercase hover:text-gray-900", c.align === "right" && "flex-row-reverse")}
+                        >
+                          {c.header}
+                          {sort?.key !== c.key ? <SortBoth className="h-3 w-3 opacity-40" /> : sort.dir === "asc" ? <SortUp className="h-3 w-3" /> : <SortDown className="h-3 w-3" />}
+                        </button>
+                      )}
                     </TableHead>
                   ))}
                 </TableRow>

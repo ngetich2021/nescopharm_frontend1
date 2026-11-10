@@ -360,6 +360,22 @@ class ReportService
         // are left out of profit (their amount is shown), as sales without a cost are.
         $credits = collect(app(CreditNoteProfitService::class)->lines(
             $this->companyId, $dateFrom->toDateString(), $dateTo->toDateString(), $productIds->all()));
+        // Each item row carries its own credit notes, so the deduction follows the table's search and
+        // filters (searching one item deducts only that item's credit notes). Credits are per product, so
+        // they sit on the item's top row (its own row, or the parent of its sizes).
+        $byProduct = $credits->groupBy('product_id');
+        $itemsWithCredits = $items->map(function ($row) use ($byProduct) {
+            if (!in_array($row['row_type'] ?? 'item', ['item', 'parent'], true)) {
+                return $row;
+            }
+            $mine = $byProduct->get($row['product_id']);
+            $row['credited_value'] = $mine ? round($mine->sum('amount'), 2) : 0.0;
+            $row['credited_cost'] = $mine ? round($mine->sum('cost'), 2) : 0.0;
+            $row['credited_uncosted'] = $mine ? round($mine->whereNull('cost')->sum('amount'), 2) : 0.0;
+            $row['credit_notes'] = $mine ? $mine->pluck('credit_note_number')->unique()->values()->all() : [];
+            return $row;
+        });
+
         // Profit = total value - cost value throughout, credit notes included (a credited line with no
         // cost recorded takes its whole value off profit; the report flags it).
         $top = $items->whereIn('row_type', ['item', 'parent']);
@@ -373,7 +389,7 @@ class ReportService
         $netProfit = round($grossBefore - $creditProfit, 2);
 
         return [
-            'data' => $items->toArray(),
+            'data' => $itemsWithCredits->toArray(),
             'period' => [
                 'date_from' => $dateFrom->toDateString(),
                 'date_to' => $dateTo->toDateString(),
