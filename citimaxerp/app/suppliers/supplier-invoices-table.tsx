@@ -161,6 +161,83 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
     };
   });
 
+  // Bills Payable as at today, like the trading workbook: a Summary sheet, then one sheet per supplier
+  // with each invoice (date, ref, their invoice no., due, amount, debit notes, paid, balance due,
+  // status, PV nos., running balance due, notes) and a TOTAL row.
+  const exportBillsPayable = useTableExport(async () => {
+    const [billsRes, notesRes] = await Promise.all([
+      getSupplierBills({ kind: "bill", per_page: "all" }),
+      getSupplierBills({ kind: "debit_note", returns_only: 1, per_page: "all" }),
+    ]);
+    // Debit notes for returned goods, by the receipt they came from (RCPT-0012 -> SDEB/0001 85,000).
+    const notesByReceipt = new Map<string, SupplierBill[]>();
+    for (const n of notesRes.data) {
+      if (!n.returns_receipt_number) continue;
+      notesByReceipt.set(n.returns_receipt_number, [...(notesByReceipt.get(n.returns_receipt_number) ?? []), n]);
+    }
+    const asAt = shortDate(new Date().toISOString());
+    const bySupplier = new Map<string, SupplierBill[]>();
+    for (const b of billsRes.data) {
+      const key = b.supplier_name || "No supplier";
+      bySupplier.set(key, [...(bySupplier.get(key) ?? []), b]);
+    }
+    const suppliers = Array.from(bySupplier.keys()).sort((a, b) => a.localeCompare(b));
+    const statusText = (b: SupplierBill) => (b.balance <= 0 ? "Paid" : b.paid > 0 ? "Part paid" : "Unpaid");
+    const headers = ["Invoice Date", "Description / Ref", "Supplier Inv No.", "Due Date", "Invoice Amount", "Debit Note / Returns",
+      "Paid", "Balance Due", "Status", "PV Nos.", "Running Balance Due", "Notes"];
+
+    const summary: (string | number)[][] = [];
+    const sheets = suppliers.map((name) => {
+      const list = [...bySupplier.get(name)!].sort((a, b) => (a.invoice_date || "").localeCompare(b.invoice_date || "")
+        || a.invoice_number.localeCompare(b.invoice_number, undefined, { numeric: true }));
+      let running = 0;
+      const rows = list.map((b) => {
+        running = round2(running + b.balance);
+        const receipt = (b.source || b.description || "").match(/RCPT-\d+/)?.[0];
+        const notes = (receipt && notesByReceipt.get(receipt)) || [];
+        return [
+          shortDate(b.invoice_date), b.description || b.source || b.invoice_number, b.supplier_invoice_number || "", shortDate(b.due_date),
+          b.total, b.debited || null, b.paid, b.balance, statusText(b), paidByLabel(b), running,
+          b.debited > 0
+            ? `${notes.length ? `Debit note ${notes.map((n) => n.invoice_number).join(", ")}` : "Debit note"} ${money(b.debited)} - goods returned to supplier, reduces amount due.`
+            : "",
+        ];
+      });
+      const t = (k: "total" | "debited" | "paid" | "balance") => round2(list.reduce((sum, b) => sum + (b[k] || 0), 0));
+      summary.push([summary.length + 1, name, list.length, t("total"), t("debited"), t("paid"), t("balance")]);
+      return {
+        fileName: "",
+        sheetName: name,
+        title: `${name} - Invoices & Ledger`,
+        subtitle: `As at ${asAt}`,
+        headers,
+        moneyColumns: [4, 5, 6, 7, 10],
+        rows,
+        footer: [["TOTAL", "", "", "", t("total"), t("debited"), t("paid"), t("balance"), "", "", "", ""]],
+      };
+    });
+    const sum = (i: number) => round2(summary.reduce((s, r) => s + (r[i] as number), 0));
+    return {
+      fileName: `Bills payable trading as at ${asAt.replace(/\//g, ".")}`,
+      title: `Bills Payable as at ${asAt}`,
+      headers: [],
+      rows: [],
+      sheets: [
+        {
+          fileName: "",
+          sheetName: "Summary",
+          title: `Bills Payable as at ${asAt}`,
+          subtitle: "Owed to each supplier; one sheet per supplier follows.",
+          headers: ["S/No", "Supplier", "Invoices", "Invoiced", "Debit Notes / Returns", "Paid", "Balance Due"],
+          moneyColumns: [3, 4, 5, 6],
+          rows: summary,
+          footer: [["", "TOTAL", summary.reduce((s, r) => s + (r[2] as number), 0), sum(3), sum(4), sum(5), sum(6)]],
+        },
+        ...sheets,
+      ],
+    };
+  });
+
   return (
     <div className="space-y-4">
       <InvoiceTotals
@@ -216,6 +293,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
               </>
             )}
             <ExportMenu onExport={exportList} disabled={bills.length === 0} />
+            {!fixedKind && <ExportMenu onExport={exportBillsPayable} label="Bills Payable" />}
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             {actions ?? (

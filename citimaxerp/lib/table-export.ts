@@ -21,7 +21,13 @@ export interface TableExport {
   // Kept in the Excel file but hidden (e.g. the Ref an import reads back), left out of the PDF.
   // CSV cannot hide a column, so it keeps them.
   hiddenColumns?: number[]
+  // A workbook of several tables (e.g. one per supplier): Excel gets one worksheet each, the PDF starts
+  // each on a new page, CSV runs them one after another. headers/rows above are then ignored.
+  sheets?: TableExport[]
+  sheetName?: string // worksheet tab name (else the title), max 31 characters
 }
+
+const partsOf = (data: TableExport): TableExport[] => (data.sheets?.length ? data.sheets : [data])
 
 interface Brand {
   name: string
@@ -103,17 +109,33 @@ function exportCsv(data: TableExport, brand: Brand) {
   }
   const lines = [
     [brand.name], [data.title], ...(data.subtitle ? [[data.subtitle]] : []),
-    ...(data.details ?? []), [],
-    data.headers, ...data.rows, ...(data.footer ?? []),
+    ...partsOf(data).flatMap((part, i) => [
+      ...(data.sheets?.length ? [[], [part.title], ...(part.subtitle ? [[part.subtitle]] : [])] : []),
+      ...(part.details ?? []), [],
+      part.headers, ...part.rows, ...(part.footer ?? []),
+      ...(i < partsOf(data).length - 1 ? [[]] : []),
+    ]),
   ].map((r) => r.map(cell).join(","))
   // BOM so Excel opens it as UTF-8.
   download(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" }), `${data.fileName}.csv`)
 }
 
-async function exportXlsx(data: TableExport, brand: Brand) {
+async function exportXlsx(whole: TableExport, brand: Brand) {
   const ExcelJS = (await import("exceljs")).default
   const wb = new ExcelJS.Workbook()
-  const ws = wb.addWorksheet(data.title.slice(0, 31) || "Sheet1")
+  const used = new Set<string>()
+  for (const part of partsOf(whole)) await writeSheet(wb, part, brand, used)
+  const buffer = await wb.xlsx.writeBuffer()
+  download(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${whole.fileName}.xlsx`)
+}
+
+async function writeSheet(wb: any, data: TableExport, brand: Brand, used: Set<string>) {
+  // Tab names: no []:*?/\ and at most 31 characters, each one different.
+  const base = (data.sheetName || data.title).replace(/[\[\]:*?/\\]/g, " ").trim().slice(0, 31) || "Sheet"
+  let name = base
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base.slice(0, 27)} (${n})`
+  used.add(name.toLowerCase())
+  const ws = wb.addWorksheet(name)
   const decimals = decimalColumns(data)
   const aligns = columnAlignments(data)
 
@@ -171,16 +193,27 @@ async function exportXlsx(data: TableExport, brand: Brand) {
       c.alignment = { horizontal: bold && aligns[i] === "left" && typeof v === "string" ? "right" : aligns[i] }
       if (bold) c.font = { bold: true }
     })
-    if (bold) r.eachCell((c) => { c.border = { top: { style: "thin" } } })
+    if (bold) r.eachCell((c: any) => { c.border = { top: { style: "thin" } } })
   }
   data.rows.forEach((r) => put(r))
   ;(data.footer ?? []).forEach((r) => put(r, true))
-
-  const buffer = await wb.xlsx.writeBuffer()
-  download(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${data.fileName}.xlsx`)
 }
 
-async function exportPdf(data: TableExport, brand: Brand) {
+async function exportPdf(whole: TableExport, brand: Brand) {
+  const { jsPDF } = await import("jspdf")
+  const autoTable = (await import("jspdf-autotable")).default
+  const parts = partsOf(whole)
+  const landscape = parts.some((p) => p.headers.length > 6)
+  const pdf = new jsPDF({ orientation: landscape ? "landscape" : "portrait", unit: "mm", format: "a4" })
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) pdf.addPage()
+    drawPdfPart(pdf, autoTable, parts[i], brand)
+  }
+  await addScanMe(pdf)
+  pdf.save(`${whole.fileName}.pdf`)
+}
+
+function drawPdfPart(pdf: any, autoTable: any, data: TableExport, brand: Brand) {
   if (data.hiddenColumns?.length) {
     const keep = (_: unknown, i: number) => !data.hiddenColumns!.includes(i)
     const drop = (r: ExportCell[]) => r.filter(keep)
@@ -191,9 +224,6 @@ async function exportPdf(data: TableExport, brand: Brand) {
       moneyColumns: remap(data.moneyColumns), rightColumns: remap(data.rightColumns), hiddenColumns: undefined,
     }
   }
-  const { jsPDF } = await import("jspdf")
-  const autoTable = (await import("jspdf-autotable")).default
-  const pdf = new jsPDF({ orientation: data.headers.length > 6 ? "landscape" : "portrait", unit: "mm", format: "a4" })
   const pageWidth = pdf.internal.pageSize.getWidth()
   const margin = 12
   const decimals = decimalColumns(data)
@@ -260,7 +290,7 @@ async function exportPdf(data: TableExport, brand: Brand) {
     footStyles: { fillColor: [243, 244, 246], textColor: 20, fontStyle: "bold" },
     // Headings and totals take their column's alignment (autoTable's columnStyles reach the body only);
     // a totals label in a text column sits right, against the figures.
-    didParseCell: ({ cell, column, section }) => {
+    didParseCell: ({ cell, column, section }: any) => {
       const align = aligns[column.index]
       cell.styles.halign = section === "foot" && align === "left" && cell.raw !== "" ? "right" : align
     },
@@ -271,8 +301,6 @@ async function exportPdf(data: TableExport, brand: Brand) {
       pdf.text(`Page ${pdf.getNumberOfPages()}`, pageWidth - margin - SCAN_ME_SIZE, pageHeight - 6, { align: "right" })
     },
   })
-  await addScanMe(pdf)
-  pdf.save(`${data.fileName}.pdf`)
 }
 
 /** Rows of a CSV file (quoted fields, "" escapes), for re-exporting a server-made CSV in any format. */
