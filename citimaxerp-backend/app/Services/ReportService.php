@@ -240,6 +240,18 @@ class ReportService
         // be the base one, while revenue stays quantity x unit_price because the price is per pack.
         $soldBaseUnits = 'SUM(COALESCE(order_items.base_quantity, order_items.quantity))';
 
+        // Pricing filter (NSPH, NSPD ... or "none" for lines sold without a code): Sold and the values
+        // count only that list's lines (the code on the order line); stock (opening/closing) stays the
+        // item's whole stock, so opening is worked out from all its sales.
+        $priceList = trim((string) ($filters['price_list'] ?? ''));
+        $onList = $priceList === ''
+            ? 'TRUE'
+            : ($priceList === 'none'
+                ? "COALESCE(order_items.price_label, '') = ''"
+                : "split_part(COALESCE(order_items.price_label, ''), ' ', 1) = " . DB::getPdo()->quote($priceList));
+        $listSoldBaseUnits = "SUM(CASE WHEN {$onList} THEN COALESCE(order_items.base_quantity, order_items.quantity) ELSE 0 END)";
+        $listRevenue = "SUM(CASE WHEN {$onList} THEN order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0) ELSE 0 END)";
+
         $salesByVariant = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->where('orders.company_id', $this->companyId)
@@ -251,7 +263,8 @@ class ReportService
             ->select(
                 'order_items.variant_id',
                 DB::raw("{$soldBaseUnits} as quantity_sold"),
-                DB::raw('SUM(order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0)) as revenue')
+                DB::raw("{$listSoldBaseUnits} as list_quantity_sold"),
+                DB::raw("{$listRevenue} as revenue")
             )
             ->get()
             ->keyBy('variant_id');
@@ -272,7 +285,8 @@ class ReportService
             ->select(
                 'order_items.product_id',
                 DB::raw("{$soldBaseUnits} as quantity_sold"),
-                DB::raw('SUM(order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0)) as revenue')
+                DB::raw("{$listSoldBaseUnits} as list_quantity_sold"),
+                DB::raw("{$listRevenue} as revenue")
             )
             ->get()
             ->keyBy('product_id');
@@ -302,17 +316,18 @@ class ReportService
             $variantId = $row['variant_id'];
             $sales = $variantId ? $salesByVariant->get($variantId) : $salesByProduct->get($row['product_id']);
             $received = $variantId ? $receiptsByVariant->get($variantId) : $receiptsByProduct->get($row['product_id']);
-            $quantitySold = (int) ($sales->quantity_sold ?? 0);
+            $allSold = (int) ($sales->quantity_sold ?? 0);
+            $quantitySold = (int) ($sales->list_quantity_sold ?? 0);
             $revenue = (float) ($sales->revenue ?? 0);
             $quantityReceived = (int) ($received->quantity_received ?? 0);
             $closingStock = (int) $row['stock_quantity'];
             $unitCost = (float) $row['unit_cost'];
 
-            $avgMonthlySales = $quantitySold / $periodMonths;
+            $avgMonthlySales = $allSold / $periodMonths; // cover: all its sales, whatever the pricing filter
             $monthsOfStock = $avgMonthlySales > 0 ? round($closingStock / $avgMonthlySales, 1) : null;
 
             return $row + [
-                'opening_stock' => $closingStock - $quantityReceived + $quantitySold,
+                'opening_stock' => $closingStock - $quantityReceived + $allSold,
                 'stock_received' => $quantityReceived,
                 'sales_quantity' => $quantitySold,
                 'closing_stock' => $closingStock,
@@ -338,10 +353,11 @@ class ReportService
             // Sales placed on a sized item without choosing a size count towards the item itself.
             $unsized = $salesByProduct->get($row['product_id']);
             $row['opening_stock'] = $sizes->sum('opening_stock') + (int) ($unsized->quantity_sold ?? 0);
+            $unsizedOnList = (int) ($unsized->list_quantity_sold ?? 0);
             foreach (['stock_received', 'closing_stock'] as $field) {
                 $row[$field] = $sizes->sum($field);
             }
-            $row['sales_quantity'] = $sizes->sum('sales_quantity') + (int) ($unsized->quantity_sold ?? 0);
+            $row['sales_quantity'] = $sizes->sum('sales_quantity') + $unsizedOnList;
             $row['closing_stock_value'] = round($sizes->sum('closing_stock_value'), 2);
             $row['sales_revenue'] = round($sizes->sum('sales_revenue') + (float) ($unsized->revenue ?? 0), 2);
             $row['gross_profit'] = round($sizes->sum('gross_profit') + (float) ($unsized->revenue ?? 0), 2);
@@ -353,13 +369,23 @@ class ReportService
             return $row;
         })->values();
 
+        if ($priceList !== '') {
+            $onTier = $priceList === 'none'
+                ? collect()
+                : DB::table('product_price_tiers')->where('company_id', $this->companyId)->where('tier_name', $priceList)->pluck('product_id')->unique();
+            $keep = $onTier->merge($items->where('sales_quantity', '>', 0)->pluck('product_id'))->flip();
+            $items = $items->filter(fn ($r) => $keep->has($r['product_id']))->values();
+        }
+
         $summaryLines = $items->where('row_type', '!=', 'parent');
 
         // Credit notes dated in the period, for the items in this report, deducted at the end: what they
         // credited comes off sales and the cost of the goods back comes off cost. Lines without any cost
         // are left out of profit (their amount is shown), as sales without a cost are.
         $credits = collect(app(CreditNoteProfitService::class)->lines(
-            $this->companyId, $dateFrom->toDateString(), $dateTo->toDateString(), $productIds->all()));
+            $this->companyId, $dateFrom->toDateString(), $dateTo->toDateString(), $productIds->all()))
+            ->when($priceList !== '', fn ($c) => $c->filter(fn ($l) => $priceList === 'none' ? empty($l['price_list']) : ($l['price_list'] ?? null) === $priceList))
+            ->values();
         // Each item row carries its own credit notes, so the deduction follows the table's search and
         // filters (searching one item deducts only that item's credit notes). Credits are per product, so
         // they sit on the item's top row (its own row, or the parent of its sizes).
@@ -390,6 +416,9 @@ class ReportService
 
         return [
             'data' => $itemsWithCredits->toArray(),
+            'price_lists' => DB::table('product_price_tiers')->where('company_id', $this->companyId)
+                ->whereNotNull('tier_name')->where('tier_name', '!=', '')->distinct()->orderBy('tier_name')->pluck('tier_name')->values()->all(),
+            'price_list' => $priceList ?: null,
             'period' => [
                 'date_from' => $dateFrom->toDateString(),
                 'date_to' => $dateTo->toDateString(),

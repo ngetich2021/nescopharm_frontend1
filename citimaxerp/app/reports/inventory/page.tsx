@@ -140,6 +140,9 @@ export default function InventoryReportPage() {
 
   const [categoryId, setCategoryId] = useState("all")
   const [storeId, setStoreId] = useState("all")
+  // Stock Management: one price list's sales (NSPH, NSPD... or "none" for lines sold without a code).
+  const [priceList, setPriceList] = useState("all")
+  const [priceLists, setPriceLists] = useState<string[]>([])
   const [status, setStatus] = useState("all")
   const todayStr = () => new Date().toISOString().slice(0, 10)
   const [dateFrom, setDateFrom] = useState(todayStr)
@@ -174,6 +177,7 @@ export default function InventoryReportPage() {
       const params: Record<string, string> = { type: reportType }
       if (categoryId !== "all") params.category_id = categoryId
       if (storeId !== "all") params.store_id = storeId
+      if (reportType === "stock_management" && priceList !== "all") params.price_list = priceList
       if (status !== "all") params.status = status
       if (usesDates && dateFrom) params.date_from = dateFrom
       if (usesDates && dateTo) params.date_to = dateTo
@@ -183,6 +187,7 @@ export default function InventoryReportPage() {
       setData(Array.isArray(resp?.data) ? resp.data : [])
       setSummary(resp?.summary ?? null)
       setPeriod(resp?.period ?? null)
+      if (Array.isArray((resp as any)?.price_lists)) setPriceLists((resp as any).price_lists)
     } catch (error: any) {
       if (requestId !== latestRequest.current) return
       setData([])
@@ -191,13 +196,13 @@ export default function InventoryReportPage() {
     } finally {
       if (requestId === latestRequest.current) setLoading(false)
     }
-  }, [reportType, categoryId, storeId, status, usesDates, dateFrom, dateTo, toast])
+  }, [reportType, categoryId, storeId, priceList, status, usesDates, dateFrom, dateTo, toast])
 
   useEffect(() => {
     fetchReport()
   }, [fetchReport])
 
-  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, status, dateFrom, dateTo, sort])
+  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort])
   useEffect(() => setSort(null), [reportType])
 
   const columns = useMemo<Column[]>(() => {
@@ -574,7 +579,7 @@ export default function InventoryReportPage() {
         </Tabs>
 
         <Card>
-          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
+          <CardContent className={cn("grid gap-3 p-4 sm:grid-cols-2", reportType === "stock_management" ? "lg:grid-cols-7" : "lg:grid-cols-6")}>
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input placeholder="Search item no. or description" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
@@ -593,6 +598,16 @@ export default function InventoryReportPage() {
                 {stores.map((store) => <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {reportType === "stock_management" && (
+              <Select value={priceList} onValueChange={setPriceList}>
+                <SelectTrigger aria-label="Pricing"><SelectValue placeholder="All pricing" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All pricing</SelectItem>
+                  {priceLists.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  <SelectItem value="none">No price code</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {usesDates ? (
               <>
                 <Input type="date" aria-label="From date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
