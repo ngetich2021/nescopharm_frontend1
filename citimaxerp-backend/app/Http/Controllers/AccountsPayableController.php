@@ -254,11 +254,20 @@ class AccountsPayableController extends Controller
             ->pluck('unit_of_measurement', 'id');
         $recorder = $note->created_by ? DB::table('users')->where('id', $note->created_by)->first(['first_name', 'last_name']) : null;
 
+        // The company's letterhead and payment details come with the note (as an invoice carries its
+        // company), so anyone who may see debit notes prints them in full without "View Company".
+        $company = \App\Models\Company::find($note->company_id);
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'id' => $note->id,
                 'company_id' => $note->company_id,
+                'company' => $company ? $company->only([
+                    'id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postal_code', 'website',
+                    'logo_url', 'letterhead_url', 'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch',
+                    'mpesa_paybill', 'mpesa_account_number',
+                ]) : null,
                 'number' => $note->invoice_number,
                 'date' => $note->invoice_date?->toDateString(),
                 'supplier_reference' => $note->vendor_invoice_number,

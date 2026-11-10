@@ -8,7 +8,8 @@ import type { DebitNoteDocumentData } from "@/lib/supplier-payments"
 import { INVOICE_PAYMENT_DETAILS, COMPANY_KRA_PIN } from "@/lib/invoice-payment-details"
 import { amountInWords } from "@/lib/number-to-words"
 
-const formatAmount = (n: number) => (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const BUNDLED_LETTERHEAD = "/company/nescopharm-letterhead.jpg"
+const formatAmount =(n: number) => (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const date = (d?: string | null) => (d ? displayDate(d) : "")
 const unitLabel = (u?: string | null) => (u || "pcs").toUpperCase()
 
@@ -45,10 +46,18 @@ export const DebitNoteDocument = forwardRef<HTMLDivElement, Props>(function Debi
         .invoice-sheet { padding: 9mm 11mm !important; }
       }`}</style>
       <Card ref={ref} className="invoice-sheet max-w-4xl mx-auto bg-white p-6 md:p-8 shadow-lg print:shadow-none print:max-w-none print:m-0 print:border-0 text-[12px] text-gray-900">
-        {company?.letterhead_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={company.letterhead_url} alt={`${company.name} letterhead`} className="w-full h-auto mb-2" crossOrigin="anonymous" />
-        )}
+        {/* The uploaded letterhead, else the copy bundled with the app, so it always prints. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={company?.letterhead_url || BUNDLED_LETTERHEAD}
+          alt={`${company?.name || "Company"} letterhead`}
+          className="w-full h-auto mb-2"
+          crossOrigin="anonymous"
+          onError={(e) => {
+            const img = e.currentTarget
+            if (!img.src.endsWith(BUNDLED_LETTERHEAD)) img.src = BUNDLED_LETTERHEAD
+          }}
+        />
 
         <h1 className="text-center text-base font-bold mb-1">Debit Note</h1>
 

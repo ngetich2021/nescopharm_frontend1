@@ -256,6 +256,8 @@ export interface DebitNoteDocumentData {
     reason: string | null;
     receipt_number: string | null;
     receipt_reference: string | null; // the supplier's invoice no. the goods came in on
+    // Letterhead and payment details, sent with the note so no "View Company" permission is needed.
+    company: Partial<import("@/lib/company").Company> | null;
     receipt_date: string | null;
     supplier: { name: string; address: string | null; phone: string | null; email: string | null; contact_person: string | null; kra_pin: string | null } | null;
     lines: { name: string; batch_number: string | null; expiry_date: string | null; unit: string; quantity: number; unit_price: number; amount: number }[];

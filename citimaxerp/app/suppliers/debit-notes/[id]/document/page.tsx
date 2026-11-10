@@ -32,7 +32,8 @@ export default function DebitNoteDocumentPage({ params }: { params: Promise<{ id
     getDebitNoteDocument(id)
       .then(async (data) => {
         setNote(data)
-        setCompany(await getCompany(data.company_id).catch(() => null))
+        // The note carries its company (letterhead, bank details); the company record itself needs "View Company".
+        setCompany((data.company as Company | null) ?? (await getCompany(data.company_id).catch(() => null)))
       })
       .catch((e: any) => setError(e?.message || "Could not load the debit note"))
   }, [id])
