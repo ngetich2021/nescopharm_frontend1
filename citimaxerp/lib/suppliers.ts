@@ -33,6 +33,7 @@ export interface Supplier {
   payment_terms_days: number
   payment_terms_description: string
   tax_information: string
+  credit_limit?: number | string | null // how much we may owe them; ordering past it warns, never blocks
   created_at: string
   updated_at: string
 }
@@ -53,6 +54,7 @@ export interface CreateSupplierPayload {
   payment_terms_days?: number
   payment_terms_description?: string
   tax_information?: string
+  credit_limit?: number | null
 }
 
 export interface UpdateSupplierPayload {
@@ -71,6 +73,7 @@ export interface UpdateSupplierPayload {
   payment_terms_days?: number
   payment_terms_description?: string
   tax_information?: string
+  credit_limit?: number | null
 }
 
 export interface SupplierSummary {
@@ -277,6 +280,7 @@ export async function exportSuppliers(format: ExportFormat = "xlsx"): Promise<vo
     "Address": s.address || "",
     "Terms Type": s.payment_terms_type || "",
     "Terms Days": s.payment_terms_days || "",
+    "Credit Limit": s.credit_limit != null && s.credit_limit !== "" ? Number(s.credit_limit) : "",
     "Terms Notes": s.payment_terms_description || "",
     "Bank Name": s.bank_name || "",
     "Bank Account Number": s.bank_account_number || "",
@@ -314,3 +318,19 @@ export async function importSuppliers(file: File, dryRun: boolean = true): Promi
   }
   return res.json()
 } 
+/** Credit used with a supplier against its limit (owed + on order + this order); warning when past it. */
+export interface SupplierCreditUse {
+  limit: number | null
+  owed: number
+  on_order: number
+  adding: number
+  total: number
+  over: number
+  warning: string | null
+}
+
+export async function getSupplierCreditUse(supplierId: string, adding = 0, except?: string): Promise<SupplierCreditUse> {
+  const qs = new URLSearchParams({ adding: String(adding || 0), ...(except ? { except } : {}) })
+  const res = await apiCall<{ data: SupplierCreditUse }>(`/suppliers/${supplierId}/credit-use?${qs}`, "GET")
+  return res.data
+}

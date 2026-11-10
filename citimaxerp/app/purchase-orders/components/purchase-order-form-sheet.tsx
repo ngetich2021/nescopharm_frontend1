@@ -24,7 +24,7 @@ import {
   itemLabel,
   PurchaseOrder,
 } from "@/lib/purchaseorders"
-import { getSuppliers, createSupplier, Supplier } from "@/lib/suppliers"
+import { getSuppliers, createSupplier, getSupplierCreditUse, Supplier, type SupplierCreditUse } from "@/lib/suppliers"
 import { getProducts, Product } from "@/lib/products"
 import { getStores } from "@/lib/stores"
 import { activeSizesOf, sizedName } from "@/lib/product-sizes"
@@ -317,6 +317,16 @@ export function PurchaseOrderFormSheet({ open, onOpenChange, order, onSaved }: P
   const invalidLine = lines.find((l) => !l.quantity || l.quantity <= 0 || isNaN(l.unit_price) || l.unit_price < 0)
   const canSave = !saving && !loadingOrder && supplierId && orderDate && lines.length > 0 && !invalidLine
 
+  // The supplier's credit limit: owed + on order + this order. Past it only warns; the order still saves.
+  const [credit, setCredit] = useState<SupplierCreditUse | null>(null)
+  useEffect(() => {
+    if (!open || !supplierId) { setCredit(null); return }
+    const t = setTimeout(() => {
+      getSupplierCreditUse(supplierId, itemsTotal, order?.id).then(setCredit).catch(() => setCredit(null))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [open, supplierId, itemsTotal, order?.id])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSave) return
@@ -348,6 +358,9 @@ export function PurchaseOrderFormSheet({ open, onOpenChange, order, onSaved }: P
             ? `${saved.order_number} changed, so it has gone back for approval.`
             : saved.order_number,
       })
+      if (credit?.warning) {
+        toast({ title: "Over the supplier's credit limit", description: credit.warning })
+      }
       onSaved()
       onOpenChange(false)
     } catch (e) {
@@ -714,11 +727,22 @@ export function PurchaseOrderFormSheet({ open, onOpenChange, order, onSaved }: P
           </div>
 
           <div className="border-t bg-background px-6 py-4">
+            {credit?.warning && (
+              <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{credit.warning}</span>
+              </div>
+            )}
             <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="text-sm text-muted-foreground">
                 {lines.length > 0 && (
                   <>
                     Order total <span className="font-semibold text-foreground">{formatCurrency(itemsTotal)}</span>
+                    {credit?.limit != null && credit.limit > 0 && (
+                      <span className="ml-3">
+                        · Credit limit {formatCurrency(credit.limit)}, used {formatCurrency(credit.total)}
+                      </span>
+                    )}
                   </>
                 )}
               </div>

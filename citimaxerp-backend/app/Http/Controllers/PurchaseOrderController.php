@@ -355,10 +355,14 @@ class PurchaseOrderController extends Controller
                 false,
             );
 
+            // Past the supplier's credit limit only warns: the order is placed all the same.
+            $creditWarning = $purchaseOrder->supplier?->creditWarning($purchaseOrder->supplier->creditUse());
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Purchase order created successfully.',
                 'data' => $this->present($purchaseOrder->fresh()),
+                'credit_warning' => $creditWarning,
             ], 201);
         } catch (\Throwable $e) {
             Log::error('Failed to create purchase order', ['error' => $e->getMessage()]);
@@ -469,8 +473,12 @@ class PurchaseOrderController extends Controller
                 $this->recalculateTotal($purchaseOrder);
             });
 
+            $freshSupplier = $purchaseOrder->fresh()->supplier;
+            $creditWarning = $freshSupplier?->creditWarning($freshSupplier->creditUse());
+
             return response()->json([
                 'status' => 'success',
+                'credit_warning' => $creditWarning,
                 'message' => 'Purchase order updated successfully.',
                 'data' => $this->present($purchaseOrder->fresh()),
             ], 200);

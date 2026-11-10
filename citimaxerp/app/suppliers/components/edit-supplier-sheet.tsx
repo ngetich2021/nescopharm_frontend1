@@ -42,6 +42,7 @@ export function EditSupplierSheet({ open, onOpenChange, supplier, onSupplierUpda
         bank_swift_code: supplier.bank_swift_code,
         payment_terms_type: supplier.payment_terms_type,
         payment_terms_days: supplier.payment_terms_days,
+        credit_limit: supplier.credit_limit != null && supplier.credit_limit !== "" ? Number(supplier.credit_limit) : null,
         payment_terms_description: supplier.payment_terms_description,
         tax_information: supplier.tax_information,
       })
@@ -247,6 +248,20 @@ export function EditSupplierSheet({ open, onOpenChange, supplier, onSupplierUpda
                     onChange={(e) => handleInputChange("payment_terms_days", parseInt(e.target.value))}
                     placeholder="Enter number of days"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="credit_limit">Credit Limit (KES)</Label>
+                  <Input
+                    id="credit_limit"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.credit_limit ?? ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, credit_limit: e.target.value === "" ? null : Number(e.target.value) }))}
+                    placeholder="No limit"
+                    className="w-[220px] text-right tabular-nums"
+                  />
+                  <p className="text-xs text-muted-foreground">Ordering past it shows a warning; the order still goes through.</p>
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="payment_terms_description">Description</Label>

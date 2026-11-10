@@ -258,6 +258,20 @@ export function CreateSupplierSheet({ open, onOpenChange, onSupplierCreated }: C
                     placeholder="Enter number of days"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="credit_limit">Credit Limit (KES)</Label>
+                  <Input
+                    id="credit_limit"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.credit_limit ?? ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, credit_limit: e.target.value === "" ? null : Number(e.target.value) }))}
+                    placeholder="No limit"
+                    className="w-[220px] text-right tabular-nums"
+                  />
+                  <p className="text-xs text-muted-foreground">Ordering past it shows a warning; the order still goes through.</p>
+                </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="payment_terms_description">Description</Label>
                   <Input

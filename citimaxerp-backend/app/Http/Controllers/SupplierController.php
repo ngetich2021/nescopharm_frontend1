@@ -302,6 +302,7 @@ class SupplierController extends Controller
             'payment_terms_days' => 'nullable|integer|min:0',
             'payment_terms_description' => 'nullable|string',
             'tax_information' => 'nullable|string',
+            'credit_limit' => 'nullable|numeric|min:0|max:9999999999999',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors(), 'data' => null], 400);
@@ -328,6 +329,7 @@ class SupplierController extends Controller
                     'payment_terms_days' => $request->input('payment_terms_days'),
                     'payment_terms_description' => $request->input('payment_terms_description'),
                     'tax_information' => $request->input('tax_information'),
+                    'credit_limit' => $request->filled('credit_limit') ? $request->input('credit_limit') : null,
                 ];
 
                 Log::info('Creating supplier with data:', $data);
@@ -383,6 +385,7 @@ class SupplierController extends Controller
             'payment_terms_days' => 'nullable|integer|min:0',
             'payment_terms_description' => 'nullable|string',
             'tax_information' => 'nullable|string',
+            'credit_limit' => 'nullable|numeric|min:0|max:9999999999999',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors(), 'data' => null], 400);
@@ -401,6 +404,22 @@ class SupplierController extends Controller
             'message' => 'Supplier updated successfully.',
             'data' => $supplier
         ]);
+    }
+
+    /**
+     * Credit used with a supplier against its limit, for the purchase order form to warn while an order
+     * is filled in: adding = the order's total, except = the order being edited. Warns only.
+     */
+    public function creditUse(Request $request, $id)
+    {
+        $user = $request->user();
+        $supplier = Supplier::where('company_id', $user->company_id)->find($id);
+        if (!$supplier) {
+            return response()->json(['status' => 'failed', 'message' => 'Supplier not found.', 'data' => null], 404);
+        }
+        $use = $supplier->creditUse((float) $request->input('adding', 0), $request->input('except') ?: null);
+
+        return response()->json(['status' => 'success', 'data' => $use + ['warning' => $supplier->creditWarning($use)]]);
     }
 
     public function destroy($id)
