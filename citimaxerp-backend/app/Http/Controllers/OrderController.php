@@ -70,6 +70,29 @@ class OrderController extends Controller
     }
 
     /**
+     * A line priced from a list ("NSPD 004") but sent without its unit gets the unit that list prices
+     * it in ("Per pack of 100's"), so its pieces (base_quantity, what stock moves by) are packs x 100,
+     * not the number of packs. Lines with a unit, or without a list price, are left as sent.
+     */
+    protected function withPriceUnit(array $item): array
+    {
+        if (!empty($item['price_unit']) || empty($item['price_label']) || empty($item['product_id'])) {
+            return $item;
+        }
+        $list = strtok(trim((string) $item['price_label']), ' ');
+        $unit = DB::table('product_price_tiers')->where('product_id', $item['product_id'])
+            ->where('tier_name', $list)
+            ->when(!empty($item['variant_id']), fn ($q) => $q->where(fn ($w) => $w->where('variant_id', $item['variant_id'])->orWhereNull('variant_id')))
+            ->orderByRaw('variant_id is null')
+            ->value('unit_of_measure');
+        if ($unit) {
+            $item['price_unit'] = $unit;
+        }
+
+        return $item;
+    }
+
+    /**
      * VAT rate for an order line: the rate picked on the line when one is sent
      * (so a product's tax can be overridden per order), otherwise the
      * product's current tax. Snapped to the eTIMS rates (0 / 8 / 16).
@@ -221,7 +244,9 @@ class OrderController extends Controller
                         $query->select('*');
                     },
                     'orderItems' => function ($query) {
-                        $query->select('id', 'order_id', 'product_id', 'variant_id', 'quantity', 'base_quantity', 'packaging_breakdown', 'unit_price', 'price_label', 'total_price', 'tax_rate', 'tax_amount')
+                        // price_unit must come back: Edit Order sends each line's unit again, and a line
+                        // sent without it saves pieces = packs (2 packs of 100 became 2 pieces of stock).
+                        $query->select('id', 'order_id', 'product_id', 'variant_id', 'quantity', 'base_quantity', 'packaging_breakdown', 'unit_price', 'price_label', 'price_unit', 'total_price', 'tax_rate', 'tax_amount')
                             ->with([
                                 'product' => function ($query) {
                                     $query->select('id', 'name', 'price', 'store_id', 'has_packaging', 'base_unit', 'tax_rate', 'is_taxable')
@@ -398,7 +423,7 @@ class OrderController extends Controller
             $totalAmount = 0;
             $totalTaxAmount = 0;
             $belowMinimumPrice = false;
-            $items = $request->input('items');
+            $items = array_map(fn ($item) => $this->withPriceUnit($item), $request->input('items'));
             foreach ($items as $index => $item) {
                 $product = Product::with('store')->find($item['product_id']);
                 if ($product->company_id !== $user->company_id && !$this->hasPermission($request, 'can_manage_all_quotes')) {
@@ -736,6 +761,7 @@ class OrderController extends Controller
         // Each incoming line's VAT is resolved up front so a tax change counts as a change too.
         $items = $request->has('items')
             ? collect($request->input('items'))
+                ->map(fn ($item) => $this->withPriceUnit($item))
                 ->map(fn ($item) => ['tax_rate' => $this->lineTaxRate($item, Product::withTrashed()->find($item['product_id']))] + $item)
                 ->all()
             : null;
