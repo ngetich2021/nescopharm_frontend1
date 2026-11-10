@@ -138,44 +138,62 @@ export const DebitNoteDocument = forwardRef<HTMLDivElement, Props>(function Debi
               </tr>
             </tbody>
           </table>
-
-          {/* Amount in words, PIN, bank details, signatory */}
-          <div className="border-t border-gray-500 px-1.5 pt-1 break-inside-avoid">
-            <div className="flex justify-between gap-4">
-              <div>
-                <p className={label}>Amount Chargeable (in words)</p>
-                <p className="font-bold">{amountInWords(note.total)}</p>
-              </div>
-              <p className="italic whitespace-nowrap">E. &amp; O.E</p>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-4 items-end">
-              <p className="pb-1">
-                Company&apos;s PIN <span className="ml-4 font-bold">{companyPin || COMPANY_KRA_PIN}</span>
-              </p>
-              <div className="leading-snug">
-                <p>Company&apos;s Bank Details</p>
-                {[
-                  ["A/c Holder's Name", company?.bank_account_name || INVOICE_PAYMENT_DETAILS.bankAccountName],
-                  ["Bank Name", company?.bank_name || INVOICE_PAYMENT_DETAILS.bankName],
-                  ["A/c No.", company?.bank_account_number || INVOICE_PAYMENT_DETAILS.bankAccountNumber],
-                  ["Branch", company?.bank_branch || INVOICE_PAYMENT_DETAILS.bankBranch],
-                  ["M-Pesa", `P/bill ${company?.mpesa_paybill || INVOICE_PAYMENT_DETAILS.mpesaPaybill} A/c No. ${company?.mpesa_account_number || INVOICE_PAYMENT_DETAILS.mpesaAccount}`],
-                ].map(([k, v]) => (
-                  <p key={k} className="grid grid-cols-[8.5rem_auto_1fr] gap-1"><span>{k}</span><span>:</span><span className="font-bold">{v}</span></p>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 border-t border-gray-500 mt-1">
-            <div />
-            <div className="border-l border-gray-500 px-1.5 py-1 text-right">
-              <p className="font-bold mb-8">for {company?.name || "Nescopharm Africa Limited"}</p>
-              <p>Authorised Signatory</p>
-            </div>
-          </div>
         </div>
-        <p className="mt-1 text-center text-[11px]">This is a Computer Generated Document</p>
+
+        {/* Amount in words, then the same payment details, QR, declaration and signatory as the invoice. */}
+        <div className="mt-1.5 mb-1.5 flex justify-between items-start gap-4 break-inside-avoid">
+          <div>
+            <p className="text-[11px] font-semibold text-gray-600">Amount Chargeable (in words)</p>
+            <p className="text-xs font-medium text-gray-900">{amountInWords(note.total)}</p>
+          </div>
+          <p className="text-xs text-gray-500 italic whitespace-nowrap">E. &amp; O.E</p>
+        </div>
+
+        <div className="flex items-stretch gap-2 break-inside-avoid">
+          <div className="flex-1 min-w-0 border border-gray-300 text-[11px] leading-tight">
+            <p className="bg-gray-50 border-b border-gray-300 px-2 py-0.5 font-bold text-gray-800">
+              {(company?.name || "COMPANY").toUpperCase()} PAYMENT DETAILS
+            </p>
+            <div className="grid grid-cols-[1fr_1.2fr_2fr] divide-x divide-gray-300">
+              <div className="px-2 py-1">
+                <p className="font-semibold text-gray-800">COMPANY&apos;S KRA PIN</p>
+                <p className="font-bold text-gray-900">{companyPin || COMPANY_KRA_PIN}</p>
+              </div>
+              <div className="px-2 py-1 text-gray-700">
+                <p className="font-semibold text-gray-800">M-PESA</p>
+                <p>Paybill: <span className="font-semibold text-gray-900">{company?.mpesa_paybill || INVOICE_PAYMENT_DETAILS.mpesaPaybill}</span></p>
+                <p>Account No: <span className="font-semibold text-gray-900">{company?.mpesa_account_number || INVOICE_PAYMENT_DETAILS.mpesaAccount}</span></p>
+              </div>
+              <div className="px-2 py-1 text-gray-700">
+                <p className="font-semibold text-gray-800">BANK DETAILS</p>
+                <p>
+                  Bank: <span className="font-semibold text-gray-900">{company?.bank_name || INVOICE_PAYMENT_DETAILS.bankName}</span>
+                  {" · "}Branch: <span className="font-semibold text-gray-900">{company?.bank_branch || INVOICE_PAYMENT_DETAILS.bankBranch}</span>
+                </p>
+                <p>A/C Name: <span className="font-semibold text-gray-900">{company?.bank_account_name || INVOICE_PAYMENT_DETAILS.bankAccountName}</span></p>
+                <p>A/C No: <span className="font-semibold text-gray-900">{company?.bank_account_number || INVOICE_PAYMENT_DETAILS.bankAccountNumber}</span></p>
+              </div>
+            </div>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/scan-me.jpg" alt="Scan me" width={64} height={64} className="h-16 w-16 print:h-14 print:w-14 shrink-0 self-center" />
+        </div>
+
+        <div className="break-inside-avoid">
+          <div className="mt-1.5 flex justify-between items-end gap-8">
+            <div className="max-w-sm">
+              <p className="text-[11px] font-semibold text-gray-700">Declaration</p>
+              <p className="text-[11px] leading-tight text-gray-500">
+                We declare that this debit note shows the goods returned to the supplier and their actual cost, and that all particulars are true and correct.
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-700 mb-5">for {company?.name || "Nescopharm Africa Limited"}</p>
+              <p className="text-[11px] text-gray-500 border-t border-gray-300 pt-0.5">Authorised Signatory</p>
+            </div>
+          </div>
+          <p className="mt-1 text-center text-[11px] text-gray-500">This is a Computer Generated Debit Note</p>
+        </div>
       </Card>
     </>
   )
