@@ -52,6 +52,13 @@ class ExpenseController extends Controller
             ], 403);
         }
 
+        // A new month adds monthly allowances paid outside payroll to the expenses.
+        try {
+            app(\App\Services\AllowanceExpenseService::class)->syncCompany($user->company_id);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Allowance expenses not synced', ['error' => $e->getMessage()]);
+        }
+
         try {
             $user = $request->user();
             $query = Expense::with(['category', 'createdBy', 'approvedBy']);

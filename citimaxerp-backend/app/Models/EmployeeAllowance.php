@@ -41,6 +41,18 @@ class EmployeeAllowance extends Model
     /**
      * Get the employee this allowance belongs to.
      */
+    // Allowances paid outside payroll are expenses (Salaries & Allowances): they follow the allowance.
+    protected static function booted(): void
+    {
+        $sync = function (EmployeeAllowance $a) {
+            if ($a->frequency === 'disbursed' || $a->getOriginal('frequency') === 'disbursed') {
+                app(\App\Services\AllowanceExpenseService::class)->sync($a);
+            }
+        };
+        static::saved($sync);
+        static::deleted($sync);
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
