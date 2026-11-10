@@ -526,8 +526,7 @@ export default function InventoryReportPage() {
               </div>
             </div>
           )}
-          <div className="max-h-[70vh] overflow-auto">
-            <Table>
+          <Table scroll="max-h-[70vh]">
               <TableHeader className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_hsl(var(--border))]">
                 <TableRow>
                   {columns.map((c) => (
@@ -597,7 +596,6 @@ export default function InventoryReportPage() {
                 </TableFooter>
               )}
             </Table>
-          </div>
 
           {!loading && totalGroups > 0 && (
             <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">

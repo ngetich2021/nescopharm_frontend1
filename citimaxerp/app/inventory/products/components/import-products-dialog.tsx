@@ -183,8 +183,7 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
               Each value is what the item will have after import. Where it changes, the current value is shown{" "}
               <span className="line-through">struck through</span> above the new one, <span className="rounded bg-amber-50 px-1 text-amber-800">highlighted</span>.
             </p>
-            <div className="max-h-[50vh] overflow-auto rounded border">
-              <Table>
+            <Table scroll="max-h-[50vh]">
                 <TableHeader className="sticky top-0 z-10 bg-white">
                   <TableRow>
                     <TableHead className="w-12">Row</TableHead>
@@ -224,7 +223,6 @@ export function ImportProductsDialog({ onImported }: { onImported: () => void })
                   ))}
                 </TableBody>
               </Table>
-            </div>
           </div>
         )}
 

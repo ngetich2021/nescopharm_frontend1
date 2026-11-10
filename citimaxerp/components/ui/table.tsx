@@ -3,15 +3,18 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 // `scroll`: the table scrolls inside a box no taller than the screen, heading pinned at the top, so
-// a wide table's sideways scrollbar is always in view instead of below its last row.
+// a wide table's sideways scrollbar is always in view instead of below its last row. Pass a height
+// class (scroll="max-h-[45vh]") for a shorter box. Never wrap a Table in another scrolling div: the
+// sideways scroll then happens in this inner box, whose scrollbar sits under the last row.
 const Table = React.forwardRef<
   HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement> & { scroll?: boolean }
+  React.HTMLAttributes<HTMLTableElement> & { scroll?: boolean | string }
 >(({ className, scroll, ...props }, ref) => (
   <div
     className={cn(
       "relative w-full overflow-auto",
-      scroll && "max-h-[70vh] rounded-md border [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background [&_thead]:shadow-[0_1px_0_hsl(var(--border))] print:max-h-none print:overflow-visible",
+      scroll && "rounded-md border [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background [&_thead]:shadow-[0_1px_0_hsl(var(--border))] print:max-h-none print:overflow-visible",
+      scroll && (typeof scroll === "string" ? scroll : "max-h-[70vh]"),
     )}
   >
     <table

@@ -136,8 +136,7 @@ export function ImportBatchesDialog({ onImported }: { onImported: () => void }) 
                 Nothing to import - every row already matches what is in the system{s.errors ? " or has an error" : ""}. Edit the values in Excel, save, and preview again.
               </p>
             )}
-            <div className="max-h-[55vh] overflow-auto rounded border">
-              <Table>
+            <Table scroll="max-h-[55vh]">
                 <TableHeader className="sticky top-0 z-10 bg-white">
                   <TableRow>
                     <TableHead className="w-12">Row</TableHead>
@@ -177,7 +176,6 @@ export function ImportBatchesDialog({ onImported }: { onImported: () => void }) 
                   ))}
                 </TableBody>
               </Table>
-            </div>
           </div>
         )}
 

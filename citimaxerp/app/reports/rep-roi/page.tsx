@@ -188,8 +188,7 @@ export default function RepRoiPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
+            <Table scroll>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-14">S/No</TableHead>
@@ -247,7 +246,6 @@ export default function RepRoiPage() {
                   </TableFooter>
                 )}
               </Table>
-            </div>
             {!loading && <TablePager {...pager} />}
           </CardContent>
         </Card>

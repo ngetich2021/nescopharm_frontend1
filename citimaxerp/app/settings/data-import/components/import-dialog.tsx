@@ -91,8 +91,7 @@ export function ImportDialog({ schema, onClose, onImported }: Props) {
           )}
 
           {preview && (
-            <div className="max-h-[45vh] overflow-auto rounded-md border">
-              <Table>
+            <Table scroll="max-h-[45vh]">
                 <TableHeader className="sticky top-0 bg-white">
                   <TableRow>
                     <TableHead className="w-16">Row</TableHead>
@@ -123,7 +122,6 @@ export function ImportDialog({ schema, onClose, onImported }: Props) {
                   ))}
                 </TableBody>
               </Table>
-            </div>
           )}
         </div>
 

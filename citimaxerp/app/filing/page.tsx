@@ -549,8 +549,7 @@ export default function FilingPage() {
                   {preview.counts.skipped > 0 && <Badge variant="outline">{preview.counts.skipped} skipped</Badge>}
                 </div>
                 {preview.rows.length > 0 && (
-                  <div className="max-h-[45vh] overflow-y-auto rounded border">
-                    <Table>
+                  <Table scroll="max-h-[45vh]">
                       <TableHeader>
                         <TableRow><TableHead>Row</TableHead><TableHead>Invoice</TableHead><TableHead>Was</TableHead><TableHead>Becomes</TableHead><TableHead>Note</TableHead></TableRow>
                       </TableHeader>
@@ -566,7 +565,6 @@ export default function FilingPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  </div>
                 )}
               </div>
             )}
@@ -588,8 +586,7 @@ export default function FilingPage() {
                 Each selected order gets its invoice, dated on the order date, with any payment already received applied to it. Nothing is sent to eTIMS.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[50vh] overflow-y-auto rounded border">
-              <Table>
+            <Table scroll="max-h-[50vh]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
@@ -616,7 +613,6 @@ export default function FilingPage() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setMissingOpen(false)} disabled={busy}>Cancel</Button>
               <PermissionGuard permissions={["can_create_invoices", "can_manage_system", "can_manage_company"]} hideOnDenied>
@@ -638,8 +634,7 @@ export default function FilingPage() {
                 Paid invoices are not selected by default: updating one leaves the customer owing the difference.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[50vh] overflow-y-auto rounded border">
-              <Table>
+            <Table scroll="max-h-[50vh]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
@@ -668,7 +663,6 @@ export default function FilingPage() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDiffersOpen(false)} disabled={busy}>Cancel</Button>
               <PermissionGuard permissions={["can_update_invoices", "can_manage_system", "can_manage_company"]} hideOnDenied>
