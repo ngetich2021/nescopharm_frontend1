@@ -1,7 +1,7 @@
 import apiCall from "./api"
 import * as XLSX from "xlsx"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
-import { exportRecords, type ExportFormat } from "@/lib/table-export"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
 
 function toQueryString(params: Record<string, any>): string {
   return (
@@ -268,9 +268,35 @@ export async function getSupplierSummaryFromDB(): Promise<SupplierSummary> {
   };
 }
 
-// Export suppliers as Excel
+/** Every item bought from each supplier (goods receipts and purchase orders), for the export. */
+export interface SupplierProductRow {
+  supplier_id: string
+  supplier: string
+  item_number: number | null
+  item: string
+  received: number
+  receipts: number
+  last_received: string | null
+  ordered: number
+  orders: number
+  last_ordered: string | null
+  last_cost: number | null
+}
+
+export async function getSupplierProducts(): Promise<SupplierProductRow[]> {
+  const res = await apiCall<{ data: SupplierProductRow[] }>("/suppliers/products", "GET")
+  return res.data ?? []
+}
+
+const dmyOrBlank = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "")
+
+// Export suppliers: the list (first sheet, which the supplier import reads back), then every item
+// bought from each supplier (a second sheet in Excel, a second section in PDF/CSV).
 export async function exportSuppliers(format: ExportFormat = "xlsx"): Promise<void> {
-  const suppliers = await getSuppliers()
+  const [suppliers, products] = await Promise.all([getSuppliers(), getSupplierProducts().catch(() => [] as SupplierProductRow[])])
+  const productHeaders = ["S/No", "Supplier", "Item No.", "Item", "Qty Received", "Receipts", "Last Received", "Qty Ordered", "Orders", "Last Ordered", "Last Cost (KES)"]
+  const productRows = products.map((p, i) => [i + 1, p.supplier, p.item_number ?? "", p.item, p.received, p.receipts, dmyOrBlank(p.last_received),
+    p.ordered, p.orders, dmyOrBlank(p.last_ordered), p.last_cost ?? ""])
 
   const rows = suppliers.map((s) => ({
     "Supplier Name": s.name,
@@ -291,13 +317,26 @@ export async function exportSuppliers(format: ExportFormat = "xlsx"): Promise<vo
     "Active": s.is_active ? "Yes" : "No",
   }))
   if (format !== "xlsx") {
-    return exportRecords(format, rows.map((r, i) => ({ "S/No": i + 1, ...r })), { fileName: documentFileName([sessionCompanyName(), "Suppliers List", todayFileDate()]), title: "Suppliers" })
+    const listHeaders = ["S/No", ...Object.keys(rows[0] ?? {})]
+    return exportTable(format, {
+      fileName: documentFileName([sessionCompanyName(), "Suppliers List", todayFileDate()]),
+      title: "Suppliers",
+      headers: [],
+      rows: [],
+      sheets: [
+        { fileName: "", title: "Suppliers", headers: listHeaders, rows: rows.map((r, i) => [i + 1, ...Object.values(r)]) },
+        { fileName: "", title: "Products by Supplier", subtitle: "Every item bought from each supplier (goods received and purchase orders)", headers: productHeaders, rows: productRows, moneyColumns: [10] },
+      ],
+    })
   }
 
   const sheet = XLSX.utils.json_to_sheet(rows)
   sheet["!cols"] = Object.keys(rows[0] ?? {}).map((k) => ({ wch: Math.max(k.length + 2, 18) }))
   const book = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(book, sheet, "Suppliers")
+  const productSheet = XLSX.utils.aoa_to_sheet([productHeaders, ...productRows])
+  productSheet["!cols"] = productHeaders.map((h) => ({ wch: h === "Item" ? 50 : h === "Supplier" ? 36 : Math.max(h.length + 2, 12) }))
+  XLSX.utils.book_append_sheet(book, productSheet, "Products by Supplier")
   XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Suppliers List", todayFileDate()], "xlsx"))
 }
 

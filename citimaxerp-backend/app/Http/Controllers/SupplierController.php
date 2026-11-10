@@ -422,6 +422,63 @@ class SupplierController extends Controller
         return response()->json(['status' => 'success', 'data' => $use + ['warning' => $supplier->creditWarning($use)]]);
     }
 
+    /**
+     * Every item bought from each supplier, for the supplier export: from goods receipts (quantity
+     * received, last cost and date) and purchase orders (quantity ordered), one row per supplier+item.
+     */
+    public function products(Request $request)
+    {
+        $companyId = $request->user()->company_id;
+        $received = DB::table('product_receipt_items as ri')
+            ->join('product_receipts as r', 'r.id', '=', 'ri.product_receipt_id')
+            ->where('r.company_id', $companyId)->whereNotNull('r.supplier_id')->whereNotNull('ri.product_id')
+            ->groupBy('r.supplier_id', 'ri.product_id', 'ri.variant_id')
+            ->selectRaw("r.supplier_id, ri.product_id, ri.variant_id, sum(ri.quantity)::float received, count(distinct r.id) receipts,
+                max(r.created_at) last_received,
+                (array_agg(ri.unit_price order by r.created_at desc))[1]::float last_cost")
+            ->get();
+        $ordered = DB::table('purchase_order_items as pi')
+            ->join('purchase_orders as po', 'po.id', '=', 'pi.purchase_order_id')
+            ->where('po.company_id', $companyId)->whereNotNull('pi.product_id')->where('po.status', '!=', 'cancelled')
+            ->groupBy('po.supplier_id', 'pi.product_id', 'pi.variant_id')
+            ->selectRaw("po.supplier_id, pi.product_id, pi.variant_id, sum(pi.quantity)::float ordered, count(distinct po.id) orders,
+                max(po.order_date) last_ordered,
+                (array_agg(pi.unit_price order by po.order_date desc))[1]::float last_po_cost")
+            ->get();
+
+        $rows = [];
+        foreach ($received as $r) {
+            $rows["{$r->supplier_id}|{$r->product_id}|{$r->variant_id}"] = (array) $r;
+        }
+        foreach ($ordered as $o) {
+            $k = "{$o->supplier_id}|{$o->product_id}|{$o->variant_id}";
+            $rows[$k] = array_merge($rows[$k] ?? ['supplier_id' => $o->supplier_id, 'product_id' => $o->product_id, 'variant_id' => $o->variant_id], (array) $o);
+        }
+        $suppliers = Supplier::where('company_id', $companyId)->pluck('name', 'id');
+        $products = DB::table('products')->whereIn('id', collect($rows)->pluck('product_id')->unique())->get(['id', 'name', 'item_number'])->keyBy('id');
+        $variants = DB::table('product_variants')->whereIn('id', collect($rows)->pluck('variant_id')->filter()->unique())->pluck('name', 'id');
+
+        $out = collect($rows)->map(function ($r) use ($suppliers, $products, $variants) {
+            $p = $products->get($r['product_id']);
+            $name = ($p->name ?? 'Item') . (!empty($r['variant_id']) && isset($variants[$r['variant_id']]) ? ' - ' . $variants[$r['variant_id']] : '');
+            return [
+                'supplier_id' => $r['supplier_id'],
+                'supplier' => $suppliers[$r['supplier_id']] ?? 'Unknown supplier',
+                'item_number' => $p->item_number ?? null,
+                'item' => $name,
+                'received' => (float) ($r['received'] ?? 0),
+                'receipts' => (int) ($r['receipts'] ?? 0),
+                'last_received' => !empty($r['last_received']) ? substr((string) $r['last_received'], 0, 10) : null,
+                'ordered' => (float) ($r['ordered'] ?? 0),
+                'orders' => (int) ($r['orders'] ?? 0),
+                'last_ordered' => !empty($r['last_ordered']) ? substr((string) $r['last_ordered'], 0, 10) : null,
+                'last_cost' => isset($r['last_cost']) ? round((float) $r['last_cost'], 2) : (isset($r['last_po_cost']) ? round((float) $r['last_po_cost'], 2) : null),
+            ];
+        })->sortBy([['supplier', 'asc'], ['item', 'asc']])->values();
+
+        return response()->json(['status' => 'success', 'data' => $out]);
+    }
+
     public function destroy($id)
     {
         $user = request()->user();

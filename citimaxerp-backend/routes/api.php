@@ -656,6 +656,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['patch', 'put'], 'debts/order/{order_id}', [DebtController::class, 'updateByOrderId']);
 
     // Supplier routes
+    Route::get('suppliers/products', [SupplierController::class, 'products']);
     Route::get('suppliers/{id}/statement', [SupplierController::class, 'statement']);
     Route::get('suppliers/{id}/ledger', [SupplierController::class, 'ledger']);
     Route::get('suppliers/{id}/credit-use', [SupplierController::class, 'creditUse']);
