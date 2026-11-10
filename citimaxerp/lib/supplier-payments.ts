@@ -255,6 +255,7 @@ export interface DebitNoteDocumentData {
     supplier_reference: string | null;
     reason: string | null;
     receipt_number: string | null;
+    receipt_reference: string | null; // the supplier's invoice no. the goods came in on
     receipt_date: string | null;
     supplier: { name: string; address: string | null; phone: string | null; email: string | null; contact_person: string | null; kra_pin: string | null } | null;
     lines: { name: string; batch_number: string | null; expiry_date: string | null; unit: string; quantity: number; unit_price: number; amount: number }[];

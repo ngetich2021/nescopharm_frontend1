@@ -3,6 +3,7 @@
 import { InvoiceTotals } from "@/components/invoices/invoice-totals"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
   reloadKey?: number;
 } = {}) {
   const { toast } = useToast();
+  const router = useRouter();
   const [bills, setBills] = useState<SupplierBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -312,7 +314,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
       </Card>
 
       <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{viewing?.kind === "debit_note" ? "Supplier Debit Note" : "Supplier Invoice"} {viewing?.invoice_number}</DialogTitle>
             <DialogDescription>{viewing?.supplier_name}</DialogDescription>
@@ -351,19 +353,20 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
 
               {viewing.lines.length > 0 && (
                 <div className="border-t pt-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <Label className="text-sm font-semibold">Goods returned</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {canEditDebitNotes && (
                         <Button size="sm" variant="outline" onClick={() => setEditingNoteId(viewing.id)}>
                           <Pencil className="h-4 w-4 mr-2" /> Edit
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" onClick={() => window.open(`/suppliers/debit-notes/${viewing.id}/document`, "_blank")}>
+                      <Button size="sm" variant="outline" onClick={() => router.push(`/suppliers/debit-notes/${viewing.id}/document`)}>
                         <FileText className="h-4 w-4 mr-2" /> Debit Note (Print / Download)
                       </Button>
                     </div>
                   </div>
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -390,6 +393,7 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                   {viewing.tax_amount > 0 && <p className="text-sm text-right mt-2">VAT {money(viewing.tax_amount)} · Total {money(viewing.total)}</p>}
                 </div>
               )}

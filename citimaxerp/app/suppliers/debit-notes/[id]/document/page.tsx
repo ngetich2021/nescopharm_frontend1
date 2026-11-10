@@ -64,6 +64,7 @@ export default function DebitNoteDocumentPage({ params }: { params: Promise<{ id
       ["Supplier", n.supplier?.name || "-"],
       ["Supplier KRA PIN", n.supplier?.kra_pin || "-"],
       ["Date", n.date ? displayDate(n.date) : "-"],
+      ["Original invoice no.", n.receipt_reference || "-"],
       ["Goods received", n.receipt_number || "-"],
       ["Supplier's credit note", n.supplier_reference || "-"],
       ["Reason", n.reason || "-"],
