@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import TemperatureRecordsTab from "./components/temperature-records-tab"
+import CleaningRecordsTab from "./components/cleaning-records-tab"
+import { SortHead, useSorted } from "./components/sortable"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
+import { displayDate } from "@/lib/date-format"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,6 +93,13 @@ export default function SopsPage() {
   const router = useRouter()
   const { toast } = useToast()
 
+  // Notifications link to /sops?tab=cleaning or ?tab=temperature.
+  const [tab, setTab] = useState("sops")
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab")
+    if (wanted === "temperature" || wanted === "cleaning") setTab(wanted)
+  }, [])
+
   const [sops, setSops] = useState<Sop[]>([])
   const [users, setUsers] = useState<UserData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -113,6 +124,25 @@ export default function SopsPage() {
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     })
   }, [sops])
+
+  // Column sorting on what the filters returned (S/No follows the page).
+  const { sorted: shownSops, sortKey, sortDir, toggle } = useSorted<Sop, "title" | "year" | "status" | "annexures" | "comments">(
+    sortedSops,
+    (sop, key) => ({ title: sop.title, year: sop.year, status: sop.status, annexures: sop.annexures_count ?? null, comments: sop.comments_count ?? null })[key],
+    "year",
+    "desc"
+  )
+
+  const exportSops = useTableExport(() => ({
+    fileName: "sops",
+    title: "SOPs",
+    subtitle: [yearFilter !== "all" ? `Year ${yearFilter}` : "", statusFilter !== "all" ? formatSopStatus(statusFilter) : ""].filter(Boolean).join(" - ") || undefined,
+    headers: ["S/No", "Title", "Year", "Status", "Annexures", "Comments", "Updated"],
+    rows: shownSops.map((sop, i) => [
+      (currentPage - 1) * rowsPerPage + i + 1, sop.title, sop.year, formatSopStatus(sop.status),
+      sop.annexures_count ?? "", sop.comments_count ?? "", displayDate(sop.updated_at),
+    ]),
+  }))
 
   const yearOptions = useMemo(() => {
     const fromSops = sortedSops.map((sop) => sop.year)
@@ -298,10 +328,11 @@ export default function SopsPage() {
           <h1 className="text-2xl sm:text-3xl font-bold">SOPs</h1>
         </div>
 
-        <Tabs defaultValue="sops">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="sops">SOPs</TabsTrigger>
             <TabsTrigger value="temperature">Temperature Records</TabsTrigger>
+            <TabsTrigger value="cleaning">Cleaning Records</TabsTrigger>
           </TabsList>
 
           <TabsContent value="sops" className="space-y-6 mt-6">
@@ -415,6 +446,7 @@ export default function SopsPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 New SOP
               </Button>
+              <ExportMenu onExport={exportSops} disabled={shownSops.length === 0} />
               <Button
                 variant="outline"
                 size="sm"
@@ -432,11 +464,12 @@ export default function SopsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="font-semibold">Title</TableHead>
-                  <TableHead className="font-semibold">Year</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold">Annexures</TableHead>
-                  <TableHead className="font-semibold">Comments</TableHead>
+                  <TableHead className="w-[60px] text-center font-semibold">S/No</TableHead>
+                  <SortHead label="Title" column="title" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Year" column="year" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Status" column="status" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Annexures" column="annexures" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Comments" column="comments" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
                   <TableHead className="text-right font-semibold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -444,7 +477,7 @@ export default function SopsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                         <span>Loading SOPs...</span>
@@ -453,7 +486,7 @@ export default function SopsPage() {
                   </TableRow>
                 ) : sortedSops.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       <div className="text-gray-500">
                         <p className="font-semibold">No SOPs found</p>
                         <p className="text-sm">Create your first SOP to get started</p>
@@ -461,16 +494,17 @@ export default function SopsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sortedSops.map((sop) => (
+                  shownSops.map((sop, index) => (
                     <TableRow
                       key={sop.id}
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => handleRowClick(sop.id)}
                     >
+                      <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           <p className="text-sm font-semibold text-primary">{sop.title}</p>
-                          <p className="text-xs text-gray-500">Updated {formatDate(sop.updated_at)}</p>
+                          <p className="text-xs text-gray-500">Updated {displayDate(sop.updated_at)}</p>
                         </div>
                       </TableCell>
                       <TableCell>{sop.year}</TableCell>
@@ -545,6 +579,10 @@ export default function SopsPage() {
 
           <TabsContent value="temperature" className="mt-6">
             <TemperatureRecordsTab />
+          </TabsContent>
+
+          <TabsContent value="cleaning" className="mt-6">
+            <CleaningRecordsTab />
           </TabsContent>
         </Tabs>
       </div>

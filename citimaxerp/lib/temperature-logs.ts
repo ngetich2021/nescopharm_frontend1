@@ -10,6 +10,7 @@ export interface TemperatureLog {
   morning_temp: string | null;
   afternoon_temp: string | null;
   checked_by: string | null;
+  recorded_by?: string | null; // who typed it in
   remarks: string | null;
   is_out_of_range: boolean;
   created_at: string;

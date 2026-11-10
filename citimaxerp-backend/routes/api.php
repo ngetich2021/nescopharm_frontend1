@@ -833,6 +833,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::match(['patch', 'put'], '/{id}', [App\Http\Controllers\TemperatureLogController::class, 'update']);
         Route::delete('/{id}', [App\Http\Controllers\TemperatureLogController::class, 'destroy']);
     });
+
+    // Cleaning services sheet - recorded by the store manager, confirmed by the picked checker.
+    Route::get('/sop-checkers', [App\Http\Controllers\CleaningLogController::class, 'checkers']);
+    Route::prefix('cleaning-logs')->group(function () {
+        Route::get('/', [App\Http\Controllers\CleaningLogController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\CleaningLogController::class, 'store']);
+        Route::match(['patch', 'put'], '/{id}', [App\Http\Controllers\CleaningLogController::class, 'update']);
+        Route::post('/{id}/check', [App\Http\Controllers\CleaningLogController::class, 'check']);
+        Route::delete('/{id}', [App\Http\Controllers\CleaningLogController::class, 'destroy']);
+    });
 });
 
 // Finance & Accounting Routes

@@ -113,6 +113,29 @@ class TemperatureLogController extends Controller
         return false;
     }
 
+    /** Tell the person picked as Checked By that a reading names them (a bell notification). */
+    protected function notifyChecker(TemperatureLog $log, $by): void
+    {
+        if (!$log->checked_by) {
+            return;
+        }
+        $checker = CleaningLogController::checkerQuery($log->company_id)->get()
+            ->first(fn ($u) => CleaningLogController::userName($u) === $log->checked_by);
+        if (!$checker) {
+            return;
+        }
+
+        $readings = collect(['morning' => $log->morning_temp, 'afternoon' => $log->afternoon_temp])
+            ->filter(fn ($v) => $v !== null)->map(fn ($v, $k) => "{$k} {$v}°C")->implode(', ');
+        app(\App\Services\NotificationService::class)->notifyUser($checker->id, new \App\Notifications\SystemAlert(
+            'action',
+            "Temperature to check: {$log->thermometer_name} " . $log->log_date->format('d/m/Y'),
+            CleaningLogController::userName($by) . " recorded {$readings}" . ($log->is_out_of_range ? ' - OUT OF RANGE' : '') . ' and named you as the checker.',
+            '/sops?tab=temperature',
+            ['type' => 'temperature_check', 'temperature_log_id' => $log->id],
+        ), $by->id);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -138,7 +161,12 @@ class TemperatureLogController extends Controller
             $query->where('log_date', '<=', $request->input('date_to'));
         }
 
-        $logs = $query->orderBy('log_date', 'desc')->get();
+        // Who typed the reading in ("Recorded by"), next to who checked it.
+        $logs = $query->with('createdBy:id,first_name,last_name,email')->orderBy('log_date', 'desc')->get()
+            ->each(function (TemperatureLog $log) {
+                $log->setAttribute('recorded_by', CleaningLogController::userName($log->createdBy));
+                $log->unsetRelation('createdBy');
+            });
 
         return response()->json([
             'status' => 'success',
@@ -195,6 +223,7 @@ class TemperatureLogController extends Controller
             'company_id' => $companyId,
             'created_by' => $user->id,
         ]));
+        $this->notifyChecker($log, $user);
 
         return response()->json(['status' => 'success', 'data' => $log], 201);
     }
@@ -229,12 +258,18 @@ class TemperatureLogController extends Controller
             return response()->json(['message' => $error], 422);
         }
 
+        $before = $log->only(['checked_by', 'morning_temp', 'afternoon_temp']);
         $log->update($request->only([
             'thermometer_name', 'area_room', 'acceptance_max_celsius', 'log_date',
             'morning_temp', 'afternoon_temp', 'checked_by', 'remarks',
         ]));
+        $log = $log->fresh();
+        // A new checker, or a new reading (e.g. the afternoon one) for the same checker, is notified.
+        if ($log->only(['checked_by', 'morning_temp', 'afternoon_temp']) != $before) {
+            $this->notifyChecker($log, $user);
+        }
 
-        return response()->json(['status' => 'success', 'data' => $log->fresh()]);
+        return response()->json(['status' => 'success', 'data' => $log]);
     }
 
     public function destroy(Request $request, string $id): JsonResponse

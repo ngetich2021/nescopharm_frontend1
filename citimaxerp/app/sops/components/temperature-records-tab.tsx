@@ -23,7 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
-import { Loader2, Plus, Thermometer, AlertTriangle, Trash2, X } from "lucide-react"
+import { Loader2, Plus, Thermometer, AlertTriangle, Trash2, X, Search } from "lucide-react"
 import {
   createTemperatureLog,
   deleteTemperatureLog,
@@ -31,7 +31,15 @@ import {
   updateTemperatureLog,
   TemperatureLog,
 } from "@/lib/temperature-logs"
-import { formatDate } from "@/lib/utils"
+import { fetchSopCheckers, type SopChecker } from "@/lib/cleaning-logs"
+import { displayDate } from "@/lib/date-format"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
+import { SortHead, useSorted } from "./sortable"
+import { SheetImport } from "./sheet-import"
+
+type TempSortKey = "date" | "thermometer" | "area" | "morning" | "afternoon" | "checked_by" | "recorded_by"
+const logDay = (log: TemperatureLog) => log.log_date.slice(0, 10)
 
 // Local-time date strings - toISOString() is UTC and can land on the wrong
 // calendar day near midnight for timezones ahead of UTC (e.g. Kenya).
@@ -134,7 +142,7 @@ function LookupField({
 
 export default function TemperatureRecordsTab() {
   const { toast } = useToast()
-  const { user, hasPermission } = useAuth()
+  const { hasPermission } = useAuth()
   // Matches the backend's isGmOrDirector() check for destroy() - deletion is
   // reserved for GM/Director specifically, not the general can_delete_sops
   // permission other temperature-log actions accept.
@@ -179,14 +187,17 @@ export default function TemperatureRecordsTab() {
   const morningOutOfRange = maxAllowedCelsius !== null && form.morning_temp !== "" && Number(form.morning_temp) > maxAllowedCelsius
   const afternoonOutOfRange = maxAllowedCelsius !== null && form.afternoon_temp !== "" && Number(form.afternoon_temp) > maxAllowedCelsius
 
+  // Checked By is picked from the people allowed to check SOP records (GM, Director, Accountant -
+  // set per role on Users > Roles with "Check SOP Records"), never filled in with whoever is logged in.
+  const [checkers, setCheckers] = useState<SopChecker[]>([])
   useEffect(() => {
-    if (user) {
-      const name = [user.first_name, user.last_name].filter(Boolean).join(" ")
-      if (name) {
-        setForm((prev) => (prev.checked_by ? prev : { ...prev, checked_by: name }))
-      }
-    }
-  }, [user])
+    fetchSopCheckers().then(setCheckers).catch(() => setCheckers([]))
+  }, [])
+  // An older reading may name someone not on the list; keep that name choosable.
+  const checkerNames = useMemo(() => {
+    const names = checkers.map((c) => c.name)
+    return form.checked_by && !names.includes(form.checked_by) ? [form.checked_by, ...names] : names
+  }, [checkers, form.checked_by])
 
   const loadLogs = useCallback(async () => {
     try {
@@ -213,12 +224,47 @@ export default function TemperatureRecordsTab() {
     loadLogs()
   }, [loadLogs])
 
-  const sortedLogs = useMemo(
-    () => [...logs].sort((a, b) => new Date(b.log_date).getTime() - new Date(a.log_date).getTime()),
-    [logs]
-  )
+  // Table filters on top of the thermometer + month the server filters by.
+  const [search, setSearch] = useState("")
+  const [areaFilter, setAreaFilter] = useState("all")
+  const [rangeFilter, setRangeFilter] = useState<"all" | "out" | "ok">("all")
 
-  const outOfRangeCount = useMemo(() => sortedLogs.filter((log) => log.is_out_of_range).length, [sortedLogs])
+  const filteredLogs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return logs.filter((log) =>
+      (areaFilter === "all" || log.area_room === areaFilter) &&
+      (rangeFilter === "all" || (rangeFilter === "out") === log.is_out_of_range) &&
+      (!q || [log.thermometer_name, log.area_room, log.checked_by, log.recorded_by, log.remarks, displayDate(logDay(log))]
+        .some((v) => v && v.toLowerCase().includes(q))))
+  }, [logs, search, areaFilter, rangeFilter])
+
+  const num = (v: string | null) => (v === null || v === "" ? null : Number(v))
+  const { sorted: sortedLogs, sortKey, sortDir, toggle } = useSorted<TemperatureLog, TempSortKey>(filteredLogs, (log, key) => ({
+    date: logDay(log),
+    thermometer: log.thermometer_name,
+    area: log.area_room,
+    morning: num(log.morning_temp),
+    afternoon: num(log.afternoon_temp),
+    checked_by: log.checked_by,
+    recorded_by: log.recorded_by,
+  })[key], "date", "desc")
+  const { pageRows, start, pager } = usePaged(sortedLogs, 20, `${search}|${areaFilter}|${rangeFilter}|${thermometerFilter}|${monthFilter}`)
+
+  const outOfRangeCount = useMemo(() => filteredLogs.filter((log) => log.is_out_of_range).length, [filteredLogs])
+
+  // Export what the filters show, in the order shown.
+  const exportLogs = useTableExport(() => ({
+    fileName: `temperature-records-${monthFilter || "all"}`,
+    title: "Temperature Records",
+    subtitle: [thermometerFilter !== "all" ? thermometerFilter : "All thermometers", monthFilter ? `Month ${monthFilter.slice(5)}/${monthFilter.slice(0, 4)}` : ""].filter(Boolean).join(" - "),
+    headers: ["S/No", "Date", "Thermometer", "Area/Room", "Max (°C)", "Morning (°C)", "Afternoon (°C)", "Checked By", "Recorded By", "Remarks"],
+    rightColumns: [4, 5, 6],
+    rows: sortedLogs.map((log, i) => [
+      i + 1, displayDate(logDay(log)), log.thermometer_name, log.area_room || "", log.acceptance_max_celsius ?? "",
+      log.morning_temp ?? "", log.afternoon_temp ?? "", log.checked_by || "", log.recorded_by || "",
+      [log.is_out_of_range ? "OUT OF RANGE" : "", log.remarks || ""].filter(Boolean).join(" - "),
+    ]),
+  }))
 
   const handleFormChange = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -315,7 +361,7 @@ export default function TemperatureRecordsTab() {
   }
 
   const handleDelete = async (log: TemperatureLog) => {
-    if (!window.confirm(`Delete the ${log.thermometer_name} reading for ${log.log_date}?`)) {
+    if (!window.confirm(`Delete the ${log.thermometer_name} reading for ${displayDate(logDay(log))}?`)) {
       return
     }
     try {
@@ -341,7 +387,7 @@ export default function TemperatureRecordsTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Thermometer className="h-4 w-4" />
-            {editingId ? "Update Today's Reading" : "Log Today's Reading"}
+            {editingId ? "Update Reading" : isTodaySelected ? "Log Today's Reading" : "Log a Past Reading"}
           </CardTitle>
           {editingId && (
             <p className="text-xs text-muted-foreground">
@@ -367,7 +413,8 @@ export default function TemperatureRecordsTab() {
             />
             <div className="space-y-1.5">
               <Label>Date</Label>
-              <Input type="date" value={form.log_date} onChange={(e) => handleFormChange("log_date", e.target.value)} />
+              {/* Any past day can be picked, to type in an old chart. */}
+              <Input type="date" max={todayDateString()} value={form.log_date} onChange={(e) => handleFormChange("log_date", e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>Acceptance Max (°C)</Label>
@@ -421,11 +468,20 @@ export default function TemperatureRecordsTab() {
             </div>
             <div className="space-y-1.5">
               <Label>Checked By</Label>
-              <Input
-                placeholder="Name"
-                value={form.checked_by}
-                onChange={(e) => handleFormChange("checked_by", e.target.value)}
-              />
+              <Select value={form.checked_by || undefined} onValueChange={(v) => handleFormChange("checked_by", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={checkerNames.length ? "Pick who checked it" : "No checkers set up"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {checkerNames.map((name) => {
+                    const role = checkers.find((c) => c.name === name)?.role
+                    return <SelectItem key={name} value={name}>{name}{role ? ` (${role})` : ""}</SelectItem>
+                  })}
+                </SelectContent>
+              </Select>
+              {checkerNames.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">Give a role &quot;Check SOP Records&quot; on Users &gt; Roles.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Remarks</Label>
@@ -462,28 +518,58 @@ export default function TemperatureRecordsTab() {
 
       {/* Filters + chart */}
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="text-base">Temperature Record Chart</CardTitle>
-            <div className="flex items-center gap-2">
-              <Select value={thermometerFilter} onValueChange={setThermometerFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All thermometers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All thermometers</SelectItem>
-                  {thermometers.map((name) => (
-                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="month"
-                className="w-[160px]"
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <SheetImport entity="temperature_logs" label="Temperature Records" onImported={loadLogs} />
+              <ExportMenu onExport={exportLogs} disabled={sortedLogs.length === 0} />
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <Input className="pl-8 w-[220px]" placeholder="Search readings..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Select value={thermometerFilter} onValueChange={setThermometerFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All thermometers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All thermometers</SelectItem>
+                {thermometers.map((name) => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={areaFilter} onValueChange={setAreaFilter}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All areas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All areas</SelectItem>
+                {areas.map((name) => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={rangeFilter} onValueChange={(v) => setRangeFilter(v as typeof rangeFilter)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All readings</SelectItem>
+                <SelectItem value="out">Out of range</SelectItem>
+                <SelectItem value="ok">Within range</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="month"
+              className="w-[160px]"
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              title="Month (clear it for every month)"
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -491,12 +577,14 @@ export default function TemperatureRecordsTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Thermometer</TableHead>
-                  <TableHead>Area/Room</TableHead>
-                  <TableHead>Morning (°C)</TableHead>
-                  <TableHead>Afternoon (°C)</TableHead>
-                  <TableHead>Checked By</TableHead>
+                  <TableHead className="w-[60px] text-center">S/No</TableHead>
+                  <SortHead label="Date" column="date" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Thermometer" column="thermometer" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Area/Room" column="area" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Morning (°C)" column="morning" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Afternoon (°C)" column="afternoon" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Checked By" column="checked_by" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <SortHead label="Recorded By" column="recorded_by" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
                   <TableHead>Remarks</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -504,28 +592,30 @@ export default function TemperatureRecordsTab() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={10} className="h-24 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Loading...
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : sortedLogs.length === 0 ? (
+                ) : pageRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-gray-500">
-                      No temperature readings for this period.
+                    <TableCell colSpan={10} className="h-24 text-center text-gray-500">
+                      No temperature readings match these filters.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sortedLogs.map((log) => (
+                  pageRows.map((log, i) => (
                     <TableRow key={log.id} className={log.is_out_of_range ? "bg-red-50" : undefined}>
-                      <TableCell>{formatDate(log.log_date)}</TableCell>
+                      <TableCell className="text-center text-muted-foreground">{start + i + 1}</TableCell>
+                      <TableCell className="whitespace-nowrap">{displayDate(logDay(log))}</TableCell>
                       <TableCell className="font-medium">{log.thermometer_name}</TableCell>
                       <TableCell>{log.area_room || "-"}</TableCell>
                       <TableCell>{log.morning_temp ?? "-"}</TableCell>
                       <TableCell>{log.afternoon_temp ?? "-"}</TableCell>
                       <TableCell>{log.checked_by || "-"}</TableCell>
+                      <TableCell>{log.recorded_by || "-"}</TableCell>
                       <TableCell className="max-w-[200px] truncate">
                         {log.is_out_of_range && (
                           <Badge variant="destructive" className="mr-1">Out of range</Badge>
@@ -554,6 +644,7 @@ export default function TemperatureRecordsTab() {
               </TableBody>
             </Table>
           </div>
+          <TablePager {...pager} />
         </CardContent>
       </Card>
     </div>

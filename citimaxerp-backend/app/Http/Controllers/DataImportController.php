@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CleaningLog;
 use App\Models\Customer;
 use App\Models\DeliveryInvoice;
 use App\Models\InventoryMovement;
@@ -123,6 +124,8 @@ class DataImportController extends Controller
                 'customers' => $this->importCustomers($body, $cells, $user, $headingRow),
                 'opening_stock' => $this->importOpeningStock($body, $cells, $user, $headingRow),
                 'past_invoices' => $this->importPastInvoices($body, $cells, $user, $headingRow),
+                'cleaning_logs' => $this->importCleaningLogs($body, $cells, $user, $headingRow),
+                'temperature_logs' => $this->importTemperatureLogs($body, $cells, $user, $headingRow),
             };
             $dryRun ? DB::rollBack() : DB::commit();
         } catch (\Throwable $e) {
@@ -308,6 +311,238 @@ class DataImportController extends Controller
     private function blankSummary(): array
     {
         return ['rows' => 0, 'created' => 0, 'updated' => 0, 'unchanged' => 0, 'errors' => 0];
+    }
+
+    /**
+     * "08:40", "8.40", "8:40am", "1:00 pm" and Excel's time fractions (0.3611) as HH:MM; '' for blank,
+     * false when it can't be read.
+     */
+    private function clockTime(string $value): string|false
+    {
+        $v = strtolower(str_replace(' ', '', $value));
+        if ($v === '' || $v === '-') {
+            return '';
+        }
+        if (is_numeric($v) && (float) $v > 0 && (float) $v < 1) {
+            $minutes = (int) round((float) $v * 1440);
+            return sprintf('%02d:%02d', intdiv($minutes, 60) % 24, $minutes % 60);
+        }
+        if (!preg_match('/^(\d{1,2})(?:[:.](\d{2}))?(?::\d{2})?(am|pm)?$/', $v, $m)) {
+            return false;
+        }
+        $h = (int) $m[1];
+        $min = (int) ($m[2] ?? 0);
+        $suffix = $m[3] ?? '';
+        if ($suffix === 'pm' && $h < 12) {
+            $h += 12;
+        } elseif ($suffix === 'am' && $h === 12) {
+            $h = 0;
+        }
+        return $h > 23 || $min > 59 ? false : sprintf('%02d:%02d', $h, $min);
+    }
+
+    /** Company users keyed by their full name and by first name alone, to match names written on a sheet. */
+    private function usersByName(string $companyId): array
+    {
+        $byName = [];
+        foreach (\App\Models\User::where('company_id', $companyId)->get(['id', 'first_name', 'last_name', 'email']) as $u) {
+            $byName[$this->nameKey(trim("{$u->first_name} {$u->last_name}"))] ??= $u;
+            if ($u->first_name) {
+                $byName[$this->nameKey($u->first_name)] ??= $u;
+            }
+        }
+        return $byName;
+    }
+
+    private function importCleaningLogs(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+        $users = $this->usersByName($companyId);
+        $me = CleaningLogController::userName($user);
+        $today = now('Africa/Nairobi')->toDateString();
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $date = $this->date($cell('cleaning_date'));
+            $areas = $cell('areas');
+            $result = ['row' => $line, 'key' => $date ? date('d/m/Y', strtotime($date)) : "Row {$line}", 'name' => $areas];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            $start = $this->clockTime($cell('start_time'));
+            $end = $this->clockTime($cell('end_time'));
+            if (!$date) {
+                $fail('Date is missing or not a date (use 19/10/2026).');
+                continue;
+            }
+            if ($date > $today) {
+                $fail('Date is in the future.');
+                continue;
+            }
+            if ($areas === '') {
+                $fail('Areas Cleaned is required (write Holiday for a day off).');
+                continue;
+            }
+            if ($start === false || $end === false) {
+                $fail('Start and End Time must be times like 08:40 or 13:00.');
+                continue;
+            }
+
+            $checkedBy = $cell('checked_by');
+            $checker = $checkedBy !== '' ? ($users[$this->nameKey($checkedBy)] ?? null) : null;
+            $preparedBy = $cell('prepared_by');
+            $preparer = $preparedBy === '' ? $user : ($users[$this->nameKey($preparedBy)] ?? null);
+
+            $values = [
+                'start_time' => $start ?: null,
+                'end_time' => $end ?: null,
+                'cleaned_by' => $cell('cleaned_by') ?: null,
+                'remarks' => $cell('notes') ?: null,
+                'prepared_by_user_id' => $preparer?->id,
+                'prepared_by_name' => $preparedBy !== '' ? $preparedBy : $me,
+                'checker_user_id' => $checker?->id,
+                'checker_name' => $checkedBy ?: null,
+                'checker_comment' => $cell('checker_comment') ?: null,
+                // A signed past sheet is already checked; without a checker it waits for one to be picked.
+                'status' => $checkedBy !== '' ? CleaningLog::STATUS_CHECKED : CleaningLog::STATUS_PENDING,
+            ];
+
+            $existing = CleaningLog::forCompany($companyId)->whereDate('cleaning_date', $date)
+                ->where('areas', $areas)
+                ->when($start, fn ($q) => $q->where('start_time', $start), fn ($q) => $q->whereNull('start_time'))
+                ->first();
+
+            if ($existing) {
+                $changes = [];
+                foreach (['start_time', 'end_time', 'cleaned_by', 'remarks', 'checker_name', 'checker_comment', 'status'] as $field) {
+                    if ((string) $existing->{$field} !== (string) $values[$field]) {
+                        $changes[] = ['field' => $field, 'from' => $existing->{$field}, 'to' => $values[$field]];
+                    }
+                }
+                if (!$changes) {
+                    $summary['unchanged']++;
+                    $results[] = $result + ['status' => 'unchanged'];
+                    continue;
+                }
+                $existing->update($values + ['checked_at' => $values['status'] === CleaningLog::STATUS_CHECKED ? ($existing->checked_at ?? $date) : null]);
+                $summary['updated']++;
+                $results[] = $result + ['status' => 'updated', 'changes' => $changes];
+                continue;
+            }
+
+            CleaningLog::create($values + [
+                'company_id' => $companyId,
+                'cleaning_date' => $date,
+                'areas' => $areas,
+                'checked_at' => $values['status'] === CleaningLog::STATUS_CHECKED ? $date : null,
+            ]);
+            $summary['created']++;
+            $results[] = $result + ['status' => 'created', 'message' => $checkedBy !== '' ? "Checked by {$checkedBy}" : 'Waiting for a checker to be picked'];
+        }
+
+        return [$summary, $results];
+    }
+
+    private function importTemperatureLogs(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+        $today = now('Africa/Nairobi')->toDateString();
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $date = $this->date($cell('log_date'));
+            $thermometer = $cell('thermometer_name');
+            $result = ['row' => $line, 'key' => $date ? date('d/m/Y', strtotime($date)) : "Row {$line}", 'name' => $thermometer];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            if (!$date) {
+                $fail('Date is missing or not a date (use 19/10/2026).');
+                continue;
+            }
+            if ($date > $today) {
+                $fail('Date is in the future.');
+                continue;
+            }
+            if ($thermometer === '') {
+                $fail('Thermometer is required.');
+                continue;
+            }
+
+            $nums = [];
+            foreach (['acceptance_max_celsius', 'morning_temp', 'afternoon_temp'] as $field) {
+                $text = $cell($field);
+                $nums[$field] = $text === '' ? null : $this->number($text);
+                if ($text !== '' && $nums[$field] === null) {
+                    $fail("{$field} must be a number.");
+                    continue 2;
+                }
+            }
+            if ($nums['morning_temp'] === null && $nums['afternoon_temp'] === null) {
+                $fail('Give a morning or an afternoon temperature.');
+                continue;
+            }
+
+            $values = [
+                'area_room' => $cell('area_room') ?: null,
+                'acceptance_max_celsius' => $nums['acceptance_max_celsius'],
+                'morning_temp' => $nums['morning_temp'],
+                'afternoon_temp' => $nums['afternoon_temp'],
+                'checked_by' => $cell('checked_by') ?: null,
+                'remarks' => $cell('notes') ?: null,
+            ];
+
+            $existing = \App\Models\TemperatureLog::forCompany($companyId)->where('thermometer_name', $thermometer)->whereDate('log_date', $date)->first();
+            if ($existing) {
+                $changes = [];
+                $norm = fn ($v) => $v === null || $v === '' ? null : (is_numeric($v) ? (float) $v : (string) $v);
+                foreach ($values as $field => $value) {
+                    $old = $existing->{$field};
+                    if ($norm($old) !== $norm($value)) {
+                        $changes[] = ['field' => $field, 'from' => $old, 'to' => $value];
+                    }
+                }
+                if (!$changes) {
+                    $summary['unchanged']++;
+                    $results[] = $result + ['status' => 'unchanged'];
+                    continue;
+                }
+                $existing->update($values);
+                $summary['updated']++;
+                $results[] = $result + ['status' => 'updated', 'changes' => $changes];
+                continue;
+            }
+
+            \App\Models\TemperatureLog::create($values + [
+                'company_id' => $companyId,
+                'thermometer_name' => $thermometer,
+                'log_date' => $date,
+                'acceptance_max_celsius' => $nums['acceptance_max_celsius'] ?? 30,
+                'created_by' => $user->id,
+            ]);
+            $summary['created']++;
+            $results[] = $result + ['status' => 'created'];
+        }
+
+        return [$summary, $results];
     }
 
     private function importSuppliers(array $body, \Closure $cells, string $companyId, int $headingRow): array

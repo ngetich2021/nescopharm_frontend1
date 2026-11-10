@@ -22,6 +22,55 @@ class ImportSchemas
             'purchase_order_items' => self::purchaseOrderItems(),
             'product_receipt_items' => self::productReceiptItems(),
             'past_invoices' => self::pastInvoices(),
+            'cleaning_logs' => self::cleaningLogs(),
+            'temperature_logs' => self::temperatureLogs(),
+        ];
+    }
+
+    /** Past cleaning services sheets (SOPs > Cleaning Records). */
+    private static function cleaningLogs(): array
+    {
+        return [
+            'key' => 'cleaning_logs',
+            'label' => 'Cleaning Records',
+            'order' => 8,
+            'description' => 'Past cleaning services sheets: one row per cleaning. A row with Checked By filled comes in as already checked (the sheet was signed); without it, it waits for the checker you pick in SOPs > Cleaning Records.',
+            'matching' => 'A row with the same Date, Start Time and Areas as a record already in the system updates it; anything else is added. Dates cannot be in the future.',
+            'permission' => 'can_create_sops',
+            'columns' => [
+                ['key' => 'cleaning_date', 'label' => 'Date', 'type' => 'date', 'required' => true, 'example' => '19/10/2026', 'aliases' => ['cleaningdate', 'day'], 'help' => 'Day first: 19/10/2026.'],
+                ['key' => 'start_time', 'label' => 'Start Time', 'type' => 'text', 'example' => '08:40', 'aliases' => ['start', 'starttime', 'timein'], 'help' => '24-hour time, e.g. 08:40 or 13:00. Blank for a holiday.'],
+                ['key' => 'end_time', 'label' => 'End Time', 'type' => 'text', 'example' => '13:00', 'aliases' => ['end', 'endtime', 'timeout']],
+                ['key' => 'areas', 'label' => 'Areas Cleaned', 'type' => 'text', 'required' => true, 'example' => 'All areas', 'aliases' => ['areas', 'area', 'fullgodown', 'godown'], 'help' => 'e.g. All areas, Offices/windows, Godown/ctns. Write Holiday for a day off.'],
+                ['key' => 'cleaned_by', 'label' => 'Cleaned By', 'type' => 'text', 'example' => 'Ben Kota', 'aliases' => ['name', 'cleaner', 'cleanedby']],
+                ['key' => 'prepared_by', 'label' => 'Prepared By', 'type' => 'text', 'example' => '', 'aliases' => ['preparedby', 'recordedby'], 'help' => 'Blank = you.'],
+                ['key' => 'checked_by', 'label' => 'Checked By', 'type' => 'text', 'example' => 'Sawanda', 'aliases' => ['checkedby', 'checker'], 'help' => 'The name on the sheet. Matched to a user when one has that name.'],
+                ['key' => 'checker_comment', 'label' => 'Checker Comment', 'type' => 'text', 'example' => 'Well done', 'aliases' => ['comment', 'checkercomment']],
+                ['key' => 'notes', 'label' => 'Remarks', 'type' => 'text', 'example' => '', 'aliases' => ['remarks', 'notes']],
+            ],
+        ];
+    }
+
+    /** Past temperature record charts (SOPs > Temperature Records). */
+    private static function temperatureLogs(): array
+    {
+        return [
+            'key' => 'temperature_logs',
+            'label' => 'Temperature Records',
+            'order' => 9,
+            'description' => 'Past temperature record charts: one row per thermometer per day, with its morning and afternoon readings.',
+            'matching' => 'Matched on Thermometer and Date: an existing reading is updated, anything else is added. Dates cannot be in the future.',
+            'permission' => 'can_create_sops',
+            'columns' => [
+                ['key' => 'log_date', 'label' => 'Date', 'type' => 'date', 'required' => true, 'example' => '19/10/2026', 'aliases' => ['logdate', 'day'], 'help' => 'Day first: 19/10/2026.'],
+                ['key' => 'thermometer_name', 'label' => 'Thermometer', 'type' => 'text', 'required' => true, 'example' => 'Thermometer 2', 'aliases' => ['thermometername']],
+                ['key' => 'area_room', 'label' => 'Area/Room', 'type' => 'text', 'example' => 'Cold Room', 'aliases' => ['area', 'room', 'arearoom']],
+                ['key' => 'acceptance_max_celsius', 'label' => 'Acceptance Max (C)', 'type' => 'number', 'example' => '30', 'aliases' => ['acceptancemax', 'max', 'acceptancemaxc']],
+                ['key' => 'morning_temp', 'label' => 'Morning Temp (C)', 'type' => 'number', 'example' => '22.5', 'aliases' => ['morning', 'morningtemp', 'am']],
+                ['key' => 'afternoon_temp', 'label' => 'Afternoon Temp (C)', 'type' => 'number', 'example' => '24', 'aliases' => ['afternoon', 'afternoontemp', 'pm']],
+                ['key' => 'checked_by', 'label' => 'Checked By', 'type' => 'text', 'example' => 'Asli Hassan', 'aliases' => ['checkedby', 'checker']],
+                ['key' => 'notes', 'label' => 'Remarks', 'type' => 'text', 'example' => '', 'aliases' => ['remarks', 'notes']],
+            ],
         ];
     }
 
