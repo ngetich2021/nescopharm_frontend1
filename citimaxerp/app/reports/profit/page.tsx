@@ -17,7 +17,7 @@ import { TablePager, usePaged } from "@/components/ui/table-pager"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { displayDate } from "@/lib/date-format"
-import { getProfitReport, type ProfitLine, type ProfitReport } from "@/lib/profit-report"
+import { getProfitReport, type ProfitCredit, type ProfitLine, type ProfitReport } from "@/lib/profit-report"
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd")
 const kes = (n: number) => n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -129,6 +129,32 @@ export default function ProfitReportPage() {
   }, [filtered, groups, view, sortKey, sortDir])
 
   const totals = useMemo(() => summarise("all", "Total", filtered), [filtered])
+
+  // Credit notes dated in the range, deducted at the end (they follow the price list and search filters).
+  // Credited lines with no cost anywhere come off sales but stay out of profit, as sales without a cost do.
+  const credits = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const rows: ProfitCredit[] = (data?.credits ?? []).filter((c) =>
+      (list === "all" || (c.price_list ?? NO_CODE) === list)
+      && (!q || [c.description, c.price_code, c.invoice_number, c.credit_note_number, c.customer].some((v) => (v || "").toLowerCase().includes(q))))
+    const costed = rows.filter((c) => c.cost !== null)
+    const amount = rows.reduce((s, c) => s + c.amount, 0)
+    const cost = costed.reduce((s, c) => s + (c.cost ?? 0), 0)
+    const profit = costed.reduce((s, c) => s + c.amount, 0) - cost
+    return {
+      rows, amount, cost, profit,
+      quantity: rows.reduce((s, c) => s + c.quantity, 0),
+      uncosted: rows.filter((c) => c.cost === null).reduce((s, c) => s + c.amount, 0),
+      numbers: Array.from(new Set(rows.map((c) => c.credit_note_number))),
+    }
+  }, [data, search, list])
+  const net = useMemo(() => {
+    const sales = totals.sales - credits.amount
+    const cost = totals.cost - credits.cost
+    const profit = totals.profit - credits.profit
+    return { sales, cost, profit, pct: pct(profit, cost) }
+  }, [totals, credits])
+  const creditLabel = credits.numbers.length ? `Less credit notes (${credits.numbers.join(", ")})` : "Less credit notes (none in this range)"
   const { pageRows, start, pager } = usePaged(sorted, 50, `${view}|${search}|${list}|${source}|${from}|${to}|${sortKey}|${sortDir}`)
 
   const toggleSort = (key: string) => {
@@ -153,7 +179,13 @@ export default function ProfitReportPage() {
         headers: ["S/No", "Invoice", "Date", "Customer", "Item", "Price Code", "Qty", "Per", "Rate", "Sales", "Cost", "Profit", "Profit %", "Cost From"],
         moneyColumns: [8, 9, 10, 11],
         rows: rows.map((r, i) => [i + 1, r.invoice_number, dmy(r.invoice_date), r.customer ?? "", r.description, r.price_code ?? "", r.quantity, r.unit, r.unit_price, r.sales, r.cost, r.profit, pctText(r.pct), SOURCES[r.cost_source]]),
-        footer: [["", "Total", "", "", "", "", totals.quantity, "", "", totals.sales, totals.cost, totals.profit, pctText(totals.pct), ""]],
+        footer: [
+          ["", "Gross", "", "", "", "", totals.quantity, "", "", totals.sales, totals.cost, totals.profit, pctText(totals.pct), ""],
+          ...([
+            ["", creditLabel, "", "", "", "", -credits.quantity, "", "", -credits.amount, -credits.cost, -credits.profit, "", ""],
+            ["", "Net (after credit notes)", "", "", "", "", totals.quantity - credits.quantity, "", "", net.sales, net.cost, net.profit, pctText(net.pct), ""],
+          ]),
+        ],
       }
     }
     const rows = sorted as Group[]
@@ -164,7 +196,13 @@ export default function ProfitReportPage() {
       headers: ["S/No", view === "list" ? "Price List" : "Item", ...(view === "product" ? ["Price Codes"] : []), "Lines", "Qty", "Sales", "Cost", "Profit", "Profit %"],
       moneyColumns: view === "product" ? [5, 6, 7] : [4, 5, 6],
       rows: rows.map((r, i) => [i + 1, r.name, ...(view === "product" ? [r.sub ?? ""] : []), r.lines, r.quantity, r.sales, r.cost, r.profit, pctText(r.pct)]),
-      footer: [["", "Total", ...(view === "product" ? [""] : []), totals.lines, totals.quantity, totals.sales, totals.cost, totals.profit, pctText(totals.pct)]],
+      footer: [
+        ["", "Gross", ...(view === "product" ? [""] : []), totals.lines, totals.quantity, totals.sales, totals.cost, totals.profit, pctText(totals.pct)],
+        ...([
+          ["", creditLabel, ...(view === "product" ? [""] : []), "", -credits.quantity, -credits.amount, -credits.cost, -credits.profit, ""],
+          ["", "Net (after credit notes)", ...(view === "product" ? [""] : []), "", totals.quantity - credits.quantity, net.sales, net.cost, net.profit, pctText(net.pct)],
+        ]),
+      ],
     }
   })
 
@@ -199,14 +237,22 @@ export default function ProfitReportPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <Stat icon={<ShoppingCart className="h-5 w-5" />} tone="bg-blue-100 text-blue-700" label="Sales (excl. VAT)" value={`KES ${kes(totals.sales)}`} />
-          <Stat icon={<Coins className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" label="Cost of goods" value={`KES ${kes(totals.cost)}`} />
-          <Stat icon={<TrendingUp className="h-5 w-5" />} tone="bg-emerald-100 text-emerald-700" label="Profit" value={`KES ${kes(totals.profit)}`} />
-          <Stat icon={<Percent className="h-5 w-5" />} tone="bg-rose-100 text-rose-700" label="Profit % (on cost)" value={pctText(totals.pct)} />
+          <Stat icon={<ShoppingCart className="h-5 w-5" />} tone="bg-blue-100 text-blue-700" label="Net sales (excl. VAT)" value={`KES ${kes(net.sales)}`} />
+          <Stat icon={<Coins className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" label="Cost of goods" value={`KES ${kes(net.cost)}`} />
+          <Stat icon={<TrendingUp className="h-5 w-5" />} tone="bg-emerald-100 text-emerald-700" label="Net profit (after credit notes)" value={`KES ${kes(net.profit)}`} />
+          <Stat icon={<Percent className="h-5 w-5" />} tone="bg-rose-100 text-rose-700" label="Profit % (on cost)" value={pctText(net.pct)} />
         </div>
         {totals.uncosted > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             {totals.uncosted} line{totals.uncosted === 1 ? " has" : "s have"} no cost anywhere (no batch cost or Cost Price), so {totals.uncosted === 1 ? "it is" : "they are"} left out of profit. Filter Cost From = No cost to see them.
+          </p>
+        )}
+
+        {credits.rows.length > 0 && (
+          <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            {credits.numbers.join(", ")} (credit {credits.numbers.length === 1 ? "note" : "notes"} dated in this range) {credits.numbers.length === 1 ? "is" : "are"} deducted at the end of the table:
+            KES {kes(credits.amount)} credited comes off sales and KES {kes(credits.cost)} cost of the goods back comes off cost.
+            {credits.uncosted > 0 && ` KES ${kes(credits.uncosted)} of it is on items with no cost anywhere, so it is left out of profit.`}
           </p>
         )}
 
@@ -357,7 +403,7 @@ export default function ProfitReportPage() {
                 <TableFooter>
                   <TableRow>
                     <TableCell colSpan={view === "lines" ? 6 : view === "product" ? 3 : 2} className="font-semibold">
-                      Total ({sorted.length} {view === "list" ? "price list" : view === "product" ? "item" : "line"}{sorted.length === 1 ? "" : "s"})
+                      Gross ({sorted.length} {view === "list" ? "price list" : view === "product" ? "item" : "line"}{sorted.length === 1 ? "" : "s"})
                     </TableCell>
                     {view !== "lines" && <TableCell className="text-right font-semibold tabular-nums">{totals.lines}</TableCell>}
                     <TableCell className="text-right font-semibold tabular-nums">{totals.quantity.toLocaleString()}</TableCell>
@@ -368,6 +414,35 @@ export default function ProfitReportPage() {
                     <TableCell className="text-right"><PctBadge p={totals.pct} /></TableCell>
                     {view === "lines" && <TableCell />}
                   </TableRow>
+                  {(
+                    <>
+                      <TableRow>
+                        <TableCell colSpan={view === "lines" ? 6 : view === "product" ? 3 : 2} className="text-muted-foreground">
+                          {creditLabel}
+                          {credits.uncosted > 0 && <span className="block text-xs text-amber-700">KES {kes(credits.uncosted)} on items without a cost: off sales, not off profit</span>}
+                        </TableCell>
+                        {view !== "lines" && <TableCell />}
+                        <TableCell className="text-right tabular-nums text-red-600">-{credits.quantity.toLocaleString()}</TableCell>
+                        {view === "lines" && <><TableCell /><TableCell /></>}
+                        <TableCell className="text-right tabular-nums text-red-600">-{kes(credits.amount)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-red-600">-{kes(credits.cost)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-red-600">-{kes(credits.profit)}</TableCell>
+                        <TableCell />
+                        {view === "lines" && <TableCell />}
+                      </TableRow>
+                      <TableRow>
+                        <TableCell colSpan={view === "lines" ? 6 : view === "product" ? 3 : 2} className="font-bold">Net (after credit notes)</TableCell>
+                        {view !== "lines" && <TableCell />}
+                        <TableCell className="text-right font-bold tabular-nums">{(totals.quantity - credits.quantity).toLocaleString()}</TableCell>
+                        {view === "lines" && <><TableCell /><TableCell /></>}
+                        <TableCell className="text-right font-bold tabular-nums">{kes(net.sales)}</TableCell>
+                        <TableCell className="text-right font-bold tabular-nums">{kes(net.cost)}</TableCell>
+                        <TableCell className="text-right font-bold tabular-nums">{kes(net.profit)}</TableCell>
+                        <TableCell className="text-right"><PctBadge p={net.pct} /></TableCell>
+                        {view === "lines" && <TableCell />}
+                      </TableRow>
+                    </>
+                  )}
                 </TableFooter>
               )}
             </Table>

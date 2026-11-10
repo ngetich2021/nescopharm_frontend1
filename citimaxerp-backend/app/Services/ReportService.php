@@ -319,6 +319,9 @@ class ReportService
                 'closing_stock_value' => round($closingStock * $unitCost, 2),
                 'sales_revenue' => round($revenue, 2),
                 'gross_profit' => round($revenue - ($quantitySold * $unitCost), 2),
+                'cost_of_sales' => round($quantitySold * $unitCost, 2),
+                // Profit % = gross profit / cost x 100 (on cost, as the user defines it).
+                'profit_pct' => $quantitySold * $unitCost > 0 ? round(($revenue - $quantitySold * $unitCost) / ($quantitySold * $unitCost) * 100, 1) : null,
                 'avg_monthly_sales' => round($avgMonthlySales, 1),
                 'months_of_stock' => $monthsOfStock,
                 'needs_reorder' => $avgMonthlySales > 0 && $monthsOfStock < 3,
@@ -342,6 +345,8 @@ class ReportService
             $row['closing_stock_value'] = round($sizes->sum('closing_stock_value'), 2);
             $row['sales_revenue'] = round($sizes->sum('sales_revenue') + (float) ($unsized->revenue ?? 0), 2);
             $row['gross_profit'] = round($sizes->sum('gross_profit') + (float) ($unsized->revenue ?? 0), 2);
+            $row['cost_of_sales'] = round($sizes->sum('cost_of_sales'), 2);
+            $row['profit_pct'] = $row['cost_of_sales'] > 0 ? round($row['gross_profit'] / $row['cost_of_sales'] * 100, 1) : null;
             $row['avg_monthly_sales'] = null;
             $row['months_of_stock'] = null;
             $row['needs_reorder'] = $sizes->contains('needs_reorder', true);
@@ -349,6 +354,18 @@ class ReportService
         })->values();
 
         $summaryLines = $items->where('row_type', '!=', 'parent');
+
+        // Credit notes dated in the period, for the items in this report, deducted at the end: what they
+        // credited comes off sales and the cost of the goods back comes off cost. Lines without any cost
+        // are left out of profit (their amount is shown), as sales without a cost are.
+        $credits = collect(app(CreditNoteProfitService::class)->lines(
+            $this->companyId, $dateFrom->toDateString(), $dateTo->toDateString(), $productIds->all()));
+        $costed = $credits->whereNotNull('cost');
+        $grossBefore = round($items->whereIn('row_type', ['item', 'parent'])->sum('gross_profit'), 2);
+        $creditProfit = round($costed->sum('amount') - $costed->sum('cost'), 2);
+        $costOfSales = round($items->whereIn('row_type', ['item', 'parent'])->sum('cost_of_sales'), 2);
+        $netCost = round($costOfSales - $costed->sum('cost'), 2);
+        $netProfit = round($grossBefore - $creditProfit, 2);
 
         return [
             'data' => $items->toArray(),
@@ -362,7 +379,19 @@ class ReportService
                 'total_closing_stock' => $summaryLines->sum('closing_stock'),
                 'total_closing_stock_value' => round($summaryLines->sum('closing_stock_value'), 2),
                 'total_sales_quantity' => $summaryLines->sum('sales_quantity'),
-                'total_gross_profit' => round($items->whereIn('row_type', ['item', 'parent'])->sum('gross_profit'), 2),
+                'total_gross_profit' => $grossBefore,
+                'total_cost_of_sales' => $costOfSales,
+                'total_profit_pct' => $costOfSales > 0 ? round($grossBefore / $costOfSales * 100, 1) : null,
+                'credit_notes' => [
+                    'count' => $credits->pluck('credit_note_id')->unique()->count(),
+                    'numbers' => $credits->pluck('credit_note_number')->unique()->values()->all(),
+                    'amount' => round($credits->sum('amount'), 2),
+                    'cost' => round($costed->sum('cost'), 2),
+                    'profit' => $creditProfit,
+                    'uncosted_amount' => round($credits->whereNull('cost')->sum('amount'), 2),
+                ],
+                'net_gross_profit' => $netProfit,
+                'net_profit_pct' => $netCost > 0 ? round($netProfit / $netCost * 100, 1) : null,
                 'reorder_alert_count' => $summaryLines->where('needs_reorder', true)->count(),
             ],
         ];

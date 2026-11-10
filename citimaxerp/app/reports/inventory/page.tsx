@@ -56,6 +56,8 @@ const EXPIRY_WARN_DAYS = 90
 const qty = (n: unknown) => (n === null || n === undefined || n === "" ? "-" : Number(n).toLocaleString())
 const money = (n: unknown) =>
   n === null || n === undefined ? "-" : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Profit % = profit / cost x 100; "-" without a cost.
+const pctText = (p: unknown) => (p === null || p === undefined || p === "" ? "-" : `${Number(p).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`)
 const isLine = (r: Row) => r.row_type !== "parent"
 const sumOf = (rows: Row[], key: string) => rows.filter(isLine).reduce((s, r) => s + Number(r[key] || 0), 0)
 
@@ -307,6 +309,19 @@ export default function InventoryReportPage() {
             render: (r) => <span className={cn(Number(r.gross_profit) < 0 && "text-red-600")}>{money(r.gross_profit)}</span>,
             total: (rows) => money(rows.filter((r) => r.row_type !== "size").reduce((s, r) => s + Number(r.gross_profit || 0), 0)),
           },
+          {
+            // Profit % = gross profit / cost x 100 (on cost).
+            key: "profit_pct",
+            header: "Profit %",
+            align: "right",
+            render: (r) => <span className={cn(r.profit_pct !== null && Number(r.profit_pct) < 0 && "text-red-600")}>{pctText(r.profit_pct)}</span>,
+            exportValue: (r) => (r.profit_pct === null || r.profit_pct === undefined ? "" : `${r.profit_pct}%`),
+            total: (rows) => {
+              const top = rows.filter((r) => r.row_type !== "size")
+              const cost = top.reduce((s, r) => s + Number(r.cost_of_sales || 0), 0)
+              return pctText(cost > 0 ? Math.round((top.reduce((s, r) => s + Number(r.gross_profit || 0), 0) / cost) * 1000) / 10 : null)
+            },
+          },
           { key: "months_of_stock", header: "Cover", align: "right", render: (r) => (r.months_of_stock === null || r.months_of_stock === undefined ? "-" : `${r.months_of_stock} mo`) },
           {
             key: "needs_reorder",
@@ -368,6 +383,22 @@ export default function InventoryReportPage() {
   const hasTotals = columns.some((c) => c.total)
   const hasGroups = data.some((r) => r.row_type === "parent")
 
+  // Credit notes in the period (CN-0008...), deducted after the Total: the profit they gave up comes
+  // off gross profit. Credited lines with no cost anywhere are left out of profit, as sales are.
+  const cn_ = reportType === "stock_management" ? summary?.credit_notes : null
+  const creditRows: { label: string; profit: string; pct: string; bold?: boolean }[] = cn_
+    ? [
+        {
+          label: cn_.count > 0
+            ? `Less credit notes (${(cn_.numbers ?? []).join(", ")}): KES ${money(cn_.amount)} credited${cn_.uncosted_amount > 0 ? `, ${money(cn_.uncosted_amount)} of it without a cost` : ""}`
+            : "Less credit notes (none in this range)",
+          profit: cn_.count > 0 ? `-${money(cn_.profit)}` : money(0),
+          pct: "",
+        },
+        { label: "Net (after credit notes)", profit: money(summary?.net_gross_profit), pct: pctText(summary?.net_profit_pct ?? null), bold: true },
+      ]
+    : []
+
   const exportReport = useTableExport(() => {
     let rowIndex = 0
     const body = visibleRows.map((r) => {
@@ -390,6 +421,16 @@ export default function InventoryReportPage() {
       subtitle: period,
       headers: columns.map((c) => c.header),
       rows: body,
+      footer: hasTotals
+        ? [
+            columns.map((c, i): ExportCell => {
+              if (i === 1) return creditRows.length ? "Gross" : "Total"
+              const t = i > 1 && c.total ? c.total(visibleRows) : ""
+              return typeof t === "string" || typeof t === "number" ? t : "" // coloured totals (movement) stay off
+            }),
+            ...creditRows.map((fr) => columns.map((c, i): ExportCell => (i === 1 ? fr.label : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""))),
+          ]
+        : undefined,
     }
   })
 
@@ -409,7 +450,17 @@ export default function InventoryReportPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Closing Stock" value={qty(summary.total_closing_stock)} hint={`as of ${displayDate(new Date())}`} icon={<Boxes className="h-5 w-5" />} />
           <SummaryCard label="Closing Value" value={`KES ${money(summary.total_closing_stock_value)}`} hint="at buying price" icon={<Wallet className="h-5 w-5" />} />
-          <SummaryCard label="Gross Profit" value={`KES ${money(summary.total_gross_profit)}`} hint={period ? `${period.date_from} to ${period.date_to}` : undefined} icon={<TrendingUp className="h-5 w-5" />} tone="green" />
+          <SummaryCard
+            label="Gross Profit"
+            value={`KES ${money(summary.net_gross_profit ?? summary.total_gross_profit)}`}
+            hint={[
+              summary.net_profit_pct !== null && summary.net_profit_pct !== undefined ? `${pctText(summary.net_profit_pct)} on cost` : null,
+              summary.credit_notes?.count ? "after credit notes" : null,
+              period ? `${period.date_from} to ${period.date_to}` : null,
+            ].filter(Boolean).join(" · ")}
+            icon={<TrendingUp className="h-5 w-5" />}
+            tone="green"
+          />
           <button type="button" className="text-left" onClick={() => setReorderOnly((v) => !v)} disabled={!summary.reorder_alert_count}>
             <SummaryCard
               label="Reorder Alerts"
@@ -589,10 +640,20 @@ export default function InventoryReportPage() {
                   <TableRow>
                     {columns.map((c, i) => (
                       <TableCell key={c.key} className={cn("py-2.5 text-sm font-semibold tabular-nums", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                        {i <= 1 ? (i === 0 ? "" : "Total") : c.total ? c.total(visibleRows) : ""}
+                        {i <= 1 ? (i === 0 ? "" : creditRows.length ? "Gross" : "Total") : c.total ? c.total(visibleRows) : ""}
                       </TableCell>
                     ))}
                   </TableRow>
+                  {/* Credit notes dated in the period are deducted at the end: Less credit notes, then Net. */}
+                  {creditRows.map((fr) => (
+                    <TableRow key={fr.label}>
+                      {columns.map((c, i) => (
+                        <TableCell key={c.key} className={cn("py-2 text-sm tabular-nums", fr.bold && "font-semibold", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
+                          {i === 1 ? <span className="whitespace-nowrap">{fr.label}</span> : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
                 </TableFooter>
               )}
             </Table>

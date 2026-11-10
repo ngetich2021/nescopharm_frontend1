@@ -117,7 +117,8 @@ class ProfitReportController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => ['date_from' => $from, 'date_to' => $to, 'earliest' => $earliest, 'lines' => $out],
+            'data' => ['date_from' => $from, 'date_to' => $to, 'earliest' => $earliest, 'lines' => $out,
+                'credits' => app(\App\Services\CreditNoteProfitService::class)->lines($companyId, $from, $to)],
         ]);
     }
 }

@@ -19,11 +19,31 @@ export interface ProfitLine {
   cost_source: "dispatch" | "batch" | "cost_price" | "none"
 }
 
+/** A credited line on a credit note dated in the range: deducted at the end of the report. */
+export interface ProfitCredit {
+  credit_note_id: string
+  credit_note_number: string
+  date: string
+  invoice_number: string | null
+  customer: string | null
+  product_id: string | null
+  description: string
+  price_list: string | null
+  price_code: string | null
+  unit: string
+  quantity: number
+  unit_price: number
+  amount: number // credited, excl. VAT, after discount
+  cost: number | null // cost of the goods back; null: no cost anywhere (amount still comes off sales)
+  cost_source: "returned_batch" | "batch" | "cost_price" | "none"
+}
+
 export interface ProfitReport {
   date_from: string
   date_to: string
   earliest: string // the first date covered (past sales before it have no cost)
   lines: ProfitLine[]
+  credits: ProfitCredit[]
 }
 
 export async function getProfitReport(params: { date_from: string; date_to: string }): Promise<ProfitReport> {
