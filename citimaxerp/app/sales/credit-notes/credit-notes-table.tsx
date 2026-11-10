@@ -214,6 +214,13 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
             <Eye className="h-4 w-4 mr-2" />
             View Details
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={(event) => {
+            event.stopPropagation()
+            router.push(`/sales/credit-notes/${creditNote.id}/document`)
+          }}>
+            <Download className="h-4 w-4 mr-2" />
+            Credit Note (Print / Download)
+          </DropdownMenuItem>
 
           {creditNote.status === "draft" && (
             <>

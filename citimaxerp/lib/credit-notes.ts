@@ -401,6 +401,38 @@ export async function voidCreditNote(id: string): Promise<CreditNote> {
     }
 }
 
+/** A credit note with what its printed document shows (company sent with it: no "View Company" needed). */
+export interface CreditNoteDocumentData {
+    id: string
+    number: string
+    status: CreditNoteStatus
+    date: string | null
+    reason: string | null
+    notes: string | null
+    invoice_number: string | null
+    invoice_date: string | null
+    prepared_by: string | null
+    company: Partial<import("@/lib/company").Company> | null
+    customer: {
+        id: string; name: string; business_name?: string | null; customer_type?: string | null; address?: string | null
+        city?: string | null; state?: string | null; country?: string | null; postal_code?: string | null; county?: string | null
+        region?: string | null; phone?: string | null; email?: string | null; pin_number?: string | null
+    } | null
+    lines: {
+        name: string; unit: string; quantity: number; unit_price: number; discount_amount: number; tax_rate: number
+        tax_amount: number; amount: number; batches: { batch_number: string | null; expiry_date: string | null; quantity: number | null }[]
+    }[]
+    subtotal: number
+    discount_amount: number
+    tax_amount: number
+    total: number
+}
+
+export async function fetchCreditNoteDocument(id: string): Promise<CreditNoteDocumentData> {
+    const response = await apiCall<{ data: CreditNoteDocumentData }>(`/credit-notes/${id}/document`, "GET", undefined, true)
+    return response.data
+}
+
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
 export function parseCreditNoteAmount(amount: any): number {

@@ -235,6 +235,97 @@ class CreditNoteController extends Controller
     }
 
     /**
+     * A credit note as its printed document needs it: our company (letterhead, payment details - sent
+     * here so no "View Company" permission is needed), the customer (business name, address, PIN), the
+     * invoice it credits and its date, and each line with its unit and the batches (with expiry) the
+     * returned goods went back into - else the batches the invoice sent them out of.
+     */
+    public function document(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_invoices', $user->company_id)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        $note = CreditNote::with(['customer', 'invoice', 'lineItems', 'createdBy'])
+            ->where('company_id', $user->company_id)->find($id);
+        if (!$note) {
+            return response()->json(['message' => 'Credit note not found.'], 404);
+        }
+
+        // Batches the returned stock went back into, per product (variant).
+        $moved = InventoryMovement::where('reference_type', 'credit_note')->where('reference_id', $note->id)
+            ->whereNotNull('batch_id')->get(['product_id', 'variant_id', 'batch_id', 'quantity']);
+        $batchRows = InventoryBatch::whereIn('id', $moved->pluck('batch_id')->unique())->get(['id', 'batch_number', 'expiry_date'])->keyBy('id');
+        $returnedBatches = $moved->groupBy(fn ($m) => $m->product_id . '|' . ($m->variant_id ?? ''))
+            ->map(fn ($rows) => $rows->groupBy('batch_id')->map(fn ($r, $batchId) => [
+                'batch_number' => $batchRows[$batchId]->batch_number ?? null,
+                'expiry_date' => isset($batchRows[$batchId]) && $batchRows[$batchId]->expiry_date ? substr((string) $batchRows[$batchId]->expiry_date, 0, 10) : null,
+                'quantity' => (float) $r->sum('quantity'),
+            ])->values()->all());
+
+        // Else the batches the invoice line carried.
+        $invoiceBatches = [];
+        if ($note->invoice_id) {
+            foreach (\App\Models\InvoiceLineItem::where('invoice_id', $note->invoice_id)->get() as $il) {
+                $key = $il->product_id . '|' . ($il->variant_id ?? '');
+                $batches = $il->metadata['batches'] ?? (($il->batch_number ?? null) || ($il->expiry_date ?? null)
+                    ? [['batch_number' => $il->batch_number ?? null, 'expiry_date' => $il->expiry_date ?? null, 'quantity' => null]] : []);
+                $invoiceBatches[$key] = array_map(fn ($b) => [
+                    'batch_number' => $b['batch_number'] ?? null,
+                    'expiry_date' => !empty($b['expiry_date']) ? substr((string) $b['expiry_date'], 0, 10) : null,
+                    'quantity' => null,
+                ], $batches);
+            }
+        }
+
+        $company = \App\Models\Company::find($note->company_id);
+        $customer = $note->customer;
+        $by = $note->createdBy;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'id' => $note->id,
+                'number' => $note->credit_note_number,
+                'status' => $note->status,
+                'date' => $note->credit_note_date ? substr((string) $note->credit_note_date, 0, 10) : null,
+                'reason' => $note->reason,
+                'notes' => $note->notes,
+                'invoice_number' => $note->invoice?->invoice_number,
+                'invoice_date' => $note->invoice?->invoice_date ? substr((string) $note->invoice->invoice_date, 0, 10) : null,
+                'prepared_by' => $by ? trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? '')) ?: ($by->name ?? null) : null,
+                'company' => $company ? $company->only([
+                    'id', 'name', 'email', 'phone', 'address', 'city', 'state', 'country', 'postal_code', 'website',
+                    'logo_url', 'letterhead_url', 'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch',
+                    'mpesa_paybill', 'mpesa_account_number',
+                ]) : null,
+                'customer' => $customer ? $customer->only([
+                    'id', 'name', 'business_name', 'customer_type', 'address', 'city', 'state', 'country', 'postal_code',
+                    'county', 'region', 'phone', 'email', 'pin_number',
+                ]) : null,
+                'lines' => $note->lineItems->values()->map(function ($l) use ($returnedBatches, $invoiceBatches) {
+                    $key = $l->product_id . '|' . ($l->variant_id ?? '');
+                    return [
+                        'name' => $l->description,
+                        'unit' => $l->unit ?: 'pcs',
+                        'quantity' => (float) $l->quantity,
+                        'unit_price' => round((float) $l->unit_price, 2),
+                        'discount_amount' => round((float) $l->discount_amount, 2),
+                        'tax_rate' => (float) $l->tax_rate,
+                        'tax_amount' => round((float) $l->tax_amount, 2),
+                        'amount' => round((float) $l->line_total, 2),
+                        'batches' => $returnedBatches[$key] ?? $invoiceBatches[$key] ?? [],
+                    ];
+                })->all(),
+                'subtotal' => round((float) $note->subtotal, 2),
+                'discount_amount' => round((float) $note->discount_amount, 2),
+                'tax_amount' => round((float) $note->tax_amount, 2),
+                'total' => round((float) $note->total_amount, 2),
+            ],
+        ]);
+    }
+
+    /**
      * Update a draft credit note.
      */
     public function update(Request $request, string $id): JsonResponse

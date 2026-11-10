@@ -570,6 +570,11 @@ export default function CreditNoteDetailPage() {
               </div>
 
               <div className="flex flex-wrap gap-2 xl:justify-end">
+                <Button variant="outline" onClick={() => router.push(`/sales/credit-notes/${creditNote.id}/document`)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Credit Note (Print / Download)
+                </Button>
+
                 {canIssue && (
                   <Button onClick={handleIssue} disabled={isIssuing}>
                     {isIssuing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
