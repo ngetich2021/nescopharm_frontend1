@@ -87,20 +87,37 @@ class ProfitReportController extends Controller
             $k = $l->order_id . '|' . $l->product_id;
             $share[$k] = ($share[$k] ?? 0) + $l->q;
         }
+        // Pieces per line for costing sales that never took stock (batch cost and Cost Price are per
+        // piece; quantities are in what was sold, e.g. packs of 100): the pieces its order line
+        // recorded (base quantity - what stock moves by), else the pieces in the invoice line's unit.
+        $orderPieces = $orderIds ? DB::table('order_items')->whereIn('order_id', $orderIds)
+            ->groupBy('order_id', 'product_id')
+            ->selectRaw('order_id, product_id, sum(quantity)::float q, sum(coalesce(base_quantity, quantity))::float b')
+            ->get()->mapWithKeys(fn ($r) => [$r->order_id . '|' . $r->product_id => $r]) : collect();
+        $piecesOf = function ($l) use ($orderPieces): float {
+            $o = $orderPieces[$l->order_id . '|' . $l->product_id] ?? null;
+            if ($o && $o->q > 0) {
+                return $l->q * ($o->b / $o->q);
+            }
+            return $l->q * \App\Services\PackagingCalculatorService::piecesPerPack($l->unit);
+        };
 
         $out = [];
         foreach ($lines as $l) {
             // Total value as invoiced: after discount, including VAT (what Sales Accounts shows).
             $sales = round($l->q * $l->p - $l->d + $l->t, 2);
             $k = $l->order_id . '|' . $l->product_id;
+            $pieces = $piecesOf($l);
+            // What the goods cost: the actual cost that left the batches on dispatch (this line's share),
+            // else the item's average batch cost x pieces, else its Cost Price x pieces.
             if ($l->order_id && isset($moved[$k]) && $moved[$k]->q > 0) {
                 $cost = $moved[$k]->c * ($l->q / max($share[$k], 1e-9));
                 $source = 'dispatch';
             } elseif ($l->product_id && isset($batchCost[$l->product_id])) {
-                $cost = (float) $batchCost[$l->product_id] * $l->q;
+                $cost = (float) $batchCost[$l->product_id] * $pieces;
                 $source = 'batch';
             } elseif ($l->product_id && isset($costPrice[$l->product_id])) {
-                $cost = (float) $costPrice[$l->product_id] * $l->q;
+                $cost = (float) $costPrice[$l->product_id] * $pieces;
                 $source = 'cost_price';
             } else {
                 $cost = null;
@@ -118,6 +135,7 @@ class ProfitReportController extends Controller
                 'price_code' => $label !== '' ? $label : null,
                 'unit' => $l->unit ?: 'pcs',
                 'quantity' => $l->q,
+                'pieces' => round($pieces, 2),
                 'unit_price' => round($l->p, 2),
                 'sales' => $sales,
                 'cost' => $cost === null ? null : round($cost, 2),
