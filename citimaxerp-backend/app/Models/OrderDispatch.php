@@ -245,6 +245,31 @@ class OrderDispatch extends Model
     }
 
     /**
+     * Put a rejected dispatch back in its approval line: the rejected step is pending again (steps
+     * already approved stay approved) and the dispatch is live again, so it takes the order's stock
+     * (see the saved hook). Its history keeps who rejected it and why.
+     */
+    public function reopen(User $user)
+    {
+        $by = trim("{$user->first_name} {$user->last_name}");
+        $approvers = collect($this->approvers ?? [])->map(function ($approver) use ($by) {
+            if (($approver['status'] ?? null) === 'rejected') {
+                $approver['status'] = 'pending';
+                $approver['approved_at'] = null;
+                $approver['comments'] = trim(($approver['comments'] ?? '') . " | Reopened by {$by} on " . now()->format('d/m/Y H:i'), ' |');
+            }
+            return $approver;
+        })->toArray();
+
+        $this->approvers = $approvers;
+        $this->approval_status = collect($approvers)->contains('status', 'approved') ? 'in_progress' : 'pending';
+        $this->status = 'pending';
+        $this->save();
+
+        return $this;
+    }
+
+    /**
      * Check if all approvers have approved
      */
     public function isFullyApproved()

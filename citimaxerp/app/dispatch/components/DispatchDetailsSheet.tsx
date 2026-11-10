@@ -105,7 +105,7 @@ export function DispatchDetailsSheet({
   const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
   const [markDeliveredModalOpen, setMarkDeliveredModalOpen] = useState(false);
 
-  const { isSystemAdmin, isCompanyAdmin } = usePermissions();
+  const { isSystemAdmin, isCompanyAdmin, hasPermission } = usePermissions();
   const { userProfile } = useAuth();
   const roleName = ((userProfile as any)?.role?.name || "").toLowerCase().trim();
   
@@ -188,15 +188,15 @@ export function DispatchDetailsSheet({
       }
       toast({
         title: "Success",
-        description: "Dispatch approved successfully",
+        description: (result as any)?.message || "Dispatch approved successfully",
       });
       setApproveDialogOpen(false);
       onRefresh?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving dispatch:", error);
       toast({
-        title: "Error",
-        description: "Failed to approve dispatch",
+        title: "Could not approve",
+        description: error?.message || "Failed to approve dispatch",
         variant: "destructive",
       });
     } finally {
@@ -287,6 +287,10 @@ export function DispatchDetailsSheet({
   const awaitingApproval = localDispatch.approval_status === 'pending' || localDispatch.approval_status === 'in_progress';
   const canOverrideReject = isSystemAdmin() || isCompanyAdmin() || roleName === 'warehouse manager';
   const canApprove = isApprover && awaitingApproval;
+  // A rejected dispatch can always be approved again by anyone who approves dispatches: it goes
+  // back in its approval line and takes the order's stock again (OrderDispatchController::approve).
+  const canApproveAgain = localDispatch.approval_status === 'rejected'
+    && (hasPermission("can_approve_order_dispatches") || isSystemAdmin() || isCompanyAdmin());
   const canReject = (isApprover || canOverrideReject) && awaitingApproval;
 
   // Can submit if draft and has items/approvers
@@ -412,6 +416,31 @@ export function DispatchDetailsSheet({
                   </Button>
                   )}
                 </div>
+              </div>
+            )}
+
+            {canApproveAgain && (
+              <div className="bg-white border border-red-200 shadow-sm rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-red-400"></div>
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-red-100 text-red-700 rounded-full">
+                    <Ban className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">This dispatch was rejected</h3>
+                    <p className="text-gray-500">
+                      Approve it again to put it back in its approval line. It takes the order&apos;s stock again;
+                      if you are the next approver it is approved in your name now.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  className="bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-200 min-w-[140px]"
+                  onClick={() => setApproveDialogOpen(true)}
+                >
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Approve again
+                </Button>
               </div>
             )}
 

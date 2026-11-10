@@ -669,6 +669,48 @@ class OrderDispatchController extends Controller
             ], 404);
         }
 
+        // A rejected dispatch can always be approved again: it goes back in its approval line (the
+        // rejected step pending again) and takes the order's stock again - unless the order has
+        // since been given another dispatch, or cancelled.
+        $reopened = false;
+        if ($dispatch->approval_status === 'rejected') {
+            $other = OrderDispatch::where('order_id', $dispatch->order_id)->where('id', '!=', $dispatch->id)
+                ->where('status', '!=', 'cancelled')->where('approval_status', '!=', 'rejected')->first();
+            if ($other) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "This order already has dispatch {$other->dispatch_number}. Approve or cancel that one instead.",
+                ], 409);
+            }
+            if (in_array($dispatch->order?->status, ['cancelled', 'rejected'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Order {$dispatch->order->order_number} is {$dispatch->order->status}, so its dispatch cannot be approved.",
+                ], 409);
+            }
+            $dispatch->reopen($user);
+            if ($dispatch->order && !$dispatch->order->is_historical) {
+                $dispatch->order->dispatch_status = 'dispatch_pending';
+                $dispatch->order->save();
+            }
+            $reopened = true;
+            // Whoever is next in line approves it; if that is not the person reopening it, it waits for them.
+            if (!$dispatch->canBeApprovedBy($user)) {
+                $this->notifyNextDispatchApprover($dispatch, $user->id);
+                $next = $dispatch->getCurrentApprover();
+                $dispatch->load(['order', 'order.invoice:id,order_id,invoice_number,file_number', 'items', 'deliveryLocation']);
+                $dispatch->approver_details = $dispatch->approver_users;
+                $dispatch->current_approver = $next;
+                $dispatch->approval_progress = $dispatch->getApprovalProgress();
+                return response()->json([
+                    'success' => true,
+                    'message' => "Dispatch {$dispatch->dispatch_number} is back in the approval line"
+                        . ($next ? " and waiting for {$next->first_name} {$next->last_name}." : '.'),
+                    'data' => $dispatch,
+                ], 200);
+            }
+        }
+
         if (!in_array($dispatch->approval_status, ['pending', 'in_progress'])) {
             return response()->json([
                 'success' => false,
