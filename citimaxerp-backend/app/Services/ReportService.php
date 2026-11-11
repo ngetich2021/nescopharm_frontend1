@@ -598,6 +598,7 @@ class ReportService
                     'reference_link' => $ref['link'] ?? null,
                     'party' => $ref['party'] ?? null,
                     'party_link' => $ref['party_link'] ?? null,
+                    'reference_details' => $ref['details'] ?? null,
                     'notes' => $m->notes,
                     'unit_cost' => $m->unit_cost !== null ? (float) $m->unit_cost : null,
                 ];
@@ -645,7 +646,7 @@ class ReportService
                 ->orderByRaw("CASE WHEN file_number ~ '^[0-9]+$' THEN 0 ELSE 1 END") // an NSK invoice (has a File No) first
                 ->orderByRaw("CASE WHEN status IN ('cancelled', 'void', 'voided') THEN 1 ELSE 0 END")
                 ->orderByDesc('created_at')
-                ->get(['id', 'order_id', 'invoice_number', 'file_number'])
+                ->get(['id', 'order_id', 'invoice_number', 'file_number', 'invoice_date', 'due_date', 'total_amount', 'balance_amount', 'status'])
                 ->unique('order_id')->keyBy('order_id');
             $orders = $orders->map(function ($o) use ($invoices) {
                 $o->invoice = $invoices->get($o->id);
@@ -694,6 +695,15 @@ class ReportService
                         'label' => $inv ? 'Invoice' : 'Order',
                         'number' => $inv ? \App\Models\Invoice::printedNumber($inv->invoice_number, $inv->file_number) : self::shortDocNumber($o->order_number ?? null) ?? $number,
                         'link' => $inv ? "/sales/invoices/{$inv->id}" : ($o ? "/sales/orders/{$o->id}" : null),
+                        // Shown when the row is expanded.
+                        'details' => $inv ? [
+                            'invoice_date' => $inv->invoice_date,
+                            'due_date' => $inv->due_date,
+                            'amount' => round((float) $inv->total_amount, 2),
+                            'balance' => round((float) $inv->balance_amount, 2),
+                            'status' => $inv->status,
+                            'order_number' => self::shortDocNumber($o->order_number ?? null),
+                        ] : null,
                     ] + $customer($o);
                 })(),
                 'credit_note' => (function () use ($creditNotes, $id, $number, $customer) {

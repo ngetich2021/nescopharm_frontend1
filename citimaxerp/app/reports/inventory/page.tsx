@@ -20,6 +20,7 @@ import { getProductCategories, type ProductCategory } from "@/lib/product-catego
 import { getStores, type Store } from "@/lib/stores"
 import { cn } from "@/lib/utils"
 import { LineSalesDialog, type LineSalesTarget } from "./line-sales-dialog"
+import { getInvoiceStatusLabel } from "@/lib/invoice-status"
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -126,6 +127,38 @@ function flowSteps(r: Row): FlowStep[] {
   const chain = r.direction === "out" ? [stock, doc, party] : [party, doc, stock]
   return chain.filter((s): s is FlowStep => s !== null)
 }
+// The expanded part of a Stock Movement row: the flow, then the invoice's details.
+function FlowDetails({ row }: { row: Row }) {
+  const d = row.reference_details as Row | null
+  const money = (n: unknown) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const facts: [string, ReactNode][] = d
+    ? [
+        ["Invoice date", d.invoice_date ? displayDate(new Date(d.invoice_date)) : "-"],
+        ["Due date", d.due_date ? displayDate(new Date(d.due_date)) : "-"],
+        ["Amount", `Ksh ${money(d.amount)}`],
+        ["Balance", `Ksh ${money(d.balance)}`],
+        ["Status", d.status ? getInvoiceStatusLabel(String(d.status)) : "-"], // as the Invoices list says it (draft = Pending)
+        ["Order", d.order_number ?? "-"],
+      ]
+    : []
+  return (
+    <div className="space-y-3 py-1">
+      <FlowCell row={row} />
+      {facts.length > 0 && (
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3 lg:grid-cols-6">
+          {facts.map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-xs text-muted-foreground">{k}</dt>
+              <dd className="font-medium text-gray-900">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {row.notes && <p className="text-xs text-muted-foreground">{row.notes}</p>}
+    </div>
+  )
+}
+
 function FlowCell({ row }: { row: Row }) {
   const steps = flowSteps(row)
   return (
@@ -202,6 +235,8 @@ export default function InventoryReportPage() {
   // Credit notes and the Net line show only when switched on; every visit starts with them hidden.
   const [showCredit, setShowCredit] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Stock Movement rows opened with the arrow (flow + invoice details).
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState("20")
 
@@ -380,13 +415,42 @@ export default function InventoryReportPage() {
           },
           { key: "quantity_before", header: "Before", align: "right", render: (r) => qty(r.quantity_before) },
           { key: "quantity_after", header: "After", align: "right", render: (r) => qty(r.quantity_after) },
-          // The flow, in the direction the stock moved: out = Stock (batch) -> Invoice -> Customer,
-          // in = Supplier -> Goods received -> Stock (batch). Invoice and customer open on click.
+          // Just the document (Invoice NSK/0455); the arrow opens the full flow under the row:
+          // Stock (batch) -> Invoice -> Customer, with the invoice's details.
           {
             key: "reference_number",
-            header: "Flow (stock → document → customer / supplier)",
-            className: "min-w-[420px]",
-            render: (r) => <FlowCell row={r} />,
+            header: "Invoice / Document",
+            className: "whitespace-nowrap",
+            render: (r) => {
+              const open = expanded.has(r.id)
+              return (
+                <div className="flex items-center gap-2">
+                  <div className="leading-tight">
+                    {r.reference_type && r.reference_type !== "Invoice" && <div className="text-xs text-muted-foreground">{r.reference_type}</div>}
+                    {r.reference_link && r.reference_number ? (
+                      <Link href={r.reference_link} className="font-medium text-primary hover:underline">{r.reference_number}</Link>
+                    ) : (
+                      <span className="text-gray-700">{r.reference_number || (r.reference_type ? "" : "-")}</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    title={open ? "Hide details" : "Show the flow: stock, invoice, customer"}
+                    className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                    onClick={() =>
+                      setExpanded((prev) => {
+                        const next = new Set(prev)
+                        next.has(r.id) ? next.delete(r.id) : next.add(r.id)
+                        return next
+                      })
+                    }
+                  >
+                    <ChevronRight className={cn("h-4 w-4 transition-transform", open && "rotate-90")} />
+                  </button>
+                </div>
+              )
+            },
             exportValue: (r) => flowSteps(r).map((s) => [s.label, s.value].filter(Boolean).join(" ")).join(" → "),
           },
         ]
@@ -520,7 +584,7 @@ export default function InventoryReportPage() {
           history,
         ]
     }
-  }, [reportType, collapsed, showMovements, dateFrom, dateTo, period, priceList])
+  }, [reportType, collapsed, expanded, showMovements, dateFrom, dateTo, period, priceList])
   const columns = allColumns
 
   const visibleGroups = useMemo(() => {
@@ -875,8 +939,8 @@ export default function InventoryReportPage() {
                           if (row.row_type === "size" && collapsed.has(group[0].item_no)) return null
                           const sno = baseNum + (++rowIndex)
                           return (
+                            <Fragment key={row.id ?? `${row.product_id}-${row.variant_id ?? ""}-${i}`}>
                             <TableRow
-                              key={row.id ?? `${row.product_id}-${row.variant_id ?? ""}-${i}`}
                               className={cn(
                                 row.row_type === "parent" && "bg-slate-50 hover:bg-slate-100",
                                 row.row_type === "size" && "border-b-slate-100",
@@ -892,6 +956,15 @@ export default function InventoryReportPage() {
                                 )
                               })}
                             </TableRow>
+                            {reportType === "movement" && expanded.has(row.id) && (
+                              <TableRow className="bg-slate-50/70 hover:bg-slate-50/70">
+                                <TableCell />
+                                <TableCell colSpan={columns.length - 1}>
+                                  <FlowDetails row={row} />
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            </Fragment>
                           )
                         })}
                       </Fragment>
