@@ -481,7 +481,7 @@ function AgingContent() {
         fileName: `${title.toLowerCase()}-ageing-summary-${asOfDate}`,
         title: `${title} Ageing - ${activeTab === "receivables" ? "Collection" : "Supplier"} Summary`,
         subtitle: asAt,
-        headers: ["S/No", partyLabel, "Invoice Date", "Terms (days)", "Total Outstanding", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Promise Date", "Collection Notes"],
+        headers: ["S/No", partyLabel, "Date", "Terms (days)", "Total Outstanding", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Promise Date", "Collection Notes"],
         rows: shownSummary.flatMap((r, i) => [
           [
             i + 1, r.party, "", r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
@@ -621,7 +621,7 @@ function AgingContent() {
             <TableRow>
               <TableHead className="w-[60px] text-center">S/No</TableHead>
               <TableHead className="min-w-[220px]">{partyLabel}</TableHead>
-              <TableHead className="whitespace-nowrap">Invoice Date</TableHead>
+              <TableHead className="whitespace-nowrap">Date</TableHead>
               <TableHead className="text-right">Terms (days)</TableHead>
               <TableHead className="text-right">Total Outstanding</TableHead>
               <TableHead className="text-right">Not Yet Due</TableHead>

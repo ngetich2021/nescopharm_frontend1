@@ -102,7 +102,7 @@ export function UnlinkedLinesTab({ onCount }: { onCount?: (n: number) => void })
                 <TableHead className="w-12">S/No</TableHead>
                 <TableHead>Line (as on the invoice)</TableHead>
                 <TableHead>Invoices</TableHead>
-                <TableHead className="whitespace-nowrap">Invoice Date</TableHead>
+                <TableHead className="whitespace-nowrap">Date</TableHead>
                 <TableHead className="w-64">Link to product</TableHead>
                 <TableHead className="w-28" />
               </TableRow>
