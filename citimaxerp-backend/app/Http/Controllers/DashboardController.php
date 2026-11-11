@@ -709,10 +709,12 @@ class DashboardController extends Controller
     private function calculatePercentageChange($oldValue, $newValue)
     {
         if ($oldValue == 0) {
-            return $newValue > 0 ? 100 : 0;
+            return $newValue > 0 ? 100 : ($newValue < 0 ? -100 : 0);
         }
-        
-        return round((($newValue - $oldValue) / $oldValue) * 100, 2);
+
+        // Divide by the size of the old figure so a figure that can go negative
+        // (Net Cash) shows a fall as a fall: -170,936 -> -952,647 is -457%, not +457%.
+        return round((($newValue - $oldValue) / abs($oldValue)) * 100, 2);
     }
 
     /**

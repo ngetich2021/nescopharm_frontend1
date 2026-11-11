@@ -52,6 +52,10 @@ import {
 } from "recharts";
 
 // ─── Sparkline inside a liquid glass metric card ───
+// Money on the cards always carries 2 decimals: -952,647.70, not -952,647.7.
+const money = (v?: number | null) =>
+  Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function SparkMetric({
   label,
   value,
@@ -338,7 +342,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <SparkMetric
                   label="Sales"
-                  value={overview?.sales_metrics?.total_revenue?.current?.toLocaleString() || "0"}
+                  value={money(overview?.sales_metrics?.total_revenue?.current)}
                   prefix="KES"
                   change={overview?.sales_metrics?.total_revenue?.change_percent}
                   icon={CircleDollarSign}
@@ -364,7 +368,7 @@ export default function DashboardPage() {
                 />
                 <SparkMetric
                   label="Net Cash"
-                  value={overview?.financial_metrics?.net_profit?.current?.toLocaleString() || "0"}
+                  value={money(overview?.financial_metrics?.net_profit?.current)}
                   prefix="KES"
                   change={overview?.financial_metrics?.net_profit?.change_percent}
                   icon={TrendingUp}
