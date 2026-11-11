@@ -673,10 +673,12 @@ class CustomerAccountService
 
     /**
      * Take back a receipt captured in error: what it paid comes back off those invoices (they owe
-     * it again) and the ledger drops it (LedgerSyncObserver). No other receipt is moved.
+     * it again) and the ledger drops it (LedgerSyncObserver). Then the customer's other receipts
+     * are re-sorted oldest invoice first, so the hole left on an old invoice is filled from money
+     * sitting on newer ones and the shortfall ends up on the newest (Jordan, NSK/0273 vs NSK/0351).
      * Cancel keeps the receipt (and its cheque) on record as cancelled; delete removes both.
      *
-     * @return array{reversed: array<int, array{invoice_number: string, amount: float}>, cheque_number: ?string}
+     * @return array{reversed: array<int, array{invoice_number: string, amount: float}>, cheque_number: ?string, moved: array}
      */
     public function removeReceipt(Payment $payment, bool $cancel): array
     {
@@ -710,7 +712,12 @@ class CustomerAccountService
                 $payment->delete();
             }
 
-            return ['reversed' => $reversed, 'cheque_number' => $cheque?->cheque_number];
+            // Payments always pay oldest to newest: close any gap this receipt left behind.
+            $moved = $reversed && $payment->customer_id
+                ? $this->rebalanceOldestFirst($payment->company_id, $payment->customer_id)
+                : [];
+
+            return ['reversed' => $reversed, 'cheque_number' => $cheque?->cheque_number, 'moved' => $moved];
         });
     }
 

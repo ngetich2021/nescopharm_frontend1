@@ -163,7 +163,9 @@ class CustomerBalanceController extends Controller
         return response()->json([
             'message' => 'Payment of ' . number_format((float) $payment->amount_paid, 2) . " {$done}"
                 . ($reversed ? "; {$reversed}" : '')
-                . ($result['cheque_number'] ? "; cheque {$result['cheque_number']} {$done}" : ''),
+                . ($result['cheque_number'] ? "; cheque {$result['cheque_number']} {$done}" : '')
+                . (!empty($result['moved']) ? '; oldest invoices paid first: ' . collect($result['moved'])
+                    ->map(fn ($m) => number_format($m['amount'], 2) . " moved {$m['from']} to {$m['to']}")->implode(', ') : ''),
             'data' => $result,
             'account' => $this->accounts->summary($companyId, $customerId),
         ]);
