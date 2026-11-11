@@ -21,6 +21,10 @@ interface Props {
 }
 
 const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// An item with no price on any list is still offered (never hidden): it comes in at 0.00 as a
+// hand-typed ("Custom") price for the person quoting to fill in.
+const NO_PRICE: PriceOption = { code: "Custom", list: "Custom", price: 0, unit: DEFAULT_UNIT }
 const looksLikeCode = (v: string) => /^[a-z]+\s*\d+$/i.test(v.trim())
 
 // Products matching what was typed, searched on the server as orders do (codes without spaces).
@@ -60,7 +64,8 @@ function SearchResults({ hits, query, searching, onPick }: { hits: any[]; query:
   if (query.trim().length < 2) return <p className="p-2 text-sm text-gray-500">Type at least 2 characters to search products</p>
   if (searching && hits.length === 0) return <p className="p-2 text-sm text-gray-500">Searching...</p>
   const codes = priceCodeHits(hits, query)
-  const items = hits.filter((p) => defaultPriceOption(p))
+  // Every match is listed, priced or not, so stock that came in is never out of reach.
+  const items = hits
   if (codes.length === 0 && items.length === 0) return <p className="p-2 text-sm text-gray-500">No products found</p>
   return (
     <>
@@ -78,12 +83,12 @@ function SearchResults({ hits, query, searching, onPick }: { hits: any[]; query:
       {items.length > 0 && (
         <div className="border-t py-1 first:border-t-0">
           {items.map((product) => {
-            const option = defaultPriceOption(product)!
+            const option = defaultPriceOption(product)
             return (
-              <button key={product.id} type="button" className="block w-full rounded px-2 py-1.5 text-left hover:bg-gray-100" onClick={() => onPick(product, option)}>
+              <button key={product.id} type="button" className="block w-full rounded px-2 py-1.5 text-left hover:bg-gray-100" onClick={() => onPick(product, option ?? NO_PRICE)}>
                 <span className="block text-sm">{product.name}</span>
                 <span className="block text-xs text-gray-500">
-                  No. {product.item_number ?? "-"} | {describeOption(option)} | {Number(product.stock_quantity ?? 0).toLocaleString()} in stock
+                  No. {product.item_number ?? "-"} | {option ? describeOption(option) : <span className="font-medium text-amber-700">No price set - type it on the line</span>} | {Number(product.stock_quantity ?? 0).toLocaleString()} in stock
                 </span>
               </button>
             )
@@ -246,6 +251,9 @@ export function QuoteLineItemsTable({ form, fields, remove, append, products }: 
                     />
                   ) : <p className="pt-2 text-right text-gray-400">-</p>}
                   {errors?.unit_price && <p className="text-xs text-red-600 mt-1 text-right">{errors.unit_price.message}</p>}
+                  {form.watch(`items.${index}.product_id`) && !price && (
+                    <p className="text-xs text-amber-700 mt-1 text-right">No price set - type the price</p>
+                  )}
                 </td>
                 <td className="py-2 pr-2">
                   <Input
@@ -411,7 +419,8 @@ function CodeCell({ form, index, products, onResolved }: { form: UseFormReturn<a
     form.setValue(`items.${index}.unit_price`, option.price)
     form.setValue(`items.${index}.price_label`, option.code)
     form.setValue(`items.${index}.price_unit`, option.unit)
-    setText(option.code)
+    // A hand-priced item has no code to show; its name stands in the box instead.
+    setText(option === NO_PRICE ? single?.name ?? "" : option.code)
     setNotFound(false)
   }
 

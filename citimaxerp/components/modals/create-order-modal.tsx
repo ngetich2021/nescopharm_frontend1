@@ -611,7 +611,9 @@ export function CreateOrderModal({
                 <div className="flex flex-col">
                   <span>{product.name}</span>
                   <span className="text-sm text-gray-500">
-                    No. {product.item_number ?? '-'} | NSPV Ksh. {parseFloat(product.price || '0').toFixed(2)}
+                    No. {product.item_number ?? '-'} | {defaultPriceOption(product)
+                      ? describeOption(defaultPriceOption(product)!)
+                      : <span className="font-medium text-amber-700">No price set - type it on the line</span>} | {Number(product.stock_quantity ?? 0).toLocaleString()} in stock
                   </span>
                 </div>
               </CommandItem>
@@ -798,6 +800,7 @@ export function CreateOrderModal({
                                 className="h-8 w-28 text-right"
                                 aria-label={`Price for row ${index + 1}`}
                               />
+                              {!Number(item.unit_price) && <p className="mt-1 text-xs text-amber-700">No price set - type the price</p>}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center">
