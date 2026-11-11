@@ -117,6 +117,36 @@ function SummaryCard({ label, value, hint, icon, tone = "default" }: { label: st
   )
 }
 
+// Stock Movement: where the stock went or came from, as a chain read left to right.
+type FlowStep = { label: string; value?: string | null; link?: string | null; muted?: boolean }
+function flowSteps(r: Row): FlowStep[] {
+  const stock: FlowStep = { label: "Stock", value: r.batch_number ? `batch ${r.batch_number}` : null, muted: true }
+  const doc: FlowStep | null = r.reference_type || r.reference_number ? { label: r.reference_type ?? "", value: r.reference_number, link: r.reference_link } : null
+  const party: FlowStep | null = r.party ? { label: "", value: r.party, link: r.party_link } : null
+  const chain = r.direction === "out" ? [stock, doc, party] : [party, doc, stock]
+  return chain.filter((s): s is FlowStep => s !== null)
+}
+function FlowCell({ row }: { row: Row }) {
+  const steps = flowSteps(row)
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 leading-tight">
+      {steps.map((s, i) => (
+        <Fragment key={i}>
+          {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" />}
+          <span className={cn("rounded-md px-2 py-1", s.muted ? "bg-slate-100 text-gray-600" : "bg-primary/5")}>
+            {s.label && <span className="mr-1 text-xs text-muted-foreground">{s.label}</span>}
+            {s.link && s.value ? (
+              <Link href={s.link} className="font-medium text-primary hover:underline">{s.value}</Link>
+            ) : (
+              s.value && <span className="font-medium text-gray-800">{s.value}</span>
+            )}
+          </span>
+        </Fragment>
+      ))}
+    </div>
+  )
+}
+
 // Sized items come back as a parent row followed by its sizes; keep them together
 // so search, pagination and collapsing treat an item and its sizes as one block.
 function groupRows(rows: Row[]): Row[][] {
@@ -350,35 +380,14 @@ export default function InventoryReportPage() {
           },
           { key: "quantity_before", header: "Before", align: "right", render: (r) => qty(r.quantity_before) },
           { key: "quantity_after", header: "After", align: "right", render: (r) => qty(r.quantity_after) },
-          { key: "batch_number", header: "Batch", className: "whitespace-nowrap", render: (r) => r.batch_number || <span className="text-gray-400">-</span> },
-          // Where it went / came from: the document (a sale shows its NSK invoice) and who it was for.
+          // The flow, in the direction the stock moved: out = Stock (batch) -> Invoice -> Customer,
+          // in = Supplier -> Goods received -> Stock (batch). Invoice and customer open on click.
           {
             key: "reference_number",
-            header: "Reference",
-            className: "whitespace-nowrap",
-            render: (r) => (
-              <div className="leading-tight">
-                {r.reference_type && <div className="text-xs text-muted-foreground">{r.reference_type}</div>}
-                {r.reference_link && r.reference_number ? (
-                  <Link href={r.reference_link} className="font-medium text-primary hover:underline">{r.reference_number}</Link>
-                ) : (
-                  <span className="text-gray-700">{r.reference_number || (r.reference_type ? "" : "-")}</span>
-                )}
-              </div>
-            ),
-            exportValue: (r) => [r.reference_type, r.reference_number].filter(Boolean).join(" "),
-          },
-          {
-            key: "party",
-            header: "Customer / Supplier",
-            className: "min-w-[180px]",
-            render: (r) =>
-              r.party ? (
-                r.party_link ? <Link href={r.party_link} className="text-primary hover:underline">{r.party}</Link> : <span>{r.party}</span>
-              ) : (
-                <span className="text-gray-400">-</span>
-              ),
-            exportValue: (r) => r.party ?? "",
+            header: "Flow (stock → document → customer / supplier)",
+            className: "min-w-[420px]",
+            render: (r) => <FlowCell row={r} />,
+            exportValue: (r) => flowSteps(r).map((s) => [s.label, s.value].filter(Boolean).join(" ")).join(" → "),
           },
         ]
       case "stock_management":
