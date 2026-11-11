@@ -642,10 +642,10 @@ class ReportService
                 ->get()->keyBy('id');
             $invoices = DB::table('invoices')->whereIn('order_id', $ids)
                 ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', ['proforma', 'credit_note']))
-                ->orderByRaw("CASE WHEN invoice_number LIKE 'NSK/%' THEN 0 ELSE 1 END")
+                ->orderByRaw("CASE WHEN file_number ~ '^[0-9]+$' THEN 0 ELSE 1 END") // an NSK invoice (has a File No) first
                 ->orderByRaw("CASE WHEN status IN ('cancelled', 'void', 'voided') THEN 1 ELSE 0 END")
                 ->orderByDesc('created_at')
-                ->get(['id', 'order_id', 'invoice_number'])
+                ->get(['id', 'order_id', 'invoice_number', 'file_number'])
                 ->unique('order_id')->keyBy('order_id');
             $orders = $orders->map(function ($o) use ($invoices) {
                 $o->invoice = $invoices->get($o->id);
@@ -692,7 +692,7 @@ class ReportService
                     $inv = $o?->invoice;
                     return [
                         'label' => $inv ? 'Invoice' : 'Order',
-                        'number' => $inv ? self::shortDocNumber($inv->invoice_number) : self::shortDocNumber($o->order_number ?? null) ?? $number,
+                        'number' => $inv ? \App\Models\Invoice::printedNumber($inv->invoice_number, $inv->file_number) : self::shortDocNumber($o->order_number ?? null) ?? $number,
                         'link' => $inv ? "/sales/invoices/{$inv->id}" : ($o ? "/sales/orders/{$o->id}" : null),
                     ] + $customer($o);
                 })(),
@@ -768,17 +768,17 @@ class ReportService
         // NSK first; an invoice still without its NSK shows its own number (INV-0491).
         $invoices = DB::table('invoices')->whereIn('order_id', $rows->pluck('order_id')->unique())
             ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', ['proforma', 'credit_note']))
-            ->orderByRaw("CASE WHEN invoice_number LIKE 'NSK/%' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN file_number ~ '^[0-9]+$' THEN 0 ELSE 1 END") // an NSK invoice (has a File No) first
             ->orderByRaw("CASE WHEN status IN ('cancelled', 'void', 'voided') THEN 1 ELSE 0 END")
             ->orderByDesc('created_at')
-            ->get(['id', 'order_id', 'invoice_number', 'invoice_date'])->unique('order_id')->keyBy('order_id');
+            ->get(['id', 'order_id', 'invoice_number', 'file_number', 'invoice_date'])->unique('order_id')->keyBy('order_id');
 
         $data = $rows->map(function ($r) use ($invoices) {
             $inv = $invoices->get($r->order_id);
             return [
                 'date' => $r->stock_deducted_at,
                 'invoice_date' => $inv->invoice_date ?? null,
-                'reference_number' => self::shortDocNumber($inv->invoice_number ?? $r->order_number),
+                'reference_number' => $inv ? \App\Models\Invoice::printedNumber($inv->invoice_number, $inv->file_number) : self::shortDocNumber($r->order_number),
                 'reference_link' => $inv ? "/sales/invoices/{$inv->id}" : "/sales/orders/{$r->order_id}",
                 'party' => $r->customer_name,
                 'party_link' => $r->customer_id ? "/customers/{$r->customer_id}/statement" : null,
