@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { displayDate, displayDateTime } from "@/lib/date-format"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
@@ -18,6 +19,7 @@ import { getInventoryReport } from "@/lib/reports"
 import { getProductCategories, type ProductCategory } from "@/lib/product-categories"
 import { getStores, type Store } from "@/lib/stores"
 import { cn } from "@/lib/utils"
+import { LineSalesDialog, type LineSalesTarget } from "./line-sales-dialog"
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -28,6 +30,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  History,
+  X,
   Layers,
   Loader2,
   PackageX,
@@ -43,6 +47,7 @@ import { documentFileName, filePeriod, todayFileDate, sessionCompanyName } from 
 
 type ReportType = "balance" | "low_stock" | "movement" | "stock_management"
 type Row = Record<string, any>
+type LineFilter = { product_id: string; variant_id?: string; name: string }
 
 interface Column {
   key: string
@@ -128,10 +133,11 @@ function groupRows(rows: Row[]): Row[][] {
 
 export default function InventoryReportPage() {
   const [reportType, setReportType] = useState<ReportType>("balance")
-  useEffect(() => {
-    const tab = new URLSearchParams(window.location.search).get("tab")
-    if (tab === "balance" || tab === "low_stock" || tab === "movement" || tab === "stock_management") setReportType(tab)
-  }, [])
+  // Stock Movement narrowed to one stock line (an item, or one size): set by the History shortcuts.
+  const [lineFilter, setLineFilter] = useState<LineFilter | null>(null)
+  const [direction, setDirection] = useState<"all" | "in" | "out">("all")
+  // "Where it went": the sales behind a Sold figure.
+  const [salesTarget, setSalesTarget] = useState<LineSalesTarget | null>(null)
   const [data, setData] = useState<Row[]>([])
   const [summary, setSummary] = useState<Row | null>(null)
   const [period, setPeriod] = useState<Row | null>(null)
@@ -148,6 +154,17 @@ export default function InventoryReportPage() {
   const todayStr = () => new Date().toISOString().slice(0, 10)
   const [dateFrom, setDateFrom] = useState(todayStr)
   const [dateTo, setDateTo] = useState(todayStr)
+  useEffect(() => {
+    // ?tab=movement&product_id=..&variant_id=..&name=..&from=yyyy-mm-dd&to=yyyy-mm-dd opens one item's history.
+    const q = new URLSearchParams(window.location.search)
+    const tab = q.get("tab")
+    if (tab === "balance" || tab === "low_stock" || tab === "movement" || tab === "stock_management") setReportType(tab)
+    const productId = q.get("product_id")
+    if (productId) setLineFilter({ product_id: productId, variant_id: q.get("variant_id") || undefined, name: q.get("name") || "this item" })
+    const from = q.get("from"), to = q.get("to")
+    if (from) setDateFrom(from)
+    if (to) setDateTo(to)
+  }, [])
   const [search, setSearch] = useState("")
   // Click a heading to sort by it (again to reverse); sizes stay under their item.
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null)
@@ -184,6 +201,11 @@ export default function InventoryReportPage() {
       if (status !== "all") params.status = status
       if (usesDates && dateFrom) params.date_from = dateFrom
       if (usesDates && dateTo) params.date_to = dateTo
+      if (reportType === "movement" && lineFilter) {
+        params.product_id = lineFilter.product_id
+        if (lineFilter.variant_id) params.variant_id = lineFilter.variant_id
+      }
+      if (reportType === "movement" && direction !== "all") params.direction = direction
 
       const resp = await getInventoryReport(params as any)
       if (requestId !== latestRequest.current) return
@@ -199,16 +221,52 @@ export default function InventoryReportPage() {
     } finally {
       if (requestId === latestRequest.current) setLoading(false)
     }
-  }, [reportType, categoryId, storeId, priceList, status, usesDates, dateFrom, dateTo, toast])
+  }, [reportType, categoryId, storeId, priceList, status, usesDates, dateFrom, dateTo, lineFilter, direction, toast])
 
   useEffect(() => {
     fetchReport()
   }, [fetchReport])
 
-  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort])
+  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort, lineFilter, direction])
+
+  // History shortcut: Stock Movement for one line - an item (all its sizes) or one size. From Stock
+  // Management the period stays; from Balance / Low stock it shows this year so far.
+  const showMovements = useCallback((target: LineFilter, opts: { from?: string; to?: string; direction?: "in" | "out" } = {}) => {
+    setLineFilter(target)
+    setDirection(opts.direction ?? "all")
+    setDateFrom(opts.from ?? `${new Date().getFullYear()}-01-01`)
+    setDateTo(opts.to ?? new Date().toISOString().slice(0, 10))
+    setSearch("")
+    setReorderOnly(false)
+    setData([])
+    setSummary(null)
+    setReportType("movement")
+  }, [])
   useEffect(() => setSort(null), [reportType])
 
-  const columns = useMemo<Column[]>(() => {
+  const allColumns = useMemo<Column[]>(() => {
+    const lineOf = (r: Row): LineFilter => ({
+      product_id: r.product_id,
+      // a sized item's own row covers every size; an item without sizes is "none"
+      variant_id: r.row_type === "parent" ? undefined : r.variant_id ?? "none",
+      name: r.name,
+    })
+    const history: Column = {
+      key: "_history",
+      header: "History",
+      align: "center",
+      render: (r) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-primary"
+          title="Where this stock came from and went: receipts, invoices and customers, returns, adjustments"
+          onClick={() => showMovements(lineOf(r), reportType === "stock_management" ? { from: dateFrom, to: dateTo } : {})}
+        >
+          <History className="h-4 w-4" />
+        </Button>
+      ),
+    }
     const serialNo: Column = {
       key: "_sno",
       header: "S/No.",
@@ -267,6 +325,7 @@ export default function InventoryReportPage() {
           },
           { key: "nearest_expiry", header: "Nearest Expiry", render: (r) => <ExpiryCell date={r.nearest_expiry} /> },
           { key: "stock_status", header: "Status", align: "center", render: (r) => <StatusBadge status={r.stock_status} /> },
+          history,
         ]
       case "movement":
         return [
@@ -299,11 +358,35 @@ export default function InventoryReportPage() {
           },
           { key: "quantity_before", header: "Before", align: "right", render: (r) => qty(r.quantity_before) },
           { key: "quantity_after", header: "After", align: "right", render: (r) => qty(r.quantity_after) },
+          { key: "batch_number", header: "Batch", className: "whitespace-nowrap", render: (r) => r.batch_number || <span className="text-gray-400">-</span> },
+          // Where it went / came from: the document (a sale shows its NSK invoice) and who it was for.
           {
-            key: "reference",
+            key: "reference_number",
             header: "Reference",
-            render: (r) => <span className="text-gray-600">{[r.reference_type, r.reference_number].filter(Boolean).join(" · ") || "-"}</span>,
+            className: "whitespace-nowrap",
+            render: (r) => (
+              <div className="leading-tight">
+                {r.reference_type && <div className="text-xs text-muted-foreground">{r.reference_type}</div>}
+                {r.reference_link && r.reference_number ? (
+                  <Link href={r.reference_link} className="font-medium text-primary hover:underline">{r.reference_number}</Link>
+                ) : (
+                  <span className="text-gray-700">{r.reference_number || (r.reference_type ? "" : "-")}</span>
+                )}
+              </div>
+            ),
             exportValue: (r) => [r.reference_type, r.reference_number].filter(Boolean).join(" "),
+          },
+          {
+            key: "party",
+            header: "Customer / Supplier",
+            className: "min-w-[180px]",
+            render: (r) =>
+              r.party ? (
+                r.party_link ? <Link href={r.party_link} className="text-primary hover:underline">{r.party}</Link> : <span>{r.party}</span>
+              ) : (
+                <span className="text-gray-400">-</span>
+              ),
+            exportValue: (r) => r.party ?? "",
           },
         ]
       case "stock_management":
@@ -312,8 +395,62 @@ export default function InventoryReportPage() {
           itemNo,
           description,
           { key: "opening_stock", header: "Opening", align: "right", render: (r) => qty(r.opening_stock), total: (rows) => qty(sumOf(rows, "opening_stock")) },
-          { key: "stock_received", header: "Received", align: "right", render: (r) => qty(r.stock_received), total: (rows) => qty(sumOf(rows, "stock_received")) },
-          { key: "sales_quantity", header: "Sold", align: "right", render: (r) => qty(r.sales_quantity), total: (rows) => qty(sumOf(rows, "sales_quantity")) },
+          {
+            key: "stock_received",
+            header: "Received",
+            align: "right",
+            render: (r) =>
+              Number(r.stock_received) ? (
+                <button type="button" className="text-primary hover:underline" title="Show the goods received" onClick={() => showMovements(lineOf(r), { from: dateFrom, to: dateTo, direction: "in" })}>
+                  {qty(r.stock_received)}
+                </button>
+              ) : qty(r.stock_received),
+            total: (rows) => qty(sumOf(rows, "stock_received")),
+          },
+          // Credit-note returns, returns to supplier, adjustments and stock counts in the period (+ in, - out).
+          {
+            key: "stock_other",
+            header: "Returns / Adj.",
+            align: "right",
+            render: (r) =>
+              Number(r.stock_other) ? (
+                <button
+                  type="button"
+                  className={cn("hover:underline", Number(r.stock_other) < 0 ? "text-red-600" : "text-emerald-600")}
+                  title="Show the returns and adjustments"
+                  onClick={() => showMovements(lineOf(r), { from: dateFrom, to: dateTo })}
+                >
+                  {Number(r.stock_other) > 0 ? "+" : ""}{qty(r.stock_other)}
+                </button>
+              ) : qty(r.stock_other ?? 0),
+            total: (rows) => qty(sumOf(rows, "stock_other")),
+          },
+          {
+            key: "sales_quantity",
+            header: "Sold",
+            align: "right",
+            render: (r) =>
+              Number(r.sales_quantity) ? (
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  title="Where it went: invoices and customers"
+                  onClick={() =>
+                    setSalesTarget({
+                      name: r.name,
+                      product_id: r.product_id,
+                      variant_id: r.row_type === "parent" ? "all" : r.variant_id ?? "none",
+                      date_from: period?.date_from ?? dateFrom,
+                      date_to: period?.date_to ?? dateTo,
+                      price_list: priceList !== "all" ? priceList : undefined,
+                    })
+                  }
+                >
+                  {qty(r.sales_quantity)}
+                </button>
+              ) : qty(r.sales_quantity),
+            total: (rows) => qty(sumOf(rows, "sales_quantity")),
+          },
           { key: "closing_stock", header: "Closing", align: "right", render: (r) => qty(r.closing_stock), total: (rows) => qty(sumOf(rows, "closing_stock")) },
           { key: "closing_stock_value", header: "Closing Value (KES)", align: "right", render: (r) => money(r.closing_stock_value), total: (rows) => money(sumOf(rows, "closing_stock_value")) },
           // Total value (as invoiced, incl. VAT) - cost value = gross profit.
@@ -366,6 +503,7 @@ export default function InventoryReportPage() {
               ) : null,
             exportValue: (r) => (r.needs_reorder ? "Reorder" : isLine(r) ? "OK" : ""),
           },
+          history,
         ]
       default:
         return [
@@ -380,13 +518,21 @@ export default function InventoryReportPage() {
           { key: "batch_count", header: "Batches", align: "right", render: (r) => qty(r.batch_count) },
           { key: "nearest_expiry", header: "Nearest Expiry", render: (r) => <ExpiryCell date={r.nearest_expiry} /> },
           { key: "stock_status", header: "Status", align: "center", render: (r) => <StatusBadge status={r.stock_status} /> },
+          history,
         ]
     }
-  }, [reportType, collapsed])
+  }, [reportType, collapsed, showMovements, dateFrom, dateTo, period, priceList])
+  const columns = allColumns
 
   const visibleGroups = useMemo(() => {
     const term = search.trim().toLowerCase()
-    const matches = (r: Row) => !term || String(r.name ?? "").toLowerCase().includes(term) || String(r.item_no ?? "").toLowerCase().startsWith(term)
+    const matches = (r: Row) =>
+      !term ||
+      String(r.name ?? "").toLowerCase().includes(term) ||
+      String(r.item_no ?? "").toLowerCase().startsWith(term) ||
+      // Stock Movement: also by invoice / document number and customer or supplier
+      String(r.reference_number ?? "").toLowerCase().includes(term) ||
+      String(r.party ?? "").toLowerCase().includes(term)
 
     return groupRows(data)
       .map((group) => {
@@ -454,6 +600,7 @@ export default function InventoryReportPage() {
     : []
 
   const exportReport = useTableExport(() => {
+    const columns = allColumns.filter((c) => c.key !== "_history")
     let rowIndex = 0
     const body = visibleRows.map((r) => {
       const sno = ++rowIndex
@@ -502,7 +649,12 @@ export default function InventoryReportPage() {
     if (reportType === "stock_management") {
       return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Closing Stock" value={qty(summary.total_closing_stock)} hint={`as of ${displayDate(new Date())}`} icon={<Boxes className="h-5 w-5" />} />
+          <SummaryCard
+            label="Closing Stock"
+            value={qty(summary.total_closing_stock)}
+            hint={`as at ${displayDate(period?.closing_as_at ? new Date(period.closing_as_at) : new Date())}, end of the "To" date`}
+            icon={<Boxes className="h-5 w-5" />}
+          />
           <SummaryCard label="Closing Value" value={`KES ${money(summary.total_closing_stock_value)}`} hint="at buying price" icon={<Wallet className="h-5 w-5" />} />
           <SummaryCard
             label="Gross Profit"
@@ -574,6 +726,8 @@ export default function InventoryReportPage() {
           value={reportType}
           onValueChange={(v) => {
             setReportType(v as ReportType)
+            setLineFilter(null)
+            setDirection("all")
             setReorderOnly(false)
             setData([])
             setSummary(null)
@@ -588,10 +742,15 @@ export default function InventoryReportPage() {
         </Tabs>
 
         <Card>
-          <CardContent className={cn("grid gap-3 p-4 sm:grid-cols-2", reportType === "stock_management" ? "lg:grid-cols-7" : "lg:grid-cols-6")}>
+          <CardContent className={cn("grid gap-3 p-4 sm:grid-cols-2", reportType === "stock_management" || reportType === "movement" ? "lg:grid-cols-7" : "lg:grid-cols-6")}>
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input placeholder="Search item no. or description" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              <Input
+                placeholder={reportType === "movement" ? "Search item, invoice no. or customer" : "Search item no. or description"}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
             </div>
             <Select value={categoryId} onValueChange={setCategoryId}>
               <SelectTrigger><SelectValue placeholder="All categories" /></SelectTrigger>
@@ -617,6 +776,16 @@ export default function InventoryReportPage() {
                 </SelectContent>
               </Select>
             )}
+            {reportType === "movement" && (
+              <Select value={direction} onValueChange={(v) => setDirection(v as "all" | "in" | "out")}>
+                <SelectTrigger aria-label="Direction"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">In &amp; out</SelectItem>
+                  <SelectItem value="out">Out only (where it went)</SelectItem>
+                  <SelectItem value="in">In only (where it came from)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {usesDates ? (
               <>
                 <Input type="date" aria-label="From date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -635,6 +804,19 @@ export default function InventoryReportPage() {
           </CardContent>
         </Card>
 
+        {reportType === "movement" && lineFilter && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+            <History className="h-4 w-4 text-primary" />
+            <span>
+              History of <span className="font-semibold">{lineFilter.name}</span>
+              {direction === "out" ? " - out only" : direction === "in" ? " - in only" : ""}
+            </span>
+            <Button variant="ghost" size="sm" className="ml-auto h-7" onClick={() => setLineFilter(null)}>
+              <X className="mr-1 h-3.5 w-3.5" /> Show all items
+            </Button>
+          </div>
+        )}
+
         {!loading && renderSummary()}
 
         <Card className="overflow-hidden">
@@ -652,14 +834,14 @@ export default function InventoryReportPage() {
                 <TableRow>
                   {columns.map((c) => (
                     <TableHead key={c.key} className={cn("whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-gray-600", c.align === "right" && "text-right", c.align === "center" && "text-center", c.className)}>
-                      {c.key === "_sno" ? c.header : (
+                      {c.key === "_sno" || c.key === "_history" ? c.header : (
                         <button
                           type="button"
                           title="Sort"
                           onClick={() => setSort((cur) => cur?.key === c.key
                             ? { key: c.key, dir: cur.dir === "asc" ? "desc" : "asc" }
                             // numbers start highest first, text A-Z
-                            : { key: c.key, dir: ["name", "item_no", "sku", "category", "store", "reference", "type", "nearest_expiry", "movement_date"].includes(c.key) ? "asc" : "desc" })}
+                            : { key: c.key, dir: ["name", "item_no", "sku", "category", "store", "reference_number", "party", "batch_number", "type", "nearest_expiry", "movement_date"].includes(c.key) ? "asc" : "desc" })}
                           className={cn("inline-flex items-center gap-1 uppercase hover:text-gray-900", c.align === "right" && "flex-row-reverse")}
                         >
                           {c.header}
@@ -773,6 +955,17 @@ export default function InventoryReportPage() {
             </div>
           )}
         </Card>
+        <LineSalesDialog
+          target={salesTarget}
+          onClose={() => setSalesTarget(null)}
+          onShowMovements={(t) => {
+            setSalesTarget(null)
+            showMovements(
+              { product_id: t.product_id, variant_id: t.variant_id === "all" ? undefined : t.variant_id, name: t.name },
+              { from: t.date_from, to: t.date_to, direction: "out" },
+            )
+          }}
+        />
       </div>
     </PermissionGuard>
   )

@@ -117,7 +117,8 @@ export interface SalesReportResponse {
  * Fetches inventory report data.
  */
 export async function getInventoryReport(params: {
-  type?: 'balance' | 'low_stock' | 'movement' | 'stock_management';
+  // line_sales: where one stock line's sold units went (invoice, customer, quantity)
+  type?: 'balance' | 'low_stock' | 'movement' | 'stock_management' | 'line_sales';
   category?: string;
   category_id?: string;
   store_id?: string;
@@ -126,9 +127,15 @@ export async function getInventoryReport(params: {
   date_from?: string;
   date_to?: string;
   price_list?: string; // Stock Management: NSPH, NSPD ... or "none"
+  product_id?: string; // movement / line_sales: one item
+  variant_id?: string; // a size, "none" (item without a size) or "all" (every size, line_sales)
+  direction?: 'in' | 'out'; // movement
 }): Promise<any> {
   try {
     const queryParams = new URLSearchParams();
+    if (params.product_id) queryParams.append('product_id', params.product_id);
+    if (params.variant_id) queryParams.append('variant_id', params.variant_id);
+    if (params.direction) queryParams.append('direction', params.direction);
     if (params.type) queryParams.append('type', params.type);
     if (params.category) queryParams.append('category', params.category);
     if (params.category_id) queryParams.append('category_id', params.category_id);

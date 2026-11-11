@@ -26,6 +26,7 @@ class AssistantTools
         'match_products' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
         'stock_on_hand' => ['can_view_inventory_menu', 'can_view_sales_menu', 'can_view_pos_menu', 'can_create_orders', 'can_view_quotes_menu'],
         'stock_alerts' => ['can_view_inventory_menu'],
+        'stock_history' => ['can_view_inventory_menu', 'can_view_reports_menu'],
         'list_invoices' => ['can_view_sales_menu'],
         'list_bounced_debits' => ['can_view_sales_menu'],
         'list_orders' => ['can_view_sales_menu'],
@@ -86,6 +87,10 @@ class AssistantTools
             'stock_alerts' => ['Alerts only (not the stock list): products at or below their reorder level or out of stock, batches expiring soon, and expired batches still holding stock.', [
                 'expiring_within_days' => ['type' => 'integer', 'description' => 'Batches expiring within this many days (default 90)'],
             ], []],
+            'stock_history' => ['Where one item\'s stock went and came from in a period (Inventory Reports > Stock Movement for that item): each sale with its NSK invoice and customer, goods received with the supplier, credit-note returns, returns to supplier, adjustments and stock counts, with quantities and totals. Use it for "where did <item> go", "who bought <item>", "which invoices took <item>", "stock history of <item>".', $range + [
+                'query' => ['type' => 'string', 'description' => 'Words of the item description, e.g. "10 ml syringe with needle"'],
+                'direction' => ['type' => 'string', 'enum' => ['all', 'out', 'in'], 'description' => 'out = where it went, in = where it came from. Default all'],
+            ], ['query']],
             'list_bounced_debits' => ['Bounced cheque debits (DEB-001, DEB-002...), the KES 2,000 charge on each bounced customer cheque, earliest first, with the cheque, what was paid and the balance. Use for bounced cheques, DEB numbers and what customers owe on them.', [
                 'search' => ['type' => 'string', 'description' => 'Debit number (DEB-001), cheque number or customer name'],
                 'status' => ['type' => 'string', 'enum' => ['any', 'unpaid', 'paid'], 'description' => 'Default any'],
@@ -467,6 +472,60 @@ class AssistantTools
                 : $n)->all(),
             'full_list_link' => '[Inventory Reports > Stock Balance](/reports/inventory)',
             'table_shown_to_user' => $table !== '' ? 'The full table of every line is added under your answer automatically.' : 'Nothing matched.',
+            '_table' => $table,
+        ];
+    }
+
+    /**
+     * One item's stock movements in a period, each with its document (NSK invoice, credit note, goods
+     * received ...) and customer or supplier, as Inventory Reports > Stock Movement shows them.
+     */
+    protected function stock_history(array $args): array
+    {
+        $words = collect(preg_split('/\s+/', trim((string) ($args['query'] ?? ''))))->filter(fn ($w) => strlen($w) > 1);
+        if ($words->isEmpty()) {
+            return ['error' => 'Say which item.'];
+        }
+        $q = Product::where('company_id', $this->companyId);
+        foreach ($words as $w) {
+            $q->where('name', 'ilike', "%{$w}%");
+        }
+        $products = $q->orderByRaw('length(name)')->limit(10)->get(['id', 'name']);
+        if ($products->isEmpty()) {
+            return ['found' => false, 'did_you_mean' => $this->suggest('products', ['name'], (string) $args['query'])];
+        }
+        $product = $products->first();
+        [$from, $to] = $this->range($args);
+        $direction = in_array($args['direction'] ?? '', ['in', 'out'], true) ? $args['direction'] : null;
+
+        $rows = collect(app(\App\Services\ReportService::class)->forCompany($this->companyId)->getInventoryMovementLog(array_filter([
+            'product_id' => $product->id,
+            'date_from' => $from,
+            'date_to' => $to,
+            'direction' => $direction,
+        ]))['data']);
+
+        $table = $rows->isEmpty() ? '' : "| S/No | Date | Item | Type | In | Out | Reference | Customer / Supplier |\n|---|---|---|---|---|---|---|---|\n"
+            . $rows->take(60)->values()->map(fn ($r, $i) => '| ' . ($i + 1) . ' | ' . Carbon::parse($r['movement_date'])->format('d/m/Y')
+                . ' | ' . str_replace('|', '/', $r['name']) . ' | ' . str_replace('_', ' ', $r['type'])
+                . ' | ' . ($r['direction'] === 'in' ? number_format($r['quantity']) : '') . ' | ' . ($r['direction'] === 'out' ? number_format($r['quantity']) : '')
+                . ' | ' . trim(($r['reference_type'] ?? '') . ' ' . ($r['reference_number'] ?? '')) . ' | ' . str_replace('|', '/', (string) ($r['party'] ?? '-')) . ' |')->implode("\n")
+            . ($rows->count() > 60 ? "\n\n" . ($rows->count() - 60) . ' more in Inventory Reports > Stock Movement.' : '');
+
+        $sales = $rows->where('direction', 'out')->filter(fn ($r) => in_array($r['reference_type'], ['Invoice', 'Order'], true));
+        return [
+            'item' => $product->name,
+            'other_matches' => $products->skip(1)->pluck('name')->values()->all(),
+            'period' => Carbon::parse($from)->format('d/m/Y') . ' to ' . Carbon::parse($to)->format('d/m/Y'),
+            'movements' => $rows->count(),
+            'units_in' => $rows->where('direction', 'in')->sum('quantity'),
+            'units_out' => $rows->where('direction', 'out')->sum('quantity'),
+            'sold_by_customer' => $sales->groupBy(fn ($r) => $r['party'] ?? 'Unknown')
+                ->map(fn ($g, $c) => ['customer' => $c, 'units' => $g->sum('quantity'), 'invoices' => $g->pluck('reference_number')->unique()->values()->all()])
+                ->sortByDesc('units')->take(15)->values()->all(),
+            'full_history_link' => '[Inventory Reports > Stock Movement](/reports/inventory?tab=movement&product_id=' . $product->id
+                . '&name=' . rawurlencode($product->name) . "&from={$from}&to={$to})",
+            'table_shown_to_user' => $table !== '' ? 'The table of movements is added under your answer automatically.' : 'No stock moved for this item in the period.',
             '_table' => $table,
         ];
     }

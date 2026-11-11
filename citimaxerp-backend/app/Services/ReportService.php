@@ -216,10 +216,10 @@ class ReportService
      * Lines come from stockLines(): each size is its own line (164.1, 164.2, ...) and the
      * sized item's parent row (164) totals them.
      *
-     * Opening stock is derived rather than stored: Opening + Receipts -
-     * Sales = Closing, rearranged as Opening = Closing - Receipts + Sales,
-     * using the line's current stock_quantity as the closing figure and the
-     * inventory-movement ledger for receipts within the period.
+     * Opening stock is derived rather than stored: Opening + Received + Returns/Adj. - Sold = Closing,
+     * rearranged as Opening = Closing - Received - Returns/Adj. + Sold. Closing is the stock at the end of
+     * the "To" date: today's stock, less what came in after that date, plus what was sold after it.
+     * Received and Returns/Adj. come from the inventory-movement ledger, Sold from the orders.
      */
     public function getStockManagementReport(array $filters = []): array
     {
@@ -252,84 +252,101 @@ class ReportService
         $listSoldBaseUnits = "SUM(CASE WHEN {$onList} THEN COALESCE(order_items.base_quantity, order_items.quantity) ELSE 0 END)";
         $listRevenue = "SUM(CASE WHEN {$onList} THEN order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0) ELSE 0 END)";
 
-        $salesByVariant = DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
-            ->where('orders.company_id', $this->companyId)
-            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
-            ->whereIn('order_items.variant_id', $variantIds)
-            ->whereNotNull('orders.stock_deducted_at')
-            ->whereBetween('orders.stock_deducted_at', [$dateFrom, $dateTo])
-            ->groupBy('order_items.variant_id')
-            ->select(
-                'order_items.variant_id',
-                DB::raw("{$soldBaseUnits} as quantity_sold"),
-                DB::raw("{$listSoldBaseUnits} as list_quantity_sold"),
-                DB::raw("{$listRevenue} as revenue")
-            )
-            ->get()
-            ->keyBy('variant_id');
+        // Sales that took stock between two moments, per size and per item without a size. A deleted
+        // order gave its stock back, so it is not a sale.
+        $salesBetween = function (Carbon $from, Carbon $to, string $by) use ($variantIds, $productIds, $soldBaseUnits, $listSoldBaseUnits, $listRevenue) {
+            $column = "order_items.{$by}";
+            return DB::table('order_items')
+                ->join('orders', 'order_items.order_id', '=', 'orders.id')
+                ->where('orders.company_id', $this->companyId)
+                ->whereNull('orders.deleted_at')
+                ->whereNotIn('orders.status', ['cancelled', 'rejected'])
+                ->when($by === 'variant_id',
+                    fn ($q) => $q->whereIn('order_items.variant_id', $variantIds),
+                    // Sales recorded directly against the product with no size - the only case for items
+                    // without sizes, but also possible on a sized item sold without picking a size.
+                    fn ($q) => $q->whereIn('order_items.product_id', $productIds)->whereNull('order_items.variant_id'))
+                ->whereNotNull('orders.stock_deducted_at')
+                ->whereBetween('orders.stock_deducted_at', [$from, $to])
+                ->groupBy($column)
+                ->select(
+                    DB::raw("{$column} as line_id"),
+                    DB::raw("{$soldBaseUnits} as quantity_sold"),
+                    DB::raw("{$listSoldBaseUnits} as list_quantity_sold"),
+                    DB::raw("{$listRevenue} as revenue")
+                )
+                ->get()
+                ->keyBy('line_id');
+        };
 
-        // Sales recorded directly against the product with no variant_id -
-        // the only case for products without variants, but also possible as
-        // an edge case for a variant-bearing product sold without picking a
-        // specific variant.
-        $salesByProduct = DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
-            ->where('orders.company_id', $this->companyId)
-            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
-            ->whereIn('order_items.product_id', $productIds)
-            ->whereNull('order_items.variant_id')
-            ->whereNotNull('orders.stock_deducted_at')
-            ->whereBetween('orders.stock_deducted_at', [$dateFrom, $dateTo])
-            ->groupBy('order_items.product_id')
-            ->select(
-                'order_items.product_id',
-                DB::raw("{$soldBaseUnits} as quantity_sold"),
-                DB::raw("{$listSoldBaseUnits} as list_quantity_sold"),
-                DB::raw("{$listRevenue} as revenue")
-            )
-            ->get()
-            ->keyBy('product_id');
+        // Every other change to stock from the movement ledger, per line: goods received, and the
+        // returns and adjustments (credit-note returns, returns to supplier, stock adjustments and counts,
+        // opening-stock imports, write-offs). Left out because they are not a change in stock: sale
+        // movements (sales come from the orders above), an order's own edit/delete restores (that sale is
+        // no longer counted either), dispatch hand-overs and allocate/release bookkeeping.
+        $movementsBetween = function (Carbon $from, ?Carbon $to) use ($productIds) {
+            return InventoryMovement::query()
+                ->where('company_id', $this->companyId)
+                ->whereIn('product_id', $productIds)
+                ->where('movement_date', '>=', $from)
+                ->when($to, fn ($q) => $q->where('movement_date', '<=', $to))
+                ->where('type', '!=', 'sale')
+                ->where(fn ($q) => $q->whereNull('reference_type')
+                    ->orWhereNotIn('reference_type', ['order', 'dispatch', 'App\\Models\\Order', 'App\\Models\\Dispatch']))
+                ->whereRaw("COALESCE(metadata->>'movement_subtype', '') NOT IN ('allocation', 'deallocation')")
+                ->groupBy('product_id', 'variant_id')
+                ->select(
+                    'product_id',
+                    'variant_id',
+                    DB::raw("SUM(CASE WHEN type = 'receipt' THEN quantity ELSE 0 END) as received"),
+                    DB::raw("SUM(CASE WHEN type = 'receipt' THEN 0 ELSE quantity END) as other")
+                )
+                ->get()
+                ->keyBy(fn ($m) => $m->product_id . '|' . ($m->variant_id ?? ''));
+        };
 
-        $receiptsByVariant = InventoryMovement::query()
-            ->where('company_id', $this->companyId)
-            ->whereIn('variant_id', $variantIds)
-            ->where('type', 'receipt')
-            ->whereBetween('movement_date', [$dateFrom, $dateTo])
-            ->groupBy('variant_id')
-            ->select('variant_id', DB::raw('SUM(quantity) as quantity_received'))
-            ->get()
-            ->keyBy('variant_id');
+        $salesByVariant = $salesBetween($dateFrom, $dateTo, 'variant_id');
+        $salesByProduct = $salesBetween($dateFrom, $dateTo, 'product_id');
+        $moves = $movementsBetween($dateFrom, $dateTo);
 
-        $receiptsByProduct = InventoryMovement::query()
-            ->where('company_id', $this->companyId)
-            ->whereIn('product_id', $productIds)
-            ->whereNull('variant_id')
-            ->where('type', 'receipt')
-            ->whereBetween('movement_date', [$dateFrom, $dateTo])
-            ->groupBy('product_id')
-            ->select('product_id', DB::raw('SUM(quantity) as quantity_received'))
-            ->get()
-            ->keyBy('product_id');
+        // Closing is the stock at the end of the "To" date, not today's: a period that ended earlier
+        // takes off what came in after it and adds back what was sold after it.
+        $closesToday = $dateTo->greaterThanOrEqualTo(Carbon::now());
+        $after = $closesToday ? null : [
+            'variant' => $salesBetween($dateTo->copy()->addSecond(), Carbon::now()->addYear(), 'variant_id'),
+            'product' => $salesBetween($dateTo->copy()->addSecond(), Carbon::now()->addYear(), 'product_id'),
+            'moves' => $movementsBetween($dateTo->copy()->addSecond(), null),
+        ];
 
-        $withPeriod = function (array $row) use ($salesByVariant, $salesByProduct, $receiptsByVariant, $receiptsByProduct, $periodMonths) {
+        $withPeriod = function (array $row) use ($salesByVariant, $salesByProduct, $moves, $after, $periodMonths) {
             $variantId = $row['variant_id'];
+            $key = $row['product_id'] . '|' . ($variantId ?? '');
             $sales = $variantId ? $salesByVariant->get($variantId) : $salesByProduct->get($row['product_id']);
-            $received = $variantId ? $receiptsByVariant->get($variantId) : $receiptsByProduct->get($row['product_id']);
+            $move = $moves->get($key);
             $allSold = (int) ($sales->quantity_sold ?? 0);
             $quantitySold = (int) ($sales->list_quantity_sold ?? 0);
             $revenue = (float) ($sales->revenue ?? 0);
-            $quantityReceived = (int) ($received->quantity_received ?? 0);
+            $quantityReceived = (int) ($move->received ?? 0);
+            $other = (int) ($move->other ?? 0);
+
             $closingStock = (int) $row['stock_quantity'];
+            if ($after) {
+                $soldAfter = $variantId ? $after['variant']->get($variantId) : $after['product']->get($row['product_id']);
+                $movedAfter = $after['moves']->get($key);
+                $closingStock = $closingStock - (int) ($movedAfter->received ?? 0) - (int) ($movedAfter->other ?? 0) + (int) ($soldAfter->quantity_sold ?? 0);
+            }
             $unitCost = (float) $row['unit_cost'];
 
             $avgMonthlySales = $allSold / $periodMonths; // cover: all its sales, whatever the pricing filter
             $monthsOfStock = $avgMonthlySales > 0 ? round($closingStock / $avgMonthlySales, 1) : null;
 
             return $row + [
-                'opening_stock' => $closingStock - $quantityReceived + $allSold,
+                // Opening + Received + Returns/Adj. - Sold (all pricing) = Closing.
+                'opening_stock' => $closingStock - $quantityReceived - $other + $allSold,
                 'stock_received' => $quantityReceived,
+                'stock_other' => $other,
                 'sales_quantity' => $quantitySold,
+                'all_sales_quantity' => $allSold,
                 'closing_stock' => $closingStock,
                 'closing_stock_value' => round($closingStock * $unitCost, 2),
                 'sales_revenue' => round($revenue, 2),
@@ -354,7 +371,7 @@ class ReportService
             $unsized = $salesByProduct->get($row['product_id']);
             $row['opening_stock'] = $sizes->sum('opening_stock') + (int) ($unsized->quantity_sold ?? 0);
             $unsizedOnList = (int) ($unsized->list_quantity_sold ?? 0);
-            foreach (['stock_received', 'closing_stock'] as $field) {
+            foreach (['stock_received', 'stock_other', 'closing_stock'] as $field) {
                 $row[$field] = $sizes->sum($field);
             }
             $row['sales_quantity'] = $sizes->sum('sales_quantity') + $unsizedOnList;
@@ -423,10 +440,14 @@ class ReportService
                 'date_from' => $dateFrom->toDateString(),
                 'date_to' => $dateTo->toDateString(),
                 'months' => round($periodMonths, 2),
+                // Closing figures are as at the end of date_to (today's stock when the range ends today).
+                'closing_as_at' => $closesToday ? Carbon::now()->toDateString() : $dateTo->toDateString(),
             ],
             'summary' => [
                 'total_items' => $summaryLines->count(),
                 'total_closing_stock' => $summaryLines->sum('closing_stock'),
+                'total_received' => $summaryLines->sum('stock_received'),
+                'total_other' => $summaryLines->sum('stock_other'),
                 'total_closing_stock_value' => round($summaryLines->sum('closing_stock_value'), 2),
                 'total_sales_quantity' => $summaryLines->sum('sales_quantity'),
                 'total_sales_value' => $salesValue,
@@ -468,24 +489,38 @@ class ReportService
         }
         if (isset($filters['product_id'])) {
             $query->where('product_id', $filters['product_id']);
+            // One line of a sized item: a size, or "none" for the item itself (no size).
+            if (($filters['variant_id'] ?? '') === 'none') {
+                $query->whereNull('variant_id');
+            } elseif (!empty($filters['variant_id'])) {
+                $query->where('variant_id', $filters['variant_id']);
+            }
         }
+        // Which way: "out" (sales, returns to supplier, write-offs ...) or "in".
+        $direction = $filters['direction'] ?? null;
 
         $lineNos = $this->stockLines()
             ->where('row_type', '!=', 'parent')
             ->mapWithKeys(fn ($r) => [$r['product_id'] . '|' . ($r['variant_id'] ?? '') => $r]);
 
-        $movements = $query->with(['product:id,name,item_number', 'variant:id,name'])
+        $raw = $query->with(['product:id,name,item_number', 'variant:id,name', 'batch:id,batch_number'])
             ->orderBy('movement_date', 'desc')
             ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($m) use ($lineNos) {
+            ->get();
+        $refs = $this->movementReferences($raw);
+
+        $movements = $raw
+            ->map(function ($m) use ($lineNos, $refs) {
                 $line = $lineNos->get($m->product_id . '|' . ($m->variant_id ?? ''));
                 $inbound = (int) $m->quantity >= 0
                     && !in_array($m->type, ['sale', 'dispatch', 'damage', 'expired', 'adjustment_out', 'transfer_out'], true);
+                $ref = $refs[$m->id] ?? [];
                 return [
                     'id' => $m->id,
                     'movement_date' => $m->movement_date ?? $m->created_at,
                     'item_no' => $line['item_no'] ?? (string) ($m->product->item_number ?? ''),
+                    'product_id' => $m->product_id,
+                    'variant_id' => $m->variant_id,
                     'name' => $m->product
                         ? \App\Models\ProductVariant::sizedName($m->product->name, $m->variant?->name)
                         : 'Unknown item',
@@ -494,12 +529,20 @@ class ReportService
                     'quantity' => abs((int) $m->quantity),
                     'quantity_before' => $m->quantity_before,
                     'quantity_after' => $m->quantity_after,
-                    'reference_type' => $m->reference_type ? class_basename($m->reference_type) : null,
-                    'reference_number' => $m->reference_number,
+                    'batch_number' => $m->batch?->batch_number,
+                    // Where the stock went or came from: the document (an order shows its NSK invoice)
+                    // and the customer or supplier, each with the page to open it on.
+                    'reference_type' => $ref['label'] ?? ($m->reference_type ? \Illuminate\Support\Str::headline(class_basename($m->reference_type)) : null),
+                    'reference_number' => $ref['number'] ?? self::shortDocNumber($m->reference_number),
+                    'reference_link' => $ref['link'] ?? null,
+                    'party' => $ref['party'] ?? null,
+                    'party_link' => $ref['party_link'] ?? null,
+                    'notes' => $m->notes,
                     'unit_cost' => $m->unit_cost !== null ? (float) $m->unit_cost : null,
                     'total_cost' => $m->total_cost !== null ? (float) $m->total_cost : null,
                 ];
-            });
+            })
+            ->when(in_array($direction, ['in', 'out'], true), fn ($c) => $c->where('direction', $direction));
 
         return [
             'data' => $movements->values()->toArray(),
@@ -507,6 +550,183 @@ class ReportService
                 'total_movements' => $movements->count(),
                 'total_in' => $movements->where('direction', 'in')->sum('quantity'),
                 'total_out' => $movements->where('direction', 'out')->sum('quantity'),
+            ],
+        ];
+    }
+
+    /** RCPT-853b296e-0074 -> RCPT-0074: the company part of long document numbers is never shown. */
+    public static function shortDocNumber(?string $number): ?string
+    {
+        return $number === null ? null : preg_replace('/^([A-Za-z]+)-[0-9a-f]{8}-(\d+)$/', '$1-$2', $number);
+    }
+
+    /**
+     * For each movement: the document it came from as people know it (a sale shows its NSK invoice, ORD only
+     * before invoicing), the customer (by business name) or supplier, and the pages to open them on.
+     * Loaded in one query per kind of document. Keyed by movement id.
+     */
+    protected function movementReferences(\Illuminate\Support\Collection $movements): array
+    {
+        $kind = fn ($m) => \Illuminate\Support\Str::snake(class_basename((string) $m->reference_type));
+        $idsOf = function (array $kinds) use ($movements, $kind) {
+            return $movements->filter(fn ($m) => in_array($kind($m), $kinds, true) && $m->reference_id)->pluck('reference_id')->unique()->values()->all();
+        };
+        $customerName = "coalesce(nullif(trim(customers.business_name), ''), customers.name) as customer_name";
+
+        $orders = collect();
+        if ($ids = $idsOf(['order'])) {
+            $orders = DB::table('orders')->leftJoin('customers', 'customers.id', '=', 'orders.customer_id')
+                ->whereIn('orders.id', $ids)
+                ->select('orders.id', 'orders.order_number', 'orders.customer_id', DB::raw($customerName))
+                ->get()->keyBy('id');
+            $invoices = DB::table('invoices')->whereIn('order_id', $ids)
+                ->orderByRaw("CASE WHEN invoice_number LIKE 'NSK/%' THEN 0 ELSE 1 END")
+                ->get(['id', 'order_id', 'invoice_number'])
+                ->unique('order_id')->keyBy('order_id');
+            $orders = $orders->map(function ($o) use ($invoices) {
+                $o->invoice = $invoices->get($o->id);
+                return $o;
+            });
+        }
+        $creditNotes = ($ids = $idsOf(['credit_note']))
+            ? DB::table('credit_notes')->leftJoin('customers', 'customers.id', '=', 'credit_notes.customer_id')
+                ->whereIn('credit_notes.id', $ids)
+                ->select('credit_notes.id', 'credit_notes.credit_note_number', 'credit_notes.customer_id', DB::raw($customerName))
+                ->get()->keyBy('id')
+            : collect();
+        $receipts = ($ids = $idsOf(['product_receipt']))
+            ? DB::table('product_receipts')->leftJoin('suppliers', 'suppliers.id', '=', 'product_receipts.supplier_id')
+                ->whereIn('product_receipts.id', $ids)
+                ->select('product_receipts.id', 'product_receipts.product_receipt_number', 'suppliers.name as supplier_name')
+                ->get()->keyBy('id')
+            : collect();
+        $debitNotes = ($ids = $idsOf(['supplier_debit_note']))
+            ? DB::table('accounts_payable')->leftJoin('suppliers', 'suppliers.id', '=', 'accounts_payable.vendor_id')
+                ->whereIn('accounts_payable.id', $ids)
+                ->select('accounts_payable.id', 'accounts_payable.invoice_number', 'suppliers.name as supplier_name')
+                ->get()->keyBy('id')
+            : collect();
+        $dispatches = ($ids = $idsOf(['dispatch']))
+            ? DB::table('dispatches')->leftJoin('users', 'users.id', '=', 'dispatches.to_user_id')
+                ->whereIn('dispatches.id', $ids)
+                ->select('dispatches.id', 'dispatches.dispatch_number', 'dispatches.to_entity', DB::raw("trim(concat(users.first_name, ' ', users.last_name)) as to_user"))
+                ->get()->keyBy('id')
+            : collect();
+
+        $out = [];
+        foreach ($movements as $m) {
+            $id = $m->reference_id;
+            $number = self::shortDocNumber($m->reference_number);
+            $customer = fn ($row) => $row && $row->customer_id
+                ? ['party' => $row->customer_name, 'party_link' => "/customers/{$row->customer_id}/statement"]
+                : [];
+            $out[$m->id] = match ($kind($m)) {
+                'order' => (function () use ($orders, $id, $number, $customer) {
+                    $o = $orders->get($id);
+                    $nsk = $o?->invoice && str_starts_with((string) $o->invoice->invoice_number, 'NSK/') ? $o->invoice : null;
+                    return [
+                        'label' => $nsk ? 'Invoice' : 'Order',
+                        'number' => $nsk->invoice_number ?? ($o->order_number ?? $number),
+                        'link' => $nsk ? "/sales/invoices/{$nsk->id}" : ($o ? "/sales/orders/{$o->id}" : null),
+                    ] + $customer($o);
+                })(),
+                'credit_note' => (function () use ($creditNotes, $id, $number, $customer) {
+                    $c = $creditNotes->get($id);
+                    return ['label' => 'Credit note', 'number' => $c->credit_note_number ?? $number, 'link' => $c ? "/sales/credit-notes/{$c->id}" : null] + $customer($c);
+                })(),
+                'product_receipt' => (function () use ($receipts, $id, $number) {
+                    $r = $receipts->get($id);
+                    return ['label' => 'Goods received', 'number' => self::shortDocNumber($r->product_receipt_number ?? null) ?? $number, 'link' => '/product-receipt', 'party' => $r->supplier_name ?? null];
+                })(),
+                'supplier_debit_note' => (function () use ($debitNotes, $id, $number) {
+                    $d = $debitNotes->get($id);
+                    return ['label' => 'Return to supplier', 'number' => $d->invoice_number ?? $number, 'link' => $d ? "/suppliers/debit-notes/{$d->id}/document" : null, 'party' => $d->supplier_name ?? null];
+                })(),
+                'dispatch' => (function () use ($dispatches, $id, $number) {
+                    $d = $dispatches->get($id);
+                    return ['label' => 'Dispatch', 'number' => self::shortDocNumber($d->dispatch_number ?? null) ?? $number, 'link' => '/dispatch', 'party' => ($d->to_user ?? '') !== '' ? $d->to_user : ($d->to_entity ?? null)];
+                })(),
+                'stock_adjustment', 'stock_adjustment_item' => [
+                    'label' => 'Stock adjustment',
+                    'number' => $number,
+                    'link' => ($adj = $kind($m) === 'stock_adjustment' ? $id : ($m->metadata['adjustment_id'] ?? null)) ? "/inventory/stock-adjustments/{$adj}" : '/inventory/stock-adjustments',
+                ],
+                'stock_count' => ['label' => 'Stock count', 'number' => $number, 'link' => $id ? "/inventory/stock-counts/{$id}" : '/inventory/stock-counts'],
+                'opening_stock' => ['label' => 'Opening stock', 'number' => $number],
+                'purchase_order_return' => ['label' => 'Return to supplier', 'number' => $number, 'link' => '/purchase-orders'],
+                default => [],
+            };
+        }
+        return $out;
+    }
+
+    /**
+     * Where one stock line's sold units went, for the Sold figure in Stock Management: every sale that took
+     * stock in the period (same rules as that figure) with its NSK invoice, customer, quantity and value.
+     * Filters: product_id, variant_id (a size, "none" for the item itself, "all" for every size), date_from,
+     * date_to, price_list.
+     */
+    public function getLineSales(array $filters = []): array
+    {
+        $dateTo = isset($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : Carbon::now();
+        $dateFrom = isset($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : Carbon::now()->startOfMonth();
+        $priceList = trim((string) ($filters['price_list'] ?? ''));
+        $variant = $filters['variant_id'] ?? null;
+
+        $rows = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('customers', 'customers.id', '=', 'orders.customer_id')
+            ->where('orders.company_id', $this->companyId)
+            ->whereNotIn('orders.status', ['cancelled', 'rejected'])
+            ->where('order_items.product_id', $filters['product_id'] ?? '')
+            ->leftJoin('product_variants', 'product_variants.id', '=', 'order_items.variant_id')
+            // "all": a sized item with every size; "none" (or nothing): the item itself; else one size.
+            ->when($variant !== 'all', fn ($q) => $variant === 'none' || $variant === null || $variant === ''
+                ? $q->whereNull('order_items.variant_id')
+                : $q->where('order_items.variant_id', $variant))
+            ->whereNotNull('orders.stock_deducted_at')
+            ->whereBetween('orders.stock_deducted_at', [$dateFrom, $dateTo])
+            ->when($priceList !== '', fn ($q) => $priceList === 'none'
+                ? $q->whereRaw("COALESCE(order_items.price_label, '') = ''")
+                : $q->whereRaw("split_part(COALESCE(order_items.price_label, ''), ' ', 1) = ?", [$priceList]))
+            ->orderBy('orders.stock_deducted_at')
+            ->select(
+                'orders.id as order_id', 'orders.order_number', 'orders.stock_deducted_at', 'orders.customer_id',
+                DB::raw("coalesce(nullif(trim(customers.business_name), ''), customers.name) as customer_name"),
+                DB::raw('COALESCE(order_items.base_quantity, order_items.quantity) as quantity'),
+                'order_items.unit_price', 'order_items.price_label', 'product_variants.name as size',
+                DB::raw('order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0) as value')
+            )
+            ->get();
+
+        $invoices = DB::table('invoices')->whereIn('order_id', $rows->pluck('order_id')->unique())
+            ->where('invoice_number', 'like', 'NSK/%')
+            ->get(['id', 'order_id', 'invoice_number', 'invoice_date'])->keyBy('order_id');
+
+        $data = $rows->map(function ($r) use ($invoices) {
+            $inv = $invoices->get($r->order_id);
+            return [
+                'date' => $r->stock_deducted_at,
+                'invoice_date' => $inv->invoice_date ?? null,
+                'reference_number' => $inv->invoice_number ?? $r->order_number,
+                'reference_link' => $inv ? "/sales/invoices/{$inv->id}" : "/sales/orders/{$r->order_id}",
+                'party' => $r->customer_name,
+                'party_link' => $r->customer_id ? "/customers/{$r->customer_id}/statement" : null,
+                'size' => $r->size,
+                'price_label' => $r->price_label,
+                'quantity' => (int) $r->quantity,
+                'unit_price' => (float) $r->unit_price,
+                'value' => round((float) $r->value, 2),
+            ];
+        })->values();
+
+        return [
+            'data' => $data->all(),
+            'summary' => [
+                'total_quantity' => $data->sum('quantity'),
+                'total_value' => round($data->sum('value'), 2),
+                'invoices' => $data->pluck('reference_number')->unique()->count(),
+                'customers' => $data->pluck('party')->filter()->unique()->count(),
             ],
         ];
     }
