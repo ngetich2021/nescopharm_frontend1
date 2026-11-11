@@ -65,12 +65,12 @@ export function PaymentsSummary() {
     <div className="grid gap-4 md:grid-cols-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
+          <CardTitle className="text-sm font-medium">Total Received</CardTitle>
           <CreditCard className="h-4 w-4 text-[#E30040]" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{formatCurrency(summary.totalAmount)}</div>
-          <p className="text-xs text-muted-foreground">{summary.totalPayments} transactions total</p>
+          <p className="text-xs text-muted-foreground">{summary.completedPayments} completed receipts (failed and pending not counted)</p>
         </CardContent>
       </Card>
 
@@ -102,8 +102,8 @@ export function PaymentsSummary() {
           <XCircle className="h-4 w-4 text-[#E30040]" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{summary.failedPayments}</div>
-          <p className="text-xs text-muted-foreground">Requires attention</p>
+          <div className="text-2xl font-bold">{formatCurrency(summary.failedAmount ?? 0)}</div>
+          <p className="text-xs text-muted-foreground">{summary.failedPayments} failed {summary.failedPayments === 1 ? "receipt" : "receipts"} · requires attention</p>
         </CardContent>
       </Card>
     </div>

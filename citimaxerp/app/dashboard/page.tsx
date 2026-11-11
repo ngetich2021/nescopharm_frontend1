@@ -206,6 +206,11 @@ export default function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<string>("last_30_days");
+  // Custom range: the boxes being typed in, and the range applied (yyyy-mm-dd).
+  const [draftFrom, setDraftFrom] = useState("");
+  const [draftTo, setDraftTo] = useState("");
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  const rangeInvalid = !draftFrom || !draftTo || draftFrom > draftTo;
   const [salesAnalytics, setSalesAnalytics] = useState<any>(null);
   const [financialAnalytics, setFinancialAnalytics] = useState<any>(null);
   const [customerAnalytics, setCustomerAnalytics] = useState<any>(null);
@@ -216,31 +221,34 @@ export default function DashboardPage() {
       setLoading(false);
       return;
     }
+    // Custom Range waits until a From and To have been applied.
+    if (period === "custom" && !range) return;
+    const custom = period === "custom" && range ? { date_from: range.from, date_to: range.to } : {};
     let cancelled = false;
     async function loadData() {
       setLoading(true);
       try {
         // The headline cards follow the period picker like everything else on the page.
-        const overviewData = await fetchDashboardOverview(period);
+        const overviewData = await fetchDashboardOverview(period, period === "custom" && range ? { date_from: range.from, date_to: range.to } : undefined);
         if (cancelled) return;
         setOverview(overviewData);
 
         // Load sequentially rather than in parallel: the dev backend handles one
         // request at a time, so firing these together just queues them behind each
         // other anyway, and risks the browser giving up on the later ones.
-        const sales = await fetchSalesAnalytics({ period, group_by: "day" });
+        const sales = await fetchSalesAnalytics({ period, group_by: "day", ...custom });
         if (cancelled) return;
         setSalesAnalytics(sales);
 
-        const financial = await fetchFinancialAnalytics({ period, group_by: "month" });
+        const financial = await fetchFinancialAnalytics({ period, group_by: "month", ...custom });
         if (cancelled) return;
         setFinancialAnalytics(financial);
 
-        const customer = await fetchCustomerAnalytics({ period, group_by: "month" });
+        const customer = await fetchCustomerAnalytics({ period, group_by: "month", ...custom });
         if (cancelled) return;
         setCustomerAnalytics(customer);
 
-        const inventory = await fetchInventoryAnalytics({ period, group_by: "month" });
+        const inventory = await fetchInventoryAnalytics({ period, group_by: "month", ...custom });
         if (cancelled) return;
         setInventoryAnalytics(inventory);
       } catch (error) {
@@ -261,7 +269,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [period, canViewFullDashboard]);
+  }, [period, range, canViewFullDashboard]);
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -299,22 +307,57 @@ export default function DashboardPage() {
               </p>
             </div>
             {canViewFullDashboard && (
-              <Select value={period} onValueChange={setPeriod}>
-                <SelectTrigger className="w-[170px] h-9 text-sm">
-                  <CalendarDays className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="yesterday">Yesterday</SelectItem>
-                  <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-                  <SelectItem value="last_30_days">Last 30 Days</SelectItem>
-                  <SelectItem value="this_month">This Month</SelectItem>
-                  <SelectItem value="last_month">Last Month</SelectItem>
-                  <SelectItem value="this_quarter">This Quarter</SelectItem>
-                  <SelectItem value="this_year">This Year</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap items-end gap-2 sm:justify-end">
+                {period === "custom" && (
+                  <>
+                    <label className="flex flex-col text-xs text-muted-foreground">
+                      From
+                      <input
+                        type="date"
+                        value={draftFrom}
+                        max={draftTo || undefined}
+                        onChange={(e) => setDraftFrom(e.target.value)}
+                        className="mt-1 h-9 w-[150px] rounded-md border bg-background px-2 text-sm text-foreground"
+                      />
+                    </label>
+                    <label className="flex flex-col text-xs text-muted-foreground">
+                      To
+                      <input
+                        type="date"
+                        value={draftTo}
+                        min={draftFrom || undefined}
+                        onChange={(e) => setDraftTo(e.target.value)}
+                        className="mt-1 h-9 w-[150px] rounded-md border bg-background px-2 text-sm text-foreground"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={rangeInvalid}
+                      onClick={() => setRange({ from: draftFrom, to: draftTo })}
+                      className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </>
+                )}
+                <Select value={period} onValueChange={setPeriod}>
+                  <SelectTrigger className="w-[170px] h-9 text-sm">
+                    <CalendarDays className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="last_7_days">Last 7 Days</SelectItem>
+                    <SelectItem value="last_30_days">Last 30 Days</SelectItem>
+                    <SelectItem value="this_month">This Month</SelectItem>
+                    <SelectItem value="last_month">Last Month</SelectItem>
+                    <SelectItem value="this_quarter">This Quarter</SelectItem>
+                    <SelectItem value="this_year">This Year</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </div>
 

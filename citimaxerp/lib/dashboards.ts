@@ -1,7 +1,8 @@
 // Fetch customer analytics
-export async function fetchCustomerAnalytics({ period = "last_30_days", group_by = "month" }: { period?: string; group_by?: string } = {}): Promise<CustomerAnalytics | null> {
+export async function fetchCustomerAnalytics({ period = "last_30_days", group_by = "month", date_from, date_to }: { period?: string; group_by?: string; date_from?: string; date_to?: string } = {}): Promise<CustomerAnalytics | null> {
   try {
     const params = new URLSearchParams({ period, group_by });
+    if (date_from && date_to) { params.set("date_from", date_from); params.set("date_to", date_to); }
     const response = await apiCall<{ status: string; data: CustomerAnalytics; message?: any }>(
       `/dashboard/customer-analytics?${params.toString()}`,
       "GET",
@@ -20,9 +21,10 @@ export async function fetchCustomerAnalytics({ period = "last_30_days", group_by
 }
 
 // Fetch inventory analytics
-export async function fetchInventoryAnalytics({ period = "last_30_days", group_by = "month" }: { period?: string; group_by?: string } = {}): Promise<InventoryAnalytics | null> {
+export async function fetchInventoryAnalytics({ period = "last_30_days", group_by = "month", date_from, date_to }: { period?: string; group_by?: string; date_from?: string; date_to?: string } = {}): Promise<InventoryAnalytics | null> {
   try {
     const params = new URLSearchParams({ period, group_by });
+    if (date_from && date_to) { params.set("date_from", date_from); params.set("date_to", date_to); }
     const response = await apiCall<{ status: string; data: InventoryAnalytics; message?: any }>(
       `/dashboard/inventory-analytics?${params.toString()}`,
       "GET",
@@ -40,9 +42,10 @@ export async function fetchInventoryAnalytics({ period = "last_30_days", group_b
   }
 }
 // Fetch financial analytics
-export async function fetchFinancialAnalytics({ period = "last_30_days", group_by = "month" }: { period?: string; group_by?: string } = {}): Promise<FinancialAnalytics | null> {
+export async function fetchFinancialAnalytics({ period = "last_30_days", group_by = "month", date_from, date_to }: { period?: string; group_by?: string; date_from?: string; date_to?: string } = {}): Promise<FinancialAnalytics | null> {
   try {
     const params = new URLSearchParams({ period, group_by });
+    if (date_from && date_to) { params.set("date_from", date_from); params.set("date_to", date_to); }
     const response = await apiCall<{ status: string; data: FinancialAnalytics; message?: any }>(
       `/dashboard/financial-analytics?${params.toString()}`,
       "GET",
@@ -60,9 +63,10 @@ export async function fetchFinancialAnalytics({ period = "last_30_days", group_b
   }
 }
 // Fetch sales analytics
-export async function fetchSalesAnalytics({ period = "last_30_days", group_by = "day" }: { period?: string; group_by?: string } = {}): Promise<SalesAnalytics | null> {
+export async function fetchSalesAnalytics({ period = "last_30_days", group_by = "day", date_from, date_to }: { period?: string; group_by?: string; date_from?: string; date_to?: string } = {}): Promise<SalesAnalytics | null> {
   try {
     const params = new URLSearchParams({ period, group_by });
+    if (date_from && date_to) { params.set("date_from", date_from); params.set("date_to", date_to); }
     const response = await apiCall<{ status: string; data: SalesAnalytics; message?: any }>(
       `/dashboard/sales-analytics?${params.toString()}`,
       "GET",
@@ -427,10 +431,12 @@ export async function fetchDashboardWidgets(): Promise<DashboardWidget[]> {
 }
 
 // Fetch dashboard summary/overview
-export async function fetchDashboardOverview(period = "last_30_days"): Promise<DashboardOverview | null> {
+export async function fetchDashboardOverview(period = "last_30_days", range?: { date_from: string; date_to: string }): Promise<DashboardOverview | null> {
   try {
+    const params = new URLSearchParams({ period });
+    if (range?.date_from && range?.date_to) { params.set("date_from", range.date_from); params.set("date_to", range.date_to); }
     const response = await apiCall<{ status: string; data: DashboardOverview; message?: any }>(
-      `/dashboard/overview?${new URLSearchParams({ period }).toString()}`,
+      `/dashboard/overview?${params.toString()}`,
       "GET",
       undefined,
       true

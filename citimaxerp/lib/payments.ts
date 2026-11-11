@@ -52,6 +52,8 @@ export interface PaymentSummary {
   completedPayments: number;
   pendingPayments: number;
   failedPayments: number;
+  pendingAmount?: number;
+  failedAmount?: number;
 }
 
 /**
@@ -128,14 +130,20 @@ export async function getPayments(
  * @returns Summary object with counts and totals
  */
 export function calculatePaymentSummary(payments: Payment[]): PaymentSummary {
-  const totalAmount = payments.reduce((sum, payment) => sum + parseFloat(payment.amount_paid || "0"), 0);
-  
+  const sumOf = (status: string) =>
+    payments
+      .filter(p => p.status === status)
+      .reduce((sum, p) => sum + parseFloat(p.amount_paid || "0"), 0);
+
+  // Only completed receipts are money received; failed/pending never count in the total.
   return {
     totalPayments: payments.length,
-    totalAmount,
+    totalAmount: sumOf('completed'),
     completedPayments: payments.filter(item => item.status === 'completed').length,
     pendingPayments: payments.filter(item => item.status === 'pending').length,
     failedPayments: payments.filter(item => item.status === 'failed').length,
+    pendingAmount: sumOf('pending'),
+    failedAmount: sumOf('failed'),
   };
 }
 
