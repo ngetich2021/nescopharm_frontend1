@@ -274,12 +274,6 @@ export default function InventoryReportPage() {
       align: "center",
       render: (r) => <span className="text-gray-700">{r._sno || "-"}</span>,
     }
-    const itemNo: Column = {
-      key: "item_no",
-      header: "Item No.",
-      className: "w-20",
-      render: (r) => <span className={cn("font-mono", r.row_type === "size" ? "pl-3 text-gray-600" : "font-semibold text-gray-900")}>{r.item_no || "-"}</span>,
-    }
     const description: Column = {
       key: "name",
       header: "Item Description",
@@ -312,7 +306,6 @@ export default function InventoryReportPage() {
       case "low_stock":
         return [
           serialNo,
-          itemNo,
           description,
           { key: "stock_quantity", header: "In Stock", align: "right", render: (r) => qty(r.stock_quantity), total: (rows) => qty(sumOf(rows, "stock_quantity")) },
           { key: "low_stock_threshold", header: "Reorder Level", align: "right", render: (r) => (isLine(r) ? qty(r.low_stock_threshold) : "") },
@@ -337,7 +330,6 @@ export default function InventoryReportPage() {
             render: (r) => displayDateTime(new Date(r.movement_date)),
             exportValue: (r) => displayDateTime(new Date(r.movement_date)),
           },
-          itemNo,
           description,
           { key: "type", header: "Type", render: (r) => <span className="capitalize">{String(r.type || "").replace(/_/g, " ")}</span> },
           {
@@ -392,7 +384,6 @@ export default function InventoryReportPage() {
       case "stock_management":
         return [
           serialNo,
-          itemNo,
           description,
           { key: "opening_stock", header: "Opening", align: "right", render: (r) => qty(r.opening_stock), total: (rows) => qty(sumOf(rows, "opening_stock")) },
           {
@@ -508,7 +499,6 @@ export default function InventoryReportPage() {
       default:
         return [
           serialNo,
-          itemNo,
           description,
           { key: "stock_quantity", header: "In Stock", align: "right", render: (r) => qty(r.stock_quantity), total: (rows) => qty(sumOf(rows, "stock_quantity")) },
           { key: "allocated", header: "Allocated", align: "right", render: (r) => qty(r.allocated), total: (rows) => qty(sumOf(rows, "allocated")) },
@@ -746,7 +736,7 @@ export default function InventoryReportPage() {
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
-                placeholder={reportType === "movement" ? "Search item, invoice no. or customer" : "Search item no. or description"}
+                placeholder={reportType === "movement" ? "Search item, invoice no. or customer" : "Search description"}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -822,7 +812,7 @@ export default function InventoryReportPage() {
         <Card className="overflow-hidden">
           {hasGroups && !loading && (
             <div className="flex items-center justify-between border-b bg-gray-50/60 px-4 py-2 text-xs text-muted-foreground">
-              <span>Sized items are numbered by size, e.g. 164.1, 164.2 under item 164. Click an item to collapse its sizes.</span>
+              <span>Each size is listed under its item. Click an item to collapse its sizes.</span>
               <div className="flex gap-3">
                 <button type="button" className="hover:text-gray-900" onClick={() => setCollapsed(new Set())}>Expand all</button>
                 <button type="button" className="hover:text-gray-900" onClick={() => setCollapsed(new Set(data.filter((r) => r.row_type === "parent").map((r) => r.item_no)))}>Collapse all</button>
@@ -912,12 +902,11 @@ export default function InventoryReportPage() {
                   {/* Credit notes dated in the period are deducted at the end: Less credit notes, then Net. */}
                   {creditRows.map((fr) => (
                     <TableRow key={fr.label}>
-                      {/* The label spans S/No, Item No. and Description and wraps there, so a long
-                          credit-note line never widens the narrow Item No. column. */}
-                      <TableCell colSpan={3} className={cn("py-2 text-sm", fr.bold && "font-semibold")}>
+                      {/* The label spans S/No and Description and wraps there. */}
+                      <TableCell colSpan={2} className={cn("py-2 text-sm", fr.bold && "font-semibold")}>
                         {fr.label}
                       </TableCell>
-                      {columns.slice(3).map((c) => (
+                      {columns.slice(2).map((c) => (
                         <TableCell key={c.key} className={cn("py-2 text-sm tabular-nums", fr.bold && "font-semibold", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
                           {c.key === "sales_revenue" ? fr.value : c.key === "cost_of_sales" ? fr.cost : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""}
                         </TableCell>

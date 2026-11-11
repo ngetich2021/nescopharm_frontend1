@@ -471,22 +471,25 @@ class ReportService
         ];
     }
 
+    /**
+     * Stock Movement: one row per document per stock line, newest first.
+     *
+     * - An order shows once per line it took: the batches it drew from and every edit of the order
+     *   (each edit puts the stock back and takes it again) are netted into one row, the batches listed.
+     *   An order whose stock all came back (deleted, or edited to nothing) is not shown.
+     * - The same for a receipt, credit note or adjustment spread over several batches.
+     * - Before / After are the line's own stock (the item or size, all batches), worked back from
+     *   today's stock through the ledger, so a sale and a receipt read on the same scale.
+     * - Allocate/release bookkeeping is left out. Internal dispatches are shown without Before/After:
+     *   their ledger rows track the batch hand-over, not the item's stock.
+     */
     public function getInventoryMovementLog(array $filters = []): array
     {
         $query = InventoryMovement::whereHas('product', function ($q) use ($filters) {
             $q->where('company_id', $this->companyId);
             $this->applyInventoryFilters($q, array_diff_key($filters, ['store_id' => true]));
-        });
+        })->whereRaw("COALESCE(metadata->>'movement_subtype', '') NOT IN ('allocation', 'deallocation')");
 
-        if (isset($filters['date_from'])) {
-            $query->where('movement_date', '>=', Carbon::parse($filters['date_from'])->startOfDay());
-        }
-        if (isset($filters['date_to'])) {
-            $query->where('movement_date', '<=', Carbon::parse($filters['date_to'])->endOfDay());
-        }
-        if (isset($filters['store_id'])) {
-            $query->where('store_id', $filters['store_id']);
-        }
         if (isset($filters['product_id'])) {
             $query->where('product_id', $filters['product_id']);
             // One line of a sized item: a size, or "none" for the item itself (no size).
@@ -496,42 +499,100 @@ class ReportService
                 $query->where('variant_id', $filters['variant_id']);
             }
         }
+        $from = isset($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : null;
+        $to = isset($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : null;
         // Which way: "out" (sales, returns to supplier, write-offs ...) or "in".
         $direction = $filters['direction'] ?? null;
 
-        $lineNos = $this->stockLines()
-            ->where('row_type', '!=', 'parent')
+        // Every movement up to the end of the range (all stores): the running stock is worked back from
+        // today's, so later movements are needed too. Only the range is shown.
+        $stockLines = $this->stockLines()->where('row_type', '!=', 'parent')
             ->mapWithKeys(fn ($r) => [$r['product_id'] . '|' . ($r['variant_id'] ?? '') => $r]);
 
         $raw = $query->with(['product:id,name,item_number', 'variant:id,name', 'batch:id,batch_number'])
-            ->orderBy('movement_date', 'desc')
-            ->orderBy('created_at', 'desc')
             ->get();
-        $refs = $this->movementReferences($raw);
 
-        $movements = $raw
-            ->map(function ($m) use ($lineNos, $refs) {
-                $line = $lineNos->get($m->product_id . '|' . ($m->variant_id ?? ''));
-                $inbound = (int) $m->quantity >= 0
-                    && !in_array($m->type, ['sale', 'dispatch', 'damage', 'expired', 'adjustment_out', 'transfer_out'], true);
+        $kind = fn ($m) => \Illuminate\Support\Str::snake(class_basename((string) $m->reference_type));
+        $groups = $raw->groupBy(function ($m) use ($kind) {
+            $line = $m->product_id . '|' . ($m->variant_id ?? '');
+            if (!$m->reference_id && !$m->reference_number) {
+                return 'm|' . $m->id;
+            }
+            $ref = $kind($m) . '|' . ($m->reference_id ?: $m->reference_number);
+            // An order's sales and its edit/delete restores net together; elsewhere one row per type.
+            return $ref . '|' . $line . '|' . ($kind($m) === 'order' ? 'order' : $m->type);
+        });
+
+        $rows = $groups->map(function ($ms) use ($kind) {
+            $first = $ms->sortBy('created_at')->first();
+            $net = (int) $ms->sum('quantity');
+            $isOrder = $kind($first) === 'order';
+            $last = $ms->sortByDesc(fn ($m) => ($m->movement_date ?? $m->created_at)?->format('Y-m-d H:i:s.u'))->first();
+            // Batches that still hold the result: an order's batch whose sale was later fully restored is not listed.
+            $batches = $ms->groupBy('batch_id')
+                ->filter(fn ($b) => !$isOrder || (int) $b->sum('quantity') !== 0)
+                ->map(fn ($b) => $b->first()->batch?->batch_number)->filter()->unique()->values();
+            return (object) [
+                'rep' => $first,
+                'line' => $first->product_id . '|' . ($first->variant_id ?? ''),
+                'date' => $last->movement_date ?? $last->created_at,
+                'created' => $last->created_at,
+                'type' => $isOrder ? ($net < 0 ? 'sale' : 'return') : $first->type,
+                'net' => $net,
+                'store_id' => $first->store_id,
+                'batches' => $batches->implode(', '),
+                'tracks_stock' => $kind($first) !== 'dispatch',
+                'count' => $ms->count(),
+            ];
+        })
+            // Fully reversed (an order deleted or edited to nothing): no stock moved.
+            ->filter(fn ($g) => !($g->net === 0 && $g->count > 1))
+            ->sortByDesc(fn ($g) => Carbon::parse($g->date)->format('Y-m-d H:i:s.u') . Carbon::parse($g->created)->format('H:i:s.u'))
+            ->values();
+
+        // Before / After: walk back from today's stock of each line.
+        $running = $stockLines->map(fn ($r) => (int) $r['stock_quantity'])->all();
+        foreach ($rows as $g) {
+            if (!$g->tracks_stock || !array_key_exists($g->line, $running)) {
+                $g->before = $g->after = null;
+                continue;
+            }
+            $g->after = $running[$g->line];
+            $g->before = $g->after - $g->net;
+            $running[$g->line] = $g->before;
+        }
+
+        $shown = $rows->filter(function ($g) use ($from, $to, $filters) {
+            $d = Carbon::parse($g->date);
+            return (!$from || $d->gte($from)) && (!$to || $d->lte($to))
+                && (!isset($filters['store_id']) || $g->store_id === $filters['store_id']);
+        })->values();
+        $refs = $this->movementReferences($shown->pluck('rep'));
+
+        $movements = $shown
+            ->map(function ($g) use ($stockLines, $refs) {
+                $m = $g->rep;
+                $line = $stockLines->get($g->line);
+                $inbound = $g->net >= 0
+                    && !in_array($g->type, ['sale', 'dispatch', 'damage', 'expired', 'adjustment_out', 'transfer_out'], true);
                 $ref = $refs[$m->id] ?? [];
                 return [
                     'id' => $m->id,
-                    'movement_date' => $m->movement_date ?? $m->created_at,
+                    'movement_date' => $g->date,
                     'item_no' => $line['item_no'] ?? (string) ($m->product->item_number ?? ''),
                     'product_id' => $m->product_id,
                     'variant_id' => $m->variant_id,
                     'name' => $m->product
                         ? \App\Models\ProductVariant::sizedName($m->product->name, $m->variant?->name)
                         : 'Unknown item',
-                    'type' => $m->type,
+                    'type' => $g->type,
                     'direction' => $inbound ? 'in' : 'out',
-                    'quantity' => abs((int) $m->quantity),
-                    'quantity_before' => $m->quantity_before,
-                    'quantity_after' => $m->quantity_after,
-                    'batch_number' => $m->batch?->batch_number,
-                    // Where the stock went or came from: the document (an order shows its NSK invoice)
-                    // and the customer or supplier, each with the page to open it on.
+                    'quantity' => abs($g->net),
+                    'quantity_before' => $g->before,
+                    'quantity_after' => $g->after,
+                    'batch_number' => $g->batches !== '' ? $g->batches : null,
+                    // Where the stock went or came from: the document (a sale shows its invoice) and the
+                    // customer or supplier, each with the page to open it on.
                     'reference_type' => $ref['label'] ?? ($m->reference_type ? \Illuminate\Support\Str::headline(class_basename($m->reference_type)) : null),
                     'reference_number' => $ref['number'] ?? self::shortDocNumber($m->reference_number),
                     'reference_link' => $ref['link'] ?? null,
@@ -539,13 +600,13 @@ class ReportService
                     'party_link' => $ref['party_link'] ?? null,
                     'notes' => $m->notes,
                     'unit_cost' => $m->unit_cost !== null ? (float) $m->unit_cost : null,
-                    'total_cost' => $m->total_cost !== null ? (float) $m->total_cost : null,
                 ];
             })
-            ->when(in_array($direction, ['in', 'out'], true), fn ($c) => $c->where('direction', $direction));
+            ->when(in_array($direction, ['in', 'out'], true), fn ($c) => $c->where('direction', $direction))
+            ->values();
 
         return [
-            'data' => $movements->values()->toArray(),
+            'data' => $movements->toArray(),
             'summary' => [
                 'total_movements' => $movements->count(),
                 'total_in' => $movements->where('direction', 'in')->sum('quantity'),
@@ -580,7 +641,10 @@ class ReportService
                 ->select('orders.id', 'orders.order_number', 'orders.customer_id', DB::raw($customerName))
                 ->get()->keyBy('id');
             $invoices = DB::table('invoices')->whereIn('order_id', $ids)
+                ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', ['proforma', 'credit_note']))
                 ->orderByRaw("CASE WHEN invoice_number LIKE 'NSK/%' THEN 0 ELSE 1 END")
+                ->orderByRaw("CASE WHEN status IN ('cancelled', 'void', 'voided') THEN 1 ELSE 0 END")
+                ->orderByDesc('created_at')
                 ->get(['id', 'order_id', 'invoice_number'])
                 ->unique('order_id')->keyBy('order_id');
             $orders = $orders->map(function ($o) use ($invoices) {
@@ -623,11 +687,13 @@ class ReportService
             $out[$m->id] = match ($kind($m)) {
                 'order' => (function () use ($orders, $id, $number, $customer) {
                     $o = $orders->get($id);
-                    $nsk = $o?->invoice && str_starts_with((string) $o->invoice->invoice_number, 'NSK/') ? $o->invoice : null;
+                    // A sale is shown by its invoice: the NSK number, or the invoice's own number
+                    // (INV-0491) while it has no NSK yet. ORD only when there is no invoice at all.
+                    $inv = $o?->invoice;
                     return [
-                        'label' => $nsk ? 'Invoice' : 'Order',
-                        'number' => $nsk->invoice_number ?? ($o->order_number ?? $number),
-                        'link' => $nsk ? "/sales/invoices/{$nsk->id}" : ($o ? "/sales/orders/{$o->id}" : null),
+                        'label' => $inv ? 'Invoice' : 'Order',
+                        'number' => $inv ? self::shortDocNumber($inv->invoice_number) : self::shortDocNumber($o->order_number ?? null) ?? $number,
+                        'link' => $inv ? "/sales/invoices/{$inv->id}" : ($o ? "/sales/orders/{$o->id}" : null),
                     ] + $customer($o);
                 })(),
                 'credit_note' => (function () use ($creditNotes, $id, $number, $customer) {
@@ -699,16 +765,20 @@ class ReportService
             )
             ->get();
 
+        // NSK first; an invoice still without its NSK shows its own number (INV-0491).
         $invoices = DB::table('invoices')->whereIn('order_id', $rows->pluck('order_id')->unique())
-            ->where('invoice_number', 'like', 'NSK/%')
-            ->get(['id', 'order_id', 'invoice_number', 'invoice_date'])->keyBy('order_id');
+            ->where(fn ($q) => $q->whereNull('type')->orWhereNotIn('type', ['proforma', 'credit_note']))
+            ->orderByRaw("CASE WHEN invoice_number LIKE 'NSK/%' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN status IN ('cancelled', 'void', 'voided') THEN 1 ELSE 0 END")
+            ->orderByDesc('created_at')
+            ->get(['id', 'order_id', 'invoice_number', 'invoice_date'])->unique('order_id')->keyBy('order_id');
 
         $data = $rows->map(function ($r) use ($invoices) {
             $inv = $invoices->get($r->order_id);
             return [
                 'date' => $r->stock_deducted_at,
                 'invoice_date' => $inv->invoice_date ?? null,
-                'reference_number' => $inv->invoice_number ?? $r->order_number,
+                'reference_number' => self::shortDocNumber($inv->invoice_number ?? $r->order_number),
                 'reference_link' => $inv ? "/sales/invoices/{$inv->id}" : "/sales/orders/{$r->order_id}",
                 'party' => $r->customer_name,
                 'party_link' => $r->customer_id ? "/customers/{$r->customer_id}/statement" : null,
