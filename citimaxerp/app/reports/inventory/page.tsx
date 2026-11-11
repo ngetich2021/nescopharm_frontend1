@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { useToast } from "@/hooks/use-toast"
 import { getInventoryReport } from "@/lib/reports"
@@ -151,6 +152,8 @@ export default function InventoryReportPage() {
   // Click a heading to sort by it (again to reverse); sizes stay under their item.
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null)
   const [reorderOnly, setReorderOnly] = useState(false)
+  // Credit notes and the Net line show only when switched on; every visit starts with them hidden.
+  const [showCredit, setShowCredit] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState("20")
@@ -435,7 +438,7 @@ export default function InventoryReportPage() {
     const netProfit = profit - (cValue - cCost)
     return { cValue, cCost, cUncosted, numbers, netValue: value - cValue, netCost, netProfit, netPct: netCost > 0 ? Math.round((netProfit / netCost) * 1000) / 10 : null }
   }, [reportType, visibleRows])
-  const creditRows: { label: string; value: string; cost: string; profit: string; pct: string; bold?: boolean }[] = shown
+  const creditRows: { label: string; value: string; cost: string; profit: string; pct: string; bold?: boolean }[] = shown && showCredit
     ? [
         {
           label: shown.numbers.length
@@ -503,10 +506,10 @@ export default function InventoryReportPage() {
           <SummaryCard label="Closing Value" value={`KES ${money(summary.total_closing_stock_value)}`} hint="at buying price" icon={<Wallet className="h-5 w-5" />} />
           <SummaryCard
             label="Gross Profit"
-            value={`KES ${money(shown ? shown.netProfit : summary.total_gross_profit)}`}
+            value={`KES ${money(shown && showCredit ? shown.netProfit : summary.total_gross_profit)}`}
             hint={[
-              shown?.netPct !== null && shown?.netPct !== undefined ? `${pctText(shown.netPct)} on cost` : null,
-              shown?.numbers.length ? "after credit notes" : null,
+              showCredit && shown?.netPct !== null && shown?.netPct !== undefined ? `${pctText(shown.netPct)} on cost` : null,
+              showCredit && shown?.numbers.length ? "after credit notes" : null,
               period ? `${period.date_from} to ${period.date_to}` : null,
             ].filter(Boolean).join(" · ")}
             icon={<TrendingUp className="h-5 w-5" />}
@@ -553,7 +556,13 @@ export default function InventoryReportPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Inventory Reports</h1>
             <p className="text-sm text-muted-foreground">Stock levels, values and movements. Each size of a sized item is reported as its own line.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {reportType === "stock_management" && (
+              <label className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm text-gray-700">
+                <Switch checked={showCredit} onCheckedChange={setShowCredit} aria-label="Show credit notes and Net" />
+                Credit notes &amp; Net
+              </label>
+            )}
             <Button variant="outline" size="sm" onClick={fetchReport} disabled={loading}>
               <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Refresh
             </Button>
