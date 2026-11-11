@@ -273,8 +273,7 @@ export function QuotesTable({
                       </span>
                       {quote.submitted_by_id && (
                         <Badge variant="outline" className="w-fit bg-blue-50 text-blue-800 border-blue-400 text-[11px] font-normal">
-                          From: {quote.submittedBy?.full_name || [quote.submittedBy?.first_name, quote.submittedBy?.last_name].filter(Boolean).join(" ") || "Rep"} · {displayDate(new Date(quote.submitted_at || quote.created_at))}{" "}
-                          {new Date(quote.submitted_at || quote.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · Needs Review
+                          From: {quote.submittedBy?.full_name || [quote.submittedBy?.first_name, quote.submittedBy?.last_name].filter(Boolean).join(" ") || "Rep"} · Needs Review
                         </Badge>
                       )}
                     </div>

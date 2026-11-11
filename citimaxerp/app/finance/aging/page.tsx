@@ -445,7 +445,12 @@ function AgingContent() {
     if (!n) return ""
     const p = latestPromise(r)
     const state = p ? promiseState(p, asOfDate, r.overdue > 0) : null
-    return [p && state ? `${PROMISE_META[state].label} ${day(p.promise_date)}` : "", n.note].filter(Boolean).join(" - ")
+    // The promise date has its own column; here only whether it was kept, then the note.
+    return [p && state ? PROMISE_META[state].label : "", n.note].filter(Boolean).join(" - ")
+  }
+  const promiseDate = (r: SummaryRow) => {
+    const p = latestPromise(r)
+    return p ? day(p.promise_date) : ""
   }
 
   const summaryPager = usePaged(shownSummary, 20, `${activeTab}|${q}`)
@@ -476,23 +481,23 @@ function AgingContent() {
         fileName: `${title.toLowerCase()}-ageing-summary-${asOfDate}`,
         title: `${title} Ageing - ${activeTab === "receivables" ? "Collection" : "Supplier"} Summary`,
         subtitle: asAt,
-        headers: ["S/No", partyLabel, "Terms (days)", "Total Outstanding", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Collection Notes / Promise Date"],
+        headers: ["S/No", partyLabel, "Invoice Date", "Terms (days)", "Total Outstanding", "Not Yet Due", "Total Overdue", "0-30 days", "31-60 days", "61-90 days", ">90 days", "Oldest Days Overdue", "Next Due Date", "PD Cheques Held", "Overdue Net of PD Cheques", "Action", "Promise Date", "Collection Notes"],
         rows: shownSummary.flatMap((r, i) => [
           [
-            i + 1, r.party, r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
-            r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action, noteText(r),
+            i + 1, r.party, "", r.terms, r.balance, r.notYetDue, r.overdue, r.buckets.current, r.buckets["31_60"], r.buckets["61_90"], r.buckets.over_90,
+            r.oldestOverdue || "", r.nextDue ? day(r.nextDue) : "", r.pdCheques || "", r.pdCheques ? r.overdueNetOfPd : "", r.action, promiseDate(r), noteText(r),
           ],
           ...(invoicesByParty.get(partyKey(r)) ?? []).map((line, j) => [
-            `${i + 1}.${j + 1}`, `${lineName(line)}, ${day(line.invoiceDate)}`, line.terms, line.balance, line.notYetDue, line.overdue,
+            `${i + 1}.${j + 1}`, lineName(line), day(line.invoiceDate), line.terms, line.balance, line.notYetDue, line.overdue,
             ...BUCKET_KEYS.map((k) => (line.bucket === k ? line.balance : 0)),
-            line.daysOverdue || "", day(line.dueDate), "", "", STATUS_META[line.status].label, "",
+            line.daysOverdue || "", day(line.dueDate), "", "", STATUS_META[line.status].label, "", "",
           ]),
         ]),
         footer: [
-          ["", "TOTAL", "", summaryTotals.balance, summaryTotals.notYetDue, summaryTotals.overdue, summaryTotals.buckets.current, summaryTotals.buckets["31_60"], summaryTotals.buckets["61_90"], summaryTotals.buckets.over_90, "", "", summaryTotals.pdCheques, summaryTotals.overdueNetOfPd, "", ""],
-          ["", "% of total", "", "", pct(summaryTotals.notYetDue, summaryTotals.balance), pct(summaryTotals.overdue, summaryTotals.balance), ...BUCKET_KEYS.map((k) => pct(summaryTotals.buckets[k], summaryTotals.balance)), "", "", "", "", "", ""],
+          ["", "TOTAL", "", "", summaryTotals.balance, summaryTotals.notYetDue, summaryTotals.overdue, summaryTotals.buckets.current, summaryTotals.buckets["31_60"], summaryTotals.buckets["61_90"], summaryTotals.buckets.over_90, "", "", summaryTotals.pdCheques, summaryTotals.overdueNetOfPd, "", "", ""],
+          ["", "% of total", "", "", "", pct(summaryTotals.notYetDue, summaryTotals.balance), pct(summaryTotals.overdue, summaryTotals.balance), ...BUCKET_KEYS.map((k) => pct(summaryTotals.buckets[k], summaryTotals.balance)), "", "", "", "", "", "", ""],
         ],
-        moneyColumns: [3, 4, 5, 6, 7, 8, 9, 12, 13],
+        moneyColumns: [4, 5, 6, 7, 8, 9, 10, 13, 14],
       }
     }
     return {
@@ -600,7 +605,7 @@ function AgingContent() {
     }
     return (
       <Badge variant="outline" className={`whitespace-nowrap ${PROMISE_META[state].className}`}>
-        {PROMISE_META[state].label} · {day(p.promise_date)}
+        {PROMISE_META[state].label}
       </Badge>
     )
   }
@@ -616,6 +621,7 @@ function AgingContent() {
             <TableRow>
               <TableHead className="w-[60px] text-center">S/No</TableHead>
               <TableHead className="min-w-[220px]">{partyLabel}</TableHead>
+              <TableHead className="whitespace-nowrap">Invoice Date</TableHead>
               <TableHead className="text-right">Terms (days)</TableHead>
               <TableHead className="text-right">Total Outstanding</TableHead>
               <TableHead className="text-right">Not Yet Due</TableHead>
@@ -626,7 +632,8 @@ function AgingContent() {
               <TableHead className="text-right">PD Cheques Held</TableHead>
               <TableHead className="text-right">Overdue Net of PD Cheques</TableHead>
               <TableHead className="min-w-[170px]">Action</TableHead>
-              <TableHead className="min-w-[220px]">Collection Notes / Promise Date</TableHead>
+              <TableHead className="whitespace-nowrap">Promise Date</TableHead>
+              <TableHead className="min-w-[220px]">Collection Notes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -638,6 +645,7 @@ function AgingContent() {
                   <span className="text-primary hover:underline">{r.party}</span>
                   <span className="block text-xs text-muted-foreground">{r.invoices} {r.invoices === 1 ? "invoice" : "invoices"}</span>
                 </TableCell>
+                <TableCell />
                 <TableCell className={num}>{r.terms}</TableCell>
                 <TableCell className={`${num} font-semibold`}>{money(r.balance)}</TableCell>
                 <TableCell className={num}>{money(r.notYetDue)}</TableCell>
@@ -648,15 +656,14 @@ function AgingContent() {
                 <TableCell className={num}>{r.pdCheques ? money(r.pdCheques) : "-"}</TableCell>
                 <TableCell className={num}>{r.pdCheques ? money(r.overdueNetOfPd) : "-"}</TableCell>
                 <TableCell className={`text-xs ${r.actionSet ? "font-semibold text-slate-800" : ""}`}>{r.action}</TableCell>
+                <TableCell className="whitespace-nowrap">{promiseDate(r) || "-"}</TableCell>
                 <TableCell>{promiseBadge(r)}</TableCell>
               </TableRow>
               {(invoicesByParty.get(partyKey(r)) ?? []).map((line, j) => (
                 <TableRow key={line.id} className={`${rowClick} text-xs`} onClick={() => setOpenParty({ key: partyKey(r), invoiceId: line.id })}>
                   <TableCell className="text-center text-muted-foreground">{summaryPager.start + i + 1}.{j + 1}</TableCell>
-                  <TableCell>
-                    <span className="font-mono whitespace-nowrap">{lineName(line)}</span>
-                    <span className="block text-muted-foreground">{day(line.invoiceDate)}</span>
-                  </TableCell>
+                  <TableCell className="font-mono whitespace-nowrap">{lineName(line)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{day(line.invoiceDate)}</TableCell>
                   <TableCell className={num}>{line.terms}</TableCell>
                   <TableCell className={num}>{money(line.balance)}</TableCell>
                   <TableCell className={num}>{line.notYetDue ? money(line.notYetDue) : "-"}</TableCell>
@@ -670,6 +677,7 @@ function AgingContent() {
                     <Badge variant="outline" className={`whitespace-nowrap ${STATUS_META[line.status].className}`}>{STATUS_META[line.status].label}</Badge>
                   </TableCell>
                   <TableCell />
+                  <TableCell />
                 </TableRow>
               ))}
               </Fragment>
@@ -677,6 +685,7 @@ function AgingContent() {
             <TableRow className="bg-muted/50 font-bold hover:bg-muted/50">
               <TableCell />
               <TableCell>TOTAL ({shownSummary.length})</TableCell>
+              <TableCell />
               <TableCell />
               <TableCell className={num}>{money(summaryTotals.balance)}</TableCell>
               <TableCell className={num}>{money(summaryTotals.notYetDue)}</TableCell>
@@ -686,17 +695,18 @@ function AgingContent() {
               <TableCell />
               <TableCell className={num}>{money(summaryTotals.pdCheques)}</TableCell>
               <TableCell className={num}>{money(summaryTotals.overdueNetOfPd)}</TableCell>
-              <TableCell colSpan={2} />
+              <TableCell colSpan={3} />
             </TableRow>
             <TableRow className="text-muted-foreground hover:bg-transparent">
               <TableCell />
               <TableCell>% of total</TableCell>
               <TableCell />
               <TableCell />
+              <TableCell />
               <TableCell className={num}>{pct(summaryTotals.notYetDue, summaryTotals.balance)}</TableCell>
               <TableCell className={num}>{pct(summaryTotals.overdue, summaryTotals.balance)}</TableCell>
               {BUCKET_KEYS.map((k) => <TableCell key={k} className={num}>{pct(summaryTotals.buckets[k], summaryTotals.balance)}</TableCell>)}
-              <TableCell colSpan={6} />
+              <TableCell colSpan={7} />
             </TableRow>
           </TableBody>
         </Table>

@@ -267,6 +267,8 @@ export default function BudgetsPage() {
                       <TableHead className="w-12">S/No</TableHead>
                       <TableHead>Budget</TableHead>
                       <TableHead>Period</TableHead>
+                      <TableHead className="whitespace-nowrap">Start Date</TableHead>
+                      <TableHead className="whitespace-nowrap">End Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Budgeted</TableHead>
                       <TableHead className="text-right">Actual</TableHead>
@@ -282,9 +284,9 @@ export default function BudgetsPage() {
                           <p className="font-medium">{b.name}</p>
                           <p className="text-xs capitalize text-muted-foreground">{b.budget_type.replace("_", " ")} · {b.line_count} account{b.line_count === 1 ? "" : "s"}</p>
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {b.period ? <>{b.period.name}<div className="text-xs text-muted-foreground">{fmtDate(b.period.start_date)} - {fmtDate(b.period.end_date)}</div></> : "-"}
-                        </TableCell>
+                        <TableCell className="text-sm">{b.period ? b.period.name : "-"}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{b.period ? fmtDate(b.period.start_date) : "-"}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">{b.period ? fmtDate(b.period.end_date) : "-"}</TableCell>
                         <TableCell><Badge variant="outline" className={cn("capitalize", STATUS[b.status])}>{b.status}</Badge></TableCell>
                         <TableCell className="text-right font-mono">{kes(b.total_budgeted)}</TableCell>
                         <TableCell className="text-right font-mono">{kes(b.total_actual)}</TableCell>

@@ -931,6 +931,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                     <TableRow>
                       <TableHead className="w-12">S/No</TableHead>
                       <TableHead>Item</TableHead>
+                      <TableHead>Batch</TableHead>
+                      <TableHead className="whitespace-nowrap">Expiry Date</TableHead>
                       <TableHead>Quantity</TableHead>
                       {/* Only show Packaging column if any item has packaging details */}
                       {order.order_items?.some(item => 
@@ -998,17 +1000,23 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
                           <TableCell className="text-muted-foreground">{lineIndex + 1}</TableCell>
                           <TableCell>
                             {item.product ? sizedName(item.product.name, item.variant?.name || (item as any).variant_name) : 'Unknown Product'}
-                            {item.batch_allocations && item.batch_allocations.length > 0 && (
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                {item.batch_allocations.map((a, i) => (
+                          </TableCell>
+                          {/* Batch and its expiry each in their own column, one line per batch picked. */}
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {item.batch_allocations?.length
+                              ? item.batch_allocations.map((a) => (
                                   <div key={a.batch_id}>
-                                    {item.batch_allocations!.length > 1 ? `${a.quantity} from ` : ''}
-                                    Batch {a.batch_number}
-                                    {a.expiry_date && ` · Exp ${displayDate(new Date(a.expiry_date))}`}
+                                    {a.batch_number}{item.batch_allocations!.length > 1 ? ` (${a.quantity})` : ''}
                                   </div>
-                                ))}
-                              </div>
-                            )}
+                                ))
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {item.batch_allocations?.length
+                              ? item.batch_allocations.map((a) => (
+                                  <div key={a.batch_id}>{a.expiry_date ? displayDate(new Date(a.expiry_date)) : '—'}</div>
+                                ))
+                              : '—'}
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">

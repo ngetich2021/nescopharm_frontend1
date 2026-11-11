@@ -102,6 +102,7 @@ export function UnlinkedLinesTab({ onCount }: { onCount?: (n: number) => void })
                 <TableHead className="w-12">S/No</TableHead>
                 <TableHead>Line (as on the invoice)</TableHead>
                 <TableHead>Invoices</TableHead>
+                <TableHead className="whitespace-nowrap">Invoice Date</TableHead>
                 <TableHead className="w-64">Link to product</TableHead>
                 <TableHead className="w-28" />
               </TableRow>
@@ -109,7 +110,7 @@ export function UnlinkedLinesTab({ onCount }: { onCount?: (n: number) => void })
             <TableBody>
               {groups.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                     {loading ? "Loading…" : "Every invoice line is linked to a product."}
                   </TableCell>
                 </TableRow>
@@ -131,10 +132,14 @@ export function UnlinkedLinesTab({ onCount }: { onCount?: (n: number) => void })
                     {g.lines.slice(0, 4).map((l) => (
                       <div key={l.id}>
                         <Link href={`/sales/invoices/${l.invoice_id}`} className="font-mono hover:underline">{l.invoice_number}</Link>
-                        {" · "}{fmtDate(l.invoice_date)}{l.customer ? ` · ${l.customer}` : ""}
+                        {l.customer ? ` · ${l.customer}` : ""}
                       </div>
                     ))}
                     {g.lines.length > 4 && <div className="text-muted-foreground">and {g.lines.length - 4} more</div>}
+                  </TableCell>
+                  {/* One date per invoice line, level with the invoice beside it. */}
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {g.lines.slice(0, 4).map((l) => <div key={l.id}>{fmtDate(l.invoice_date)}</div>)}
                   </TableCell>
                   <TableCell>
                     <ProductPicker

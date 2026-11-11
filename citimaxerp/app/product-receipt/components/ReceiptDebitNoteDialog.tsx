@@ -144,6 +144,7 @@ export function ReceiptDebitNoteDialog({ receipt, editNoteId, open, onOpenChange
                     <TableHead className="w-12">S/No</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Batch</TableHead>
+                    <TableHead className="whitespace-nowrap">Expiry Date</TableHead>
                     <TableHead className="text-right">Received</TableHead>
                     <TableHead className="text-right">Returned</TableHead>
                     <TableHead className="text-right">Left in Batch</TableHead>
@@ -160,10 +161,8 @@ export function ReceiptDebitNoteDialog({ receipt, editNoteId, open, onOpenChange
                       <TableRow key={l.receipt_item_id}>
                         <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="font-medium">{l.name}</TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {l.batch_number || "—"}
-                          {l.expiry_date && <span className="block text-xs text-muted-foreground">exp {displayDate(new Date(l.expiry_date))}</span>}
-                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{l.batch_number || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap">{l.expiry_date ? displayDate(new Date(l.expiry_date)) : "—"}</TableCell>
                         <TableCell className="text-right">{l.received}</TableCell>
                         <TableCell className="text-right">{l.returned || "—"}</TableCell>
                         <TableCell className="text-right">{l.in_stock}</TableCell>

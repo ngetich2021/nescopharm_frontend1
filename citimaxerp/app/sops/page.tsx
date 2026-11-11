@@ -470,6 +470,7 @@ export default function SopsPage() {
                   <SortHead label="Status" column="status" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
                   <SortHead label="Annexures" column="annexures" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
                   <SortHead label="Comments" column="comments" sortKey={sortKey} sortDir={sortDir} onSort={toggle} />
+                  <TableHead className="font-semibold whitespace-nowrap">Updated</TableHead>
                   <TableHead className="text-right font-semibold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -477,7 +478,7 @@ export default function SopsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                         <span>Loading SOPs...</span>
@@ -486,7 +487,7 @@ export default function SopsPage() {
                   </TableRow>
                 ) : sortedSops.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                       <div className="text-gray-500">
                         <p className="font-semibold">No SOPs found</p>
                         <p className="text-sm">Create your first SOP to get started</p>
@@ -502,10 +503,7 @@ export default function SopsPage() {
                     >
                       <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-primary">{sop.title}</p>
-                          <p className="text-xs text-gray-500">Updated {displayDate(sop.updated_at)}</p>
-                        </div>
+                        <p className="text-sm font-semibold text-primary">{sop.title}</p>
                       </TableCell>
                       <TableCell>{sop.year}</TableCell>
                       <TableCell>
@@ -515,6 +513,7 @@ export default function SopsPage() {
                       </TableCell>
                       <TableCell>{sop.annexures_count ?? "-"}</TableCell>
                       <TableCell>{sop.comments_count ?? "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{displayDate(sop.updated_at)}</TableCell>
                       <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
                         <ActionsDropdown sop={sop} />
                       </TableCell>
