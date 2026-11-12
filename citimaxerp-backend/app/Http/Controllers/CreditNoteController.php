@@ -512,13 +512,23 @@ class CreditNoteController extends Controller
             ->whereHas('role', fn ($r) => $r->whereRaw("LOWER(TRIM(name)) IN ({$placeholders})", self::APPROVER_ROLES));
     }
 
+    /** At least 2 GM/Accountants besides this person, so they need not approve their own credit note. */
+    private function enoughOtherApprovers(string $companyId, ?string $userId): bool
+    {
+        return $this->approverQuery($companyId)->when($userId, fn ($q) => $q->where('id', '!=', $userId))->count() >= 2;
+    }
+
     /** People who can be picked as approvers: the GM and Accountants, other than the one asking. */
     public function approverOptions(Request $request): JsonResponse
     {
         $user = $request->user();
 
+        // Normally never the person raising it; only when fewer than 2 others hold the roles may
+        // they approve their own (e.g. one Accountant was promoted: the other Accountant + the GM).
+        $includeSelf = !$this->enoughOtherApprovers($user->company_id, $user->id);
+
         $users = $this->approverQuery($user->company_id)
-            ->where('id', '!=', $user->id)
+            ->when(!$includeSelf, fn ($q) => $q->where('id', '!=', $user->id))
             ->with('role:id,name')
             ->orderBy('first_name')->orderBy('last_name')
             ->get(['id', 'first_name', 'last_name', 'email', 'role_id'])
@@ -526,6 +536,7 @@ class CreditNoteController extends Controller
                 'id' => $u->id,
                 'name' => trim("{$u->first_name} {$u->last_name}") ?: $u->email,
                 'role' => $u->role?->name,
+                'is_you' => $u->id === $user->id,
             ]);
 
         return response()->json(['data' => $users]);
@@ -694,7 +705,7 @@ class CreditNoteController extends Controller
     private function approverProblem(CreditNote $creditNote, array $ids, ?string $creatorId = null): ?string
     {
         $creatorId ??= $creditNote->created_by;
-        if (in_array($creatorId, $ids, true)) {
+        if (in_array($creatorId, $ids, true) && $this->enoughOtherApprovers($creditNote->company_id, $creatorId)) {
             return 'Whoever raised the credit note cannot approve it: choose 2 other people.';
         }
         $found = $this->approverQuery($creditNote->company_id)->whereIn('id', $ids)->count();

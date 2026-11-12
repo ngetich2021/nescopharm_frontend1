@@ -29,7 +29,9 @@ export function ApproverPicker({
       .finally(() => setLoading(false))
   }, [])
 
-  const label = (o: ApproverOption) => (o.role ? `${o.name} (${o.role})` : o.name)
+  const label = (o: ApproverOption) =>
+    (o.role ? `${o.name} (${o.role})` : o.name) + (o.is_you ? " - you" : "")
+  const selfListed = options.some((o) => o.is_you)
 
   return (
     <div className="space-y-3">
@@ -69,9 +71,13 @@ export function ApproverPicker({
         <p className="text-sm text-destructive">{error}</p>
       ) : !loading && options.length < 2 ? (
         <p className="text-sm text-destructive">
-          {options.length === 0 ? "There is no one" : "There is only 1 person"} with the GM or Accountant role you can
-          choose (you cannot approve your own credit note), so it cannot be sent for approval. Ask an admin to give the
-          role to someone under Users &amp; Roles, or have someone else raise it.
+          {options.length === 0 ? "There is no one" : "There is only 1 person"} with the GM or Accountant role to
+          choose, so it cannot be sent for approval. Ask an admin to give the role to someone under Users &amp; Roles.
+        </p>
+      ) : selfListed ? (
+        <p className="text-xs text-amber-700">
+          Fewer than 2 other GM/Accountants are available, so you may be one of the 2 approvers yourself. Both must
+          still approve it, each with a comment, before it is credited.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">

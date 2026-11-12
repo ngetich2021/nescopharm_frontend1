@@ -141,6 +141,8 @@ export interface ApproverOption {
     id: string
     name: string
     role?: string | null
+    /** Listed only when fewer than 2 other GM/Accountants are available to approve. */
+    is_you?: boolean
 }
 
 export function approverName(approval: CreditNoteApproval): string {
