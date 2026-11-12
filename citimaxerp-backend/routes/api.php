@@ -108,6 +108,9 @@ Route::get('/system/health', function () {
     }
 });
 
+// Called every minute by the Cloudflare Worker (cloudflare/scheduler-worker.js) to run the schedule.
+Route::post('/system/cron', App\Http\Controllers\SchedulerTickController::class)->middleware('throttle:10,1');
+
 // Company branding assets (logo/letterhead), served with CORS headers so they can
 // load into <img crossorigin> for PDF export. This must be an actual route (not a
 // static public/ file) because php artisan serve serves existing public/ files
