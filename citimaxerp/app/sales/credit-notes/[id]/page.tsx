@@ -201,7 +201,8 @@ export default function CreditNoteDetailPage() {
     creditNote?.status === "draft" &&
     parseCreditNoteAmount(creditNote.total_amount) > 0 &&
     (approvalStatus === null || approvalStatus === "approved")
-  const canResend = creditNote?.status === "draft" && approvalStatus === "rejected"
+  // After a rejection, or while waiting (e.g. an approver changed role or is away): pick the 2 again.
+  const canResend = creditNote?.status === "draft" && (approvalStatus === "rejected" || approvalStatus === "pending")
   const canApply = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canRefund = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canVoid = (creditNote?.status === "draft" || creditNote?.status === "issued") && consumedAmount <= 0
@@ -667,13 +668,14 @@ export default function CreditNoteDetailPage() {
 
                 {canResend && (
                   <Button
+                    variant={approvalStatus === "pending" ? "outline" : "default"}
                     onClick={() => {
                       const ids = approvals.map((a) => a.approver_id)
                       setResendApprovers([ids[0] || "", ids[1] || ""])
                       setIsResendOpen(true)
                     }}
                   >
-                    Send for Approval Again
+                    {approvalStatus === "pending" ? "Change Approvers" : "Send for Approval Again"}
                   </Button>
                 )}
 
@@ -825,9 +827,9 @@ export default function CreditNoteDetailPage() {
       <Dialog open={isResendOpen} onOpenChange={setIsResendOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Send for Approval Again</DialogTitle>
+            <DialogTitle>{approvalStatus === "pending" ? "Change Approvers" : "Send for Approval Again"}</DialogTitle>
             <DialogDescription>
-              Both people must approve it again; the earlier decisions are cleared.
+              Both people must approve it again; any decision already given is cleared.
             </DialogDescription>
           </DialogHeader>
           <ApproverPicker value={resendApprovers} onChange={setResendApprovers} disabled={isResending} />

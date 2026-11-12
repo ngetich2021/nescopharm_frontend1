@@ -585,6 +585,13 @@ class CreditNoteController extends Controller
         if (!$approval) {
             return response()->json(['message' => 'You are not one of the approvers still to decide on this credit note.'], 403);
         }
+        // Picked while GM / Accountant but moved to another role since: the creator picks someone else.
+        if (!$this->approverQuery($user->company_id)->whereKey($user->id)->exists()) {
+            return response()->json([
+                'message' => 'Only the GM or an Accountant can approve credit notes, and you no longer hold either role. '
+                    . 'Whoever raised it should use "Change Approvers".',
+            ], 403);
+        }
 
         $approve = $request->decision === 'approve';
         $comment = trim($request->comment);

@@ -67,6 +67,12 @@ export function ApproverPicker({
       </div>
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
+      ) : !loading && options.length < 2 ? (
+        <p className="text-sm text-destructive">
+          {options.length === 0 ? "There is no one" : "There is only 1 person"} with the GM or Accountant role you can
+          choose (you cannot approve your own credit note), so it cannot be sent for approval. Ask an admin to give the
+          role to someone under Users &amp; Roles, or have someone else raise it.
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground">
           Choose from the GM and the Accountants. Both must approve it, each with a comment (e.g. &quot;Products in good shape&quot;), before the customer is
