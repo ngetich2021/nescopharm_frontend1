@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ApproverOption, fetchApproverOptions } from "@/lib/credit-notes"
 
 /**
- * The 2 people who must approve a credit note before it is credited. Lists active users other than
- * the one creating it; the same person cannot be picked twice.
+ * The 2 people who must approve a credit note before it is credited: chosen from the GM and the
+ * Accountants (never the one creating it); the same person cannot be picked twice.
  */
 export function ApproverPicker({
   value,
@@ -69,7 +69,7 @@ export function ApproverPicker({
         <p className="text-sm text-destructive">{error}</p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Both must approve it, each with a comment (e.g. &quot;Products in good shape&quot;), before the customer is
+          Choose from the GM and the Accountants. Both must approve it, each with a comment (e.g. &quot;Products in good shape&quot;), before the customer is
           credited and the stock goes back. If either rejects it, it is not credited.
         </p>
       )}

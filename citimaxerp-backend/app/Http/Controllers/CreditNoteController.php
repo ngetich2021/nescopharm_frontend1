@@ -499,15 +499,26 @@ class CreditNoteController extends Controller
     // before the credit note is credited. Either rejecting stops it.
     // -------------------------------------------------------------------------
 
-    /** People who can be picked as approvers: active users of the company other than the one asking. */
+    /** Only the GM and Accountants approve credit notes. */
+    public const APPROVER_ROLES = ['gm', 'general manager', 'accountant', 'accountants'];
+
+    /** Active GM / Accountant users of the company, never the person raising the credit note. */
+    private function approverQuery(string $companyId)
+    {
+        $placeholders = implode(',', array_fill(0, count(self::APPROVER_ROLES), '?'));
+        return \App\Models\User::where('company_id', $companyId)
+            ->whereRaw('users.is_active = true')
+            ->whereNull('terminated_at')
+            ->whereHas('role', fn ($r) => $r->whereRaw("LOWER(TRIM(name)) IN ({$placeholders})", self::APPROVER_ROLES));
+    }
+
+    /** People who can be picked as approvers: the GM and Accountants, other than the one asking. */
     public function approverOptions(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $users = \App\Models\User::where('company_id', $user->company_id)
+        $users = $this->approverQuery($user->company_id)
             ->where('id', '!=', $user->id)
-            ->whereRaw('users.is_active = true')
-            ->whereNull('terminated_at')
             ->with('role:id,name')
             ->orderBy('first_name')->orderBy('last_name')
             ->get(['id', 'first_name', 'last_name', 'email', 'role_id'])
@@ -679,13 +690,9 @@ class CreditNoteController extends Controller
         if (in_array($creatorId, $ids, true)) {
             return 'Whoever raised the credit note cannot approve it: choose 2 other people.';
         }
-        $found = \App\Models\User::where('company_id', $creditNote->company_id)
-            ->whereIn('id', $ids)
-            ->whereRaw('users.is_active = true')
-            ->whereNull('terminated_at')
-            ->count();
+        $found = $this->approverQuery($creditNote->company_id)->whereIn('id', $ids)->count();
 
-        return $found === 2 ? null : 'Both approvers must be active users of this company.';
+        return $found === 2 ? null : 'Both approvers must be the GM or Accountants.';
     }
 
     /** (Re)start approval with these two people: earlier decisions are cleared. Call inside a transaction. */
