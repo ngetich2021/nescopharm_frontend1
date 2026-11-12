@@ -557,12 +557,6 @@ export default function NewCreditNotePage() {
               />
             </div>
 
-            {!needsApprovers && (
-              <p className="md:col-span-2 text-xs text-muted-foreground">
-                Dated before 12/11/2026, so no approvers are needed: after saving, click Issue on it to credit it.
-              </p>
-            )}
-
             {needsApprovers && (
               <div className="space-y-2 md:col-span-2 rounded-lg border p-4">
                 <p className="font-medium">Approvers</p>
