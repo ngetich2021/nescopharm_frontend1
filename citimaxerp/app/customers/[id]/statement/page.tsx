@@ -85,7 +85,8 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const [dateFrom, setDateFrom] = useState(firstOfMonthString())
   const [dateTo, setDateTo] = useState(lastOfMonthString())
   // Optional sections: left off the statement (screen, print, PDF and CSV) unless ticked.
-  const [include, setInclude] = useState({ outstanding: false, orders: false, pdCheques: false })
+  // pendingOnly: the statement is just the bills still owed (section 1), nothing else - easy for a customer to read.
+  const [include, setInclude] = useState({ pendingOnly: false, outstanding: false, orders: false, pdCheques: false })
 
   const loadStatement = async (from = dateFrom, to = dateTo) => {
     if (from && to && from > to) {
@@ -163,10 +164,14 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   // Only when something is due: a customer with no unpaid invoices has no ageing section at all.
   const ageing = statement.ageing?.rows.length ? statement.ageing : null
   const ageingBase = ageing ? ageing.buckets.reduce((s, b) => s + b.amount, 0) : 0
-  const pendingBills = include.outstanding ? statement.pending_bills ?? [] : []
+  const pendingOnly = include.pendingOnly
+  // Every bill still owed (bounced-cheque debits too), after credit notes and receipts - the ageing rows.
+  const owedBills = statement.ageing?.rows ?? []
+  const owedTotal = owedBills.reduce((s, r) => s + r.amount, 0)
+  const pendingBills = include.outstanding && !pendingOnly ? statement.pending_bills ?? [] : []
   const pendingTotal = pendingBills.reduce((sum, bill) => sum + toNumber(bill.pending_amount), 0)
-  const pdCheques = include.pdCheques ? statement.pd_cheques ?? [] : []
-  const orders = include.orders ? statement.orders ?? [] : []
+  const pdCheques = include.pdCheques && !pendingOnly ? statement.pd_cheques ?? [] : []
+  const orders = include.orders && !pendingOnly ? statement.orders ?? [] : []
   const liveOrders = orders.filter((o) => o.status !== "cancelled")
   const ordersTotal = liveOrders.reduce((s, o) => s + toNumber(o.total), 0)
   const ordersPaid = liveOrders.reduce((s, o) => s + toNumber(o.paid), 0)
@@ -175,7 +180,9 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const hasPaymentDetails = !!paymentDetails && Object.values(paymentDetails).some((v) => !!v)
   const closing = toNumber(statement.closing_balance)
   const statementDate = formatDate(statement.period.to)
-  const fileBase = documentFileName([customerName, `Account Statement ${filePeriod(statement.period.from, statement.period.to)}`])
+  const fileBase = pendingOnly
+    ? documentFileName([customerName, `Pending Bills ${statementDate.replace(/\//g, "-")}`])
+    : documentFileName([customerName, `Account Statement ${filePeriod(statement.period.from, statement.period.to)}`])
 
   const handleDownloadCSV = () => {
     const rows: (string | number | null | undefined)[][] = []
@@ -186,6 +193,19 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     rows.push(["Statement Date", statementDate])
     rows.push([])
 
+    if (pendingOnly) {
+      rows.push(["1. PENDING BILLS"])
+      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Invoice Amount (KES)", "Balance Due (KES)", "Days Overdue"])
+      owedBills.forEach((r, i) => {
+        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.invoice_amount != null ? r.invoice_amount.toFixed(2) : "", r.amount.toFixed(2), r.overdue_days || ""])
+      })
+      rows.push(["", "Total", "", "", "", owedTotal.toFixed(2), ""])
+      if (statement.ageing && statement.ageing.unallocated !== 0) rows.push(["", "Unallocated payments / credits", "", "", "", statement.ageing.unallocated.toFixed(2), ""])
+      rows.push(["", "Total Outstanding", "", "", "", closing.toFixed(2), ""])
+      rows.push([])
+    }
+
+    if (!pendingOnly) {
     rows.push(["1. TRANSACTION STATEMENT"])
     rows.push(["Date", "Reference", "Description", "Debit (KES)", "Credit (KES)", "Balance (KES)"])
     for (const t of transactions) {
@@ -214,6 +234,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
       if (ageing.credit_notes > 0) rows.push(["", "Credit notes already taken off the above", "", "", "", ...ageing.buckets.map(() => ""), ageing.credit_notes.toFixed(2)])
       rows.push(["", "Total Outstanding", "", "", "", ...ageing.buckets.map(() => ""), ageing.total.toFixed(2)])
       rows.push([])
+    }
     }
 
     if (pendingBills.length > 0) {
@@ -308,6 +329,31 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const handleDownload = async (format: ExportFormat) => {
     if (format === "pdf") return handleDownloadPDF()
     if (format === "csv") return handleDownloadCSV()
+    if (pendingOnly) {
+      await exportTable("xlsx", {
+        fileName: documentFileName([customerName, `Pending Bills ${statementDate.replace(/\//g, "-")}`]),
+        title: "Pending Bills",
+        subtitle: `As at ${statementDate}`,
+        details: [
+          ["Customer", customerName],
+          ["Account No.", account?.account_number ?? "-"],
+          ["Total outstanding", `KES ${closing.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+        ],
+        headers: ["S/No", "Invoice No.", "Invoice Date", "Due Date", "Invoice Amount", "Balance Due", "Days Overdue"],
+        moneyColumns: [4, 5],
+        rows: owedBills.map((r, i) => [
+          i + 1,
+          r.invoice_number,
+          formatDate(r.invoice_date),
+          formatDate(r.due_date),
+          r.invoice_amount ?? null,
+          r.amount,
+          r.overdue_days || null,
+        ]),
+        footer: [["", "Total", "", "", "", owedTotal, ""]],
+      }, company)
+      return
+    }
     await exportTable("xlsx", {
       fileName: fileBase,
       title: "Statement of Account",
@@ -374,18 +420,27 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
               <span className="text-xs text-muted-foreground">Include:</span>
               {([
+                ["pendingOnly", "Pending Bills Only"],
                 ["outstanding", "Outstanding Invoices"],
                 ["orders", "Orders in this Period"],
                 ["pdCheques", "Post-Dated Cheques Held"],
-              ] as const).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-1.5 cursor-pointer">
-                  <Checkbox
-                    checked={include[key]}
-                    onCheckedChange={(v) => setInclude((s) => ({ ...s, [key]: v === true }))}
-                  />
-                  {label}
-                </label>
-              ))}
+              ] as const).map(([key, label]) => {
+                // With "Pending Bills Only" ticked the statement is just those bills, so the rest is off.
+                const off = key !== "pendingOnly" && pendingOnly
+                return (
+                  <label
+                    key={key}
+                    className={`flex items-center gap-1.5 ${off ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${key === "pendingOnly" ? "font-semibold" : ""}`}
+                  >
+                    <Checkbox
+                      checked={include[key]}
+                      disabled={off}
+                      onCheckedChange={(v) => setInclude((s) => ({ ...s, [key]: v === true }))}
+                    />
+                    {label}
+                  </label>
+                )
+              })}
             </div>
 
             <div className="flex gap-2">
@@ -487,7 +542,68 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             </div>
           </div>
 
+          {/* Pending Bills Only: just what is still owed, bill by bill */}
+          {pendingOnly && (
+            <section className="mb-8 print:mb-3">
+              <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">1. Pending Bills</h2>
+              <p className="text-xs text-gray-500 mb-2">
+                Every bill not yet fully paid as at {statementDate}, oldest first, after payments and credit notes.
+              </p>
+              {owedBills.length === 0 ? (
+                <p className="text-sm italic text-gray-600">There are no pending bills: nothing is owed.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className={TABLE}>
+                    <thead>
+                      <tr>
+                        <th className={`${TH} w-12`}>S/No</th>
+                        <th className={TH}>Invoice No.</th>
+                        <th className={`${TH} w-24`}>Invoice Date</th>
+                        <th className={`${TH} w-24`}>Due Date</th>
+                        <th className={`${TH} text-right w-32`}>Invoice Amount (KES)</th>
+                        <th className={`${TH} text-right w-32`}>Balance Due (KES)</th>
+                        <th className={`${TH} text-right w-24`}>Days Overdue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {owedBills.map((r, i) => (
+                        <tr key={r.invoice_id}>
+                          <td className={TD}>{i + 1}</td>
+                          <td className={TD}>{r.invoice_number}</td>
+                          <td className={TD}>{formatDate(r.invoice_date)}</td>
+                          <td className={TD}>{formatDate(r.due_date)}</td>
+                          <td className={`${TD} text-right`}>{r.invoice_amount != null ? formatAmount(r.invoice_amount) : "—"}</td>
+                          <td className={`${TD} text-right font-medium`}>{formatAmount(r.amount)}</td>
+                          <td className={`${TD} text-right ${r.overdue_days > 0 ? "text-red-700 font-semibold" : ""}`}>
+                            {r.overdue_days > 0 ? r.overdue_days : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                      {statement.ageing && statement.ageing.unallocated !== 0 && (
+                        <tr>
+                          <td className={`${TD} italic text-gray-600`} colSpan={5}>
+                            {statement.ageing.unallocated < 0 ? "Less: payments / credits not yet set against a bill" : "Add: other balance"}
+                          </td>
+                          <td className={`${TD} text-right`}>{formatAmount(statement.ageing.unallocated)}</td>
+                          <td className={TD}></td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="font-bold">
+                        <td colSpan={5} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">Total Outstanding</td>
+                        <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(closing)}</td>
+                        <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
           {/* 1. Transaction Statement */}
+          {!pendingOnly && (
           <section className="mb-8 print:mb-3">
             <h2 className="text-base print:text-[11px] font-bold mb-2 print:mb-1">1. Transaction Statement</h2>
             <div className="overflow-x-auto">
@@ -532,9 +648,10 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             )}
             <p className="mt-4 print:mt-1 text-base print:text-[11px] font-bold">Total Outstanding: KES {formatAmount(closing)}</p>
           </section>
+          )}
 
           {/* 2. Ageing */}
-          {ageing && (
+          {ageing && !pendingOnly && (
             <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
               <p className="text-xs text-gray-500 mb-2">

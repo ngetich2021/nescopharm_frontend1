@@ -88,6 +88,8 @@ export interface StatementAgeing {
     overdue_days: number
     bucket: number
     amount: number
+    /** The bill as raised (amount above is what is still owed on it). */
+    invoice_amount?: number
   }[]
   // Credit notes already taken off the amounts above.
   credit_notes: number

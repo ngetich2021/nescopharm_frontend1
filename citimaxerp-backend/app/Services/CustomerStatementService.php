@@ -451,6 +451,8 @@ class CustomerStatementService
                 'overdue_days' => $overdueDays,
                 'bucket' => $index,
                 'amount' => $left,
+                // The bill as raised, for the statement's "Pending Bills Only" view (Invoice Amount vs Balance Due).
+                'invoice_amount' => round((float) $inv->total_amount, 2),
             ];
         }
 
