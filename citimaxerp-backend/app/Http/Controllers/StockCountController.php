@@ -230,6 +230,18 @@ class StockCountController extends Controller
                 ], 404);
             }
 
+            // Each batch line shows its batch's manufacturing date as the batch has it now (lines of
+            // counts made before the date was carried onto them, or dates added since, have none).
+            $batchIds = $stockCount->items->whereNull('manufacture_date')->pluck('batch_id')->filter()->unique()->values();
+            if ($batchIds->isNotEmpty()) {
+                $made = \App\Models\InventoryBatch::whereIn('id', $batchIds)->whereNotNull('manufacture_date')->pluck('manufacture_date', 'id');
+                foreach ($stockCount->items as $line) {
+                    if (!$line->manufacture_date && $line->batch_id && isset($made[$line->batch_id])) {
+                        $line->manufacture_date = $made[$line->batch_id];
+                    }
+                }
+            }
+
             // Calculate metrics from items
             $totalProducts = $stockCount->items->count();
             $productsCounted = $stockCount->items->where('is_counted', true)->count();
