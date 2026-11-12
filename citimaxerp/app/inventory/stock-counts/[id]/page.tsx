@@ -411,6 +411,7 @@ export default function StockCountDetailsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-14">S/No</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Batch</TableHead>
                     <TableHead>Expiry</TableHead>
@@ -423,13 +424,14 @@ export default function StockCountDetailsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredItems.map((item) => {
-                    const variance = item.counted_quantity !== null 
-                      ? item.counted_quantity - item.expected_quantity 
+                  {filteredItems.map((item, index) => {
+                    const variance = item.counted_quantity !== null
+                      ? item.counted_quantity - item.expected_quantity
                       : null
-                    
+
                     return (
                       <TableRow key={item.id}>
+                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
                         <TableCell className="font-medium">
                           {item.product_name}
                           {item.is_new_batch && (
