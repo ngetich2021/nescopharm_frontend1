@@ -40,6 +40,7 @@ import {
 import type { StockCount, StockCountItem } from "@/app/types"
 import { format } from "date-fns"
 import { ExportMenu } from "@/components/export-menu"
+import { TablePager, usePaged } from "@/components/ui/table-pager"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { useOptionalAuth } from "@/lib/auth-context"
 import { documentFileName } from "@/lib/document-names"
@@ -223,6 +224,16 @@ export default function StockCountDetailsPage() {
     }
   }
 
+  // Search: every word typed, in any order, ignoring spaces and marks - "syringe 20ml" finds
+  // "Disposable Syringes Without Needles 20ml"; batch numbers and SKUs match too.
+  const loose = (v: string) => v.toLowerCase().replace(/[^a-z0-9.]/g, "")
+  const words = searchQuery.toLowerCase().split(/\s+/).map(loose).filter(Boolean)
+  const filteredItems = words.length === 0 ? items : items.filter((item) => {
+    const text = loose(`${item.product_name} ${item.batch_number ?? ""} ${item.product_sku ?? ""}`)
+    return words.every((w) => text.includes(w))
+  })
+  const paged = usePaged(filteredItems, 20, searchQuery)
+
   if (loading) {
     return (
       <PermissionGuard permissions={["can_view_stock_counts_menu"]}>
@@ -241,12 +252,6 @@ export default function StockCountDetailsPage() {
   const canComplete = stockCount.status === "in_progress"
   const canApprove = stockCount.status === "completed"
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.batch_number ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.product_sku && item.product_sku.toLowerCase().includes(searchQuery.toLowerCase()))
-  )
 
   // Export the lines shown (following the search) for tracking: Excel / PDF / CSV, logo-headed.
   const handleExport = async (fmt: ExportFormat) => {
@@ -477,14 +482,14 @@ export default function StockCountDetailsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredItems.map((item, index) => {
+                  {paged.pageRows.map((item, index) => {
                     const variance = item.counted_quantity !== null
                       ? item.counted_quantity - item.expected_quantity
                       : null
 
                     return (
                       <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                        <TableCell className="text-muted-foreground">{paged.start + index + 1}</TableCell>
                         <TableCell className="font-medium">
                           {item.product_name}
                           {item.is_new_batch && (
@@ -547,6 +552,7 @@ export default function StockCountDetailsPage() {
                 </TableBody>
               </Table>
             </div>
+            <TablePager {...paged.pager} />
           </CardContent>
         </Card>
       </div>
