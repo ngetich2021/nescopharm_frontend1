@@ -184,6 +184,12 @@ class StockCountController extends Controller
                             'stock_count_id',
                             'product_id',
                             'variant_id',
+                            // Which batch each line counts - without these, saving the count from
+                            // its page dropped every line's batch.
+                            'batch_id',
+                            'batch_number',
+                            'expiry_date',
+                            'is_new_batch',
                             'product_name',
                             'product_sku',
                             'product_category',
@@ -454,8 +460,9 @@ class StockCountController extends Controller
                         'unit_cost' => $item['unit_cost'] ?? $unitCost,
                         'expected_quantity' => $item['expected_quantity'],
                         'counted_quantity' => $item['counted_quantity'] ?? null,
-                        'counted_by' => ($item['counted_quantity'] ?? null) ? $user->email : null,
-                        'counted_at' => ($item['counted_quantity'] ?? null) ? $now : null,
+                        // A count of 0 is a count (an empty batch): only "not counted yet" leaves these empty.
+                        'counted_by' => !is_null($item['counted_quantity'] ?? null) ? $user->email : null,
+                        'counted_at' => !is_null($item['counted_quantity'] ?? null) ? $now : null,
                         'notes' => $item['notes'] ?? null,
                         // Raw bulk insert() bypasses StockCountItem's boolean mutators, which
                         // normally convert to the 'true'/'false' strings this Postgres boolean
@@ -684,25 +691,34 @@ class StockCountController extends Controller
                             'unit_cost' => $unitCost,
                             'expected_quantity' => $item['expected_quantity'],
                             'counted_quantity' => $item['counted_quantity'] ?? null,
-                            'counted_by' => ($item['counted_quantity'] ?? null) ? $user->email : null,
-                            'counted_at' => ($item['counted_quantity'] ?? null) ? now() : null,
+                            // A count of 0 is a count (an empty batch): only "not counted yet" leaves these empty.
+                            'counted_by' => !is_null($item['counted_quantity'] ?? null) ? $user->email : null,
+                            'counted_at' => !is_null($item['counted_quantity'] ?? null) ? now() : null,
                             'notes' => $item['notes'] ?? null,
                             // String 'true'/'false' (not raw PHP bool) so this works whether it
                             // goes through Eloquent's update() (mutator accepts either form) or
                             // the raw bulk insert() below (which bypasses mutators entirely and
                             // needs the exact form this Postgres boolean column accepts).
-                            'is_counted' => !is_null($item['counted_quantity']) ? 'true' : 'false',
+                            'is_counted' => !is_null($item['counted_quantity'] ?? null) ? 'true' : 'false',
                             'requires_recount' => ($item['requires_recount'] ?? false) ? 'true' : 'false',
                         ];
 
                         if (isset($item['id']) && $existingItemsById->has($item['id'])) {
-                            $existingItemsById->get($item['id'])->update($itemData);
+                            $existing = $existingItemsById->get($item['id']);
+                            // Same count as before: keep who counted it and when, so an unchanged
+                            // line is not rewritten (saving 800 lines rewrote all 800 every time).
+                            if (!is_null($existing->counted_quantity) && !is_null($item['counted_quantity'] ?? null)
+                                && (int) $existing->counted_quantity === (int) $item['counted_quantity']) {
+                                $itemData['counted_by'] = $existing->counted_by;
+                                $itemData['counted_at'] = $existing->counted_at;
+                            }
+                            $existing->update($itemData);
                             $existingItemIds[] = $item['id'];
                         } else {
                             $newId = (string) Str::uuid();
                             $newRows[] = array_merge($itemData, [
                                 'id' => $newId,
-                                'counted_at' => $item['counted_quantity'] ? $now : null,
+                                'counted_at' => !is_null($item['counted_quantity'] ?? null) ? $now : null,
                                 'created_at' => $now,
                                 'updated_at' => $now,
                             ]);

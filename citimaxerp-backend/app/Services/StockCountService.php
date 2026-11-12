@@ -42,23 +42,51 @@ class StockCountService
      */
     public function batchLines(string $companyId, ?string $storeId, array $items): array
     {
+        // Every batch holding stock for these products in one query (one per product was 800
+        // round trips for a full count, minutes against the remote database).
+        $productIds = array_values(array_unique(array_column($items, 'product_id')));
+        $all = $productIds
+            ? InventoryBatch::where('company_id', $companyId)
+                ->whereIn('product_id', $productIds)
+                ->where('quantity_available', '>', 0)
+                ->orderByRaw('expiry_date asc nulls last')->orderBy('received_date')
+                ->get()
+            : collect();
+        $byKey = $all->groupBy(fn ($b) => $b->product_id . '|' . ($b->variant_id ?? ''));
+
+        $line = fn (array $item, $b) => array_merge($item, [
+            'batch_id' => $b->id,
+            'batch_number' => $b->batch_number,
+            'expiry_date' => optional($b->expiry_date)->toDateString(),
+            'expected_quantity' => (int) $b->quantity_available,
+            'unit_cost' => $b->unit_cost,
+        ]);
+
         $lines = [];
+        $sizedProducts = [];
         foreach ($items as $item) {
-            $batches = $this->batchesFor($companyId, $storeId, $item['product_id'], $item['variant_id'] ?? null);
+            $variantId = $item['variant_id'] ?? null;
+            if ($variantId) {
+                $sizedProducts[$item['product_id']] = $item;
+            }
+            $batches = $byKey->get($item['product_id'] . '|' . ($variantId ?? ''), collect());
             if ($batches->isEmpty()) {
-                $lines[] = $item + ['batch_id' => null, 'batch_number' => null, 'expiry_date' => null, 'expected_quantity' => 0];
+                $lines[] = array_merge($item, ['batch_id' => null, 'batch_number' => null, 'expiry_date' => null, 'expected_quantity' => 0]);
                 continue;
             }
             foreach ($batches as $b) {
-                $lines[] = array_merge($item, [
-                    'batch_id' => $b->id,
-                    'batch_number' => $b->batch_number,
-                    'expiry_date' => optional($b->expiry_date)->toDateString(),
-                    'expected_quantity' => (int) $b->quantity_available,
-                    'unit_cost' => $b->unit_cost,
-                ]);
+                $lines[] = $line($item, $b);
             }
         }
+
+        // A product counted by size can still hold a batch recorded without a size: list it too,
+        // on its own line, so no stock is left out of the count.
+        foreach ($sizedProducts as $productId => $item) {
+            foreach ($byKey->get($productId . '|', collect()) as $b) {
+                $lines[] = $line(array_merge($item, ['variant_id' => null]), $b);
+            }
+        }
+
         return $lines;
     }
 
@@ -82,13 +110,15 @@ class StockCountService
         $touched = [];      // product_id|variant_id => true, to refresh their stock totals
         $targets = [];      // batch id => ['batch' => InventoryBatch, 'qty' => counted total]
         $newBatches = [];   // product|variant|batch number => ['items' => [...], 'qty' => n]
+        // The counted batches in one query, not one per line.
+        $batchesById = InventoryBatch::whereIn('id', $items->pluck('batch_id')->filter()->unique()->values())->get()->keyBy('id');
 
         foreach ($items as $item) {
             $key = $item->product_id . '|' . ($item->variant_id ?? '');
             $number = trim((string) $item->batch_number);
 
             if ($item->batch_id) {
-                $batch = InventoryBatch::find($item->batch_id);
+                $batch = $batchesById->get($item->batch_id);
                 if ($batch) {
                     $targets[$batch->id] ??= ['batch' => $batch, 'qty' => 0];
                     $targets[$batch->id]['qty'] += (int) $item->counted_quantity;
