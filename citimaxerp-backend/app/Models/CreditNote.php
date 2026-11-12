@@ -57,6 +57,7 @@ class CreditNote extends Model
         'etims_receipt_date',
         'etims_receipt_time',
         'etims_internal_data',
+        'approval_status',
     ];
 
     protected $casts = [
@@ -154,6 +155,12 @@ class CreditNote extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** The two people who must approve it (with comments) before it is credited. */
+    public function approvals()
+    {
+        return $this->hasMany(CreditNoteApproval::class)->orderBy('position');
     }
 
     public function lineItems()

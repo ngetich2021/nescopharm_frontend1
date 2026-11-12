@@ -1080,6 +1080,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('credit-notes/by-invoice/{invoiceId}', [CreditNoteController::class, 'getByInvoice']);
     Route::get('credit-notes/customers/{customerId}/unapplied-credits', [CreditNoteController::class, 'getCustomerUnappliedCredits']);
     Route::get('credit-notes/{id}/document', [CreditNoteController::class, 'document']);
+    Route::get('credit-notes/approver-options', [CreditNoteController::class, 'approverOptions']);
+    Route::post('credit-notes/{id}/submit-approval', [CreditNoteController::class, 'submitForApproval']);
+    Route::post('credit-notes/{id}/decide', [CreditNoteController::class, 'decideApproval']);
     Route::post('credit-notes/{id}/issue', [CreditNoteController::class, 'issueCredit']);
     Route::post('credit-notes/{id}/apply', [CreditNoteController::class, 'applyToInvoice']);
     Route::post('credit-notes/{id}/refund', [CreditNoteController::class, 'refundCredit']);

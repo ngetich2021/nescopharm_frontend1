@@ -29,6 +29,7 @@ import {
 import { fetchInvoiceById, fetchInvoices, Invoice } from "@/lib/invoices"
 import { formatCurrency } from "@/lib/utils"
 import { ArrowLeft, Check, ChevronsUpDown, Loader2, Plus, Trash2 } from "lucide-react"
+import { ApproverPicker } from "../approver-picker"
 
 interface EditableLineItem {
   // Kept from the invoice line so issuing the note puts the goods back in stock.
@@ -119,6 +120,10 @@ export default function NewCreditNotePage() {
   const [currency, setCurrency] = useState("KES")
   const [notes, setNotes] = useState("")
   const [lineItems, setLineItems] = useState<EditableLineItem[]>([buildEmptyLineItem()])
+  // The 2 people who must approve it before it is credited. A credit note from before approvals
+  // began (12/11/2026) is edited without them.
+  const [approverIds, setApproverIds] = useState<[string, string]>(["", ""])
+  const [needsApprovers, setNeedsApprovers] = useState(true)
 
   const selectedInvoice = useMemo(
     () => invoices.find((invoice) => invoice.id === selectedInvoiceId) || null,
@@ -177,6 +182,10 @@ export default function NewCreditNotePage() {
       setReason(creditNote.reason || "")
       setCurrency(creditNote.currency || "KES")
       setNotes(creditNote.notes || "")
+
+      const existing = (creditNote.approvals || []).map((a) => a.approver_id)
+      setNeedsApprovers(Boolean(creditNote.approval_status))
+      setApproverIds([existing[0] || "", existing[1] || ""])
 
       const mappedLineItems: EditableLineItem[] =
         creditNote.line_items?.map((lineItem) => ({
@@ -321,6 +330,15 @@ export default function NewCreditNotePage() {
       return
     }
 
+    if (needsApprovers && (!approverIds[0] || !approverIds[1])) {
+      toast({
+        title: "Approvers Required",
+        description: "Choose the 2 people who will approve this credit note.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setIsSubmitting(true)
 
@@ -332,11 +350,14 @@ export default function NewCreditNotePage() {
           currency: currency || "KES",
           notes: notes.trim() || undefined,
           line_items: normalizedLineItems,
+          ...(needsApprovers ? { approver_ids: approverIds } : {}),
         })
 
         toast({
           title: "Success",
-          description: "Credit note updated successfully.",
+          description: needsApprovers
+            ? "Credit note updated and sent to both approvers again. It is credited once both approve it."
+            : "Credit note updated successfully.",
         })
 
         router.push(`/sales/credit-notes/${updated.id}`)
@@ -351,11 +372,12 @@ export default function NewCreditNotePage() {
         currency: currency || "KES",
         notes: notes.trim() || undefined,
         line_items: normalizedLineItems,
+        approver_ids: approverIds,
       })
 
       toast({
-        title: "Success",
-        description: "Credit note created successfully.",
+        title: "Sent for approval",
+        description: "Credit note created and sent to the 2 approvers. It is credited once both approve it.",
       })
 
       router.push(`/sales/credit-notes/${created.id}`)
@@ -532,6 +554,18 @@ export default function NewCreditNotePage() {
                 rows={3}
               />
             </div>
+
+            {needsApprovers && (
+              <div className="space-y-2 md:col-span-2 rounded-lg border p-4">
+                <p className="font-medium">Approvers</p>
+                <ApproverPicker value={approverIds} onChange={setApproverIds} disabled={isSubmitting} />
+                {isEditMode && (
+                  <p className="text-xs text-amber-700">
+                    Saving changes sends it to both approvers again: any approval already given is cleared.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {selectedInvoice && (

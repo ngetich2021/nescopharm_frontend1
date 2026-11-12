@@ -42,6 +42,9 @@ import {
   CustomerCreditContext,
   CreditNote,
   CreditNoteLineItem,
+  approverName,
+  decideCreditNoteApproval,
+  submitCreditNoteForApproval,
   applyCreditNote,
   deleteCreditNote,
   fetchCreditNoteById,
@@ -55,6 +58,9 @@ import {
 import { fetchInvoices } from "@/lib/invoices"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { InvoiceEtimsBadge } from "@/components/etims/invoice-etims-badge"
+import { useAuth } from "@/lib/auth-context"
+import { displayDateTime } from "@/lib/date-format"
+import { ApproverPicker } from "../approver-picker"
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -173,7 +179,29 @@ export default function CreditNoteDetailPage() {
   const consumedAmount =
     parseCreditNoteAmount(creditNote?.amount_applied) + parseCreditNoteAmount(creditNote?.amount_refunded)
 
-  const canIssue = creditNote?.status === "draft" && parseCreditNoteAmount(creditNote.total_amount) > 0
+  const { user } = useAuth()
+  const [decisionComment, setDecisionComment] = useState("")
+  const [isDeciding, setIsDeciding] = useState(false)
+  const [isResendOpen, setIsResendOpen] = useState(false)
+  const [resendApprovers, setResendApprovers] = useState<[string, string]>(["", ""])
+  const [isResending, setIsResending] = useState(false)
+
+  const approvals = creditNote?.approvals || []
+  const approvalStatus = creditNote?.approval_status || null
+  const approvedCount = approvals.filter((a) => a.status === "approved").length
+  // This user is one of the 2 approvers and has not decided yet.
+  const myPendingApproval =
+    creditNote?.status === "draft" && approvalStatus === "pending"
+      ? approvals.find((a) => a.approver_id === user?.id && a.status === "pending")
+      : undefined
+
+  // From 12/11/2026 a credit note is credited only when both approvers approve; Issue is then only a
+  // retry if crediting failed. Older ones (no approval_status) issue as before.
+  const canIssue =
+    creditNote?.status === "draft" &&
+    parseCreditNoteAmount(creditNote.total_amount) > 0 &&
+    (approvalStatus === null || approvalStatus === "approved")
+  const canResend = creditNote?.status === "draft" && approvalStatus === "rejected"
   const canApply = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canRefund = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0
   const canVoid = (creditNote?.status === "draft" || creditNote?.status === "issued") && consumedAmount <= 0
@@ -303,6 +331,55 @@ export default function CreditNoteDetailPage() {
       })
     } finally {
       setIsIssuing(false)
+    }
+  }
+
+  const handleDecision = async (decision: "approve" | "reject") => {
+    if (!creditNote) return
+    if (decisionComment.trim().length < 3) {
+      toast({
+        title: "Comment required",
+        description: 'Write a comment, e.g. "Products in good shape".',
+        variant: "destructive",
+      })
+      return
+    }
+    if (decision === "reject" && !window.confirm("Reject this credit note? It will not be credited.")) {
+      return
+    }
+    try {
+      setIsDeciding(true)
+      const res = await decideCreditNoteApproval(creditNote.id, decision, decisionComment.trim())
+      toast({
+        title: res.issue_failed ? "Approved - not credited yet" : decision === "approve" ? "Approved" : "Rejected",
+        description: res.message,
+        variant: res.issue_failed ? "destructive" : undefined,
+      })
+      setDecisionComment("")
+      await loadCreditNote(creditNote.id)
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "Could not save your decision", variant: "destructive" })
+    } finally {
+      setIsDeciding(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (!creditNote) return
+    if (!resendApprovers[0] || !resendApprovers[1]) {
+      toast({ title: "Approvers required", description: "Choose the 2 people who will approve it.", variant: "destructive" })
+      return
+    }
+    try {
+      setIsResending(true)
+      const res = await submitCreditNoteForApproval(creditNote.id, resendApprovers)
+      toast({ title: "Sent for approval", description: res.message })
+      setIsResendOpen(false)
+      await loadCreditNote(creditNote.id)
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "Could not send it for approval", variant: "destructive" })
+    } finally {
+      setIsResending(false)
     }
   }
 
@@ -537,9 +614,15 @@ export default function CreditNoteDetailPage() {
             Back to Credit Notes
           </Button>
         </Link>
-        <Badge className={getCreditNoteStatusColor(creditNote.status)}>
-          {formatStatusLabel(creditNote.status)}
-        </Badge>
+        {creditNote.status === "draft" && approvalStatus === "pending" ? (
+          <Badge className="bg-amber-100 text-amber-800">Awaiting approval ({approvedCount} of {approvals.length})</Badge>
+        ) : creditNote.status === "draft" && approvalStatus === "rejected" ? (
+          <Badge className="bg-red-100 text-red-800">Rejected - not credited</Badge>
+        ) : (
+          <Badge className={getCreditNoteStatusColor(creditNote.status)}>
+            {formatStatusLabel(creditNote.status)}
+          </Badge>
+        )}
       </div>
 
       <Card className="overflow-hidden border-border/70 shadow-sm">
@@ -578,7 +661,19 @@ export default function CreditNoteDetailPage() {
                 {canIssue && (
                   <Button onClick={handleIssue} disabled={isIssuing}>
                     {isIssuing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Issue
+                    {approvalStatus === "approved" ? "Issue (try again)" : "Issue"}
+                  </Button>
+                )}
+
+                {canResend && (
+                  <Button
+                    onClick={() => {
+                      const ids = approvals.map((a) => a.approver_id)
+                      setResendApprovers([ids[0] || "", ids[1] || ""])
+                      setIsResendOpen(true)
+                    }}
+                  >
+                    Send for Approval Again
                   </Button>
                 )}
 
@@ -651,6 +746,102 @@ export default function CreditNoteDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {approvals.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Approvals</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {approvalStatus === "pending"
+                ? "Credited only when both approve it. Nothing has been credited yet."
+                : approvalStatus === "rejected"
+                  ? "Rejected, so it was not credited. Edit it or send it for approval again."
+                  : "Approved by both."}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-14">S/No</TableHead>
+                    <TableHead>Approver</TableHead>
+                    <TableHead>Decision</TableHead>
+                    <TableHead>Comment</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {approvals.map((a, i) => (
+                    <TableRow key={a.id}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{approverName(a)}</TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            a.status === "approved"
+                              ? "bg-green-100 text-green-800"
+                              : a.status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-amber-100 text-amber-800"
+                          }
+                        >
+                          {a.status === "approved" ? "Approved" : a.status === "rejected" ? "Rejected" : "Waiting"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-pre-wrap">{a.comment || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{a.decided_at ? displayDateTime(a.decided_at) : "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {myPendingApproval && (
+              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+                <Label htmlFor="decision-comment">Your comment *</Label>
+                <Textarea
+                  id="decision-comment"
+                  value={decisionComment}
+                  onChange={(e) => setDecisionComment(e.target.value)}
+                  placeholder='e.g. "Products in good shape" or "2 cartons damaged"'
+                  rows={3}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => handleDecision("approve")} disabled={isDeciding}>
+                    {isDeciding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Approve
+                  </Button>
+                  <Button variant="destructive" onClick={() => handleDecision("reject")} disabled={isDeciding}>
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={isResendOpen} onOpenChange={setIsResendOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send for Approval Again</DialogTitle>
+            <DialogDescription>
+              Both people must approve it again; the earlier decisions are cleared.
+            </DialogDescription>
+          </DialogHeader>
+          <ApproverPicker value={resendApprovers} onChange={setResendApprovers} disabled={isResending} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsResendOpen(false)} disabled={isResending}>
+              Cancel
+            </Button>
+            <Button onClick={handleResend} disabled={isResending}>
+              {isResending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <InvoiceEtimsBadge invoiceId={creditNote.id} isCreditNote />
 

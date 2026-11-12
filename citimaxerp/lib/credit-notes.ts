@@ -119,9 +119,62 @@ export interface CreditNote {
     }
     line_items?: CreditNoteLineItem[]
     refunds?: CreditNoteRefund[]
+    /** pending | approved | rejected; null for credit notes from before approvals began (12/11/2026). */
+    approval_status?: CreditNoteApprovalStatus | null
+    approvals?: CreditNoteApproval[]
+}
+
+export type CreditNoteApprovalStatus = "pending" | "approved" | "rejected"
+
+/** One of the 2 people who must approve a credit note (with a comment) before it is credited. */
+export interface CreditNoteApproval {
+    id: string
+    approver_id: string
+    position: number
+    status: CreditNoteApprovalStatus
+    comment?: string | null
+    decided_at?: string | null
+    approver?: { id: string; first_name?: string | null; last_name?: string | null; email?: string | null } | null
+}
+
+export interface ApproverOption {
+    id: string
+    name: string
+    role?: string | null
+}
+
+export function approverName(approval: CreditNoteApproval): string {
+    const a = approval.approver
+    return [a?.first_name, a?.last_name].filter(Boolean).join(" ") || a?.email || "Approver"
+}
+
+export async function fetchApproverOptions(): Promise<ApproverOption[]> {
+    const response = await apiCall<{ data: ApproverOption[] }>("/credit-notes/approver-options", "GET", undefined, true)
+    return response.data || []
+}
+
+/** Send a draft credit note (again) to 2 approvers; earlier decisions are cleared. */
+export async function submitCreditNoteForApproval(id: string, approverIds: string[]): Promise<{ message: string; data: CreditNote }> {
+    return apiCall<{ message: string; data: CreditNote }>(`/credit-notes/${id}/submit-approval`, "POST", { approver_ids: approverIds }, true)
+}
+
+/** An approver approves or rejects, always with a comment. The second approval credits it. */
+export async function decideCreditNoteApproval(
+    id: string,
+    decision: "approve" | "reject",
+    comment: string
+): Promise<{ message: string; data: CreditNote; issue_failed?: boolean }> {
+    return apiCall<{ message: string; data: CreditNote; issue_failed?: boolean }>(
+        `/credit-notes/${id}/decide`,
+        "POST",
+        { decision, comment },
+        true
+    )
 }
 
 export interface CreateCreditNoteRequest {
+    /** The 2 people who must approve it before it is credited (not the creator). */
+    approver_ids?: string[]
     invoice_id: string
     customer_id?: string
     credit_note_date: string

@@ -67,7 +67,7 @@ class CreditNoteController extends Controller
                     return response()->json(['message' => 'Unauthorized'], 403);
                 }
 
-                $query = CreditNote::with(['customer', 'invoice', 'createdBy', 'refunds'])
+                $query = CreditNote::with(['customer', 'invoice', 'createdBy', 'refunds', 'approvals.approver'])
                     ->where('company_id', $companyId);
 
                 if ($request->has('invoice_id')) {
@@ -123,10 +123,15 @@ class CreditNoteController extends Controller
             'line_items.*.discount_amount' => 'sometimes|numeric|min:0',
             'line_items.*.tax_rate' => 'sometimes|numeric|min:0|max:100',
             'line_items.*.etims_tax_type_code' => 'sometimes|nullable|in:A,B,C,D,E',
-        ]);
+        ] + $this->approverRules(true), $this->approverMessages());
 
         if ($validator->fails()) {
-            return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $approverCheck = new CreditNote(['company_id' => $companyId, 'created_by' => $user->id]);
+        if ($message = $this->approverProblem($approverCheck, $request->approver_ids, $user->id)) {
+            return response()->json(['message' => $message], 422);
         }
 
         try {
@@ -187,11 +192,14 @@ class CreditNoteController extends Controller
                 return response()->json(['message' => $message], 422);
             }
 
+            // Not credited until both chosen approvers approve it.
+            $this->startApprovals($creditNote, $request->approver_ids);
+
             DB::commit();
 
             return response()->json([
-                'message' => 'Credit note created successfully',
-                'data' => $creditNote->load(['customer', 'invoice', 'lineItems', 'refunds']),
+                'message' => 'Credit note created and sent to the 2 approvers. It is credited once both approve it.',
+                'data' => $creditNote->load(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']),
             ], 201);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -214,7 +222,9 @@ class CreditNoteController extends Controller
                 $user = $request->user();
                 $companyId = $user->company_id;
 
-                if (!$this->hasPermission($request, 'can_view_invoices', $companyId)) {
+                // Its approvers may open it to decide, even without access to invoices.
+                $isApprover = \App\Models\CreditNoteApproval::where('credit_note_id', $id)->where('approver_id', $user->id)->exists();
+                if (!$isApprover && !$this->hasPermission($request, 'can_view_invoices', $companyId)) {
                     return response()->json(['message' => 'Unauthorized'], 403);
                 }
 
@@ -225,6 +235,7 @@ class CreditNoteController extends Controller
                     'lineItems.variant',
                     'createdBy',
                     'refunds',
+                    'approvals.approver',
                 ])->where('company_id', $companyId)->findOrFail($id);
 
                 return response()->json($creditNote);
@@ -370,10 +381,14 @@ class CreditNoteController extends Controller
             'line_items.*.discount_amount' => 'sometimes|numeric|min:0',
             'line_items.*.tax_rate' => 'sometimes|numeric|min:0|max:100',
             'line_items.*.etims_tax_type_code' => 'sometimes|nullable|in:A,B,C,D,E',
-        ]);
+        ] + $this->approverRules(false), $this->approverMessages());
 
         if ($validator->fails()) {
-            return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        if ($request->has('approver_ids') && ($message = $this->approverProblem($creditNote, $request->approver_ids))) {
+            return response()->json(['message' => $message], 422);
         }
 
         try {
@@ -422,11 +437,21 @@ class CreditNoteController extends Controller
                 }
             }
 
+            // A changed credit note is approved afresh: earlier approvals were for what it said before.
+            // (One from before approvals began stays outside them unless approvers are given.)
+            $approverIds = $request->approver_ids ?? $creditNote->approvals()->pluck('approver_id')->all();
+            $restarted = count($approverIds) === 2;
+            if ($restarted) {
+                $this->startApprovals($creditNote, $approverIds);
+            }
+
             DB::commit();
 
             return response()->json([
-                'message' => 'Credit note updated successfully',
-                'data' => $creditNote->load(['customer', 'invoice', 'lineItems', 'refunds']),
+                'message' => $restarted
+                    ? 'Credit note updated and sent to the 2 approvers again. It is credited once both approve it.'
+                    : 'Credit note updated successfully',
+                'data' => $creditNote->load(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']),
             ]);
 
         } catch (\Exception $e) {
@@ -470,6 +495,240 @@ class CreditNoteController extends Controller
     }
 
     // -------------------------------------------------------------------------
+    // Approvals: the creator picks two people; both must approve (with a comment)
+    // before the credit note is credited. Either rejecting stops it.
+    // -------------------------------------------------------------------------
+
+    /** People who can be picked as approvers: active users of the company other than the one asking. */
+    public function approverOptions(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $users = \App\Models\User::where('company_id', $user->company_id)
+            ->where('id', '!=', $user->id)
+            ->whereRaw('users.is_active = true')
+            ->whereNull('terminated_at')
+            ->with('role:id,name')
+            ->orderBy('first_name')->orderBy('last_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'role_id'])
+            ->map(fn ($u) => [
+                'id' => $u->id,
+                'name' => trim("{$u->first_name} {$u->last_name}") ?: $u->email,
+                'role' => $u->role?->name,
+            ]);
+
+        return response()->json(['data' => $users]);
+    }
+
+    /** Send (or send again, after a rejection or with other people) a draft credit note for approval. */
+    public function submitForApproval(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        $creditNote = CreditNote::where('company_id', $user->company_id)->findOrFail($id);
+
+        if ($creditNote->created_by !== $user->id && !$this->hasPermission($request, 'can_update_invoices', $user->company_id)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        if (!$creditNote->isDraft()) {
+            return response()->json(['message' => 'Only a credit note that has not been credited yet can be sent for approval.'], 400);
+        }
+
+        $validator = Validator::make($request->all(), $this->approverRules(true), $this->approverMessages());
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+        if ($message = $this->approverProblem($creditNote, $request->approver_ids)) {
+            return response()->json(['message' => $message], 422);
+        }
+
+        DB::transaction(fn () => $this->startApprovals($creditNote, $request->approver_ids));
+
+        return response()->json([
+            'message' => 'Sent for approval. It is credited once both approvers approve it.',
+            'data' => $creditNote->fresh(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']),
+        ]);
+    }
+
+    /** An approver approves or rejects, always with a comment. The second approval credits it. */
+    public function decideApproval(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        $creditNote = CreditNote::where('company_id', $user->company_id)->findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'decision' => 'required|in:approve,reject',
+            'comment' => 'required|string|min:3|max:1000',
+        ], [
+            'comment.required' => 'Write a comment, e.g. "Products in good shape".',
+            'comment.min' => 'Write a comment, e.g. "Products in good shape".',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        if (!$creditNote->isDraft() || $creditNote->approval_status !== 'pending') {
+            return response()->json(['message' => 'This credit note is not waiting for approval.'], 400);
+        }
+
+        $approval = $creditNote->approvals()->where('approver_id', $user->id)->where('status', 'pending')->first();
+        if (!$approval) {
+            return response()->json(['message' => 'You are not one of the approvers still to decide on this credit note.'], 403);
+        }
+
+        $approve = $request->decision === 'approve';
+        $comment = trim($request->comment);
+
+        $complete = DB::transaction(function () use ($creditNote, $approval, $approve, $comment) {
+            $approval->update([
+                'status' => $approve ? 'approved' : 'rejected',
+                'comment' => $comment,
+                'decided_at' => now(),
+            ]);
+            if (!$approve) {
+                $creditNote->update(['approval_status' => 'rejected']);
+                return false;
+            }
+            $allApproved = !$creditNote->approvals()->where('status', '!=', 'approved')->exists();
+            if ($allApproved) {
+                $creditNote->update(['approval_status' => 'approved']);
+            }
+            return $allApproved;
+        });
+
+        $notifications = app(\App\Services\NotificationService::class);
+        $notifications->resolve('credit_note_approval', 'approval_id', $approval->id);
+        if (!$approve) {
+            // Nothing left for the other approver to decide.
+            foreach ($creditNote->approvals()->where('status', 'pending')->pluck('id') as $otherId) {
+                $notifications->resolve('credit_note_approval', 'approval_id', $otherId);
+            }
+        }
+        $notifications->notifyDecision(
+            $creditNote->created_by,
+            "Credit note {$creditNote->credit_note_number}",
+            $approve ? 'approved' : 'rejected',
+            "/sales/credit-notes/{$creditNote->id}",
+            $user->id,
+            $comment,
+        );
+
+        if (!$approve) {
+            return response()->json([
+                'message' => 'Rejected. The credit note will not be credited.',
+                'data' => $creditNote->fresh(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']),
+            ]);
+        }
+
+        if (!$complete) {
+            return response()->json([
+                'message' => 'Approved. It is credited once the other approver approves too.',
+                'data' => $creditNote->fresh(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']),
+            ]);
+        }
+
+        // Both approved: credit it now.
+        $issued = $this->issueNow($creditNote->fresh(), $user);
+        $body = $issued->getData(true);
+        $data = $creditNote->fresh(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']);
+
+        if ($issued->getStatusCode() === 200) {
+            $notifications->notifyUser($creditNote->created_by, new \App\Notifications\SystemAlert(
+                'approval_result',
+                "Credit note {$creditNote->credit_note_number} credited",
+                'Both approvers approved it, so it has been credited to the customer.',
+                "/sales/credit-notes/{$creditNote->id}",
+                ['type' => 'approval_result', 'decision' => 'credited'],
+            ), $user->id);
+
+            return response()->json([
+                'message' => 'Approved by both. ' . ($body['message'] ?? 'Credit note issued.'),
+                'data' => $data,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Approved by both, but it could not be credited yet: '
+                . trim(($body['message'] ?? '') . ' ' . ($body['error'] ?? ''))
+                . ' Use Issue on the credit note to try again.',
+            'issue_failed' => true,
+            'data' => $data,
+        ]);
+    }
+
+    private function approverRules(bool $required): array
+    {
+        return [
+            'approver_ids' => ($required ? 'required' : 'sometimes') . '|array|size:2',
+            'approver_ids.*' => 'required|uuid|distinct',
+        ];
+    }
+
+    private function approverMessages(): array
+    {
+        return [
+            'approver_ids.required' => 'Choose the 2 people who will approve this credit note.',
+            'approver_ids.size' => 'Choose exactly 2 people to approve this credit note.',
+            'approver_ids.*.distinct' => 'Choose 2 different people to approve this credit note.',
+        ];
+    }
+
+    /** Why these two cannot approve this credit note, or null when they can. */
+    private function approverProblem(CreditNote $creditNote, array $ids, ?string $creatorId = null): ?string
+    {
+        $creatorId ??= $creditNote->created_by;
+        if (in_array($creatorId, $ids, true)) {
+            return 'Whoever raised the credit note cannot approve it: choose 2 other people.';
+        }
+        $found = \App\Models\User::where('company_id', $creditNote->company_id)
+            ->whereIn('id', $ids)
+            ->whereRaw('users.is_active = true')
+            ->whereNull('terminated_at')
+            ->count();
+
+        return $found === 2 ? null : 'Both approvers must be active users of this company.';
+    }
+
+    /** (Re)start approval with these two people: earlier decisions are cleared. Call inside a transaction. */
+    private function startApprovals(CreditNote $creditNote, array $ids): void
+    {
+        $notifications = app(\App\Services\NotificationService::class);
+        foreach ($creditNote->approvals()->pluck('id') as $oldId) {
+            $notifications->resolve('credit_note_approval', 'approval_id', $oldId);
+        }
+        $creditNote->approvals()->delete();
+
+        foreach (array_values($ids) as $i => $approverId) {
+            $creditNote->approvals()->create([
+                'approver_id' => $approverId,
+                'position' => $i + 1,
+                'status' => 'pending',
+            ]);
+        }
+        $creditNote->update(['approval_status' => 'pending']);
+
+        DB::afterCommit(fn () => $this->notifyApprovers($creditNote->fresh(['approvals', 'customer', 'invoice'])));
+    }
+
+    private function notifyApprovers(CreditNote $creditNote): void
+    {
+        $customer = $creditNote->customer?->business_name ?: ($creditNote->customer?->name ?: 'a customer');
+        $invoice = $creditNote->invoice?->file_number ?: $creditNote->invoice?->invoice_number;
+        $amount = number_format((float) $creditNote->total_amount, 2);
+        $notifications = app(\App\Services\NotificationService::class);
+
+        foreach ($creditNote->approvals->where('status', 'pending') as $approval) {
+            $notifications->notifyUser($approval->approver_id, new \App\Notifications\SystemAlert(
+                'approval',
+                "Credit note {$creditNote->credit_note_number} needs your approval",
+                "Credit note of {$creditNote->currency} {$amount} for {$customer}" . ($invoice ? " on invoice {$invoice}" : '')
+                    . '. Check the goods returned, then approve or reject it with a comment (e.g. "Products in good shape"). It is credited only when both approvers approve.',
+                "/sales/credit-notes/{$creditNote->id}",
+                ['type' => 'credit_note_approval', 'approval_id' => $approval->id, 'credit_note_id' => $creditNote->id],
+            ), $creditNote->created_by);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Special Actions
     // -------------------------------------------------------------------------
 
@@ -492,6 +751,27 @@ class CreditNoteController extends Controller
                 'message' => 'Only draft credit notes can be issued. Current status: ' . $creditNote->status,
             ], 400);
         }
+
+        // Credited only once both chosen approvers have approved it (each with a comment). Credit
+        // notes raised before approvals began (12/11/2026, approval_status empty) issue as before.
+        if ($creditNote->approval_status !== null && $creditNote->approval_status !== 'approved') {
+            return response()->json([
+                'message' => $creditNote->approval_status === 'rejected'
+                    ? 'This credit note was rejected, so it cannot be credited. Correct it and send it for approval again.'
+                    : 'This credit note cannot be credited until both approvers have approved it.',
+            ], 422);
+        }
+
+        return $this->issueNow($creditNote, $user);
+    }
+
+    /**
+     * Credit it: eTIMS (when live), stock back to its batches, status issued and the credit applied
+     * to its invoice. Runs when the second approver approves, or from Issue to retry after a failure.
+     */
+    protected function issueNow(CreditNote $creditNote, $user): JsonResponse
+    {
+        $companyId = $creditNote->company_id;
 
         if ($creditNote->total_amount <= 0) {
             return response()->json(['message' => 'Credit note must have a total amount greater than zero'], 400);

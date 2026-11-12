@@ -76,6 +76,22 @@ function formatStatus(status?: string | null) {
   return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ")
 }
 
+/** A draft waiting on its 2 approvers (or rejected by one) says so; otherwise its status. */
+function creditNoteStatusLabel(creditNote: CreditNote) {
+  if (creditNote.status === "draft" && creditNote.approval_status === "pending") {
+    const done = (creditNote.approvals || []).filter((a) => a.status === "approved").length
+    return `Awaiting approval (${done} of ${(creditNote.approvals || []).length})`
+  }
+  if (creditNote.status === "draft" && creditNote.approval_status === "rejected") return "Rejected"
+  return formatStatus(creditNote.status)
+}
+
+function creditNoteStatusClass(creditNote: CreditNote) {
+  if (creditNote.status === "draft" && creditNote.approval_status === "pending") return "bg-amber-100 text-amber-800"
+  if (creditNote.status === "draft" && creditNote.approval_status === "rejected") return "bg-red-100 text-red-800"
+  return getCreditNoteStatusColor(creditNote.status)
+}
+
 export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTableProps) {
   const router = useRouter()
   const [creditNotes, setCreditNotes] = useState<CreditNote[]>(initialCreditNotes)
@@ -188,7 +204,7 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
       creditNote.invoice?.invoice_number || "",
       getCustomerDisplayName(creditNote),
       formatDate(creditNote.credit_note_date),
-      formatStatus(creditNote.status),
+      creditNoteStatusLabel(creditNote),
       parseCreditNoteAmount(creditNote.total_amount),
       parseCreditNoteAmount(creditNote.balance_amount),
     ]),
@@ -367,8 +383,8 @@ export function CreditNotesTable({ initialCreditNotes = [] }: CreditNotesTablePr
                     {formatCurrency(parseCreditNoteAmount(creditNote.balance_amount))}
                   </TableCell>
                   <TableCell>
-                    <Badge className={getCreditNoteStatusColor(creditNote.status)}>
-                      {formatStatus(creditNote.status)}
+                    <Badge className={creditNoteStatusClass(creditNote)}>
+                      {creditNoteStatusLabel(creditNote)}
                     </Badge>
                   </TableCell>
                   <TableCell>
