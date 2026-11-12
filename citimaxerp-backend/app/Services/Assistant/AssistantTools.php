@@ -238,8 +238,27 @@ class AssistantTools
                 }
             })
             ->selectRaw("distinct {$label} as label")->limit(80)->pluck('label');
-        return $hits->sortByDesc(fn ($l) => $stems->filter(fn ($s) => str_contains(strtolower((string) $l), $s))->count())
-            ->take(5)->values()->all();
+        // Most shared word stems first, then the name most like what was typed (so 4" X 4.5m
+        // comes before 2" X 4.5m when "4" X 4.5m" was asked for).
+        $typed = self::looseName($term);
+        return $hits->map(function ($l) use ($stems, $typed) {
+            similar_text($typed, self::looseName((string) $l), $like);
+            return ['l' => $l, 'stems' => $stems->filter(fn ($s) => str_contains(strtolower((string) $l), $s))->count(), 'like' => $like];
+        })->sort(fn ($a, $b) => [$b['stems'], $b['like']] <=> [$a['stems'], $a['like']])
+            ->take(5)->pluck('l')->values()->all();
+    }
+
+    /**
+     * A product name compared loosely: lower case, "inch"/"inches" and every mark except the decimal
+     * point dropped, so 'Zinc Oxide Tape 4" X 4.5m', 'zinc oxide tape 4″ x 4.5m', 'Zinc Oxide Tape
+     * 4 inch X 4.5m' and 'zinc oxide tape 4"x4.5m' are all "zincoxidetape4x4.5m".
+     */
+    protected const LOOSE_NAME_SQL = "regexp_replace(regexp_replace(lower(name), 'inch(es)?', '', 'g'), '[^a-z0-9.]', '', 'g')";
+
+    protected static function looseName(string $s): string
+    {
+        $s = preg_replace('/inch(es)?/', '', mb_strtolower($s));
+        return preg_replace('/[^a-z0-9.]/', '', $s);
     }
 
     protected function canSeeCost(): bool
@@ -258,9 +277,14 @@ class AssistantTools
     {
         $term = trim((string) ($args['query'] ?? ''));
         $compact = strtoupper(preg_replace('/[\s\-]+/', '', $term));
+        $loose = self::looseName($term);
         $products = Product::where('company_id', $this->companyId)
-            ->where(function ($q) use ($term, $compact) {
+            ->where(function ($q) use ($term, $compact, $loose) {
                 $q->where('name', 'ilike', '%' . $term . '%');
+                // Same name typed with another inch mark, spacing or none: 4″ / 4" / 4 inch / 4"X4.5m.
+                if (strlen($loose) >= 3) {
+                    $q->orWhereRaw(self::LOOSE_NAME_SQL . ' like ?', ['%' . $loose . '%']);
+                }
                 if (ctype_digit($term)) {
                     $q->orWhere('item_number', (int) $term);
                 }
@@ -332,6 +356,19 @@ class AssistantTools
                     ->whereRaw('upper(tier_name) = ?', [strtoupper($m[1])])
                     ->whereRaw("ltrim(coalesce(item_code, ''), '0') = ?", [ltrim($m[2], '0')]))->with('priceTiers')->first();
                 $how = $match ? 'code' : null;
+            }
+
+            if (!$match) {
+                // The whole product name inside the line, compared loosely (sizes such as 4" vs 2"
+                // decide it, and quantities around it don't matter): the longest such name wins.
+                $looseLine = self::looseName($line);
+                if (strlen($looseLine) >= 6) {
+                    $match = Product::where('company_id', $this->companyId)->where('is_active', true)
+                        ->whereRaw('length(' . self::LOOSE_NAME_SQL . ') >= 6')
+                        ->whereRaw('? like \'%\' || ' . self::LOOSE_NAME_SQL . ' || \'%\'', [$looseLine])
+                        ->with('priceTiers')->orderByRaw('length(' . self::LOOSE_NAME_SQL . ') desc')->first();
+                    $how = $match ? 'name' : null;
+                }
             }
 
             if (!$match) {
@@ -491,6 +528,11 @@ class AssistantTools
             $q->where('name', 'ilike', "%{$w}%");
         }
         $products = $q->orderByRaw('length(name)')->limit(10)->get(['id', 'name']);
+        if ($products->isEmpty() && strlen($loose = self::looseName((string) $args['query'])) >= 3) {
+            $products = Product::where('company_id', $this->companyId)
+                ->whereRaw(self::LOOSE_NAME_SQL . ' like ?', ['%' . $loose . '%'])
+                ->orderByRaw('length(name)')->limit(10)->get(['id', 'name']);
+        }
         if ($products->isEmpty()) {
             return ['found' => false, 'did_you_mean' => $this->suggest('products', ['name'], (string) $args['query'])];
         }
