@@ -87,10 +87,29 @@ class ProductVariant extends Model
         if ($this->relationLoaded('product')) {
             $productName = $this->product?->name;
         } else {
+            if (! array_key_exists($this->product_id, self::$productNames) && self::$pendingProductIds) {
+                // Sizes loaded together: fetch all their products' names in one query.
+                self::$productNames += Product::whereIn('id', array_keys(self::$pendingProductIds))->pluck('name', 'id')->all();
+                self::$pendingProductIds = [];
+            }
             $productName = self::$productNames[$this->product_id]
                 ??= Product::whereKey($this->product_id)->value('name');
         }
         return self::sizedName($productName, $this->name);
+    }
+
+    private static array $pendingProductIds = [];
+
+    public function newCollection(array $models = [])
+    {
+        if (count($models) > 1) {
+            foreach ($models as $m) {
+                if ($m instanceof self && $m->product_id && ! array_key_exists($m->product_id, self::$productNames)) {
+                    self::$pendingProductIds[$m->product_id] = true;
+                }
+            }
+        }
+        return parent::newCollection($models);
     }
 
     // Boolean mutator for PostgreSQL compatibility

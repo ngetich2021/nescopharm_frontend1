@@ -24,7 +24,38 @@ class Order extends Model
     {
         // Use loaded orderItems if available, otherwise query
         // Number of lines. Summing quantities mixed packs and pieces (one order read "22000 items").
-        return $this->relationLoaded('orderItems') ? $this->orderItems->count() : $this->orderItems()->count();
+        if ($this->relationLoaded('orderItems')) {
+            return $this->orderItems->count();
+        }
+        if ($this->getKey() === null) {
+            return 0; // aggregate rows (sums, report groupings) are not orders
+        }
+        if (($t = $this->listTotals?->for($this)) !== null) {
+            return (int) ($t['lines'] ?? 0);
+        }
+        return $this->orderItems()->count();
+    }
+
+    /** Shared by orders loaded together: their line counts come from one grouped query. */
+    public ?\App\Support\ListTotals $listTotals = null;
+
+    public function newCollection(array $models = [])
+    {
+        if (count($models) > 1) {
+            $totals = new \App\Support\ListTotals($models, fn (array $ids) => OrderItem::query()
+                ->whereIn('order_id', $ids)
+                ->groupBy('order_id')
+                ->selectRaw('order_id, count(*) as lines')
+                ->toBase()->get()
+                ->mapWithKeys(fn ($r) => [(string) $r->order_id => ['lines' => $r->lines]])
+                ->all());
+            foreach ($models as $m) {
+                if ($m instanceof self) {
+                    $m->listTotals = $totals;
+                }
+            }
+        }
+        return parent::newCollection($models);
     }
 
     protected $dates = ['deleted_at'];

@@ -56,6 +56,9 @@ class Customer extends Model
      */
     public function getTotalSpendAttribute(): string
     {
+        if (! $this->relationLoaded('orders') && ($t = $this->listTotals?->for($this)) !== null) {
+            return number_format((float) ($t['spend'] ?? 0), 2, '.', '');
+        }
         $sum = $this->ordersForTotals()->sum(function ($order) {
             return (float) $order->total_amount;
         });
@@ -68,7 +71,32 @@ class Customer extends Model
      */
     public function getTotalOrdersAttribute(): int
     {
+        if (! $this->relationLoaded('orders') && ($t = $this->listTotals?->for($this)) !== null) {
+            return (int) ($t['orders'] ?? 0);
+        }
         return $this->ordersForTotals()->count();
+    }
+
+    /** Shared by customers loaded together: their order totals come from one grouped query. */
+    public ?\App\Support\ListTotals $listTotals = null;
+
+    public function newCollection(array $models = [])
+    {
+        if (count($models) > 1) {
+            $totals = new \App\Support\ListTotals($models, fn (array $ids) => Order::query()
+                ->whereIn('customer_id', $ids)
+                ->groupBy('customer_id')
+                ->selectRaw('customer_id, count(*) as orders, coalesce(sum(total_amount), 0) as spend')
+                ->toBase()->get()
+                ->mapWithKeys(fn ($r) => [(string) $r->customer_id => ['orders' => $r->orders, 'spend' => $r->spend]])
+                ->all());
+            foreach ($models as $m) {
+                if ($m instanceof self) {
+                    $m->listTotals = $totals;
+                }
+            }
+        }
+        return parent::newCollection($models);
     }
 
     private $ordersForTotalsCache = null;

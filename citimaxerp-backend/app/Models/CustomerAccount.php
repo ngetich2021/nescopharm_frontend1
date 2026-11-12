@@ -249,9 +249,10 @@ class CustomerAccount extends Model
             'approved_count' => $approvedCount,
             'rejected_count' => $rejectedCount,
             'pending_count' => $pendingCount,
-            'credit_limit_updates' => $this->creditLimitApprovals->count(),
-            'latest_approval_date' => $this->latestApproval?->approved_at,
-            'latest_approval_type' => $this->latestApproval?->approval_type,
+            // From the approvals already loaded: separate queries here ran twice per account on every list.
+            'credit_limit_updates' => $approvals->where('approval_type', 'credit_limit_update')->count(),
+            'latest_approval_date' => $this->latestLoadedApproval()?->approved_at,
+            'latest_approval_type' => $this->latestLoadedApproval()?->approval_type,
             'overall_status' => $this->approval_status,
             'has_rejections' => $rejectedCount > 0,
             'has_multiple_approvals' => $approvedCount > 1,
@@ -284,12 +285,23 @@ class CustomerAccount extends Model
      */
     public function getApprovedByUsersAttribute()
     {
-        return $this->approvals()
-            ->where('status', 'approved')
-            ->with('approver')
-            ->get()
-            ->pluck('approver')
-            ->filter();
+        return $this->approversWith('approved');
+    }
+
+    /** Approvers of the given status, from the loaded approvals (one query per list, not per account). */
+    protected function approversWith(string $status)
+    {
+        $this->loadMissing('approvals.approver');
+        return $this->approvals->where('status', $status)->pluck('approver')->filter()->values();
+    }
+
+    /** Newest approval, as latestApproval() orders it, without a query per account. */
+    protected function latestLoadedApproval()
+    {
+        if ($this->relationLoaded('latestApproval')) {
+            return $this->latestApproval;
+        }
+        return $this->approvals->sortByDesc('created_at')->first();
     }
 
     /**
@@ -297,12 +309,7 @@ class CustomerAccount extends Model
      */
     public function getRejectedByUsersAttribute()
     {
-        return $this->approvals()
-            ->where('status', 'rejected')
-            ->with('approver')
-            ->get()
-            ->pluck('approver')
-            ->filter();
+        return $this->approversWith('rejected');
     }
 
     /**

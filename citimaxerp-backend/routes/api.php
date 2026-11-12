@@ -97,6 +97,17 @@ Route::get('/assistant/health', function () {
     }
 });
 
+// Public health check used by the 5-minute monitor (health:check): the app answers and reaches
+// its database. Says nothing about any data.
+Route::get('/system/health', function () {
+    try {
+        \Illuminate\Support\Facades\DB::select('select 1');
+        return response()->json(['status' => 'ok']);
+    } catch (\Throwable $e) {
+        return response()->json(['status' => 'database unreachable'], 503);
+    }
+});
+
 // Company branding assets (logo/letterhead), served with CORS headers so they can
 // load into <img crossorigin> for PDF export. This must be an actual route (not a
 // static public/ file) because php artisan serve serves existing public/ files

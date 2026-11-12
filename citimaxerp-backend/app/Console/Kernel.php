@@ -28,6 +28,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('daily-reports:remind')->dailyAt('22:00')->timezone('Africa/Nairobi');
         $schedule->command('daily-reports:close')->dailyAt('00:00')->timezone('Africa/Nairobi')->withoutOverlapping();
 
+        // System health: 8:00am summary email; every 5 minutes round the clock an outage is
+        // emailed (8:30-17:00 and 17:00-8:30 alike) and again once it is back up.
+        $schedule->command('health:check --report')->dailyAt('08:00')->timezone('Africa/Nairobi');
+        $schedule->command('health:check')->everyFiveMinutes()->withoutOverlapping(10)
+            ->skip(fn () => now()->timezone('Africa/Nairobi')->format('H:i') === '08:00');
+
         // Recover eTIMS invoices left locked by an interrupted worker.
         $schedule->job(new EtimsReaperJob())->everyFiveMinutes()->withoutOverlapping();
     }
