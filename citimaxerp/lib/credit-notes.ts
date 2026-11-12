@@ -126,6 +126,13 @@ export interface CreditNote {
 
 export type CreditNoteApprovalStatus = "pending" | "approved" | "rejected"
 
+/** Credit notes dated from this day need 2 approvals; earlier-dated ones are issued directly. */
+export const CREDIT_NOTE_APPROVALS_FROM = "2026-11-12"
+
+export function creditNoteNeedsApproval(creditNoteDate?: string | null): boolean {
+    return !!creditNoteDate && creditNoteDate.slice(0, 10) >= CREDIT_NOTE_APPROVALS_FROM
+}
+
 /** One of the 2 people who must approve a credit note (with a comment) before it is credited. */
 export interface CreditNoteApproval {
     id: string

@@ -43,6 +43,7 @@ import {
   CreditNote,
   CreditNoteLineItem,
   approverName,
+  creditNoteNeedsApproval,
   decideCreditNoteApproval,
   submitCreditNoteForApproval,
   applyCreditNote,
@@ -195,12 +196,13 @@ export default function CreditNoteDetailPage() {
       ? approvals.find((a) => a.approver_id === user?.id && a.status === "pending")
       : undefined
 
-  // From 12/11/2026 a credit note is credited only when both approvers approve; Issue is then only a
-  // retry if crediting failed. Older ones (no approval_status) issue as before.
+  // Dated from 12/11/2026 it is credited only when both approvers approve; Issue is then only a
+  // retry if crediting failed. Earlier-dated ones are issued directly, as before.
+  const needsApproval = creditNoteNeedsApproval(creditNote?.credit_note_date)
   const canIssue =
     creditNote?.status === "draft" &&
     parseCreditNoteAmount(creditNote.total_amount) > 0 &&
-    (approvalStatus === null || approvalStatus === "approved")
+    (!needsApproval || approvalStatus === "approved")
   // After a rejection, or while waiting (e.g. an approver changed role or is away): pick the 2 again.
   const canResend = creditNote?.status === "draft" && (approvalStatus === "rejected" || approvalStatus === "pending")
   const canApply = creditNote?.status === "issued" && parseCreditNoteAmount(creditNote.balance_amount) > 0

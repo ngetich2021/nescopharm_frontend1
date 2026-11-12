@@ -123,14 +123,16 @@ class CreditNoteController extends Controller
             'line_items.*.discount_amount' => 'sometimes|numeric|min:0',
             'line_items.*.tax_rate' => 'sometimes|numeric|min:0|max:100',
             'line_items.*.etims_tax_type_code' => 'sometimes|nullable|in:A,B,C,D,E',
-        ] + $this->approverRules(true), $this->approverMessages());
+        ] + $this->approverRules(CreditNote::needsApproval($request->credit_note_date)), $this->approverMessages());
 
         if ($validator->fails()) {
             return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
         }
 
+        // Dated before approvals began: no approvers, issued directly as before.
+        $needsApproval = CreditNote::needsApproval($request->credit_note_date);
         $approverCheck = new CreditNote(['company_id' => $companyId, 'created_by' => $user->id]);
-        if ($message = $this->approverProblem($approverCheck, $request->approver_ids, $user->id)) {
+        if ($needsApproval && ($message = $this->approverProblem($approverCheck, $request->approver_ids, $user->id))) {
             return response()->json(['message' => $message], 422);
         }
 
@@ -193,12 +195,16 @@ class CreditNoteController extends Controller
             }
 
             // Not credited until both chosen approvers approve it.
-            $this->startApprovals($creditNote, $request->approver_ids);
+            if ($needsApproval) {
+                $this->startApprovals($creditNote, $request->approver_ids);
+            }
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Credit note created and sent to the 2 approvers. It is credited once both approve it.',
+                'message' => $needsApproval
+                    ? 'Credit note created and sent to the 2 approvers. It is credited once both approve it.'
+                    : 'Credit note created. It is dated before 12/11/2026, so it needs no approvals: Issue it to credit it.',
                 'data' => $creditNote->load(['customer', 'invoice', 'lineItems', 'refunds', 'approvals.approver']),
             ], 201);
 
@@ -438,11 +444,27 @@ class CreditNoteController extends Controller
             }
 
             // A changed credit note is approved afresh: earlier approvals were for what it said before.
-            // (One from before approvals began stays outside them unless approvers are given.)
-            $approverIds = $request->approver_ids ?? $creditNote->approvals()->pluck('approver_id')->all();
-            $restarted = count($approverIds) === 2;
-            if ($restarted) {
+            // Dated before 12/11/2026 it needs none (any it had are dropped).
+            $restarted = false;
+            if (CreditNote::needsApproval($creditNote->credit_note_date)) {
+                $approverIds = $request->approver_ids ?? $creditNote->approvals()->pluck('approver_id')->all();
+                if (count($approverIds) !== 2) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Choose the 2 people who will approve this credit note.'], 422);
+                }
+                if ($message = $this->approverProblem($creditNote, $approverIds)) {
+                    DB::rollBack();
+                    return response()->json(['message' => $message], 422);
+                }
                 $this->startApprovals($creditNote, $approverIds);
+                $restarted = true;
+            } elseif ($creditNote->approval_status !== null) {
+                $notifications = app(\App\Services\NotificationService::class);
+                foreach ($creditNote->approvals()->pluck('id') as $oldId) {
+                    $notifications->resolve('credit_note_approval', 'approval_id', $oldId);
+                }
+                $creditNote->approvals()->delete();
+                $creditNote->update(['approval_status' => null]);
             }
 
             DB::commit();
@@ -553,6 +575,9 @@ class CreditNoteController extends Controller
         }
         if (!$creditNote->isDraft()) {
             return response()->json(['message' => 'Only a credit note that has not been credited yet can be sent for approval.'], 400);
+        }
+        if (!CreditNote::needsApproval($creditNote->credit_note_date)) {
+            return response()->json(['message' => 'It is dated before 12/11/2026, so it needs no approvals: Issue it to credit it.'], 400);
         }
 
         $validator = Validator::make($request->all(), $this->approverRules(true), $this->approverMessages());
@@ -777,9 +802,9 @@ class CreditNoteController extends Controller
             ], 400);
         }
 
-        // Credited only once both chosen approvers have approved it (each with a comment). Credit
-        // notes raised before approvals began (12/11/2026, approval_status empty) issue as before.
-        if ($creditNote->approval_status !== null && $creditNote->approval_status !== 'approved') {
+        // Dated from 12/11/2026: credited only once both chosen approvers have approved it (each with
+        // a comment). Dated earlier: issued directly, as before.
+        if (CreditNote::needsApproval($creditNote->credit_note_date) && $creditNote->approval_status !== 'approved') {
             return response()->json([
                 'message' => $creditNote->approval_status === 'rejected'
                     ? 'This credit note was rejected, so it cannot be credited. Correct it and send it for approval again.'

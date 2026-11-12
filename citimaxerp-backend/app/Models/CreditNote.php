@@ -157,6 +157,14 @@ class CreditNote extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /** Credit notes dated from this day need 2 approvals before they are credited; earlier-dated ones issue directly. */
+    public const APPROVALS_FROM = '2026-11-12';
+
+    public static function needsApproval($creditNoteDate): bool
+    {
+        return $creditNoteDate && substr((string) ($creditNoteDate instanceof \DateTimeInterface ? $creditNoteDate->format('Y-m-d') : $creditNoteDate), 0, 10) >= self::APPROVALS_FROM;
+    }
+
     /** The two people who must approve it (with comments) before it is credited. */
     public function approvals()
     {

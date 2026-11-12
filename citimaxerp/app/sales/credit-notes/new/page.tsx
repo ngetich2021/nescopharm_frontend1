@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import {
   createCreditNote,
+  creditNoteNeedsApproval,
   fetchCreditNoteById,
   parseCreditNoteAmount,
   updateCreditNote,
@@ -120,10 +121,10 @@ export default function NewCreditNotePage() {
   const [currency, setCurrency] = useState("KES")
   const [notes, setNotes] = useState("")
   const [lineItems, setLineItems] = useState<EditableLineItem[]>([buildEmptyLineItem()])
-  // The 2 people who must approve it before it is credited. A credit note from before approvals
-  // began (12/11/2026) is edited without them.
+  // The 2 people who must approve it before it is credited - only for credit notes dated from
+  // 12/11/2026; earlier-dated ones are issued directly.
   const [approverIds, setApproverIds] = useState<[string, string]>(["", ""])
-  const [needsApprovers, setNeedsApprovers] = useState(true)
+  const needsApprovers = creditNoteNeedsApproval(creditNoteDate)
 
   const selectedInvoice = useMemo(
     () => invoices.find((invoice) => invoice.id === selectedInvoiceId) || null,
@@ -184,7 +185,6 @@ export default function NewCreditNotePage() {
       setNotes(creditNote.notes || "")
 
       const existing = (creditNote.approvals || []).map((a) => a.approver_id)
-      setNeedsApprovers(Boolean(creditNote.approval_status))
       setApproverIds([existing[0] || "", existing[1] || ""])
 
       const mappedLineItems: EditableLineItem[] =
@@ -372,12 +372,14 @@ export default function NewCreditNotePage() {
         currency: currency || "KES",
         notes: notes.trim() || undefined,
         line_items: normalizedLineItems,
-        approver_ids: approverIds,
+        ...(needsApprovers ? { approver_ids: approverIds } : {}),
       })
 
       toast({
-        title: "Sent for approval",
-        description: "Credit note created and sent to the 2 approvers. It is credited once both approve it.",
+        title: needsApprovers ? "Sent for approval" : "Credit note created",
+        description: needsApprovers
+          ? "Credit note created and sent to the 2 approvers. It is credited once both approve it."
+          : "Dated before 12/11/2026, so it needs no approvals: click Issue on it to credit it.",
       })
 
       router.push(`/sales/credit-notes/${created.id}`)
@@ -554,6 +556,12 @@ export default function NewCreditNotePage() {
                 rows={3}
               />
             </div>
+
+            {!needsApprovers && (
+              <p className="md:col-span-2 text-xs text-muted-foreground">
+                Dated before 12/11/2026, so no approvers are needed: after saving, click Issue on it to credit it.
+              </p>
+            )}
 
             {needsApprovers && (
               <div className="space-y-2 md:col-span-2 rounded-lg border p-4">
