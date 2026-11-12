@@ -108,6 +108,7 @@ export default function StockCountDetailsPage() {
       batch_id: null,
       batch_number: found.batch_number,
       expiry_date: found.expiry_date,
+      manufacture_date: found.manufacture_date ?? null,
       is_new_batch: true,
       expected_quantity: 0,
       counted_quantity: found.counted_quantity,
@@ -130,6 +131,7 @@ export default function StockCountDetailsPage() {
         batch_id: item.batch_id ?? null,
         batch_number: item.batch_number ?? null,
         expiry_date: item.expiry_date ?? null,
+        manufacture_date: item.manufacture_date ?? null,
         is_new_batch: !!item.is_new_batch,
         expected_quantity: item.expected_quantity,
         counted_quantity: item.counted_quantity ?? null,
@@ -414,6 +416,7 @@ export default function StockCountDetailsPage() {
                     <TableHead className="w-14">S/No</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Batch</TableHead>
+                    <TableHead>Mfg. Date</TableHead>
                     <TableHead>Expiry</TableHead>
                     <TableHead className="text-right">Expected</TableHead>
                     <TableHead className="text-right">Counted</TableHead>
@@ -439,6 +442,7 @@ export default function StockCountDetailsPage() {
                           )}
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{item.batch_number || <span className="text-muted-foreground">No batch</span>}</TableCell>
+                        <TableCell className="whitespace-nowrap">{item.manufacture_date ? format(new Date(item.manufacture_date), "dd/MM/yyyy") : "-"}</TableCell>
                         <TableCell className="whitespace-nowrap">{item.expiry_date ? format(new Date(item.expiry_date), "dd/MM/yyyy") : "-"}</TableCell>
                         <TableCell className="text-right">{item.expected_quantity}</TableCell>
                         <TableCell className="text-right">

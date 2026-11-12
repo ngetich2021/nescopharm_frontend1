@@ -16,8 +16,11 @@ use Illuminate\Support\Collection;
  *   one line with no batch for a product that has none, so found stock can still be entered;
  * - stock found during the count that is in no listed batch is added as a line with its batch
  *   number and expiry (is_new_batch);
- * - approving the count sets each batch to what was counted, puts found stock into its batch
- *   (the existing one with that number, or a new one) and records every change as a movement.
+ * - a line counted is compared with what its batch held at that moment (its expected quantity
+ *   is refreshed when it is counted), and approving applies only that difference to what the
+ *   batch holds at approval - so sales made while the count is open are not undone;
+ * - found stock goes into its batch (the existing one with that number, or a new one), and every
+ *   change is recorded as a movement.
  */
 class StockCountService
 {
@@ -58,6 +61,7 @@ class StockCountService
             'batch_id' => $b->id,
             'batch_number' => $b->batch_number,
             'expiry_date' => optional($b->expiry_date)->toDateString(),
+            'manufacture_date' => optional($b->manufacture_date)->toDateString(),
             'expected_quantity' => (int) $b->quantity_available,
             'unit_cost' => $b->unit_cost,
         ]);
@@ -71,7 +75,7 @@ class StockCountService
             }
             $batches = $byKey->get($item['product_id'] . '|' . ($variantId ?? ''), collect());
             if ($batches->isEmpty()) {
-                $lines[] = array_merge($item, ['batch_id' => null, 'batch_number' => null, 'expiry_date' => null, 'expected_quantity' => 0]);
+                $lines[] = array_merge($item, ['batch_id' => null, 'batch_number' => null, 'expiry_date' => null, 'manufacture_date' => null, 'expected_quantity' => 0]);
                 continue;
             }
             foreach ($batches as $b) {
@@ -108,7 +112,7 @@ class StockCountService
         $summary = ['batches_updated' => 0, 'batches_created' => 0, 'movements' => 0];
         $items = $count->items()->whereNotNull('counted_quantity')->get();
         $touched = [];      // product_id|variant_id => true, to refresh their stock totals
-        $targets = [];      // batch id => ['batch' => InventoryBatch, 'qty' => counted total]
+        $targets = [];      // batch id => ['batch' => InventoryBatch, 'qty' => difference found by the count]
         $newBatches = [];   // product|variant|batch number => ['items' => [...], 'qty' => n]
         // The counted batches in one query, not one per line.
         $batchesById = InventoryBatch::whereIn('id', $items->pluck('batch_id')->filter()->unique()->values())->get()->keyBy('id');
@@ -121,7 +125,9 @@ class StockCountService
                 $batch = $batchesById->get($item->batch_id);
                 if ($batch) {
                     $targets[$batch->id] ??= ['batch' => $batch, 'qty' => 0];
-                    $targets[$batch->id]['qty'] += (int) $item->counted_quantity;
+                    // Counted minus what the batch held when it was counted: sales made while the
+                    // count was open stay deducted (setting the batch to the count would undo them).
+                    $targets[$batch->id]['qty'] += (int) $item->counted_quantity - (int) $item->expected_quantity;
                     $touched[$key] = true;
                     continue;
                 }
@@ -133,8 +139,14 @@ class StockCountService
                 $batch = $this->findBatch($count->company_id, $item->product_id, $item->variant_id, $number);
                 if ($batch) {
                     $targets[$batch->id] ??= ['batch' => $batch, 'qty' => 0];
+                    // Found on the shelf in no listed line: added to that batch.
                     $targets[$batch->id]['qty'] += (int) $item->counted_quantity;
                     $item->update(['batch_id' => $batch->id]);
+                    // The pack's manufacturing date fills the batch's when it had none.
+                    $target = $targets[$batch->id]['batch'];
+                    if ($item->manufacture_date && !$target->manufacture_date) {
+                        $target->manufacture_date = $item->manufacture_date;
+                    }
                 } else {
                     $nk = $key . '|' . strtoupper($number);
                     $newBatches[$nk] ??= ['items' => [], 'qty' => 0];
@@ -153,9 +165,13 @@ class StockCountService
             }
         }
 
-        foreach ($targets as ['batch' => $batch, 'qty' => $qty]) {
-            $before = (int) $batch->quantity_available;
+        foreach ($targets as ['batch' => $batch, 'qty' => $diff]) {
+            $before = (int) $batch->quantity_available; // as it is now, at approval (loaded above)
+            $qty = max(0, $before + $diff);
             if ($qty === $before) {
+                if ($batch->isDirty()) {
+                    $batch->save(); // e.g. its manufacturing date filled in from the count
+                }
                 continue;
             }
             $batch->quantity_available = $qty;
@@ -184,6 +200,7 @@ class StockCountService
                 'quantity_received' => $qty,
                 'quantity_available' => $qty,
                 'expiry_date' => collect($lines)->pluck('expiry_date')->filter()->first(),
+                'manufacture_date' => collect($lines)->pluck('manufacture_date')->filter()->first(),
                 'received_date' => now(),
                 'unit_cost' => $first->unit_cost ?? $variant?->cost ?? $product?->unit_cost ?? 0,
                 'selling_price' => $variant?->price ?? $product?->price,

@@ -323,6 +323,7 @@ export interface StockCountItem {
   batch_id?: string | null;
   batch_number?: string | null;
   expiry_date?: string | null;
+  manufacture_date?: string | null;
   is_new_batch?: boolean;
   product_name: string;
   product_sku: string | null;
@@ -415,6 +416,7 @@ export interface CreateStockCountItem {
   batch_id?: string | null;
   batch_number?: string | null;
   expiry_date?: string | null;
+  manufacture_date?: string | null;
   is_new_batch?: boolean;
   expected_quantity: number;
   counted_quantity?: number | null;

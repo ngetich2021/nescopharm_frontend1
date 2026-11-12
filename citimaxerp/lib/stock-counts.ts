@@ -367,7 +367,7 @@ export function formatVariance(varianceQuantity: number | null): string {
  */
 export async function checkCountBatch(params: { product_id: string; variant_id?: string | null; batch_number: string }): Promise<{
   exists: boolean
-  batch: { id: string; batch_number: string; quantity_available: number; expiry_date: string | null; status: string } | null
+  batch: { id: string; batch_number: string; quantity_available: number; expiry_date: string | null; manufacture_date?: string | null; status: string } | null
 }> {
   const qs = new URLSearchParams({ product_id: params.product_id, batch_number: params.batch_number })
   if (params.variant_id) qs.append("variant_id", params.variant_id)

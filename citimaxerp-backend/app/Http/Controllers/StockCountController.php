@@ -189,6 +189,7 @@ class StockCountController extends Controller
                             'batch_id',
                             'batch_number',
                             'expiry_date',
+                            'manufacture_date',
                             'is_new_batch',
                             'product_name',
                             'product_sku',
@@ -453,6 +454,7 @@ class StockCountController extends Controller
                         'batch_id' => $item['batch_id'] ?? null,
                         'batch_number' => $item['batch_number'] ?? null,
                         'expiry_date' => $item['expiry_date'] ?? null,
+                        'manufacture_date' => $item['manufacture_date'] ?? null,
                         'is_new_batch' => ($item['is_new_batch'] ?? false) ? 'true' : 'false',
                         'product_name' => $productName,
                         'product_sku' => $productSku,
@@ -556,6 +558,7 @@ class StockCountController extends Controller
             'items.*.batch_id' => 'nullable|uuid',
             'items.*.batch_number' => 'nullable|string|max:100',
             'items.*.expiry_date' => 'nullable|date',
+            'items.*.manufacture_date' => 'nullable|date',
             'items.*.is_new_batch' => 'nullable|boolean',
             'items.*.expected_quantity' => 'required|integer|min:0',
             'items.*.counted_quantity' => 'nullable|integer|min:0',
@@ -628,6 +631,13 @@ class StockCountController extends Controller
                     $existingItemsById = $existingIds
                         ? StockCountItem::whereIn('id', $existingIds)->where('stock_count_id', $stockCount->id)->get()->keyBy('id')
                         : collect();
+                    // What each counted batch holds now: a line counted (or recounted) in this save
+                    // takes it as its expected quantity, so sales made while the count is open are
+                    // not mistaken for missing stock (approval then applies only the difference).
+                    $batchIds = array_values(array_unique(array_filter(array_column($items, 'batch_id'))));
+                    $batchQty = $batchIds
+                        ? \App\Models\InventoryBatch::whereIn('id', $batchIds)->pluck('quantity_available', 'id')
+                        : collect();
 
                     $existingItemIds = [];
                     $now = now();
@@ -684,6 +694,7 @@ class StockCountController extends Controller
                             'batch_id' => $item['batch_id'] ?? null,
                             'batch_number' => isset($item['batch_number']) ? (trim($item['batch_number']) ?: null) : null,
                             'expiry_date' => $item['expiry_date'] ?? null,
+                            'manufacture_date' => $item['manufacture_date'] ?? null,
                             'is_new_batch' => ($item['is_new_batch'] ?? false) ? 'true' : 'false',
                             'product_name' => $productName,
                             'product_sku' => $productSku,
@@ -702,6 +713,20 @@ class StockCountController extends Controller
                             'is_counted' => !is_null($item['counted_quantity'] ?? null) ? 'true' : 'false',
                             'requires_recount' => ($item['requires_recount'] ?? false) ? 'true' : 'false',
                         ];
+
+                        $existingRow = isset($item['id']) ? $existingItemsById->get($item['id']) : null;
+                        $newCount = $item['counted_quantity'] ?? null;
+                        $countChanged = !is_null($newCount)
+                            && (!$existingRow || is_null($existingRow->counted_quantity) || (int) $existingRow->counted_quantity !== (int) $newCount);
+                        if (!empty($item['batch_id']) && $batchQty->has($item['batch_id'])) {
+                            if ($countChanged || is_null($newCount)) {
+                                // Counted now (or not counted yet): expected = what the batch holds now.
+                                $itemData['expected_quantity'] = max(0, (int) $batchQty[$item['batch_id']]);
+                            } elseif ($existingRow) {
+                                // Same count as before: keep what the batch held when it was counted.
+                                $itemData['expected_quantity'] = (int) $existingRow->expected_quantity;
+                            }
+                        }
 
                         if (isset($item['id']) && $existingItemsById->has($item['id'])) {
                             $existing = $existingItemsById->get($item['id']);
@@ -799,6 +824,7 @@ class StockCountController extends Controller
                 'batch_number' => $batch->batch_number,
                 'quantity_available' => (int) $batch->quantity_available,
                 'expiry_date' => optional($batch->expiry_date)->toDateString(),
+                'manufacture_date' => optional($batch->manufacture_date)->toDateString(),
                 'status' => $batch->status,
             ] : null,
         ]);

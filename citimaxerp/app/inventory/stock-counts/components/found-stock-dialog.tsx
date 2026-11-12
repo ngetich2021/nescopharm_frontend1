@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle2, Loader2, PackagePlus, Search } from "lucide-react"
+import { displayDate } from "@/lib/date-format"
 import { getProducts, type Product } from "@/lib/products"
 import { checkCountBatch } from "@/lib/stock-counts"
 import type { StockCountItem } from "@/app/types"
@@ -15,7 +16,7 @@ import type { StockCountItem } from "@/app/types"
 // pack, its expiry and how many. If the batch number is one of the product's batches, approving
 // the count corrects that batch; if not, a new batch is created - so expiry is then required.
 
-export type FoundStock = Pick<StockCountItem, "product_id" | "variant_id" | "product_name" | "batch_number" | "expiry_date" | "counted_quantity"> & {
+export type FoundStock = Pick<StockCountItem, "product_id" | "variant_id" | "product_name" | "batch_number" | "expiry_date" | "manufacture_date" | "counted_quantity"> & {
   existing_batch: { id: string; quantity_available: number; expiry_date: string | null } | null
 }
 
@@ -33,13 +34,14 @@ export function FoundStockDialog({ open, onOpenChange, onAdd }: Props) {
   const [variantId, setVariantId] = useState<string>("")
   const [batchNumber, setBatchNumber] = useState("")
   const [expiry, setExpiry] = useState("")
+  const [manufactured, setManufactured] = useState("")
   const [quantity, setQuantity] = useState("")
   const [check, setCheck] = useState<Awaited<ReturnType<typeof checkCountBatch>> | null>(null)
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
     if (!open) {
-      setQuery(""); setResults([]); setProduct(null); setVariantId(""); setBatchNumber(""); setExpiry(""); setQuantity(""); setCheck(null)
+      setQuery(""); setResults([]); setProduct(null); setVariantId(""); setBatchNumber(""); setExpiry(""); setManufactured(""); setQuantity(""); setCheck(null)
     }
   }, [open])
 
@@ -67,6 +69,7 @@ export function FoundStockDialog({ open, onOpenChange, onAdd }: Props) {
         const res = await checkCountBatch({ product_id: product.id, variant_id: variantId || null, batch_number: batchNumber.trim() })
         setCheck(res)
         if (res.exists && res.batch?.expiry_date) setExpiry(res.batch.expiry_date)
+        if (res.exists && res.batch?.manufacture_date) setManufactured(res.batch.manufacture_date)
       } catch { setCheck(null) }
       finally { setChecking(false) }
     }, 400)
@@ -77,6 +80,8 @@ export function FoundStockDialog({ open, onOpenChange, onAdd }: Props) {
   const isNew = check ? !check.exists : null
   const valid = !!product && (!needsVariant || !!variantId) && batchNumber.trim() !== "" && check !== null
     && Number.isInteger(qty) && qty > 0 && (!isNew || expiry !== "")
+    // Made before it expires, and not in the future.
+    && (!manufactured || ((!expiry || manufactured < expiry) && manufactured <= new Date().toISOString().slice(0, 10)))
 
   const add = () => {
     if (!product || !valid) return
@@ -87,6 +92,7 @@ export function FoundStockDialog({ open, onOpenChange, onAdd }: Props) {
       product_name: variant ? `${product.name} - ${variant.name}` : product.name,
       batch_number: batchNumber.trim(),
       expiry_date: expiry || null,
+      manufacture_date: manufactured || null,
       counted_quantity: qty,
       existing_batch: check?.exists && check.batch ? { id: check.batch.id, quantity_available: check.batch.quantity_available, expiry_date: check.batch.expiry_date } : null,
     })
@@ -158,7 +164,7 @@ export function FoundStockDialog({ open, onOpenChange, onAdd }: Props) {
             <p className="flex items-start gap-2 rounded-md bg-blue-50 p-2 text-xs text-blue-800">
               <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               Existing batch {check.batch.batch_number}: the system holds {check.batch.quantity_available}
-              {check.batch.expiry_date ? `, expires ${check.batch.expiry_date}` : ""}. What is counted for it in this count becomes its quantity on approval.
+              {check.batch.expiry_date ? `, expires ${displayDate(check.batch.expiry_date)}` : ""}. What is counted for it in this count becomes its quantity on approval.
             </p>
           )}
           {check && !check.exists && (
@@ -167,10 +173,25 @@ export function FoundStockDialog({ open, onOpenChange, onAdd }: Props) {
             </p>
           )}
 
-          <div className="space-y-1.5">
-            <Label>Expiry date{isNew ? " (required for a new batch)" : ""}</Label>
-            <Input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} disabled={!product || !!check?.exists} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Manufacturing date</Label>
+              <Input
+                type="date"
+                value={manufactured}
+                max={expiry || undefined}
+                onChange={(e) => setManufactured(e.target.value)}
+                disabled={!product || !!(check?.exists && check.batch?.manufacture_date)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Expiry date{isNew ? " *" : ""}</Label>
+              <Input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} disabled={!product || !!check?.exists} />
+            </div>
           </div>
+          {manufactured && expiry && manufactured >= expiry && (
+            <p className="text-xs text-destructive">The manufacturing date must be before the expiry date.</p>
+          )}
         </div>
 
         <DialogFooter>
