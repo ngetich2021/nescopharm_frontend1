@@ -165,9 +165,6 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
   const ageing = statement.ageing?.rows.length ? statement.ageing : null
   const ageingBase = ageing ? ageing.buckets.reduce((s, b) => s + b.amount, 0) : 0
   const pendingOnly = include.pendingOnly
-  // Every bill still owed (bounced-cheque debits too), after credit notes and receipts - the ageing rows.
-  const owedBills = statement.ageing?.rows ?? []
-  const owedTotal = owedBills.reduce((s, r) => s + r.amount, 0)
   const pendingBills = include.outstanding && !pendingOnly ? statement.pending_bills ?? [] : []
   const pendingTotal = pendingBills.reduce((sum, bill) => sum + toNumber(bill.pending_amount), 0)
   const pdCheques = include.pdCheques && !pendingOnly ? statement.pd_cheques ?? [] : []
@@ -193,15 +190,21 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
     rows.push(["Statement Date", statementDate])
     rows.push([])
 
+    // Pending Bills Only: the ageing table, as section 1.
     if (pendingOnly) {
-      rows.push(["1. PENDING BILLS"])
-      rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Invoice Amount (KES)", "Balance Due (KES)", "Days Overdue"])
-      owedBills.forEach((r, i) => {
-        rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.invoice_amount != null ? r.invoice_amount.toFixed(2) : "", r.amount.toFixed(2), r.overdue_days || ""])
-      })
-      rows.push(["", "Total", "", "", "", owedTotal.toFixed(2), ""])
-      if (statement.ageing && statement.ageing.unallocated !== 0) rows.push(["", "Unallocated payments / credits", "", "", "", statement.ageing.unallocated.toFixed(2), ""])
-      rows.push(["", "Total Outstanding", "", "", "", closing.toFixed(2), ""])
+      rows.push([`1. PENDING BILLS (as at ${statementDate})`])
+      if (!ageing) {
+        rows.push(["There are no pending bills: nothing is owed."])
+      } else {
+        rows.push(["S/No", "Invoice No.", "Invoice Date", "Due Date", "Days Past Due", ...ageing.buckets.map((b) => b.label), "Balance (KES)"])
+        ageing.rows.forEach((r, i) => {
+          rows.push([i + 1, r.invoice_number, formatDate(r.invoice_date), formatDate(r.due_date), r.overdue_days, ...ageing.buckets.map((_, b) => (b === r.bucket ? r.amount.toFixed(2) : "")), r.amount.toFixed(2)])
+        })
+        rows.push(["", "Total", "", "", "", ...ageing.buckets.map((b) => b.amount.toFixed(2)), ageingBase.toFixed(2)])
+        rows.push(["", "% of Total", "", "", "", ...ageing.buckets.map((b) => (ageingBase > 0 ? ((b.amount / ageingBase) * 100).toFixed(1) + "%" : "0.0%")), ""])
+        if (ageing.unallocated !== 0) rows.push(["", "Unallocated payments / credits", "", "", "", ...ageing.buckets.map(() => ""), ageing.unallocated.toFixed(2)])
+        rows.push(["", "Total Outstanding", "", "", "", ...ageing.buckets.map(() => ""), ageing.total.toFixed(2)])
+      }
       rows.push([])
     }
 
@@ -339,18 +342,21 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           ["Account No.", account?.account_number ?? "-"],
           ["Total outstanding", `KES ${closing.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
         ],
-        headers: ["S/No", "Invoice No.", "Invoice Date", "Due Date", "Invoice Amount", "Balance Due", "Days Overdue"],
-        moneyColumns: [4, 5],
-        rows: owedBills.map((r, i) => [
+        headers: ["S/No", "Invoice No.", "Invoice Date", "Due Date", "Days Past Due", ...(ageing?.buckets ?? []).map((b) => b.label), "Balance (KES)"],
+        moneyColumns: [...(ageing?.buckets ?? []).map((_, i) => 5 + i), 5 + (ageing?.buckets.length ?? 0)],
+        rows: (ageing?.rows ?? []).map((r, i) => [
           i + 1,
           r.invoice_number,
           formatDate(r.invoice_date),
           formatDate(r.due_date),
-          r.invoice_amount ?? null,
+          r.overdue_days,
+          ...(ageing?.buckets ?? []).map((_, b) => (b === r.bucket ? r.amount : null)),
           r.amount,
-          r.overdue_days || null,
         ]),
-        footer: [["", "Total", "", "", "", owedTotal, ""]],
+        footer: ageing
+          ? [["", "Total", "", "", "", ...ageing.buckets.map((b) => b.amount), ageingBase],
+             ["", "Total Outstanding", "", "", "", ...ageing.buckets.map(() => ""), ageing.total]]
+          : [],
       }, company)
       return
     }
@@ -542,63 +548,11 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
             </div>
           </div>
 
-          {/* Pending Bills Only: just what is still owed, bill by bill */}
-          {pendingOnly && (
+          {/* Pending Bills Only with nothing owed (otherwise the ageing table below is the pending bills) */}
+          {pendingOnly && !ageing && (
             <section className="mb-8 print:mb-3">
               <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">1. Pending Bills</h2>
-              <p className="text-xs text-gray-500 mb-2">
-                Every bill not yet fully paid as at {statementDate}, oldest first, after payments and credit notes.
-              </p>
-              {owedBills.length === 0 ? (
-                <p className="text-sm italic text-gray-600">There are no pending bills: nothing is owed.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className={TABLE}>
-                    <thead>
-                      <tr>
-                        <th className={`${TH} w-12`}>S/No</th>
-                        <th className={TH}>Invoice No.</th>
-                        <th className={`${TH} w-24`}>Invoice Date</th>
-                        <th className={`${TH} w-24`}>Due Date</th>
-                        <th className={`${TH} text-right w-32`}>Invoice Amount (KES)</th>
-                        <th className={`${TH} text-right w-32`}>Balance Due (KES)</th>
-                        <th className={`${TH} text-right w-24`}>Days Overdue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {owedBills.map((r, i) => (
-                        <tr key={r.invoice_id}>
-                          <td className={TD}>{i + 1}</td>
-                          <td className={TD}>{r.invoice_number}</td>
-                          <td className={TD}>{formatDate(r.invoice_date)}</td>
-                          <td className={TD}>{formatDate(r.due_date)}</td>
-                          <td className={`${TD} text-right`}>{r.invoice_amount != null ? formatAmount(r.invoice_amount) : "—"}</td>
-                          <td className={`${TD} text-right font-medium`}>{formatAmount(r.amount)}</td>
-                          <td className={`${TD} text-right ${r.overdue_days > 0 ? "text-red-700 font-semibold" : ""}`}>
-                            {r.overdue_days > 0 ? r.overdue_days : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                      {statement.ageing && statement.ageing.unallocated !== 0 && (
-                        <tr>
-                          <td className={`${TD} italic text-gray-600`} colSpan={5}>
-                            {statement.ageing.unallocated < 0 ? "Less: payments / credits not yet set against a bill" : "Add: other balance"}
-                          </td>
-                          <td className={`${TD} text-right`}>{formatAmount(statement.ageing.unallocated)}</td>
-                          <td className={TD}></td>
-                        </tr>
-                      )}
-                    </tbody>
-                    <tfoot>
-                      <tr className="font-bold">
-                        <td colSpan={5} className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">Total Outstanding</td>
-                        <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800 print:whitespace-nowrap text-right">{formatAmount(closing)}</td>
-                        <td className="px-2 py-2 print:px-1 print:py-1 border-t-2 border-gray-800"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+              <p className="text-sm italic text-gray-600">There are no pending bills: nothing is owed.</p>
             </section>
           )}
 
@@ -651,9 +605,12 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
           )}
 
           {/* 2. Ageing */}
-          {ageing && !pendingOnly && (
-            <section className="mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2">
-              <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">2. Accounts Receivable Ageing Analysis</h2>
+          {/* With "Pending Bills Only" this same table is the whole statement, as "1. Pending Bills". */}
+          {ageing && (
+            <section className={pendingOnly ? "mb-8 print:mb-3" : "mb-8 border-t border-gray-200 pt-6 print:mb-3 print:pt-2"}>
+              <h2 className="text-base print:text-[11px] font-bold mb-1 print:mb-0.5">
+                {pendingOnly ? "1. Pending Bills" : "2. Accounts Receivable Ageing Analysis"}
+              </h2>
               <p className="text-xs text-gray-500 mb-2">
                 As at {formatDate(ageing.as_at)}, each unpaid invoice by its age from the invoice date
                 {ageing.credit_notes > 0 && `, after credit notes of KES ${formatAmount(ageing.credit_notes)}`}
