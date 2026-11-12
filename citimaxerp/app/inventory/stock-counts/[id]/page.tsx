@@ -39,12 +39,17 @@ import {
 } from "@/lib/stock-counts"
 import type { StockCount, StockCountItem } from "@/app/types"
 import { format } from "date-fns"
+import { ExportMenu } from "@/components/export-menu"
+import { exportTable, type ExportFormat } from "@/lib/table-export"
+import { useOptionalAuth } from "@/lib/auth-context"
+import { documentFileName } from "@/lib/document-names"
 
 export default function StockCountDetailsPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
   const [stockCount, setStockCount] = useState<StockCount | null>(null)
+  const company = useOptionalAuth()?.userProfile?.company
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [items, setItems] = useState<StockCountItem[]>([])
@@ -243,6 +248,50 @@ export default function StockCountDetailsPage() {
       (item.product_sku && item.product_sku.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
+  // Export the lines shown (following the search) for tracking: Excel / PDF / CSV, logo-headed.
+  const handleExport = async (fmt: ExportFormat) => {
+    const d = (v?: string | null) => (v ? format(new Date(v), "dd/MM/yyyy") : "")
+    const lineStatus = (i: StockCountItem) =>
+      i.is_new_batch ? "Found" : i.counted_quantity === null || i.counted_quantity === undefined ? "Not counted" : "Counted"
+    const counted = filteredItems.filter((i) => i.counted_quantity !== null && i.counted_quantity !== undefined)
+    const sum = (f: (i: StockCountItem) => number) => filteredItems.reduce((s, i) => s + f(i), 0)
+    await exportTable(fmt, {
+      fileName: documentFileName([stockCount.count_number, stockCount.name, "Stock Count"]),
+      title: "Stock Count",
+      subtitle: `${stockCount.name} (${stockCount.count_number})`,
+      details: [
+        ["Store", stockCount.store?.name || "-"],
+        ["Status", stockCount.status.replace(/_/g, " ")],
+        ["Lines counted", `${counted.length} of ${filteredItems.length}`],
+        ["Exported", format(new Date(), "dd/MM/yyyy HH:mm")],
+      ],
+      headers: ["S/No", "Product", "Batch", "Mfg. Date", "Expiry", "Expected", "Counted", "Variance", "Value (KSh)", "Status", "Notes"],
+      moneyColumns: [8],
+      rows: filteredItems.map((i, n) => {
+        const hasCount = i.counted_quantity !== null && i.counted_quantity !== undefined
+        return [
+          n + 1,
+          i.product_name,
+          i.batch_number || "No batch",
+          d(i.manufacture_date),
+          d(i.expiry_date),
+          i.expected_quantity,
+          hasCount ? i.counted_quantity : "",
+          hasCount ? (i.counted_quantity as number) - i.expected_quantity : "",
+          i.variance_value ? parseFloat(String(i.variance_value)) : "",
+          lineStatus(i),
+          i.notes || "",
+        ]
+      }),
+      footer: [["", "Total", "", "", "",
+        sum((i) => i.expected_quantity),
+        counted.reduce((s, i) => s + (i.counted_quantity as number), 0),
+        counted.reduce((s, i) => s + (i.counted_quantity as number) - i.expected_quantity, 0),
+        sum((i) => (i.variance_value ? parseFloat(String(i.variance_value)) : 0)),
+        "", ""]],
+    }, company)
+  }
+
   return (
     <PermissionGuard permissions={["can_view_stock_counts_menu"]}>
       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
@@ -391,6 +440,7 @@ export default function StockCountDetailsPage() {
             <div className="flex items-center justify-between">
               <CardTitle>Items</CardTitle>
               <div className="flex items-center gap-2">
+                <ExportMenu onExport={handleExport} size="sm" />
                 {canEdit && (
                   <Button variant="outline" size="sm" onClick={() => setShowFoundDialog(true)}>
                     <PackagePlus className="mr-2 h-4 w-4" /> Add found stock
