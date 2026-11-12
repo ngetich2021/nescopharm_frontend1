@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\CompanySetting;
+use Illuminate\Console\Scheduling\CallbackEvent;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -41,14 +43,67 @@ class SchedulerTickController extends Controller
         app()->terminating(function () {
             ignore_user_abort(true);
             set_time_limit(600);
-            try {
-                Artisan::call('schedule:run');
-            } catch (\Throwable $e) {
-                Log::error('Scheduler tick failed', ['error' => $e->getMessage()]);
-            }
+            $this->runDueEvents();
         });
 
         return response()->json(['status' => 'ok', 'schedule' => 'started']);
+    }
+
+    /**
+     * What schedule:run does, but in this process: schedule:run starts each command as a new
+     * "php artisan ..." process, and inside the web server PHP_BINARY is php-fpm, so nothing ran.
+     * Each tick's result is kept in the "scheduler_last_tick" setting.
+     */
+    private function runDueEvents(): void
+    {
+        $ran = [];
+        app(\Illuminate\Contracts\Console\Kernel::class); // defines the schedule
+        $schedule = app(Schedule::class);
+
+        foreach ($schedule->dueEvents(app()) as $event) {
+            $name = $event instanceof CallbackEvent ? ($event->description ?: 'job') : $this->artisanCommand($event->command);
+            try {
+                if (! $event->filtersPass(app())) {
+                    continue;
+                }
+                if ($event->withoutOverlapping && ! $event->mutex->create($event)) {
+                    $ran[] = "{$name}: skipped (still running)";
+                    continue;
+                }
+                try {
+                    if ($event instanceof CallbackEvent) {
+                        $event->run(app());
+                    } else {
+                        Artisan::call($name);
+                    }
+                    $ran[] = "{$name}: ok";
+                } finally {
+                    if ($event->withoutOverlapping) {
+                        $event->mutex->forget($event);
+                    }
+                }
+            } catch (\Throwable $e) {
+                $ran[] = "{$name}: failed - " . mb_substr($e->getMessage(), 0, 200);
+                Log::error('Scheduled task failed', ['task' => $name, 'error' => $e->getMessage()]);
+            }
+        }
+
+        try {
+            CompanySetting::updateOrCreate(
+                ['setting_key' => 'scheduler_last_tick', 'company_id' => CompanySetting::where('setting_key', 'scheduler_token_hash')->value('company_id')
+                    ?? DB::table('companies')->orderBy('created_at')->value('id')],
+                ['setting_value' => ['at' => now()->toIso8601String(), 'ran' => $ran], 'is_active' => true,
+                 'description' => 'Last run of the schedule by the Cloudflare Worker and what it ran']
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Scheduler tick not recorded', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /** "'/usr/bin/php' 'artisan' health:check --report" -> "health:check --report" */
+    private function artisanCommand(string $command): string
+    {
+        return trim(preg_replace("/^.*?['\"]?artisan['\"]?\s+/", '', $command));
     }
 
     private function validToken(string $token): bool
