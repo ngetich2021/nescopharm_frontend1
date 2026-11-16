@@ -131,6 +131,21 @@ class CreditNote extends Model
                 }
             }
         });
+
+        // The invoice it was raised on shows "Credited" (not "Paid") once the note counts, and back again if it is voided or deleted.
+        static::saved(function ($model) {
+            if ($model->invoice_id && ($model->wasRecentlyCreated || $model->wasChanged(['status', 'invoice_id']))) {
+                Invoice::find($model->invoice_id)?->refreshClearedStatus();
+                if ($model->wasChanged('invoice_id') && ($old = $model->getOriginal('invoice_id'))) {
+                    Invoice::find($old)?->refreshClearedStatus();
+                }
+            }
+        });
+        static::deleted(function ($model) {
+            if ($model->invoice_id) {
+                Invoice::find($model->invoice_id)?->refreshClearedStatus();
+            }
+        });
     }
 
     // -------------------------------------------------------------------------

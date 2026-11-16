@@ -78,7 +78,7 @@ class InvoiceOrderService
         $settled = $paid + (float) $invoice->amount_credited;
         if (!in_array($invoice->status, ['draft', 'cancelled'], true)) {
             $invoice->update([
-                'status' => $settled >= $total - 0.01 ? ($paid >= $total - 0.01 ? 'paid' : 'credited')
+                'status' => $settled >= $total - 0.01 ? $invoice->clearedStatus()
                     : ($invoice->due_date && now()->startOfDay()->isAfter($invoice->due_date) ? 'overdue'
                     : ($settled > 0 ? 'partially_paid' : 'sent')),
             ]);

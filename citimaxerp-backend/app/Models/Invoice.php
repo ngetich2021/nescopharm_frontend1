@@ -284,8 +284,8 @@ class Invoice extends Model
             $paid = (float) $model->amount_paid;
             $credited = (float) $model->amount_credited;
             if ($model->balance_amount <= 0.005) {
-                // Cleared at least partly by a credit note: "Credited", not "Paid".
-                $model->status = $credited > 0.005 && $paid < (float) $model->total_amount - 0.005 ? 'credited' : 'paid';
+                // Cleared at least partly by a credit note, or a credit note was raised on it: "Credited", not "Paid".
+                $model->status = $model->clearedStatus();
                 if (!$model->paid_at) {
                     $model->paid_at = now();
                 }
@@ -385,6 +385,39 @@ class Invoice extends Model
         return $days > 0 && $this->invoice_date
             ? Carbon::parse($this->invoice_date)->startOfDay()->addDays($days)
             : null;
+    }
+
+    /**
+     * The status of an invoice with nothing left to pay. "Credited" when credit cleared any of it, or when
+     * a credit note (issued or used) was raised on it - even one it was paid in full before, whose credit
+     * went to the customer's other invoices; else "Paid".
+     */
+    public function clearedStatus(): string
+    {
+        $creditCleared = (float) $this->amount_credited > 0.005 && (float) $this->amount_paid < (float) $this->total_amount - 0.005;
+
+        return $creditCleared || $this->hasCreditNoteRaised() ? 'credited' : 'paid';
+    }
+
+    /** A credit note raised on this invoice that counts (issued or applied; not draft, pending or void). */
+    public function hasCreditNoteRaised(): bool
+    {
+        return $this->exists && CreditNote::where('invoice_id', $this->id)->whereIn('status', ['issued', 'applied'])->exists();
+    }
+
+    /**
+     * Re-labels a cleared invoice Paid/Credited after a credit note raised on it was issued, applied,
+     * voided or deleted. Status only: saved quietly, so the ledger and eTIMS are untouched.
+     */
+    public function refreshClearedStatus(): void
+    {
+        if (!in_array($this->status, ['paid', 'credited'], true) || $this->outstanding() > 0.005) {
+            return;
+        }
+        $status = $this->clearedStatus();
+        if ($status !== $this->status) {
+            $this->forceFill(['status' => $status])->saveQuietly();
+        }
     }
 
     /** What is still owed: the total less money received and credit notes applied. */
