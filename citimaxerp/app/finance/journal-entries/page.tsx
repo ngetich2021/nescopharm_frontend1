@@ -61,6 +61,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format, formatDistanceToNow } from "date-fns"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { useAuth } from "@/lib/auth-context"
 import { DownloadButton } from "@/components/download-button"
 import type { TableExport } from "@/lib/table-export"
 import { documentFileName, filePeriod, sessionCompanyName, todayFileDate } from "@/lib/document-names"
@@ -117,6 +118,12 @@ export default function JournalEntriesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const { toast } = useToast()
+  const { hasPermission } = useAuth()
+  // Posted (and reversed) entries can be edited/deleted outright by whoever has "Edit Posted Journal
+  // Entries" - for cleaning up the records brought over from the old system.
+  const canFixPosted = hasPermission("can_edit_posted_journal_entries")
+  const canEdit = (e: JournalEntry) => e.status === 'draft' || e.status === 'pending' || (e.status === 'posted' && canFixPosted)
+  const canDelete = (e: JournalEntry) => e.status === 'draft' || e.status === 'pending' || canFixPosted
 
   const statusOptions = [
     { value: "all", label: "All Status" },
@@ -239,22 +246,27 @@ export default function JournalEntriesPage() {
   }
 
   const handleDeleteEntry = async (entry: JournalEntry) => {
-    if (!confirm(`Are you sure you want to delete "${entry.entry_number}"?`)) {
+    const warning = entry.status === 'draft' || entry.status === 'pending'
+      ? `Are you sure you want to delete "${entry.entry_number}"?`
+      : `Delete ${entry.status} entry "${entry.entry_number}"? It comes out of the books completely` +
+        (entry.status === 'reversed' ? ", together with its reversal" : "") +
+        ". This cannot be undone."
+    if (!confirm(warning)) {
       return
     }
 
     try {
-      await financeApi.deleteJournalEntry(entry.id)
+      const res: any = await financeApi.deleteJournalEntry(entry.id)
       toast({
-        title: "Success",
-        description: "Journal entry deleted successfully.",
+        title: "Deleted",
+        description: res?.message || "Journal entry deleted successfully.",
       })
       fetchEntries()
     } catch (error) {
       console.error('Error deleting entry:', error)
       toast({
         title: "Error",
-        description: "Failed to delete journal entry. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to delete journal entry. Please try again.",
         variant: "destructive",
       })
     }
@@ -376,6 +388,7 @@ export default function JournalEntriesPage() {
               <Table>
                 <TableHeader className="bg-slate-50">
                   <TableRow>
+                    <TableHead className="font-semibold text-xs text-slate-500 uppercase tracking-wider w-12">S/No</TableHead>
                     <TableHead className="font-semibold text-xs text-slate-500 uppercase tracking-wider w-32">Entry #</TableHead>
                     <TableHead className="font-semibold text-xs text-slate-500 uppercase tracking-wider w-32">Date</TableHead>
                     <TableHead className="font-semibold text-xs text-slate-500 uppercase tracking-wider">Description</TableHead>
@@ -390,7 +403,7 @@ export default function JournalEntriesPage() {
                 <TableBody>
                   {paginatedEntries.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-64 text-center">
+                      <TableCell colSpan={10} className="h-64 text-center">
                         <div className="flex flex-col items-center justify-center space-y-3">
                           <div className="h-12 w-12 bg-slate-50 rounded-full flex items-center justify-center">
                             <FileText className="h-6 w-6 text-slate-300" />
@@ -416,12 +429,13 @@ export default function JournalEntriesPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginatedEntries.map((entry) => (
+                    paginatedEntries.map((entry, index) => (
                       <TableRow 
                         key={entry.id} 
                         className="cursor-pointer hover:bg-slate-50/80 transition-colors group"
                         onClick={() => router.push(`/finance/journal-entries/${entry.id}`)}
                       >
+                        <TableCell className="text-xs text-slate-500">{startIndex + index + 1}</TableCell>
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-slate-700 font-mono group-hover:text-emerald-600 transition-colors">
@@ -497,27 +511,31 @@ export default function JournalEntriesPage() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>
+                              {canEdit(entry) && (
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/finance/journal-entries/${entry.id}/edit`}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
                               {(entry.status === 'draft' || entry.status === 'pending') && (
                                 <>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/finance/journal-entries/${entry.id}/edit`}>
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Edit Order
-                                    </Link>
-                                  </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem onClick={() => handlePostEntry(entry)}>
                                     <CheckCircle className="h-4 w-4 mr-2 text-emerald-600" />
                                     Post Entry
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDeleteEntry(entry)}
-                                    className="text-red-600 focus:text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
                                 </>
+                              )}
+                              {canDelete(entry) && (
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteEntry(entry)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
                               )}
                               {entry.status === 'posted' && (
                                 <DropdownMenuItem asChild>

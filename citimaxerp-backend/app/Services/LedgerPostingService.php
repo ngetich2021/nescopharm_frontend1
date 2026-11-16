@@ -565,7 +565,8 @@ class LedgerPostingService
 
         // A company that books salaries as monthly expenses keeps payroll off the ledger, or every
         // month's salaries would be counted twice.
-        if (!$deleted && $settings && $settings->payroll_posts_to_ledger !== false && in_array($run->status, ['approved', 'paid'], true)) {
+        // A past payroll entered for the record (is_historical) never posts: those salaries are in the books already.
+        if (!$deleted && !$run->is_historical && $settings && $settings->payroll_posts_to_ledger !== false && in_array($run->status, ['approved', 'paid'], true)) {
             // Payslips with no gross pay can still carry a statutory minimum
             // (e.g. SHIF 300) that is never actually withheld, so they are
             // left out - otherwise the entry cannot balance.

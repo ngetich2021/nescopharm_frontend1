@@ -24,6 +24,43 @@ class ImportSchemas
             'past_invoices' => self::pastInvoices(),
             'cleaning_logs' => self::cleaningLogs(),
             'temperature_logs' => self::temperatureLogs(),
+            'payroll_history' => self::payrollHistory(),
+        ];
+    }
+
+    /**
+     * Every payroll since the company started, for the record and reconciliations: one row per employee
+     * per month, with the figures actually paid then. Each month becomes a past payroll (Payroll page)
+     * that never posts to the books - those salaries are already there as expenses.
+     */
+    private static function payrollHistory(): array
+    {
+        return [
+            'key' => 'payroll_history',
+            'label' => 'Payroll History',
+            'order' => 10,
+            'description' => 'Past payrolls: one row per employee per month, with the figures actually paid. Each month becomes a past payroll on the Payroll page (marked "Record"), exactly as typed - nothing is recalculated, and it does not post to the books, because those salaries are already there as expenses.',
+            'matching' => 'Rows are grouped by Month into one payroll each. A month already imported is updated: the same employee\'s payslip is replaced, new employees are added. A month already run in the system the normal way is left alone. Employees are found by Employee No., or by name.',
+            'permission' => 'can_create_payroll',
+            'columns' => [
+                ['key' => 'month', 'label' => 'Month', 'type' => 'text', 'required' => true, 'example' => '03/2023', 'aliases' => ['paymonth', 'period', 'payperiod', 'monthyear'], 'help' => 'The pay month: 03/2023, March 2023 or 2023-03. Or the month number with a Year column.'],
+                ['key' => 'year', 'label' => 'Year', 'type' => 'number', 'example' => '', 'aliases' => ['payyear'], 'help' => 'Only when Month is a number (3).'],
+                ['key' => 'employee_number', 'label' => 'Employee No.', 'type' => 'text', 'example' => 'EMP001', 'aliases' => ['employeenumber', 'staffno', 'payrollno', 'empno']],
+                ['key' => 'employee_name', 'label' => 'Employee Name', 'type' => 'text', 'example' => 'Jane Wanjiku', 'aliases' => ['employee', 'name', 'staffname', 'fullname'], 'help' => 'Needed when Employee No. is blank. The employee must be in HR > Employees (one who has left: add them with a leaving date).'],
+                ['key' => 'basic_salary', 'label' => 'Basic Salary', 'type' => 'number', 'required' => true, 'example' => '45000', 'aliases' => ['basic', 'basicpay', 'salary']],
+                ['key' => 'taxable_allowances', 'label' => 'Taxable Allowances', 'type' => 'number', 'example' => '5000', 'aliases' => ['allowances', 'houseallowance', 'taxableallowance'], 'help' => 'Added to Basic Salary to make Gross Pay.'],
+                ['key' => 'non_taxable_allowances', 'label' => 'Non-Taxable Allowances', 'type' => 'number', 'example' => '0', 'aliases' => ['nontaxableallowance', 'perdiem', 'reimbursements']],
+                ['key' => 'nssf', 'label' => 'NSSF', 'type' => 'number', 'example' => '2160', 'aliases' => ['nssfemployee'], 'help' => 'The employee\'s share. The employer\'s matching share is recorded as the same amount.'],
+                ['key' => 'shif', 'label' => 'NHIF / SHIF', 'type' => 'number', 'example' => '1375', 'aliases' => ['nhif', 'shif', 'nhifshif', 'shifnhif']],
+                ['key' => 'housing_levy', 'label' => 'Housing Levy', 'type' => 'number', 'example' => '750', 'aliases' => ['ahl', 'housinglevyemployee', 'affordablehousinglevy'], 'help' => 'The employee\'s share; the employer\'s matching share is recorded as the same amount.'],
+                ['key' => 'paye', 'label' => 'PAYE', 'type' => 'number', 'example' => '7500', 'aliases' => ['tax', 'incometax']],
+                ['key' => 'salary_advance', 'label' => 'Salary Advance', 'type' => 'number', 'example' => '0', 'aliases' => ['advance', 'advancededuction']],
+                ['key' => 'other_deductions', 'label' => 'Other Deductions', 'type' => 'number', 'example' => '0', 'aliases' => ['deductions', 'otherdeduction', 'loans', 'sacco']],
+                ['key' => 'net_pay', 'label' => 'Net Pay', 'type' => 'number', 'example' => '38215', 'aliases' => ['net', 'netsalary', 'takehome'], 'help' => 'Blank = worked out from the figures. When typed, it is kept as typed and any difference from the figures is shown in the preview.'],
+                ['key' => 'paid_date', 'label' => 'Paid Date', 'type' => 'date', 'example' => '28/03/2023', 'aliases' => ['paymentdate', 'datepaid'], 'help' => 'Day first. Blank = the last day of the month.'],
+                ['key' => 'status', 'label' => 'Status', 'type' => 'choice', 'choices' => ['Paid', 'Approved', 'Draft'], 'example' => 'Paid', 'help' => 'Blank counts as Paid. Draft keeps the month open for checking.'],
+                ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => ''],
+            ],
         ];
     }
 

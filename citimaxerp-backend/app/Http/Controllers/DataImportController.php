@@ -126,6 +126,7 @@ class DataImportController extends Controller
                 'past_invoices' => $this->importPastInvoices($body, $cells, $user, $headingRow),
                 'cleaning_logs' => $this->importCleaningLogs($body, $cells, $user, $headingRow),
                 'temperature_logs' => $this->importTemperatureLogs($body, $cells, $user, $headingRow),
+                'payroll_history' => $this->importPayrollHistory($body, $cells, $user, $headingRow),
             };
             $dryRun ? DB::rollBack() : DB::commit();
         } catch (\Throwable $e) {
@@ -352,6 +353,272 @@ class DataImportController extends Controller
             }
         }
         return $byName;
+    }
+
+    /**
+     * "03/2023", "3/2023", "2023-03", "March 2023", "Mar-23", an Excel date, or a month number with
+     * the Year column. Returns [year, month] or null.
+     */
+    private function payMonth(string $month, string $year): ?array
+    {
+        $v = trim($month);
+        if (is_numeric($v) && (float) $v > 20000 && (float) $v < 80000) {
+            $d = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $v);
+            return [(int) $d->format('Y'), (int) $d->format('n')];
+        }
+        if (preg_match('/^(\d{1,2})$/', $v, $m) && is_numeric($year)) {
+            return [(int) $year, (int) $m[1]];
+        }
+        if (preg_match('#^(\d{1,2})[/\-. ](\d{4})$#', $v, $m)) {
+            return [(int) $m[2], (int) $m[1]];
+        }
+        if (preg_match('#^(\d{4})[/\-. ](\d{1,2})$#', $v, $m)) {
+            return [(int) $m[1], (int) $m[2]];
+        }
+        if (preg_match('#^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$#', $v, $m)) { // a full date: its month
+            return [(int) $m[3], (int) $m[2]];
+        }
+        if (preg_match('/^([a-z]+)[\s\-,.]*(\d{2}|\d{4})?$/i', $v, $m)) {
+            $names = ['jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'may' => 5, 'jun' => 6, 'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12];
+            $num = $names[substr(strtolower($m[1]), 0, 3)] ?? null;
+            $y = $m[2] ?? (is_numeric($year) ? $year : null);
+            if ($num && $y) {
+                return [strlen((string) $y) === 2 ? 2000 + (int) $y : (int) $y, $num];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Past payrolls, one row per employee per month, kept exactly as typed (see ImportSchemas::payrollHistory).
+     * Each month is one payroll run marked is_historical, which never posts to the ledger.
+     */
+    private function importPayrollHistory(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+        $money = fn (?float $v) => number_format(round((float) $v, 2), 2, '.', '');
+
+        $employees = \App\Models\Employee::with('user:id,first_name,last_name')->where('company_id', $companyId)->get();
+        $byNumber = [];
+        $byName = [];
+        foreach ($employees as $e) {
+            if ($e->employee_number) {
+                $byNumber[mb_strtolower(trim($e->employee_number))] = $e;
+            }
+            $names = array_filter([
+                trim("{$e->first_name} {$e->last_name}"), trim("{$e->last_name} {$e->first_name}"),
+                $e->user ? trim("{$e->user->first_name} {$e->user->last_name}") : null,
+            ]);
+            foreach (array_unique(array_map(fn ($n) => $this->nameKey($n), $names)) as $key) {
+                if ($key !== '') {
+                    $byName[$key][$e->id] = $e;
+                }
+            }
+        }
+
+        $runs = [];       // "Y-m" => PayrollRun
+        $runState = [];   // "Y-m" => ['status' => ..., 'paid' => date]
+        $seen = [];
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $result = ['row' => $line, 'key' => $cell('month'), 'name' => $cell('employee_name') ?: $cell('employee_number')];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            $period = $this->payMonth($cell('month'), $cell('year'));
+            if (!$period || $period[1] < 1 || $period[1] > 12 || $period[0] < 2000) {
+                $fail('Month is missing or not a month (use 03/2023 or March 2023).');
+                continue;
+            }
+            [$year, $month] = $period;
+            $monthEnd = \Carbon\Carbon::create($year, $month, 1)->endOfMonth();
+            if ($monthEnd->copy()->startOfMonth()->isFuture()) {
+                $fail('That month has not started yet - run it on the Payroll page when it comes.');
+                continue;
+            }
+            $label = $monthEnd->format('F Y');
+            $result['key'] = $label;
+
+            $number = mb_strtolower($cell('employee_number'));
+            $employee = $number !== '' ? ($byNumber[$number] ?? null) : null;
+            if (!$employee && $cell('employee_name') !== '') {
+                $found = $byName[$this->nameKey($cell('employee_name'))] ?? [];
+                if (count($found) > 1) {
+                    $fail("More than one employee is called \"{$cell('employee_name')}\" - add the Employee No.");
+                    continue;
+                }
+                $employee = $found ? reset($found) : null;
+            }
+            if (!$employee) {
+                $who = $cell('employee_number') ?: $cell('employee_name');
+                $fail($who === '' ? 'Employee No. or Employee Name is needed.' : "No employee \"{$who}\" in HR > Employees - add them first (with a leaving date if they have left).");
+                continue;
+            }
+            $result['name'] = trim("{$employee->first_name} {$employee->last_name}") . ($employee->employee_number ? " ({$employee->employee_number})" : '');
+
+            $key = "{$year}-{$month}|{$employee->id}";
+            if (isset($seen[$key])) {
+                $fail("{$result['name']} is already on row {$seen[$key]} for {$label}.");
+                continue;
+            }
+
+            $figures = [];
+            $bad = null;
+            foreach (['basic_salary', 'taxable_allowances', 'non_taxable_allowances', 'nssf', 'shif', 'housing_levy', 'paye', 'salary_advance', 'other_deductions', 'net_pay'] as $field) {
+                $raw = $cell($field);
+                $value = $raw === '' || $raw === '-' ? null : $this->number($raw);
+                if ($raw !== '' && $raw !== '-' && ($value === null || $value < 0)) {
+                    $bad = "{$field} \"{$raw}\" is not an amount.";
+                    break;
+                }
+                $figures[$field] = $value;
+            }
+            if ($bad) {
+                $fail(str_replace('_', ' ', ucfirst($bad)));
+                continue;
+            }
+            if ($figures['basic_salary'] === null) {
+                $fail('Basic Salary is needed.');
+                continue;
+            }
+
+            $statusText = strtolower($cell('status'));
+            $status = match ($statusText) { '', 'paid' => 'paid', 'approved' => 'approved', 'draft' => 'draft', default => false };
+            if ($status === false) {
+                $fail('Status must be Paid, Approved or Draft.');
+                continue;
+            }
+            $paidDate = $cell('paid_date') !== '' ? $this->date($cell('paid_date')) : $monthEnd->toDateString();
+            if (!$paidDate) {
+                $fail('Paid Date is not a date (use 28/03/2023).');
+                continue;
+            }
+
+            $runKey = sprintf('%04d-%02d', $year, $month);
+            if (!isset($runs[$runKey])) {
+                $existing = \App\Models\PayrollRun::where('company_id', $companyId)->where('pay_year', $year)->where('pay_month', $month)->first();
+                if ($existing && !$existing->is_historical) {
+                    $runs[$runKey] = false;
+                } else {
+                    $runs[$runKey] = $existing ?? \App\Models\PayrollRun::create([
+                        'company_id' => $companyId, 'pay_month' => $month, 'pay_year' => $year, 'status' => 'draft',
+                        'is_historical' => true, 'created_by' => $user->id,
+                        'notes' => 'Past payroll entered from the Payroll History import.',
+                    ]);
+                }
+            }
+            if ($runs[$runKey] === false) {
+                $fail("{$label} was already run in the system - change it on the Payroll page instead.");
+                continue;
+            }
+            $run = $runs[$runKey];
+            $seen[$key] = $line;
+
+            // Gross = basic + taxable allowances, as the payroll itself counts it.
+            $basic = (float) $figures['basic_salary'];
+            $taxableAllow = (float) ($figures['taxable_allowances'] ?? 0);
+            $nonTaxAllow = (float) ($figures['non_taxable_allowances'] ?? 0);
+            $gross = $basic + $taxableAllow;
+            $nssf = (float) ($figures['nssf'] ?? 0);
+            $shif = (float) ($figures['shif'] ?? 0);
+            $housing = (float) ($figures['housing_levy'] ?? 0);
+            $paye = (float) ($figures['paye'] ?? 0);
+            $advance = (float) ($figures['salary_advance'] ?? 0);
+            $other = (float) ($figures['other_deductions'] ?? 0);
+            $deductions = $nssf + $shif + $housing + $paye + $advance + $other;
+            $worked = round($gross + $nonTaxAllow - $deductions, 2);
+            $net = $figures['net_pay'] ?? $worked;
+            $note = abs($net - $worked) > 0.99
+                ? 'Net Pay kept as typed (' . number_format($net, 2) . '); the figures give ' . number_format($worked, 2) . '.'
+                : null;
+
+            $allowances = array_values(array_filter([
+                $taxableAllow > 0 ? ['name' => 'Taxable allowances', 'amount' => $money($taxableAllow), 'frequency' => 'monthly', 'is_taxable' => true] : null,
+                $nonTaxAllow > 0 ? ['name' => 'Non-taxable allowances', 'amount' => $money($nonTaxAllow), 'frequency' => 'monthly', 'is_taxable' => false] : null,
+            ]));
+
+            $fields = [
+                'company_id' => $companyId,
+                'gross_pay' => $money($gross),
+                'allowances_json' => $allowances,
+                'total_allowances' => $money($taxableAllow + $nonTaxAllow),
+                'deductions_json' => [],
+                'total_custom_deductions' => 0,
+                'nssf_tier1' => 0,
+                'nssf_tier2' => 0,
+                'nssf_employee' => $money($nssf),
+                'nssf_employer' => $money($nssf),
+                'taxable_pay' => $money(max(0, $gross - $nssf)),
+                'paye_before_relief' => $money($paye),
+                'personal_relief' => 0,
+                'insurance_relief' => 0,
+                'paye' => $money($paye),
+                'shif' => $money($shif),
+                'housing_levy_employee' => $money($housing),
+                'housing_levy_employer' => $money($housing),
+                'salary_advance_deduction' => $money($advance),
+                'other_deductions' => $money($other),
+                'other_deductions_note' => $cell('notes') ?: null,
+                'total_deductions' => $money($deductions),
+                'net_pay' => $money($net),
+            ];
+
+            $payslip = \App\Models\PayrollPayslip::where('payroll_run_id', $run->id)->where('employee_id', $employee->id)->first();
+            if ($payslip) {
+                $payslip->fill($fields);
+                $changes = collect($payslip->getDirty())->except(['company_id', 'allowances_json', 'deductions_json', 'updated_at'])
+                    ->filter(fn ($to, $field) => (string) $payslip->getOriginal($field) !== (string) $to && !(is_numeric($to) && (float) $payslip->getOriginal($field) === (float) $to))
+                    ->map(fn ($to, $field) => ['field' => $field, 'from' => $payslip->getOriginal($field), 'to' => $to])->values()->all();
+                $payslip->save();
+                if ($changes) {
+                    $summary['updated']++;
+                    $results[] = $result + ['status' => 'updated', 'changes' => $changes, 'message' => $note];
+                } else {
+                    $summary['unchanged']++;
+                    $results[] = $result + ['status' => 'unchanged', 'message' => $note];
+                }
+            } else {
+                \App\Models\PayrollPayslip::create($fields + ['payroll_run_id' => $run->id, 'employee_id' => $employee->id, 'insurance_relief_premium' => 0]);
+                $summary['created']++;
+                $results[] = $result + ['status' => 'created', 'message' => $note ?? ('Net ' . number_format($net, 2) . ($status === 'paid' ? ', paid ' . date('d/m/Y', strtotime($paidDate)) : ", {$status}"))];
+            }
+
+            // The month's status follows its rows: the furthest along wins (Paid > Approved > Draft).
+            $rank = ['draft' => 0, 'approved' => 1, 'paid' => 2];
+            $state = $runState[$runKey] ?? ['status' => 'draft', 'paid' => null];
+            if ($rank[$status] > $rank[$state['status']]) {
+                $state['status'] = $status;
+            }
+            if ($status === 'paid' && (!$state['paid'] || $paidDate > $state['paid'])) {
+                $state['paid'] = $paidDate;
+            }
+            $runState[$runKey] = $state;
+        }
+
+        foreach ($runState as $runKey => $state) {
+            $run = $runs[$runKey];
+            $end = \Carbon\Carbon::create($run->pay_year, $run->pay_month, 1)->endOfMonth();
+            $run->update([
+                'status' => $state['status'],
+                'approved_by' => $state['status'] !== 'draft' ? ($run->approved_by ?? $user->id) : null,
+                'approved_at' => $state['status'] !== 'draft' ? ($run->approved_at ?? $end) : null,
+                'paid_by' => $state['status'] === 'paid' ? ($run->paid_by ?? $user->id) : null,
+                'paid_at' => $state['status'] === 'paid' ? \Carbon\Carbon::parse($state['paid'] ?? $end) : null,
+            ]);
+        }
+        $summary['months'] = count(array_filter($runs));
+
+        return [$summary, $results];
     }
 
     private function importCleaningLogs(array $body, \Closure $cells, $user, int $headingRow): array

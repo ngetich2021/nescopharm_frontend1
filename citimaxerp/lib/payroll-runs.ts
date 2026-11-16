@@ -13,6 +13,8 @@ export interface PayrollRun {
   pay_year: number
   status: 'draft' | 'approved' | 'paid'
   notes: string | null
+  /** A past payroll entered for the record (Payroll History import): figures as typed, never posted to the books. */
+  is_historical?: boolean
   created_by: string
   approved_by: string | null
   approved_at: string | null
@@ -192,6 +194,12 @@ export async function markPayrollRunPaid(id: string): Promise<PayrollRun> {
     'POST',
   )
   return res.data
+}
+
+/** Delete a payroll run (any status) with its payslips; salary advances it deducted are owed again. */
+export async function deletePayrollRun(id: string): Promise<string> {
+  const res = await apiCall<{ message: string }>(`/payroll-runs/${id}`, 'DELETE')
+  return (res as any)?.message ?? 'Payroll run deleted.'
 }
 
 // ---------------------------------------------------------------------------

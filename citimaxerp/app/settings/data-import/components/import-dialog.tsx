@@ -111,7 +111,10 @@ export function ImportDialog({ schema, onClose, onImported }: Props) {
                         <Badge variant="outline" className={STATUS_STYLE[row.status]}>{row.status}</Badge>
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
-                        {row.message ??
+                        {[
+                          row.message,
+                          ((row as any).changes ?? []).map((c: any) => `${String(c.field).replace(/_/g, " ")}: ${c.from ?? "-"} → ${c.to ?? "-"}`).join("; "),
+                        ].filter(Boolean).join(" · ") ||
                           (row.before !== undefined && row.before !== null
                             ? `${row.before} → ${row.after}`
                             : row.lines

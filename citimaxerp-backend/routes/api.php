@@ -149,6 +149,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('payroll-runs', [\App\Http\Controllers\PayrollRunController::class, 'index']);
     Route::post('payroll-runs', [\App\Http\Controllers\PayrollRunController::class, 'store']);
     Route::get('payroll-runs/{id}', [\App\Http\Controllers\PayrollRunController::class, 'show']);
+    Route::delete('payroll-runs/{id}', [\App\Http\Controllers\PayrollRunController::class, 'destroy']);
     Route::post('payroll-runs/{id}/process', [\App\Http\Controllers\PayrollRunController::class, 'process']);
     Route::post('payroll-runs/{id}/approve', [\App\Http\Controllers\PayrollRunController::class, 'approve']);
     Route::post('payroll-runs/{id}/mark-paid', [\App\Http\Controllers\PayrollRunController::class, 'markPaid']);

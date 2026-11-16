@@ -45,6 +45,11 @@ class PayrollService
 
     public function processRun(PayrollRun $run): void
     {
+        if ($run->is_historical) {
+            throw new \RuntimeException(
+                'This is a past payroll entered from the Payroll History import - its figures are as paid. Change them by importing the month again.'
+            );
+        }
         if ($run->status !== 'draft') {
             throw new \RuntimeException(
                 "Only draft payroll runs can be processed. Current status: {$run->status}"
@@ -83,13 +88,17 @@ class PayrollService
 
             $payDate = $monthStart;
 
+            // A month before this one is a past payroll: today's salary advances and one-time
+            // allowances belong to the current payroll, so they are neither taken nor used up.
+            $isPast = $run->is_historical || $monthEnd < now()->startOfMonth()->toDateString();
+
             foreach ($employees as $employee) {
-                $this->processEmployee($run, $employee, $payDate, $monthStart, $monthEnd);
+                $this->processEmployee($run, $employee, $payDate, $monthStart, $monthEnd, $isPast);
             }
         });
     }
 
-    private function processEmployee(PayrollRun $run, Employee $employee, string $payDate, string $monthStart, string $monthEnd): void
+    private function processEmployee(PayrollRun $run, Employee $employee, string $payDate, string $monthStart, string $monthEnd, bool $isPast = false): void
     {
         // Calculate working days for proration if hired or terminated mid-month
         $workingDaysInMonth = $this->getWorkingDaysInMonth($monthStart, $monthEnd);
@@ -101,6 +110,9 @@ class PayrollService
 
         // ── Allowances ──────────────────────────────────────────────
         $allowances = $this->getApplicableAllowances($employee, $run->pay_month, $payDate);
+        if ($isPast) {
+            $allowances = $allowances->reject(fn ($a) => $a->frequency === 'one_time')->values();
+        }
 
         $totalTaxableAllowances    = '0.00';
         $totalNonTaxableAllowances = '0.00';
@@ -127,6 +139,9 @@ class PayrollService
 
         // ── Custom deductions ───────────────────────────────────────
         $deductions = $this->getApplicableDeductions($employee, $run->pay_month, $payDate);
+        if ($isPast) {
+            $deductions = $deductions->reject(fn ($d) => $d->frequency === 'one_time')->values();
+        }
 
         $totalCustomDeductions = '0.00';
         $deductionsSnapshot    = [];
@@ -159,7 +174,7 @@ class PayrollService
         $calc = $this->calculator->calculate($grossPay, $insurancePremium);
 
         // ── Salary advances ─────────────────────────────────────────
-        $advances = SalaryAdvance::where('employee_id', $employee->id)
+        $advances = $isPast ? collect() : SalaryAdvance::where('employee_id', $employee->id)
             ->where('company_id', $employee->company_id)
             ->where('status', 'approved')
             ->whereNull('deducted_in_run')

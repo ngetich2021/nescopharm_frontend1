@@ -28,9 +28,11 @@ class PayrollRun extends Model
         'approved_at',
         'paid_by',
         'paid_at',
+        'is_historical',
     ];
 
     protected $casts = [
+        'is_historical' => 'boolean',
         'pay_month' => 'integer',
         'pay_year' => 'integer',
         'approved_at' => 'datetime',

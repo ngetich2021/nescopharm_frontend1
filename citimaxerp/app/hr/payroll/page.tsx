@@ -11,6 +11,7 @@ import {
   processPayrollRun,
   approvePayrollRun,
   markPayrollRunPaid,
+  deletePayrollRun,
   formatKES,
   monthName,
 } from "@/lib/payroll-runs";
@@ -57,6 +58,10 @@ import {
   Users,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Trash2, FileSpreadsheet, Upload } from "lucide-react";
+import { fetchImportSchema, downloadTemplate, type ImportSchema } from "@/lib/data-import";
+import { ImportDialog } from "@/app/settings/data-import/components/import-dialog";
+import { displayDate } from "@/lib/date-format";
 
 const MONTHS = [
   "January",
@@ -126,6 +131,42 @@ export default function PayrollPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Payroll History: past payrolls from Excel (one row per employee per month), preview first.
+  const [historySchema, setHistorySchema] = useState<ImportSchema | null>(null);
+  const [importSchema, setImportSchema] = useState<ImportSchema | null>(null);
+  const loadHistorySchema = async () =>
+    historySchema ?? fetchImportSchema("payroll_history").then((sc) => { setHistorySchema(sc); return sc; });
+  const handleHistoryTemplate = async () => {
+    try {
+      downloadTemplate(await loadHistorySchema(), { fileName: "Payroll History Import Template.xlsx" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to download the template.", variant: "destructive" });
+    }
+  };
+  const handleHistoryImport = async () => {
+    try {
+      setImportSchema(await loadHistorySchema());
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Could not open the import.", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (run: PayrollRun) => {
+    const label = `${monthName(run.pay_month)} ${run.pay_year}`;
+    if (!confirm(`Delete the ${label} payroll (${run.payslips_count ?? 0} payslips, ${run.status})? This cannot be undone.`)) return;
+    setDeletingId(run.id);
+    try {
+      toast({ title: "Deleted", description: await deletePayrollRun(run.id) });
+      loadRuns();
+      loadStats();
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to delete the payroll.", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -273,10 +314,24 @@ export default function PayrollPage() {
             Manage monthly payroll runs
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Run
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {hasPermission("can_create_payroll") && (
+            <>
+              <Button variant="outline" onClick={handleHistoryTemplate} title="Excel template for past payrolls: one row per employee per month">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                History Template
+              </Button>
+              <Button variant="outline" onClick={handleHistoryImport} title="Upload past payrolls from Excel - previewed before anything is saved">
+                <Upload className="h-4 w-4 mr-2" />
+                Import Payroll History
+              </Button>
+            </>
+          )}
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Run
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -293,7 +348,7 @@ export default function PayrollPage() {
               {statsLoading ? (
                 <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
               ) : (
-                stats?.total_runs_this_year ?? 0
+                stats?.runs_this_year ?? 0
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -347,7 +402,7 @@ export default function PayrollPage() {
               {statsLoading ? (
                 <div className="h-6 w-20 bg-gray-200 rounded animate-pulse" />
               ) : (
-                formatKES(stats?.total_paid_this_year ?? 0)
+                formatKES(stats?.total_net_paid_this_year ?? 0)
               )}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -370,7 +425,7 @@ export default function PayrollPage() {
               {statsLoading ? (
                 <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
               ) : (
-                stats?.last_run?.employees ?? 0
+                stats?.last_run?.payslips_count ?? 0
               )}
             </div>
             <p className="text-xs text-muted-foreground">employees</p>
@@ -396,8 +451,10 @@ export default function PayrollPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-14">S/No</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Paid Date</TableHead>
                 <TableHead>Employees</TableHead>
                 <TableHead className="text-right">Total Gross</TableHead>
                 <TableHead className="text-right">Total Net</TableHead>
@@ -407,7 +464,7 @@ export default function PayrollPage() {
             <TableBody>
               {runsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
+                  <TableCell colSpan={8} className="text-center py-12">
                     <div className="flex items-center justify-center gap-2 text-muted-foreground">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
                       Loading...
@@ -417,19 +474,26 @@ export default function PayrollPage() {
               ) : runs.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={8}
                     className="text-center py-12 text-muted-foreground"
                   >
                     No payroll runs yet
                   </TableCell>
                 </TableRow>
               ) : (
-                runs.map((run) => (
+                runs.map((run, index) => (
                   <TableRow key={run.id}>
+                    <TableCell className="text-muted-foreground">{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
                     <TableCell className="font-medium">
                       {monthName(run.pay_month)} {run.pay_year}
+                      {run.is_historical && (
+                        <Badge variant="outline" className="ml-2 text-[10px] bg-slate-50 text-slate-600" title="A past payroll entered for the record: figures as typed, not posted to the books">
+                          Record
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>{getStatusBadge(run.status)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{run.status === "paid" && run.paid_at ? displayDate(run.paid_at) : "-"}</TableCell>
                     <TableCell>{run.payslips_count ?? 0}</TableCell>
                     <TableCell className="text-right font-mono">
                       {formatKES(run.total_gross)}
@@ -439,7 +503,7 @@ export default function PayrollPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center gap-1 justify-end">
-                        {run.status === "draft" && hasPermission("can_create_payroll") && (
+                        {run.status === "draft" && !run.is_historical && hasPermission("can_create_payroll") && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -476,6 +540,17 @@ export default function PayrollPage() {
                             disabled={markingPaidId === run.id}
                           >
                             <CreditCard className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {hasPermission("can_delete_payroll") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete this payroll"
+                            onClick={() => handleDelete(run)}
+                            disabled={deletingId === run.id}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         )}
                         <Button
@@ -532,6 +607,12 @@ export default function PayrollPage() {
         </div>
       )}
 
+      <ImportDialog
+        schema={importSchema}
+        onClose={() => setImportSchema(null)}
+        onImported={() => { loadRuns(); loadStats(); }}
+      />
+
       {/* New Run Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
@@ -539,7 +620,8 @@ export default function PayrollPage() {
             <DialogTitle>Create Payroll Run</DialogTitle>
             <DialogDescription>
               Start a new monthly payroll run. Select the month and year for
-              the pay period.
+              the pay period. For past months with the figures actually paid,
+              use Import Payroll History instead.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -565,8 +647,8 @@ export default function PayrollPage() {
                 type="number"
                 value={newYear}
                 onChange={(e) => setNewYear(e.target.value)}
-                min={2020}
-                max={2099}
+                min={2000}
+                max={new Date().getFullYear() + 1}
               />
             </div>
             <div className="space-y-2">

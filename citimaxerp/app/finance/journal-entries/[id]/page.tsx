@@ -65,7 +65,7 @@ import { format, formatDistanceToNow } from "date-fns"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { cn } from "@/lib/utils"
-import { useOptionalAuth } from "@/lib/auth-context"
+import { useOptionalAuth, useAuth } from "@/lib/auth-context"
 import { exportTable, type TableExport } from "@/lib/table-export"
 import { documentFileName, sessionCompanyName } from "@/lib/document-names"
 import { ExportSubMenu } from "@/components/export-menu"
@@ -143,6 +143,8 @@ export default function JournalEntryDetailPage() {
   const [entry, setEntry] = useState<JournalEntry | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const company = useOptionalAuth()?.userProfile?.company
+  const { hasPermission } = useAuth()
+  const canFixPosted = hasPermission("can_edit_posted_journal_entries")
 
   const entryId = params.id as string
 
@@ -216,22 +218,26 @@ export default function JournalEntryDetailPage() {
   }
 
   const handleDeleteEntry = async () => {
-    if (!entry || !confirm(`Are you sure you want to delete entry "${entry.entry_number}"? This action cannot be undone.`)) {
+    if (!entry) return
+    const isDraft = entry.status === 'draft' || entry.status === 'pending'
+    if (!confirm(isDraft
+      ? `Are you sure you want to delete entry "${entry.entry_number}"? This action cannot be undone.`
+      : `Delete ${entry.status} entry "${entry.entry_number}"? It comes out of the books completely${entry.status === 'reversed' ? ", together with its reversal" : ""}. This cannot be undone.`)) {
       return
     }
 
     try {
-      await financeApi.deleteJournalEntry(entry.id)
+      const res: any = await financeApi.deleteJournalEntry(entry.id)
       toast({
-        title: "Success",
-        description: "Journal entry deleted successfully.",
+        title: "Deleted",
+        description: res?.message || "Journal entry deleted successfully.",
       })
       router.push('/finance/journal-entries')
     } catch (error) {
       console.error('Error deleting entry:', error)
       toast({
         title: "Error",
-        description: "Failed to delete journal entry.",
+        description: error instanceof Error ? error.message : "Failed to delete journal entry.",
         variant: "destructive",
       })
     }
@@ -334,12 +340,22 @@ export default function JournalEntryDetailPage() {
                       </Button>
                     </>
                  ) : entry.status === 'posted' ? (
+                    <>
+                    {canFixPosted && (
+                      <Link href={`/finance/journal-entries/${entry.id}/edit`}>
+                        <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </Link>
+                    )}
                     <Link href={`/finance/journal-entries/${entry.id}/reverse`}>
                       <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white hover:border-red-400/50 hover:text-red-400">
                         <RotateCcw className="h-4 w-4 mr-2" />
                         Reverse
                       </Button>
                     </Link>
+                    </>
                  ) : null}
                  
                  <DropdownMenu>
@@ -350,7 +366,7 @@ export default function JournalEntryDetailPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                        <ExportSubMenu onExport={(f) => exportTable(f, buildExport(entry), company)} />
-                       {(entry.status === 'draft' || entry.status === 'pending') && (
+                       {(entry.status === 'draft' || entry.status === 'pending' || canFixPosted) && (
                           <>
                              <DropdownMenuSeparator />
                              <DropdownMenuItem onClick={handleDeleteEntry} className="text-red-600 focus:text-red-600 focus:bg-red-50">

@@ -292,8 +292,13 @@ export default function PayrollRunDetailPage() {
             </h1>
           </div>
           {getStatusBadge(run.status)}
+          {run.is_historical && (
+            <Badge variant="outline" className="bg-slate-50 text-slate-600" title="Entered from the Payroll History import: figures as typed, not posted to the books">
+              Record - figures as paid, change them by importing the month again
+            </Badge>
+          )}
         </div>
-        {run.status === "draft" && hasPermission("can_create_payroll") && (
+        {run.status === "draft" && !run.is_historical && hasPermission("can_create_payroll") && (
           <Button
             size="sm"
             onClick={handleProcess}
@@ -510,7 +515,7 @@ export default function PayrollRunDetailPage() {
                         >
                           View
                         </Button>
-                        {run?.status === "draft" && hasPermission("can_update_payroll") && (
+                        {run?.status === "draft" && !run?.is_historical && hasPermission("can_update_payroll") && (
                           <Button
                             variant="outline"
                             size="sm"

@@ -169,8 +169,14 @@ class JournalEntryController extends Controller
             return $this->deny('Unauthorized to edit journal entries.');
         }
         if ($entry->status !== 'draft') {
-            return response()->json(['status' => 'failed', 'message' => 'Only draft journal entries can be edited. Reverse a posted entry instead.'], 400);
+            if ($entry->status !== 'posted') {
+                return response()->json(['status' => 'failed', 'message' => "A {$entry->status} entry can't be edited. Delete it (its reversal goes with it) and enter it again."], 400);
+            }
+            if (!$this->hasPermission($request, 'can_edit_posted_journal_entries', $entry->company_id)) {
+                return response()->json(['status' => 'failed', 'message' => 'Only draft journal entries can be edited. Reverse a posted entry instead, or ask for "Edit Posted Journal Entries".'], 400);
+            }
         }
+        $before = $this->snapshot($entry);
 
         $validator = Validator::make($request->all(), $this->rules(true));
         if ($validator->fails()) {
@@ -186,7 +192,7 @@ class JournalEntryController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($request, $entry, $items) {
+            DB::transaction(function () use ($request, $entry, $items, $before) {
                 if ($items !== null) {
                     $entry->items()->delete();
                     foreach ($items as $item) {
@@ -206,9 +212,25 @@ class JournalEntryController extends Controller
                     'description' => $request->input('description'),
                     'entry_type' => $request->filled('entry_type') ? $this->entryType($request->input('entry_type')) : null,
                 ], fn ($v) => $v !== null));
-                $entry->metadata = array_merge($entry->metadata ?? [], $this->metadata($request));
+                $meta = array_merge($entry->metadata ?? [], $this->metadata($request));
+                if ($entry->status === 'posted') {
+                    // A posted entry changed in place keeps a note of who changed it, when, and what it was.
+                    $meta['edit_history'] = array_merge($meta['edit_history'] ?? [], [[
+                        'by' => $request->user()->id,
+                        'by_name' => trim(($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? '')) ?: $request->user()->email,
+                        'at' => now()->toIso8601String(),
+                        'before' => $before,
+                    ]]);
+                }
+                $entry->metadata = $meta;
                 $entry->save();
             });
+
+            if ($entry->status === 'posted') {
+                \App\Models\ActivityLog::logActivity('journal_entry_edited', "Posted journal entry {$entry->entry_number} edited", $request->user(), [
+                    'journal_entry_id' => $entry->id, 'before' => $before, 'after' => $this->snapshot($entry->fresh('items')),
+                ]);
+            }
 
             return response()->json([
                 'status' => 'success',
@@ -230,13 +252,63 @@ class JournalEntryController extends Controller
         if (!$this->hasPermission($request, 'can_delete_journal_entries', $entry->company_id)) {
             return $this->deny('Unauthorized to delete journal entries.');
         }
-        if ($entry->status !== 'draft') {
-            return response()->json(['status' => 'failed', 'message' => 'Only draft journal entries can be deleted. Reverse a posted entry instead.'], 400);
+        if ($entry->status !== 'draft' && !$this->hasPermission($request, 'can_edit_posted_journal_entries', $entry->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only draft journal entries can be deleted. Reverse a posted entry instead, or ask for "Edit Posted Journal Entries".'], 400);
         }
 
-        $entry->delete();
+        // A reversed entry and its reversal net to nothing, so deleting the original takes its reversal
+        // with it. Deleting just the reversal undoes the reversal: the original counts again as posted.
+        $isReversal = $entry->source_type === JournalEntry::class && $entry->source_id;
+        $original = $isReversal ? JournalEntry::find($entry->source_id) : null;
+        $linked = $isReversal ? null : JournalEntry::where('source_type', JournalEntry::class)->where('source_id', $entry->id)->first();
 
-        return response()->json(['status' => 'success', 'message' => 'Journal entry deleted successfully.']);
+        $deleted = [$entry->entry_number];
+        DB::transaction(function () use ($entry, $linked, $original, &$deleted) {
+            if ($original && $original->status === 'reversed') {
+                $original->update(['status' => 'posted', 'reversed_by' => null, 'reversed_at' => null, 'reversal_reason' => null]);
+            }
+            if ($linked) {
+                $deleted[] = $linked->entry_number;
+                $linked->items()->delete();
+                $linked->delete();
+            }
+            $entry->items()->delete();
+            $entry->delete();
+        });
+
+        if ($entry->status !== 'draft') {
+            \App\Models\ActivityLog::logActivity('journal_entry_deleted', 'Journal entry ' . implode(' and ', $deleted) . ' deleted', $request->user(), [
+                'entry' => $this->snapshot($entry),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => count($deleted) > 1
+                ? 'Deleted ' . implode(' and its reversal ', $deleted) . '.'
+                : ($original ? "Reversal deleted; {$original->entry_number} counts as posted again." : 'Journal entry deleted successfully.'),
+        ]);
+    }
+
+    /** What an entry said, for the edit history and the activity log. */
+    protected function snapshot(JournalEntry $entry): array
+    {
+        $entry->loadMissing('items.chartOfAccount');
+        return [
+            'entry_number' => $entry->entry_number,
+            'entry_date' => optional($entry->entry_date)->format('Y-m-d'),
+            'reference' => $entry->reference,
+            'description' => $entry->description,
+            'status' => $entry->status,
+            'source_type' => $entry->source_type ? class_basename($entry->source_type) : null,
+            'total' => (float) $entry->total_debit,
+            'lines' => $entry->items->map(fn ($i) => [
+                'account' => $i->chartOfAccount?->account_code . ' ' . $i->chartOfAccount?->account_name,
+                'debit' => (float) $i->debit_amount,
+                'credit' => (float) $i->credit_amount,
+                'description' => $i->description,
+            ])->all(),
+        ];
     }
 
     public function post(Request $request, $id)

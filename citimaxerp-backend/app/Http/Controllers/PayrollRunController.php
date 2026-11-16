@@ -149,7 +149,7 @@ class PayrollRunController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'pay_month' => 'required|integer|min:1|max:12',
-            'pay_year' => 'required|integer',
+            'pay_year' => 'required|integer|min:2000|max:' . (now()->year + 1),
             'notes' => 'nullable|string',
         ]);
 
@@ -215,6 +215,39 @@ class PayrollRunController extends Controller
                 'message' => 'Failed to retrieve payroll run.',
             ], 500);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // DELETE /payroll-runs/{id}
+    // -------------------------------------------------------------------------
+
+    /**
+     * Delete a payroll run in any status, with its payslips - e.g. a past payroll entered wrongly, to
+     * import it again. Salary advances it deducted go back to being owed; a run that posted to the
+     * ledger has its entries reversed by the ledger sync.
+     */
+    public function destroy(Request $request, string $id): JsonResponse
+    {
+        $run = PayrollRun::where('company_id', $request->user()->company_id)->find($id);
+        if (!$run) {
+            return response()->json(['status' => 'failed', 'message' => 'Payroll run not found.'], 404);
+        }
+        if (!$this->hasPermission($request, 'can_delete_payroll', $run->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'You do not have permission to delete payroll runs.'], 403);
+        }
+
+        $label = date('F Y', mktime(0, 0, 0, $run->pay_month, 1, $run->pay_year));
+        $count = $run->payslips()->count();
+        DB::transaction(function () use ($run) {
+            \App\Models\SalaryAdvance::where('deducted_in_run', $run->id)->update(['deducted_in_run' => null]);
+            $run->payslips()->delete();
+            $run->delete();
+        });
+        \App\Models\ActivityLog::logActivity('payroll_run_deleted', "Payroll {$label} deleted ({$count} payslips, was {$run->status})", $request->user(), [
+            'payroll_run_id' => $run->id, 'is_historical' => $run->is_historical,
+        ]);
+
+        return response()->json(['status' => 'success', 'message' => "Payroll {$label} deleted."]);
     }
 
     // -------------------------------------------------------------------------
@@ -614,6 +647,12 @@ class PayrollRunController extends Controller
                 return response()->json([
                     'status' => 'failed',
                     'message' => 'Payslip can only be edited on draft runs.',
+                ], 400);
+            }
+            if ($run->is_historical) {
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => 'This is a past payroll with the figures as paid. Change them by importing the month again (Payroll History).',
                 ], 400);
             }
 

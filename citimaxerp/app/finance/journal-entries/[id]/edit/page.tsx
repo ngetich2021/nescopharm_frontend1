@@ -266,7 +266,7 @@ export default function EditJournalEntryPage() {
       console.error("Failed to update journal entry:", error)
       toast({
         title: "Error",
-        description: "Failed to update journal entry. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to update journal entry. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -285,8 +285,16 @@ export default function EditJournalEntryPage() {
   }
 
   return (
-    <PermissionGuard permissions={["can_edit_journal_entries"]}>
+    <PermissionGuard permissions={["can_update_journal_entries", "can_edit_journal_entries"]}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {entry && entry.status === 'posted' && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            This entry is <b>posted</b>: saving changes it in the books straight away (no reversal), and a note of who changed it and what it was is kept on the entry.
+            {(entry as any).source_type && !String((entry as any).source_type).endsWith('JournalEntry') && (
+              <> It was posted automatically from a {String((entry as any).source_type).split('\\').pop()}; editing it here does not change that document, and editing the document later posts it afresh.</>
+            )}
+          </div>
+        )}
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
