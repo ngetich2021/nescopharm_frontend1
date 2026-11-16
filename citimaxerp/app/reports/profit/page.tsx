@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { format, startOfMonth, startOfWeek } from "date-fns"
-import { ArrowDown, ArrowUp, ArrowUpDown, Coins, Loader2, Percent, RefreshCw, Search, ShoppingCart, TrendingUp } from "lucide-react"
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Coins, Loader2, Percent, RefreshCw, Search, ShoppingCart, TrendingUp } from "lucide-react"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -12,12 +12,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TablePager, usePaged } from "@/components/ui/table-pager"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { displayDate } from "@/lib/date-format"
 import { getProfitReport, type ProfitCredit, type ProfitLine, type ProfitReport } from "@/lib/profit-report"
+import { updateProduct } from "@/lib/products"
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd")
 const kes = (n: number) => n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -71,9 +73,11 @@ export default function ProfitReportPage() {
   const [source, setSource] = useState("all")
   const [sortKey, setSortKey] = useState("sales")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  // Credit notes and the Net line show only when switched on (as on Stock Management); every visit starts with them hidden.
+  const [showCredit, setShowCredit] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     try {
       setData(await getProfitReport({ date_from: from, date_to: to }))
     } catch (e: any) {
@@ -84,6 +88,8 @@ export default function ProfitReportPage() {
   }, [from, to, toast])
 
   useEffect(() => { load() }, [load])
+  // Lines that just got a cost drop out of the No-cost list: reload in place, without the table spinner.
+  const reloadQuietly = useCallback(() => load(true), [load])
 
   const preset = (p: string) => {
     const today = new Date()
@@ -154,7 +160,10 @@ export default function ProfitReportPage() {
     const profit = totals.profit - credits.profit
     return { sales, cost, profit, pct: pct(profit, cost) }
   }, [totals, credits])
+  // What the cards show: after credit notes when they are switched on, else the invoiced figures.
+  const shownTotals = showCredit ? net : { sales: totals.sales, cost: totals.cost, profit: totals.profit, pct: totals.pct }
   const creditLabel = credits.numbers.length ? `Less credit notes (${credits.numbers.join(", ")})` : "Less credit notes (none in this range)"
+  const totalLabel = showCredit ? "Gross" : "Total"
   const { pageRows, start, pager } = usePaged(sorted, 50, `${view}|${search}|${list}|${source}|${from}|${to}|${sortKey}|${sortDir}`)
 
   const toggleSort = (key: string) => {
@@ -180,8 +189,8 @@ export default function ProfitReportPage() {
         moneyColumns: [8, 9, 10, 11],
         rows: rows.map((r, i) => [i + 1, r.invoice_number, dmy(r.invoice_date), r.customer ?? "", r.description, r.price_code ?? "", r.quantity, r.unit, r.unit_price, r.sales, r.cost, r.profit, pctText(r.pct), SOURCES[r.cost_source]]),
         footer: [
-          ["", "Gross", "", "", "", "", totals.quantity, "", "", totals.sales, totals.cost, totals.profit, pctText(totals.pct), ""],
-          ...([
+          ["", totalLabel, "", "", "", "", totals.quantity, "", "", totals.sales, totals.cost, totals.profit, pctText(totals.pct), ""],
+          ...(!showCredit ? [] : [
             ["", creditLabel, "", "", "", "", -credits.quantity, "", "", -credits.amount, -credits.cost, -credits.profit, "", ""],
             ["", "Net (after credit notes)", "", "", "", "", totals.quantity - credits.quantity, "", "", net.sales, net.cost, net.profit, pctText(net.pct), ""],
           ]),
@@ -197,8 +206,8 @@ export default function ProfitReportPage() {
       moneyColumns: view === "product" ? [5, 6, 7] : [4, 5, 6],
       rows: rows.map((r, i) => [i + 1, r.name, ...(view === "product" ? [r.sub ?? ""] : []), r.lines, r.quantity, r.sales, r.cost, r.profit, pctText(r.pct)]),
       footer: [
-        ["", "Gross", ...(view === "product" ? [""] : []), totals.lines, totals.quantity, totals.sales, totals.cost, totals.profit, pctText(totals.pct)],
-        ...([
+        ["", totalLabel, ...(view === "product" ? [""] : []), totals.lines, totals.quantity, totals.sales, totals.cost, totals.profit, pctText(totals.pct)],
+        ...(!showCredit ? [] : [
           ["", creditLabel, ...(view === "product" ? [""] : []), "", -credits.quantity, -credits.amount, -credits.cost, -credits.profit, ""],
           ["", "Net (after credit notes)", ...(view === "product" ? [""] : []), "", totals.quantity - credits.quantity, net.sales, net.cost, net.profit, pctText(net.pct)],
         ]),
@@ -229,7 +238,11 @@ export default function ProfitReportPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={load} disabled={loading}>
+            <label className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
+              <Switch checked={showCredit} onCheckedChange={setShowCredit} aria-label="Show credit notes and Net" />
+              Credit notes &amp; Net
+            </label>
+            <Button variant="outline" onClick={() => load()} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
             <ExportMenu onExport={exportReport} size="default" disabled={loading || filtered.length === 0} />
@@ -237,18 +250,15 @@ export default function ProfitReportPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <Stat icon={<ShoppingCart className="h-5 w-5" />} tone="bg-blue-100 text-blue-700" label="Net total value (incl. VAT)" value={`KES ${kes(net.sales)}`} />
-          <Stat icon={<Coins className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" label="Net cost value" value={`KES ${kes(net.cost)}`} />
-          <Stat icon={<TrendingUp className="h-5 w-5" />} tone="bg-emerald-100 text-emerald-700" label="Net profit (after credit notes)" value={`KES ${kes(net.profit)}`} />
-          <Stat icon={<Percent className="h-5 w-5" />} tone="bg-rose-100 text-rose-700" label="Profit % (on cost)" value={pctText(net.pct)} />
+          <Stat icon={<ShoppingCart className="h-5 w-5" />} tone="bg-blue-100 text-blue-700" label={showCredit ? "Net total value (incl. VAT)" : "Total value (incl. VAT)"} value={`KES ${kes(shownTotals.sales)}`} />
+          <Stat icon={<Coins className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" label={showCredit ? "Net cost value" : "Cost value"} value={`KES ${kes(shownTotals.cost)}`} />
+          <Stat icon={<TrendingUp className="h-5 w-5" />} tone="bg-emerald-100 text-emerald-700" label={showCredit ? "Net profit (after credit notes)" : "Profit (before credit notes)"} value={`KES ${kes(shownTotals.profit)}`} />
+          <Stat icon={<Percent className="h-5 w-5" />} tone="bg-rose-100 text-rose-700" label="Profit % (on cost)" value={pctText(shownTotals.pct)} />
         </div>
-        {totals.uncosted > 0 && (
-          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            {totals.uncosted} line{totals.uncosted === 1 ? " has" : "s have"} no cost recorded anywhere (no batch cost or Cost Price), so {totals.uncosted === 1 ? "it counts" : "they count"} at cost 0 and overstate profit. Filter Cost From = No cost to see them, and set their Cost Price.
-          </p>
-        )}
 
-        {credits.rows.length > 0 && (
+        {data && <NoCostPanel lines={data.lines} credits={showCredit ? data.credits : []} onFixed={reloadQuietly} />}
+
+        {showCredit && credits.rows.length > 0 && (
           <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
             {credits.numbers.join(", ")} (credit {credits.numbers.length === 1 ? "note" : "notes"} dated in this range) {credits.numbers.length === 1 ? "is" : "are"} deducted at the end of the table:
             KES {kes(credits.amount)} credited comes off sales and KES {kes(credits.cost)} cost of the goods back comes off cost.
@@ -403,7 +413,7 @@ export default function ProfitReportPage() {
                 <TableFooter>
                   <TableRow>
                     <TableCell colSpan={view === "lines" ? 6 : view === "product" ? 3 : 2} className="font-semibold">
-                      Gross ({sorted.length} {view === "list" ? "price list" : view === "product" ? "item" : "line"}{sorted.length === 1 ? "" : "s"})
+                      {totalLabel} ({sorted.length} {view === "list" ? "price list" : view === "product" ? "item" : "line"}{sorted.length === 1 ? "" : "s"})
                     </TableCell>
                     {view !== "lines" && <TableCell className="text-right font-semibold tabular-nums">{totals.lines}</TableCell>}
                     <TableCell className="text-right font-semibold tabular-nums">{totals.quantity.toLocaleString()}</TableCell>
@@ -414,7 +424,7 @@ export default function ProfitReportPage() {
                     <TableCell className="text-right"><PctBadge p={totals.pct} /></TableCell>
                     {view === "lines" && <TableCell />}
                   </TableRow>
-                  {(
+                  {showCredit && (
                     <>
                       <TableRow>
                         <TableCell colSpan={view === "lines" ? 6 : view === "product" ? 3 : 2} className="text-muted-foreground">
@@ -451,6 +461,184 @@ export default function ProfitReportPage() {
         </Card>
       </div>
     </PermissionGuard>
+  )
+}
+
+type NoCostDoc = { key: string; kind: "invoice" | "credit"; id: string; number: string; date: string; customer: string | null; quantity: number; unit: string; pieces: number | null; amount: number }
+type NoCostItem = { key: string; productId: string | null; name: string; docs: NoCostDoc[]; pieces: number; amount: number }
+
+/**
+ * Every line in the range with no cost anywhere (no batch cost, no Cost Price), grouped by item and always
+ * on show above the table. Expand an item to see the invoices (and credit notes, when shown) it is on, each
+ * linked for corrections; type its Cost Price (per piece) and Save - the report reloads and the item drops
+ * out once it has a cost. Lines not linked to a product can only be fixed on the invoice.
+ */
+function NoCostPanel({ lines, credits, onFixed }: { lines: ProfitLine[]; credits: ProfitCredit[]; onFixed: () => Promise<void> | void }) {
+  const { toast } = useToast()
+  const [open, setOpen] = useState(true)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [costs, setCosts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState<string | null>(null)
+
+  const items = useMemo<NoCostItem[]>(() => {
+    const by = new Map<string, NoCostItem>()
+    const add = (productId: string | null, name: string, doc: NoCostDoc) => {
+      const key = productId ?? `name:${name}`
+      const item = by.get(key) ?? { key, productId, name, docs: [], pieces: 0, amount: 0 }
+      item.docs.push(doc)
+      if (doc.kind === "invoice") { item.pieces += doc.pieces ?? doc.quantity; item.amount += doc.amount }
+      by.set(key, item)
+    }
+    lines.forEach((l, i) => l.cost === null && add(l.product_id, l.description, {
+      key: `i${i}`, kind: "invoice", id: l.invoice_id, number: l.invoice_number, date: l.invoice_date, customer: l.customer,
+      quantity: l.quantity, unit: l.unit, pieces: l.pieces ?? null, amount: l.sales,
+    }))
+    credits.forEach((c, i) => c.cost === null && add(c.product_id, c.description, {
+      key: `c${i}`, kind: "credit", id: c.credit_note_id, number: c.credit_note_number, date: c.date, customer: c.customer,
+      quantity: c.quantity, unit: c.unit, pieces: null, amount: -c.amount,
+    }))
+    return Array.from(by.values()).sort((a, b) => b.amount - a.amount)
+  }, [lines, credits])
+
+  if (items.length === 0) return null
+  const lineCount = items.reduce((s, it) => s + it.docs.length, 0)
+  const amount = items.reduce((s, it) => s + it.amount, 0)
+  const toggle = (key: string) => setExpanded((prev) => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
+
+  const save = async (item: NoCostItem) => {
+    const value = Number(costs[item.key])
+    if (!item.productId || !(value > 0)) {
+      toast({ title: "Type the Cost Price", description: "Enter what one piece costs (more than 0), then Save.", variant: "destructive" })
+      return
+    }
+    setSaving(item.key)
+    try {
+      const res = await updateProduct(item.productId, { unit_cost: value })
+      if (res?.status === "error" || res?.status === "failed") throw new Error(res.message || "The Cost Price was not saved.")
+      toast({ title: "Cost Price saved", description: `${item.name}: KES ${kes(value)} per piece. Its ${item.docs.length} line${item.docs.length === 1 ? " is" : "s are"} now costed.` })
+      setCosts((prev) => { const next = { ...prev }; delete next[item.key]; return next })
+      await onFixed()
+    } catch (e: any) {
+      toast({ title: "Could not save the Cost Price", description: e?.message || "Please try again.", variant: "destructive" })
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50/60">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 p-3 text-left text-sm text-amber-900">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <span className="flex-1">
+          <span className="font-semibold">{lineCount} line{lineCount === 1 ? "" : "s"} on {items.length} item{items.length === 1 ? "" : "s"} with no cost recorded</span>
+          {" "}(no batch cost or Cost Price) - KES {kes(amount)} of sales counted at cost 0, which overstates profit.
+          Expand an item to see its invoices, set its Cost Price and Save; it leaves this list once costed.
+        </span>
+        {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+      </button>
+      {open && (
+        <div className="max-h-[480px] overflow-auto border-t border-amber-200 bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10" />
+                <TableHead className="w-14">S/No</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">Lines</TableHead>
+                <TableHead className="text-right">Pieces sold</TableHead>
+                <TableHead className="text-right">Total Value (KES)</TableHead>
+                <TableHead className="text-right">Sold at / piece</TableHead>
+                <TableHead>Cost Price / piece (KES)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item, i) => {
+                const isOpen = expanded.has(item.key)
+                const perPiece = item.pieces > 0 ? item.amount / item.pieces : null
+                return (
+                  <Fragment key={item.key}>
+                    <TableRow className="align-top">
+                      <TableCell>
+                        <button type="button" onClick={() => toggle(item.key)} aria-label={isOpen ? "Hide invoices" : "Show invoices"} className="rounded p-1 hover:bg-muted">
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                      <TableCell className="min-w-[220px] font-medium">
+                        {item.productId
+                          ? <Link href={`/inventory/products/${item.productId}`} className="text-primary hover:underline">{item.name}</Link>
+                          : item.name}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <button type="button" onClick={() => toggle(item.key)} className="text-primary hover:underline">{item.docs.length}</button>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{item.pieces.toLocaleString()}</TableCell>
+                      <TableCell className="text-right tabular-nums">{kes(item.amount)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{perPiece === null ? "—" : kes(perPiece)}</TableCell>
+                      <TableCell>
+                        {item.productId ? (
+                          <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); save(item) }}>
+                            <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="h-9 w-[140px] tabular-nums"
+                              value={costs[item.key] ?? ""} onChange={(e) => setCosts((prev) => ({ ...prev, [item.key]: e.target.value }))} />
+                            <Button type="submit" size="sm" disabled={saving !== null || !costs[item.key]}>
+                              {saving === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                            </Button>
+                          </form>
+                        ) : (
+                          <span className="text-xs text-amber-800">Not linked to a product - open the invoice and pick the product on the line.</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                    {isOpen && (
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell />
+                        <TableCell colSpan={7} className="py-2">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-14">S/No</TableHead>
+                                <TableHead>Document</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Customer</TableHead>
+                                <TableHead className="text-right">Qty</TableHead>
+                                <TableHead>Per</TableHead>
+                                <TableHead className="text-right">Pieces</TableHead>
+                                <TableHead className="text-right">Total Value (KES)</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {item.docs.map((d, j) => (
+                                <TableRow key={d.key}>
+                                  <TableCell className="text-muted-foreground">{j + 1}</TableCell>
+                                  <TableCell className="whitespace-nowrap">
+                                    <Link href={d.kind === "invoice" ? `/sales/invoices/${d.id}` : `/sales/credit-notes/${d.id}`} className="text-primary hover:underline">{d.number}</Link>
+                                    {d.kind === "credit" && <Badge variant="outline" className="ml-2">Credit note</Badge>}
+                                  </TableCell>
+                                  <TableCell className="whitespace-nowrap">{dmy(d.date)}</TableCell>
+                                  <TableCell className="min-w-[180px]">{d.customer ?? "—"}</TableCell>
+                                  <TableCell className="text-right tabular-nums">{d.quantity.toLocaleString()}</TableCell>
+                                  <TableCell className="whitespace-nowrap">{d.unit}</TableCell>
+                                  <TableCell className="text-right tabular-nums">{d.pieces === null ? "—" : d.pieces.toLocaleString()}</TableCell>
+                                  <TableCell className={`text-right tabular-nums ${d.amount < 0 ? "text-red-600" : ""}`}>{kes(d.amount)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
   )
 }
 

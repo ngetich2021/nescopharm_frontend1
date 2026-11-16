@@ -12,6 +12,7 @@ export interface ProfitLine {
   price_code: string | null // "NSPH 067"
   unit: string
   quantity: number
+  pieces?: number // the quantity in pieces (Cost Price and batch cost are per piece)
   unit_price: number
   sales: number
   cost: number | null // null: no cost anywhere for the item
