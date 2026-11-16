@@ -32,7 +32,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Wallet, Eye, MoreHorizontal, FileText, Download, Search, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Wallet, Eye, MoreHorizontal, FileText, Download, Search, ArrowUp, ArrowDown, Pencil } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,7 +46,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/rbac";
-import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
+import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, updateDeliveryInvoice, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
 import { exportTable, type ExportFormat } from "@/lib/table-export";
 import { ExportMenu, ExportSubMenu, useTableExport } from "@/components/export-menu";
 import { DeliveryInvoicesImport, TransporterStatement } from "./delivery-invoices-excel";
@@ -105,6 +106,44 @@ export function DeliveryInvoicesTable() {
   const [totals, setTotals] = useState({ count: 0, total: 0, paid: 0, unpaid: 0 });
 
   const canPay = hasPermission(userProfile as any, "can_pay_delivery_invoices");
+  // Accounting corrects the amount to what was actually agreed with the transporter (not rate x cartons).
+  const [editing, setEditing] = useState<DeliveryInvoice | null>(null);
+  const [edit, setEdit] = useState({ total_amount: "", number_of_cartons: "", transporter_invoice_number: "", invoice_date: "", notes: "" });
+  const openEdit = (invoice: DeliveryInvoice) => {
+    setEditing(invoice);
+    setEdit({
+      total_amount: String(Number(invoice.total_amount) || ""),
+      number_of_cartons: invoice.number_of_cartons != null ? String(invoice.number_of_cartons) : "",
+      transporter_invoice_number: invoice.transporter_invoice_number || "",
+      invoice_date: (invoice.invoice_date || invoice.created_at || "").slice(0, 10),
+      notes: invoice.notes || "",
+    });
+  };
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    const amount = Number(edit.total_amount);
+    if (!(amount > 0)) {
+      toast({ title: "Check the amount", description: "Enter the amount agreed with the transporter (more than 0).", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { message } = await updateDeliveryInvoice(editing.id, {
+        total_amount: amount,
+        number_of_cartons: edit.number_of_cartons === "" ? null : Number(edit.number_of_cartons),
+        transporter_invoice_number: edit.transporter_invoice_number.trim() || null,
+        ...(edit.invoice_date ? { invoice_date: edit.invoice_date } : {}),
+        notes: edit.notes.trim() || null,
+      });
+      toast({ title: "Saved", description: message });
+      setEditing(null);
+      loadInvoices();
+    } catch (error: any) {
+      toast({ title: "Could not save", description: error.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -282,7 +321,7 @@ export function DeliveryInvoicesTable() {
             </div>
             <div className="flex flex-wrap gap-2">
               <TransporterStatement />
-              {canPay && <DeliveryInvoicesImport onImported={loadInvoices} />}
+              {canPay && <DeliveryInvoicesImport onImported={loadInvoices} search={search} />}
               <ImportHistoryDialog kind="delivery_invoices" title="Delivery Invoice" />
             </div>
           </div>
@@ -375,6 +414,15 @@ export function DeliveryInvoicesTable() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <ExportSubMenu onExport={(format) => handleDownload(invoice, format)} />
+                          {canPay && invoice.status !== "cancelled" && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => openEdit(invoice)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit Amount / Details
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           {canPay && invoice.status === "pending" && (
                             <>
                               <DropdownMenuSeparator />
@@ -463,6 +511,13 @@ export function DeliveryInvoicesTable() {
                 </div>
               </div>
 
+              {viewingInvoice.notes && (
+                <div className="border-t pt-4">
+                  <Label className="text-xs text-muted-foreground">Notes</Label>
+                  <p className="whitespace-pre-line text-sm">{viewingInvoice.notes}</p>
+                </div>
+              )}
+
               {viewingInvoice.status === "paid" && (
                 <div className="border-t pt-4 space-y-2">
                   <Label className="text-sm font-semibold">Payment Information</Label>
@@ -506,6 +561,67 @@ export function DeliveryInvoicesTable() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingInvoice(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Modal (accounting): the amount actually agreed for this dispatch */}
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Edit Delivery Invoice</DialogTitle>
+            <DialogDescription>
+              {editing?.invoice_number} · {editing?.transporter_name}. Enter what was agreed with the transporter for this dispatch;
+              it replaces rate x cartons.{editing?.status === "paid" ? " It is paid, so its payment is changed to the new amount too." : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit_amount">Amount (KES)</Label>
+                  <Input id="edit_amount" type="number" inputMode="decimal" min="0" step="0.01" className="font-semibold tabular-nums"
+                    value={edit.total_amount} onChange={(e) => setEdit((p) => ({ ...p, total_amount: e.target.value }))} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit_cartons">Cartons</Label>
+                  <Input id="edit_cartons" type="number" min="0" step="1" className="tabular-nums"
+                    value={edit.number_of_cartons} onChange={(e) => setEdit((p) => ({ ...p, number_of_cartons: e.target.value }))} />
+                </div>
+              </div>
+              {Number(editing.rate_per_carton) > 0 && Number(edit.number_of_cartons) > 0 && (
+                <p className="-mt-2 text-xs text-muted-foreground">
+                  At the rate: {edit.number_of_cartons} x KES {Number(editing.rate_per_carton).toLocaleString()} = KES {(Number(edit.number_of_cartons) * Number(editing.rate_per_carton)).toLocaleString()}
+                  {" · "}<button type="button" className="text-primary underline"
+                    onClick={() => setEdit((p) => ({ ...p, total_amount: String(Number(p.number_of_cartons) * Number(editing.rate_per_carton)) }))}>Use the rate</button>
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit_trans_inv">Transporter Invoice No.</Label>
+                  <Input id="edit_trans_inv" value={edit.transporter_invoice_number}
+                    onChange={(e) => setEdit((p) => ({ ...p, transporter_invoice_number: e.target.value }))} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit_date">Invoice Date</Label>
+                  <Input id="edit_date" type="date" value={edit.invoice_date}
+                    onChange={(e) => setEdit((p) => ({ ...p, invoice_date: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit_notes">Notes</Label>
+                <Textarea id="edit_notes" rows={3} placeholder="e.g. Negotiated KES 1,000 for the 4 cartons"
+                  value={edit.notes} onChange={(e) => setEdit((p) => ({ ...p, notes: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">A change of amount is noted here automatically (from, to, who, when).</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

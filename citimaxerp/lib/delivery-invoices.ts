@@ -190,6 +190,15 @@ export async function payDeliveryInvoice(
   return response.delivery_invoice;
 }
 
+/** Accounting corrects a delivery invoice: the amount agreed (not rate x cartons), cartons, transporter inv. no., date, notes. */
+export async function updateDeliveryInvoice(
+  id: string,
+  data: { total_amount?: number; number_of_cartons?: number | null; transporter_invoice_number?: string | null; invoice_date?: string; notes?: string | null }
+): Promise<{ invoice: DeliveryInvoice; message: string }> {
+  const response = await apiCall<{ delivery_invoice: DeliveryInvoice; message: string }>(`/delivery-invoices/${id}`, "PUT", data);
+  return { invoice: response.delivery_invoice, message: response.message };
+}
+
 export async function cancelDeliveryInvoice(id: string): Promise<DeliveryInvoice> {
   const response = await apiCall<{ delivery_invoice: DeliveryInvoice }>(`/delivery-invoices/${id}/cancel`, "POST");
   return response.delivery_invoice;

@@ -347,6 +347,87 @@ class DeliveryInvoiceController extends Controller
         }, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
+    /**
+     * Accountant edits a delivery invoice: the amount (what was actually agreed with the transporter, not
+     * rate x cartons), cartons, the transporter's invoice no., date and notes. The dispatch's delivery cost
+     * follows; a paid invoice's payment is re-recorded at the new amount; the books follow on save.
+     * Each amount change is noted on the invoice (from, to, who, when).
+     */
+    public function update(Request $request, $id)
+    {
+        $user = $request->user();
+
+        if (!$this->hasPermission($request, 'can_pay_delivery_invoices', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only accounting can edit delivery invoices.'], 403);
+        }
+
+        $invoice = DeliveryInvoice::where('company_id', $user->company_id)->find($id);
+        if (!$invoice) {
+            return response()->json(['status' => 'failed', 'message' => 'Delivery invoice not found.'], 404);
+        }
+        if ($invoice->status === 'cancelled') {
+            return response()->json(['status' => 'failed', 'message' => 'A cancelled delivery invoice cannot be edited.'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'total_amount' => 'sometimes|required|numeric|min:0.01',
+            'number_of_cartons' => 'sometimes|nullable|integer|min:0',
+            'transporter_invoice_number' => 'sometimes|nullable|string|max:100',
+            'invoice_date' => 'sometimes|required|date',
+            'notes' => 'sometimes|nullable|string|max:2000',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'failed', 'message' => collect($validator->errors()->all())->implode(' ')], 422);
+        }
+
+        $old = round((float) $invoice->total_amount, 2);
+        $new = $request->has('total_amount') ? round((float) $request->input('total_amount'), 2) : $old;
+        $amountChanged = abs($new - $old) > 0.005;
+
+        if ($amountChanged && $invoice->status === 'paid' && $invoice->supplier_payment_id
+            && \App\Models\SupplierPaymentAllocation::where('supplier_payment_id', $invoice->supplier_payment_id)->where('invoice_id', '!=', $invoice->id)->exists()) {
+            return response()->json(['status' => 'failed', 'message' => 'This invoice was paid together with other invoices on one payment, so its amount cannot be changed here. Change that payment on the Payments page first.'], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $invoice, $user, $old, $new, $amountChanged) {
+            $invoice->fill($request->only(['number_of_cartons', 'transporter_invoice_number', 'invoice_date', 'notes']));
+            if ($amountChanged) {
+                $invoice->total_amount = $new;
+                $trail = 'Amount changed from KES ' . number_format($old, 2) . ' to KES ' . number_format($new, 2)
+                    . ' by ' . ($user->name ?? 'accounting') . ' on ' . now()->format('d/m/Y') . '.';
+                $invoice->notes = trim(($invoice->notes ? $invoice->notes . "\n" : '') . $trail);
+            }
+            $invoice->save();
+
+            if ($amountChanged && $invoice->status === 'paid') {
+                // The transporter's payment follows the new amount (Payments page, statement, books).
+                $invoice->recordPayment(
+                    $invoice->paid_by,
+                    (string) $invoice->payment_method,
+                    $invoice->payment_reference,
+                    $invoice->payment_date,
+                    ['cheque_number' => $invoice->cheque_number, 'bank_name' => $invoice->bank_name, 'cheque_maturity_date' => $invoice->cheque_maturity_date],
+                );
+            }
+
+            $logistic = \App\Models\Logistic::where('delivery_invoice_id', $invoice->id)->first();
+            if ($logistic) {
+                $logistic->update(array_filter([
+                    'delivery_cost' => $invoice->total_amount,
+                    'number_of_cartons' => $request->has('number_of_cartons') ? $invoice->number_of_cartons : null,
+                    'transporter_invoice_number' => $request->has('transporter_invoice_number') ? $invoice->transporter_invoice_number : null,
+                    'amount_paid' => $invoice->status === 'paid' ? $invoice->total_amount : null,
+                ], fn ($v) => $v !== null));
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $amountChanged ? 'Delivery invoice updated to KES ' . number_format($new, 2) . '.' : 'Delivery invoice updated.',
+            'delivery_invoice' => $invoice->fresh(['orderDispatch.order', 'deliveryRate', 'createdBy', 'paidBy']),
+        ], 200);
+    }
+
     public function cancel(Request $request, $id)
     {
         $user = $request->user();

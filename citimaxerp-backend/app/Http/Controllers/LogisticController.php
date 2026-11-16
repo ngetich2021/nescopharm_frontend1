@@ -558,6 +558,8 @@ class LogisticController extends Controller
             // Delivery Invoice for the accountant to pay before dispatch proceeds.
             'delivery_rate_id' => 'nullable|uuid|exists:delivery_rates,id',
             'number_of_cartons' => 'nullable|integer|min:1',
+            // A cost negotiated with the transporter for this dispatch: it replaces rate x cartons.
+            'agreed_cost' => 'nullable|numeric|min:0.01',
         ]);
 
         if ($validator->fails()) {
@@ -628,8 +630,21 @@ class LogisticController extends Controller
 
                 $deliveryCost = $request->input('delivery_cost');
                 $amountPaid = $request->input('amount_paid');
+                $agreedNote = null;
                 if ($deliveryRate) {
-                    $deliveryCost = $deliveryRate->rate_per_carton * (int) $request->input('number_of_cartons');
+                    // Rate x cartons, unless an amount was agreed with the transporter for this dispatch:
+                    // that amount is the cost and the delivery invoice, and the invoice notes what the rate gave.
+                    $cartons = (int) $request->input('number_of_cartons');
+                    $rateCost = round((float) $deliveryRate->rate_per_carton * $cartons, 2);
+                    $deliveryCost = $rateCost;
+                    if ($request->filled('agreed_cost')) {
+                        $deliveryCost = round((float) $request->input('agreed_cost'), 2);
+                        if (abs($deliveryCost - $rateCost) > 0.005) {
+                            $agreedNote = 'Agreed amount for this dispatch: KES ' . number_format($deliveryCost, 2)
+                                . " ({$cartons} carton" . ($cartons === 1 ? '' : 's') . ' at the rate of KES '
+                                . number_format((float) $deliveryRate->rate_per_carton, 2) . ' would be KES ' . number_format($rateCost, 2) . ').';
+                        }
+                    }
                     $amountPaid = 0;
                 } elseif ($customerArranged) {
                     $deliveryCost = 0;
@@ -694,6 +709,7 @@ class LogisticController extends Controller
                         'number_of_cartons' => (int) $request->input('number_of_cartons'),
                         'rate_per_carton' => $deliveryRate->rate_per_carton,
                         'total_amount' => $deliveryCost,
+                        'notes' => $agreedNote,
                         'status' => 'pending',
                         'created_by' => $user->id,
                     ]);

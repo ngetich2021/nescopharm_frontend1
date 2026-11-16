@@ -1029,6 +1029,15 @@ class DataImportController extends Controller
                     'payment_reference' => null, 'paid_by' => null, 'supplier_payment_id' => null]);
             }
 
+            // The dispatch's delivery cost follows the invoice (an amount agreed with the transporter, not rate x cartons).
+            if (!$isNew && ($logistic = \App\Models\Logistic::where('delivery_invoice_id', $invoice->id)->first())) {
+                $logistic->update(array_filter([
+                    'delivery_cost' => $invoice->total_amount,
+                    'number_of_cartons' => $invoice->number_of_cartons,
+                    'amount_paid' => $invoice->status === 'paid' ? $invoice->total_amount : null,
+                ], fn ($v) => $v !== null));
+            }
+
             if ($isNew) {
                 $summary['created']++;
                 $results[] = ['key' => $invoice->invoice_number, 'status' => 'created',

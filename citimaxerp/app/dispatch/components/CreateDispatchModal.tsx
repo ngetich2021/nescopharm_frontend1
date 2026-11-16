@@ -182,6 +182,12 @@ export function CreateLogisticsModal({
   const selectedRate = deliveryRates.find((r) => r.id === selectedRateId);
   const cartons = Number(formData.number_of_cartons) || 0;
   const calculatedTotal = selectedRate ? Number(selectedRate.rate_per_carton) * cartons : 0;
+  // An amount negotiated with the transporter for this dispatch replaces rate x cartons; blank = the rate.
+  // null: not typed in, so the box shows rate x cartons; once typed in it shows exactly what was typed.
+  const [agreedCost, setAgreedCost] = useState<string | null>(null);
+  const agreed = agreedCost === null || agreedCost.trim() === "" ? null : Number(agreedCost);
+  const totalCost = agreed !== null && agreed > 0 ? agreed : calculatedTotal;
+  const kesText = (n: number) => n.toLocaleString("en-KE", { maximumFractionDigits: 2 });
 
   const handleAddDeliveryPerson = async () => {
     if (!companyId) return;
@@ -247,13 +253,22 @@ export function CreateLogisticsModal({
       toast({ title: "Missing Information", description: "Please enter the number of cartons.", variant: "destructive" });
       return;
     }
+    if (agreed !== null && !(agreed > 0)) {
+      toast({ title: "Check the delivery cost", description: "The agreed amount must be more than 0, or clear it to use the rate.", variant: "destructive" });
+      return;
+    }
 
     setLoading(true);
     try {
-      await createLogistics({ ...formData, delivery_rate_id: selectedRateId, number_of_cartons: cartons });
+      await createLogistics({
+        ...formData,
+        delivery_rate_id: selectedRateId,
+        number_of_cartons: cartons,
+        ...(agreed !== null ? { agreed_cost: agreed } : {}),
+      });
       toast({
         title: "Success",
-        description: `Logistics created. A delivery invoice of KES ${calculatedTotal.toLocaleString()} has been sent to accounting.`,
+        description: `Logistics created. A delivery invoice of KES ${kesText(totalCost)} has been sent to accounting.`,
       });
       onOpenChange(false);
       onSuccess?.();
@@ -612,7 +627,7 @@ export function CreateLogisticsModal({
                   <h5 className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-1">
                     <Wallet className="h-3.5 w-3.5" />
                     Delivery Cost
-                    <span className="text-xs text-gray-400 font-normal">(auto-calculated)</span>
+                    <span className="text-xs text-gray-400 font-normal">(rate x cartons, or type the amount agreed)</span>
                   </h5>
                   <div className="grid gap-4">
                     {dispatch.dispatched_through && (
@@ -693,15 +708,35 @@ export function CreateLogisticsModal({
                         />
                       </div>
                       <div className="grid gap-2">
-                        <Label>Total Delivery Cost</Label>
-                        <div className="h-10 flex items-center px-3 rounded-md border border-gray-200 bg-gray-50 font-semibold text-gray-800">
-                          KES {calculatedTotal.toLocaleString()}
-                        </div>
+                        <Label htmlFor="agreed_cost">Total Delivery Cost (KES)</Label>
+                        <Input
+                          id="agreed_cost"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          className="font-semibold tabular-nums"
+                          placeholder={calculatedTotal > 0 ? kesText(calculatedTotal) : "Pick a rate and cartons"}
+                          value={agreedCost ?? (calculatedTotal > 0 ? String(calculatedTotal) : "")}
+                          onChange={(e) => setAgreedCost(e.target.value)}
+                          disabled={!selectedRateId}
+                        />
+                        {selectedRate && cartons > 0 && (
+                          <p className="text-xs text-gray-500">
+                            Rate: {cartons} x KES {kesText(Number(selectedRate.rate_per_carton))} = KES {kesText(calculatedTotal)}
+                            {agreed !== null && agreed > 0 && Math.abs(agreed - calculatedTotal) > 0.005 && (
+                              <>
+                                {" · "}<span className="text-amber-700">agreed amount used</span>{" "}
+                                <button type="button" className="text-primary underline" onClick={() => setAgreedCost(null)}>Use the rate</button>
+                              </>
+                            )}
+                          </p>
+                        )}
                       </div>
                     </div>
                     {selectedRate && cartons > 0 && (
                       <p className="text-xs text-gray-500">
-                        This will raise a Delivery Invoice of <strong>KES {calculatedTotal.toLocaleString()}</strong> for
+                        This will raise a Delivery Invoice of <strong>KES {kesText(totalCost)}</strong> for
                         accounting to pay.
                       </p>
                     )}

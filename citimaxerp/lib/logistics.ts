@@ -303,6 +303,8 @@ export interface CreateLogisticsData {
   // Invoice for accounting instead of the manual payment fields above.
   delivery_rate_id?: string;
   number_of_cartons?: number;
+  // An amount agreed with the transporter for this dispatch; replaces rate x cartons.
+  agreed_cost?: number;
 }
 
 interface CreateLogisticsResponse {

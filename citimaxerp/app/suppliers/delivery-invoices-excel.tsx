@@ -31,9 +31,23 @@ const shortDate = (date: string) => {
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
 /** Template download and Import (preview first) for delivery invoices. */
-export function DeliveryInvoicesImport({ onImported }: { onImported: () => void }) {
+export function DeliveryInvoicesImport({ onImported, search }: { onImported: () => void; search?: string }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // The invoices in the import layout (Invoice No. kept): change Amount, Cartons, Status... and Import it back.
+  const handleDownloadForEditing = async () => {
+    setDownloading(true);
+    try {
+      await exportDeliveryInvoicesToExcel({ search: search?.trim() || undefined });
+      toast({ title: "Downloaded", description: "Edit the rows (e.g. Amount to what was agreed), keep each Invoice No., then Import the file back." });
+    } catch (err) {
+      toast({ title: "Download failed", description: err instanceof Error ? err.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
   const [preview, setPreview] = useState<any>(null);
   const [file, setFile] = useState<File | null>(null);
 
@@ -86,6 +100,11 @@ export function DeliveryInvoicesImport({ onImported }: { onImported: () => void 
       <Button variant="outline" size="sm" onClick={handleTemplate}>
         <FileSpreadsheet className="h-4 w-4 mr-2" />
         Template
+      </Button>
+      <Button variant="outline" size="sm" onClick={handleDownloadForEditing} disabled={downloading}
+        title="All delivery invoices (following the search) in the import layout: edit them in Excel and Import the file back">
+        {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+        Download to Edit
       </Button>
       <input type="file" id="import-delivery-invoices-file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleFile} />
       <Button variant="outline" size="sm" disabled={busy} onClick={() => document.getElementById("import-delivery-invoices-file")?.click()}>
