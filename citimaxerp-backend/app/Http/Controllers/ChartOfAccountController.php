@@ -16,6 +16,23 @@ class ChartOfAccountController extends Controller
         $this->middleware('auth:sanctum');
     }
 
+    /**
+     * The account belongs to the user's own company (system admins may act on any company).
+     * Whether the user may view/edit/delete it is decided by the can_*_chart_of_accounts
+     * permission, not by "Manage Company" - the Accountant has the former but not the latter.
+     */
+    protected function canManageCompany(Request $request, $companyId)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return false;
+        }
+        if ($user->role && $user->role->hasPermission('can_manage_system')) {
+            return true;
+        }
+        return (string) $user->company_id === (string) $companyId;
+    }
+
     protected function hasPermission(Request $request, $permission, $resourceCompanyId = null)
     {
         $user = $request->user();
@@ -320,17 +337,32 @@ class ChartOfAccountController extends Controller
 
             // Check if account has children
             if ($account->children()->count() > 0) {
+                DB::rollBack();
                 return response()->json([
                     'status' => 'failed',
-                    'message' => 'Cannot delete account with child accounts.',
+                    'message' => "Cannot delete {$account->account_code} {$account->account_name}: it has sub-accounts. Delete or move them first.",
                 ], 400);
             }
 
             // Check if account is used in journal entries
-            if ($account->journalEntryItems()->count() > 0) {
+            $entryLines = $account->journalEntryItems()->count();
+            if ($entryLines > 0) {
+                DB::rollBack();
                 return response()->json([
                     'status' => 'failed',
-                    'message' => 'Cannot delete account with existing transactions.',
+                    'message' => "Cannot delete {$account->account_code} {$account->account_name}: it has {$entryLines} journal entry line(s). Delete or move those entries first, or mark the account Inactive.",
+                ], 400);
+            }
+
+            $transfers = DB::table('bank_transfers')
+                ->where('from_account_id', $account->id)
+                ->orWhere('to_account_id', $account->id)
+                ->count();
+            if ($transfers > 0) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => "Cannot delete {$account->account_code} {$account->account_name}: it is used by {$transfers} bank transfer(s). Mark the account Inactive instead.",
                 ], 400);
             }
 

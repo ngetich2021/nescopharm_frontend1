@@ -267,7 +267,7 @@ export default function ChartOfAccountsPage() {
       console.error('Error deleting account:', error)
       toast({
         title: "Error",
-        description: "Failed to delete account. Please try again.",
+        description: error instanceof Error && error.message ? error.message : "Failed to delete account. Please try again.",
         variant: "destructive",
       })
     }
