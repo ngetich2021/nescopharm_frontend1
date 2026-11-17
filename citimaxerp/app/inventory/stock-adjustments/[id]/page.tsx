@@ -365,6 +365,10 @@ export default function StockAdjustmentDetailPage() {
                               <Badge variant={item.item_status === "completed" ? "default" : item.item_status === "failed" ? "destructive" : "secondary"} className="text-xs">
                                 {item.item_status}
                               </Badge>
+                              {/* Why it failed; pressing Apply to Inventory again retries it. */}
+                              {item.item_status === "failed" && (item as any).error_message && (
+                                <span className="block text-xs text-red-600 mt-1 max-w-[220px]">{(item as any).error_message} - press Apply to Inventory to retry.</span>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

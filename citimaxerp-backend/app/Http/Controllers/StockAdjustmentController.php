@@ -996,9 +996,13 @@ class StockAdjustmentController extends Controller
 
             // Check if this is a bulk adjustment (has items) or legacy single-item adjustment
             if ($adjustment->hasItems()) {
-                // Process each item in the bulk adjustment
-                foreach ($adjustment->pendingItems as $item) {
+                // Process each item not yet applied: pending ones, and ones that failed before
+                // (fixed since), so pressing Apply again retries them.
+                $toApply = $adjustment->items()->with(['product', 'variant', 'batch'])->whereIn('item_status', ['pending', 'failed'])->get();
+                foreach ($toApply as $item) {
                     try {
+                        // Each item in its own savepoint: a failed one leaves no half-made change.
+                        DB::transaction(function () use ($item, $adjustment, $user, &$movement) {
                         // Apply the item to inventory
                         $this->applyItemToInventory($item);
 
@@ -1031,7 +1035,9 @@ class StockAdjustmentController extends Controller
                         ]);
 
                         // Mark item as applied
+                        $item->error_message = null;
                         $item->markAsApplied($movement->id);
+                        });
 
                         $itemResults[] = [
                             'status' => 'success',
@@ -1236,13 +1242,14 @@ class StockAdjustmentController extends Controller
         $companyId = $item->stockAdjustment->company_id;
         $batchNumber = trim((string) ($meta['batch_number'] ?? ''));
 
+        // The batch of this product with that number. The same number can also be on another
+        // product (CI-26B11A on two Ceftriaxone items); that one is never touched.
         $batch = $batchNumber !== ''
-            ? InventoryBatch::where('company_id', $companyId)->where('batch_number', $batchNumber)->first()
+            ? InventoryBatch::where('company_id', $companyId)->where('batch_number', $batchNumber)
+                ->where('product_id', $item->product_id)
+                ->where(fn ($q) => $item->variant_id ? $q->where('variant_id', $item->variant_id) : $q->whereNull('variant_id'))
+                ->orderByDesc('created_at')->first()
             : null;
-
-        if ($batch && ($batch->product_id !== $item->product_id || $batch->variant_id !== $item->variant_id)) {
-            throw new \Exception("Batch {$batchNumber} belongs to a different product");
-        }
 
         if ($batch) {
             $batch->increment('quantity_available', $item->quantity_adjusted);
