@@ -56,6 +56,10 @@ const METHOD_LABELS: Record<string, string> = { bank_transfer: "Bank Transfer", 
 /** "PV-161, PV-162" - the payments that paid a bill. */
 const paidByLabel = (bill: SupplierBill) => bill.payments.map((p) => p.payment_number || p.reference || "payment").join(", ");
 
+/** Our reference: the goods receipt it came from (RCPT-0016), or a debit note's receipt. */
+const ourRef = (bill: SupplierBill) =>
+  bill.returns_receipt_number || (bill.source || bill.description || "").match(/RCPT-\d+/)?.[0] || "";
+
 /**
  * What suppliers billed us (bills, e.g. PUR-131) and their debit notes, with what each payment put on
  * them. Bills are paid from Supplier Payments; this tab is where the invoices those payments pay are seen.
@@ -321,6 +325,8 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                 <TableRow>
                   <TableHead className="w-12">S/NO</TableHead>
                   <TableHead>Invoice #</TableHead>
+                  <TableHead className="whitespace-nowrap">Supplier Ref</TableHead>
+                  <TableHead className="whitespace-nowrap">Our Ref</TableHead>
                   <TableHead className="whitespace-nowrap">Date</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -343,10 +349,9 @@ export function SupplierInvoicesTable({ fixedKind, actions, reloadKey = 0 }: {
                 {bills.map((bill, index) => (
                   <TableRow key={bill.id} className="cursor-pointer" onClick={() => setViewing(bill)}>
                     <TableCell className="text-sm text-muted-foreground">{(pagination.current_page - 1) * pagination.per_page + index + 1}</TableCell>
-                    <TableCell className="font-medium whitespace-nowrap">
-                      {bill.invoice_number}
-                      {bill.supplier_invoice_number && <span className="block text-xs text-muted-foreground">their inv {bill.supplier_invoice_number}</span>}
-                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{bill.invoice_number}</TableCell>
+                    <TableCell className="whitespace-nowrap">{bill.supplier_invoice_number || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{ourRef(bill) || "—"}</TableCell>
                     <TableCell className="whitespace-nowrap">{shortDate(bill.invoice_date)}</TableCell>
                     <TableCell>{bill.supplier_name || "—"}</TableCell>
                     <TableCell className="text-right font-semibold whitespace-nowrap">{money(bill.total)}</TableCell>
