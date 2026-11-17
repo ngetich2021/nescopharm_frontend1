@@ -302,6 +302,18 @@ export async function deleteSupplierBill(id: string): Promise<{ message: string 
     return apiCall(`/finance/accounts-payable/${id}`, "DELETE");
 }
 
+/**
+ * Take back a supplier payment / cheque captured in error: cancel keeps it on record as cancelled,
+ * delete removes it. The invoices it paid owe again and its cheque is cancelled.
+ */
+export async function cancelSupplierPayment(id: string): Promise<{ message: string }> {
+    return apiCall(`/supplier-payments/${id}/cancel`, "POST");
+}
+
+export async function deleteSupplierPayment(id: string): Promise<{ message: string }> {
+    return apiCall(`/supplier-payments/${id}`, "DELETE");
+}
+
 /** Preview (dryRun) or save a supplier invoices sheet. Saved invoices post to the books. */
 export async function importSupplierBills(file: File, dryRun: boolean = true): Promise<any> {
     const form = new FormData();

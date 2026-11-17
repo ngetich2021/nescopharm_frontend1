@@ -230,6 +230,7 @@ class SupplierController extends Controller
         $payments = DB::table('supplier_payments')->where('supplier_id', $supplier->id)->where('status', 'completed')->get();
         foreach ($payments as $p) {
             $entries->push([
+                'payment_id' => $p->id, // so the statement can cancel or delete one captured in error
                 'date' => substr((string) $p->payment_date, 0, 10),
                 'type' => 'payment',
                 'reference' => $p->payment_number,

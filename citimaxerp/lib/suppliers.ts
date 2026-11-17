@@ -120,6 +120,7 @@ export async function getSupplier(id: string): Promise<Supplier> {
 
 // Create new supplier
 export interface SupplierStatementEntry {
+  payment_id?: string // on payment lines: lets the statement cancel or delete it
   date: string
   type: "opening_balance" | "bill" | "receipt" | "debit_note" | "payment"
   reference: string

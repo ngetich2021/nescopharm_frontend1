@@ -272,6 +272,84 @@ class SupplierPaymentController extends Controller
         return response()->json($payment);
     }
 
+    /**
+     * Take back a supplier payment or cheque captured in error, as on a customer's receipts.
+     * Cancel keeps it on record as "cancelled"; delete removes it. Either way the invoices it paid
+     * owe again, its purchase order is no longer paid by it, its cheque is cancelled and its ledger
+     * entry goes (LedgerSyncObserver).
+     */
+    public function cancel(Request $request, $id)
+    {
+        return $this->takeBack($request, $id, true);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        return $this->takeBack($request, $id, false);
+    }
+
+    protected function takeBack(Request $request, string $id, bool $cancel)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_delete_invoices', $user->company_id)
+            && !$this->hasPermission($request, 'can_refund_payments', $user->company_id)) {
+            return response()->json(['message' => 'You do not have permission to cancel or delete supplier payments.'], 403);
+        }
+        $payment = SupplierPayment::where('company_id', $user->company_id)->find($id);
+        if (!$payment) {
+            return response()->json(['message' => 'Payment not found'], 404);
+        }
+        if ($cancel && $payment->status === 'cancelled') {
+            return response()->json(['message' => "{$payment->payment_number} is already cancelled."], 422);
+        }
+
+        $payment->load('allocations');
+        $this->withInvoicesPaid(collect([$payment]));
+        $invoices = collect($payment->invoices_paid ?? [])->where('applied', true)->pluck('number')->filter()->implode(', ');
+        $number = $payment->payment_number;
+        $amount = (float) $payment->amount;
+
+        try {
+            $chequeNumber = DB::transaction(function () use ($payment, $cancel, $amount) {
+                $payment = SupplierPayment::lockForUpdate()->find($payment->id);
+                // A completed payment counted on its purchase order; take it off.
+                if ($payment->status === 'completed' && $payment->purchase_order_id
+                    && $po = PurchaseOrder::lockForUpdate()->find($payment->purchase_order_id)) {
+                    $paid = max(0, round((float) $po->amount_paid - $amount, 2));
+                    $po->update([
+                        'amount_paid' => $paid,
+                        'payment_status' => $paid <= 0 ? 'unpaid' : ($paid >= (float) $po->total_amount && (float) $po->total_amount > 0 ? 'paid' : 'partial'),
+                    ]);
+                }
+
+                $cheque = Cheque::where('supplier_payment_id', $payment->id)->first();
+                $cheque?->update(['status' => 'cancelled', 'notes' => trim(($cheque->notes ? "{$cheque->notes}\n" : '')
+                    . 'Cancelled with payment ' . $payment->payment_number . ' on ' . now()->format('d/m/Y'))]);
+
+                if ($cancel) {
+                    $payment->update(['status' => 'cancelled']); // unapplies its invoices, removes its ledger entry
+                } else {
+                    $payment->delete(); // same, then the record goes
+                }
+
+                return $cheque?->cheque_number;
+            });
+        } catch (\Throwable $e) {
+            return \App\Support\PaymentFailure::response($e, $cancel ? 'The cancellation' : 'The deletion');
+        }
+
+        $done = $cancel ? 'cancelled' : 'deleted';
+        \App\Models\ActivityLog::logActivity("supplier_payment_{$done}", "Supplier payment {$number} of KES " . number_format($amount, 2) . " {$done}", $user,
+            ['payment_number' => $number, 'amount' => $amount, 'invoices' => $invoices, 'cheque_number' => $chequeNumber]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "{$number} of KES " . number_format($amount, 2) . " {$done}"
+                . ($invoices ? "; {$invoices} owe again" : '')
+                . ($chequeNumber ? "; cheque {$chequeNumber} cancelled" : ''),
+        ]);
+    }
+
     /** A supplier's unpaid invoices, oldest first, for the payment form to pay. */
     public function openInvoices(Request $request, $supplierId)
     {

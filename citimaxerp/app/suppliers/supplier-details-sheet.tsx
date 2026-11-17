@@ -23,10 +23,13 @@ import {
   Loader2,
   RefreshCw,
   Receipt,
-  BookOpen
+  BookOpen,
+  Ban
 } from "lucide-react"
-import { getSupplier, deleteSupplier, getSupplierStatement, Supplier, SupplierStatement } from "@/lib/suppliers"
+import { getSupplier, deleteSupplier, getSupplierStatement, Supplier, SupplierStatement, SupplierStatementEntry } from "@/lib/suppliers"
 import { useToast } from "@/hooks/use-toast"
+import { usePermissions } from "@/hooks/use-permissions"
+import { cancelSupplierPayment, deleteSupplierPayment } from "@/lib/supplier-payments"
 import { EditSupplierSheet } from "./components/edit-supplier-sheet"
 
 const money = (n: number) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -51,6 +54,29 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [statement, setStatement] = useState<SupplierStatement | null>(null)
+  const [takingBack, setTakingBack] = useState<string | null>(null)
+  const { hasPermission } = usePermissions()
+  // As on a customer's receipts: those who refund payments (Accountant) or delete invoices.
+  const canTakeBack = hasPermission("can_delete_invoices") || hasPermission("can_refund_payments")
+
+  // A payment or cheque captured in error: cancel keeps it on record, delete removes it.
+  const takeBackPayment = async (e: SupplierStatementEntry, cancel: boolean) => {
+    if (!e.payment_id || !supplierId) return
+    const what = `${e.reference} (KES ${money(e.paid)})`
+    if (!window.confirm(cancel
+      ? `Cancel payment ${what}? It stays on record as cancelled; the invoices it paid owe again and its cheque is cancelled.`
+      : `Delete payment ${what}? It is removed; the invoices it paid owe again and its cheque is cancelled.`)) return
+    setTakingBack(e.payment_id)
+    try {
+      const res = await (cancel ? cancelSupplierPayment(e.payment_id) : deleteSupplierPayment(e.payment_id))
+      toast({ title: cancel ? "Payment cancelled" : "Payment deleted", description: res.message })
+      setStatement(await getSupplierStatement(supplierId))
+    } catch (err) {
+      toast({ title: cancel ? "Could not cancel" : "Could not delete", description: err instanceof Error ? err.message : "Nothing was changed", variant: "destructive" })
+    } finally {
+      setTakingBack(null)
+    }
+  }
 
   useEffect(() => {
     if (open && supplierId) {
@@ -192,6 +218,7 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                                 <th className="text-right">Billed</th>
                                 <th className="text-right">Paid</th>
                                 <th className="text-right">Balance</th>
+                                {canTakeBack && <th />}
                               </tr>
                             </thead>
                             <tbody>
@@ -204,6 +231,22 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                                   <td className="text-right tabular-nums">{e.billed ? money(e.billed) : "—"}</td>
                                   <td className="text-right tabular-nums">{e.paid ? money(e.paid) : "—"}</td>
                                   <td className="text-right tabular-nums font-medium">{money(e.balance)}</td>
+                                  {canTakeBack && (
+                                    <td className="whitespace-nowrap text-right">
+                                      {e.type === "payment" && e.payment_id && (takingBack === e.payment_id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin inline" />
+                                      ) : (
+                                        <>
+                                          <Button variant="ghost" size="icon" className="h-6 w-6" title="Cancel this payment (keeps it on record)" disabled={!!takingBack} onClick={() => takeBackPayment(e, true)}>
+                                            <Ban className="h-3.5 w-3.5 text-amber-600" />
+                                          </Button>
+                                          <Button variant="ghost" size="icon" className="h-6 w-6" title="Delete this payment" disabled={!!takingBack} onClick={() => takeBackPayment(e, false)}>
+                                            <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                          </Button>
+                                        </>
+                                      ))}
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                               <tr className="border-t bg-gray-50 font-semibold [&>td]:px-2 [&>td]:py-1.5">
@@ -211,6 +254,7 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                                 <td className="text-right tabular-nums">{money(statement.totals.billed)}</td>
                                 <td className="text-right tabular-nums">{money(statement.totals.paid)}</td>
                                 <td className="text-right tabular-nums">{money(statement.totals.balance)}</td>
+                                {canTakeBack && <td />}
                               </tr>
                             </tbody>
                           </table>
