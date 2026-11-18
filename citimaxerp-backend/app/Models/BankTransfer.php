@@ -25,6 +25,21 @@ class BankTransfer extends Model
         'charges' => 'decimal:2',
     ];
 
+    /**
+     * Record a transfer under the next TRF-0001, TRF-0002 ... number of its company. The lock keeps
+     * two saves from taking the same number.
+     */
+    public static function record(array $attributes): self
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($attributes) {
+            $last = static::where('company_id', $attributes['company_id'])->lockForUpdate()
+                ->orderByDesc('transfer_number')->value('transfer_number');
+            $next = $last ? ((int) substr($last, 4)) + 1 : 1;
+
+            return static::create($attributes + ['transfer_number' => 'TRF-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT)]);
+        });
+    }
+
     public function fromAccount()
     {
         return $this->belongsTo(ChartOfAccount::class, 'from_account_id');

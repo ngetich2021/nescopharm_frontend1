@@ -230,7 +230,7 @@ export function RecordPaymentModal({
                   id="bank_name"
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                  placeholder="e.g. Equity Bank"
+                  placeholder="e.g. Prime Bank"
                   required
                 />
               </div>

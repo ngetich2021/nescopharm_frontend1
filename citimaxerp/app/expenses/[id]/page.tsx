@@ -5,7 +5,8 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Pencil, Trash2, ExternalLink } from "lucide-react"
+import { ArrowLeft, Pencil, Trash2, ExternalLink, ArrowRightLeft } from "lucide-react"
+import apiCall from "@/lib/api"
 import Link from "next/link"
 import { getExpenseById, deleteExpense } from "@/lib/expenses"
 import type { Expense } from "@/types/expenses"
@@ -84,6 +85,17 @@ export default function ExpenseDetailsPage() {
     }
   }
 
+  // A bank withdrawal booked as an expense becomes a Prime Bank -> Cash at Hand transfer.
+  const handleToTransfer = async () => {
+    try {
+      const res = await apiCall<{ message: string }>(`/finance/bank-transfers/from-expense/${expenseId}`, "POST", {})
+      toast({ title: "Recorded as a transfer", description: res.message })
+      window.location.href = "/finance/cash-books"
+    } catch (error: any) {
+      toast({ title: "Could not change it to a transfer", description: error?.message, variant: "destructive" })
+    }
+  }
+
   const handleExpenseUpdated = () => {
     fetchExpenseAndCategories() // Re-fetch to update details
     setIsEditModalOpen(false)
@@ -128,6 +140,28 @@ export default function ExpenseDetailsPage() {
           <Button variant="outline" onClick={() => setIsEditModalOpen(true)}>
             <Pencil className="mr-2 h-4 w-4" /> Edit
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline">
+                <ArrowRightLeft className="mr-2 h-4 w-4" /> Was a bank withdrawal
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Record this as a withdrawal from the bank?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Cash taken out of Prime Bank is not spending: it is a transfer from the bank into Cash at Hand. This removes the
+                  expense ({formatCurrency(expense.amount)} on {displayDate(new Date(expense.expense_date))}) and records the same
+                  amount as a transfer, so it shows as a payment in the Bank Book and a receipt in the Cash Book. Record what the cash
+                  was then spent on as expenses paid in cash.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleToTransfer}>Make it a transfer</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive">

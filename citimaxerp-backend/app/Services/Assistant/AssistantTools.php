@@ -36,6 +36,7 @@ class AssistantTools
         'receipts_summary' => ['can_view_payments_menu'],
         'expenses_summary' => ['can_view_expenses_menu', 'can_view_finance_menu'],
         'purchase_orders' => ['can_view_purchase_orders_menu'],
+        'cash_book' => ['can_view_bank_accounts', 'can_view_general_ledger'],
     ];
 
     // Invoices that do not count as sales. Drafts do count: most invoices here stay "draft" after
@@ -121,6 +122,10 @@ class AssistantTools
             'receipts_summary' => ['Money received from customers in a period: total, by payment method, latest receipts.', $range, []],
             'expenses_summary' => ['Expenses (expenditure) in a period: total, by category and status, latest expenses.', $range + [
                 'category' => ['type' => 'string', 'description' => 'Optional category name'],
+            ], []],
+            'cash_book' => ['Bank Book (Prime Bank) and Cash Book (Cash at Hand / Petty Cash): each money account\'s balance now, and for one book the opening balance, receipts, payments, closing balance and entries in a period (date, particulars, voucher type - Receipt, Payment, Contra = bank-to-cash withdrawal - voucher no., amount). Use for "bank balance", "cash at hand", "petty cash", "cash book", "bank book", "what did we withdraw".', $range + [
+                'book' => ['type' => 'string', 'description' => 'Which book: "bank" or "cash" (or an account code). Leave out for just the balances of all books.'],
+                'limit' => ['type' => 'integer', 'description' => 'Max entries listed (default 15, max 50)'],
             ], []],
             'purchase_orders' => ['Purchase orders, newest first, with supplier, total, approval, receipt and payment status.', [
                 'status' => ['type' => 'string', 'description' => 'Optional: pending, partial, received, cancelled'],
@@ -874,6 +879,46 @@ class AssistantTools
             'by_status' => $byStatus->map(fn ($v) => self::money($v)),
             'by_category' => $byCategory->map(fn ($r) => ['category' => $r->category, 'count' => (int) $r->n, 'total' => self::money($r->total)]),
             'latest' => $latest->map(fn ($e) => ['date' => substr((string) $e->expense_date, 0, 10), 'description' => $e->description, 'category' => $e->category?->name, 'amount' => self::money($e->amount), 'status' => $e->status, 'vendor' => $e->vendor_name]),
+        ];
+    }
+
+    protected function cash_book(array $args): array
+    {
+        $service = app(\App\Services\CashBookService::class);
+        $accounts = $service->moneyAccounts($this->companyId);
+        $isCash = fn ($a) => (bool) preg_match('/cash|petty/i', $a['name']);
+        $result = ['books' => $accounts->map(fn ($a) => [
+            'book' => ($isCash($a) ? 'Cash Book' : 'Bank Book') . ': ' . $a['label'],
+            'code' => $a['code'],
+            'balance' => self::money(abs($a['balance'])) . ($a['balance'] < 0 ? ' Cr (overdrawn / more paid out than recorded in)' : ' Dr'),
+        ])->values()];
+
+        $want = strtolower(trim((string) ($args['book'] ?? '')));
+        if ($want === '') {
+            return $result;
+        }
+        $pick = $accounts->first(fn ($a) => $a['code'] === $want)
+            ?? $accounts->first(fn ($a) => $want === 'cash' ? $isCash($a) : (in_array($want, ['bank', 'prime', 'prime bank'], true) ? !$isCash($a) : str_contains(strtolower($a['label']), $want)));
+        if (!$pick) {
+            return $result + ['note' => 'No book matches "' . $args['book'] . '".'];
+        }
+        [$from, $to] = $this->range($args);
+        $book = $service->book($this->companyId, \App\Models\ChartOfAccount::findOrFail($pick['id']), $from, $to);
+        $limit = $this->limit($args, 15, 50);
+
+        return $result + [
+            'book' => $book['account']['code'] . ' ' . $book['account']['name'],
+            'period' => ['from' => $from, 'to' => $to],
+            'opening_balance' => self::money($book['opening_balance']['amount']) . ' ' . $book['opening_balance']['side'],
+            'receipts' => self::money($book['totals']['debit']),
+            'payments' => self::money($book['totals']['credit']),
+            'closing_balance' => self::money($book['closing_balance']['amount']) . ' ' . $book['closing_balance']['side'],
+            'entries_in_period' => count($book['rows']),
+            'latest_entries' => collect($book['rows'])->reverse()->take($limit)->map(fn ($r) => [
+                'date' => $r['date'], 'particulars' => $r['particulars'], 'vch_type' => $r['voucher_type'], 'vch_no' => $r['voucher_no'],
+                'receipt' => $r['debit'] ? self::money($r['debit']) : null, 'payment' => $r['credit'] ? self::money($r['credit']) : null,
+                'balance' => self::money($r['balance']) . ' ' . $r['balance_side'],
+            ])->values(),
         ];
     }
 

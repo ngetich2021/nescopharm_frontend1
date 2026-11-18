@@ -386,7 +386,10 @@ class FinancialStatementService
         $retainedEarnings = $this->getIncomeStatement('1900-01-01', $yearStart->copy()->subDay()->toDateString())['sections']['net_income'];
         
         $accountBalances = $this->getAllAccountBalances($date);
-        
+        $openingDifferenceId = \Illuminate\Support\Facades\DB::table('company_account_mappings')
+            ->where('company_id', $this->companyId)->where('mapping_key', 'opening_balance_equity')
+            ->whereNull('context_type')->where('is_active', true)->value('chart_of_account_id');
+
         // Initialize categories
         $currentAssets = [];
         $fixedAssets = [];
@@ -449,34 +452,40 @@ class FinancialStatementService
                     break;
                     
                 case 'equity':
+                    // The owners' Capital Account; balances brought across from the old system sit
+                    // apart as the Difference in Opening Balances (as Tally shows them).
+                    $row['group'] = $acc['id'] === $openingDifferenceId ? 'opening_difference' : 'capital';
                     $equity[] = $row;
                     $totalEquity += $acc['balance'];
                     break;
             }
         }
 
+        // Profit is never closed off by journal: it shows as the Profit & Loss A/c, not as more equity accounts.
         if (abs($retainedEarnings) >= 0.01) {
             $equity[] = [
                 'account_id' => null,
                 'account_code' => 'RETAINED',
-                'account_name' => 'Retained Earnings (prior years)',
+                'account_name' => 'Profit & Loss A/c (previous years)',
                 'is_contra' => $retainedEarnings < 0,
                 'amount' => round($retainedEarnings, 2),
+                'group' => 'profit_loss',
             ];
             $totalEquity += $retainedEarnings;
         }
 
-        // Add current period net income to equity section
         if (abs($netIncome) >= 0.01) {
             $equity[] = [
                 'account_id' => null,
                 'account_code' => 'NET_INCOME',
-                'account_name' => 'Net Income (Current Period)',
+                'account_name' => 'Profit & Loss A/c (current year)',
                 'is_contra' => $netIncome < 0,
                 'amount' => round($netIncome, 2),
+                'group' => 'profit_loss',
             ];
             $totalEquity += $netIncome;
         }
+        $equityGroup = fn (string $g) => round(array_sum(array_column(array_filter($equity, fn ($r) => $r['group'] === $g), 'amount')), 2);
 
         $netFixedAssets = $totalFixedAssets - $totalAccumDepreciation;
         $totalAssets = $totalCurrentAssets + $netFixedAssets + $totalOtherAssets;
@@ -523,6 +532,9 @@ class FinancialStatementService
                 ],
                 'equity' => [
                     'accounts' => $equity,
+                    'capital_total' => $equityGroup('capital'),
+                    'opening_difference_total' => $equityGroup('opening_difference'),
+                    'profit_loss_total' => $equityGroup('profit_loss'),
                     'total' => round($totalEquity, 2),
                 ],
                 'total_liabilities_and_equity' => round($totalLiabilitiesAndEquity, 2),

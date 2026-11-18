@@ -540,7 +540,7 @@ export default function CreateSupplierPaymentSheet({
                           name="bank_name"
                           value={formData.bank_name}
                           onChange={handleChange}
-                          placeholder="e.g., Equity Bank"
+                          placeholder="e.g., Prime Bank"
                           required={formData.payment_method === "cheque"}
                           className="h-10 bg-white"
                         />

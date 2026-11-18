@@ -656,6 +656,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/expense-categories/{id}', [ExpenseCategoryController::class, 'destroy'])->name('expense_categories.destroy');
 
     // Expense routes
+    Route::get('/petty-cash', [\App\Http\Controllers\PettyCashController::class, 'show']);
+    Route::post('/petty-cash/withdrawals', [\App\Http\Controllers\PettyCashController::class, 'withdraw']);
+    Route::post('/petty-cash/counts', [\App\Http\Controllers\PettyCashController::class, 'storeCount']);
+    Route::delete('/petty-cash/counts/{id}', [\App\Http\Controllers\PettyCashController::class, 'destroyCount']);
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
     Route::get('/expenses/{id}', [ExpenseController::class, 'show'])->name('expenses.show');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
@@ -928,6 +932,8 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     // Bank Accounts
     // Withdrawals / transfers between money accounts, with bank charges.
     Route::get('bank-transfers/accounts', [\App\Http\Controllers\BankTransferController::class, 'accounts']);
+    Route::get('cash-books/{accountId}', [\App\Http\Controllers\BankTransferController::class, 'book']);
+    Route::post('bank-transfers/from-expense/{expenseId}', [\App\Http\Controllers\BankTransferController::class, 'fromExpense']);
     Route::get('bank-transfers', [\App\Http\Controllers\BankTransferController::class, 'index']);
     Route::post('bank-transfers', [\App\Http\Controllers\BankTransferController::class, 'store']);
     Route::delete('bank-transfers/{id}', [\App\Http\Controllers\BankTransferController::class, 'destroy']);

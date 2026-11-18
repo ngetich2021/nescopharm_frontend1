@@ -147,6 +147,9 @@ class CompanyAccountMapping extends Model
 
         // Equity
         'retained_earnings' => ['description' => 'Retained Earnings', 'type' => 'equity', 'required' => false],
+        'owners_capital' => ['description' => "Owners' Capital (Capital Account)", 'type' => 'equity', 'required' => false],
+        // Balancing side of balances brought across from the old system (Tally: "Difference in opening balances").
+        'opening_balance_equity' => ['description' => 'Opening Balance Difference', 'type' => 'equity', 'required' => false],
     ];
 
     /**

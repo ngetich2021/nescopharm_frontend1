@@ -20,6 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ExpensesTableSkeleton } from "./components/expenses-table-skeleton"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { documentFileName, todayFileDate, sessionCompanyName } from "@/lib/document-names"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PettyCashTab } from "./petty-cash"
 
 export function ExpensesClient() {
   const { user, userProfile, companyId } = useAuth()
@@ -90,9 +92,13 @@ export function ExpensesClient() {
     return () => clearTimeout(timer)
   }, [selectedStatus, searchTerm, companyId])
 
+  const [tab, setTab] = useState("expenses")
+  const [pettyRefresh, setPettyRefresh] = useState(0)
+
   const handleExpenseCreatedOrUpdated = () => {
     fetchExpensesAndCategories()
     setIsCreateModalOpen(false)
+    setPettyRefresh((n) => n + 1)
   }
 
   const handleExpenseSelect = (expense: Expense) => {
@@ -149,6 +155,15 @@ export function ExpensesClient() {
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Expense Management</h2>
       </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="petty-cash">Petty Cash</TabsTrigger>
+        </TabsList>
+        <TabsContent value="petty-cash" className="pt-2">
+          <PettyCashTab refreshKey={pettyRefresh} onAddExpense={() => { setSelectedExpense(null); setIsCreateModalOpen(true) }} />
+        </TabsContent>
+        <TabsContent value="expenses">
       <div className="space-y-4">
         <p className="text-muted-foreground">Track, manage, and analyze your company's expenditures in one place.</p>
 
@@ -326,7 +341,11 @@ export function ExpensesClient() {
             </Button>
           </div>
         </div>
+      </div>
+        </TabsContent>
+      </Tabs>
 
+      <div>
         <PermissionGuard permissions={["can_create_expenses", "can_manage_system", "can_manage_company"]} hideOnDenied>
           {/* Create Modal */}
           <CreateExpenseModal

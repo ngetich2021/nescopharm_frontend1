@@ -835,7 +835,7 @@ export function CreateEmployeeSheet({ open, onOpenChange, onSuccess }: CreateEmp
                       id="bank_name"
                       value={formData.bank_name}
                       onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                      placeholder="Equity Bank"
+                      placeholder="Prime Bank"
                     />
                   </div>
                   <div className="space-y-2">

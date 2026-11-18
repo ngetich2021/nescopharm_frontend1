@@ -199,7 +199,7 @@ export function RecordIssuedChequeModal({ open, onOpenChange, onSuccess }: Recor
               <Label htmlFor="bank_name">Bank</Label>
               <Input
                 id="bank_name"
-                placeholder="e.g. Equity Bank"
+                placeholder="e.g. Prime Bank"
                 value={form.bank_name}
                 onChange={(e) => handleChange("bank_name", e.target.value)}
               />

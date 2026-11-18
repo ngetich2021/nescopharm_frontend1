@@ -115,6 +115,10 @@ export default function BankAccountsPage() {
             Manage your bank accounts and monitor balances
           </p>
         </div>
+        <div className="flex gap-2">
+        <Button variant="outline" asChild>
+          <a href="/finance/cash-books"><History className="h-4 w-4 mr-2" /> Bank &amp; Cash Books</a>
+        </Button>
         <Dialog>
           <DialogTrigger asChild>
             <Button>
@@ -129,6 +133,7 @@ export default function BankAccountsPage() {
             <CreateBankAccountForm onSuccess={fetchBankAccounts} />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards */}

@@ -165,7 +165,7 @@ export function ReceiveOnAccountModal({ isOpen, onClose, customerId, customerNam
               </div>
               <div className="space-y-2">
                 <Label htmlFor="acc_bank">Bank Name *</Label>
-                <Input id="acc_bank" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. Equity Bank" />
+                <Input id="acc_bank" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. Prime Bank" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="acc_maturity">Maturity Date *</Label>
