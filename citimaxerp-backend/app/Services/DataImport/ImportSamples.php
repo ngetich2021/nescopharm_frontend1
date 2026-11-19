@@ -28,6 +28,7 @@ class ImportSamples
                 'purchase_order_items' => self::purchaseOrderItem($companyId),
                 'product_receipt_items' => self::productReceiptItem($companyId),
                 'past_invoices' => self::pastInvoice($companyId),
+                'expenses' => self::expense($companyId),
                 default => null,
             };
         } catch (\Throwable $e) {
@@ -50,6 +51,30 @@ class ImportSamples
     }
 
     private const METHODS = ['bank_transfer' => 'Bank Transfer', 'cash' => 'Cash', 'mpesa' => 'M-Pesa', 'cheque' => 'Cheque'];
+
+    private static function expense(string $companyId): ?array
+    {
+        $e = DB::table('expenses as e')->join('chart_of_accounts as a', 'a.id', '=', 'e.account_id')
+            ->leftJoin('chart_of_accounts as p', 'p.id', '=', 'a.parent_id')->leftJoin('stores as s', 's.id', '=', 'e.store_id')
+            ->where('e.company_id', $companyId)->where('a.account_type', 'expense')
+            ->orderByDesc('e.expense_date')->orderByDesc('e.created_at')
+            ->select('e.*', 'a.account_code', 'a.account_name', 'p.account_code as parent_code', 'p.account_name as parent_name', 's.name as store_name')->first();
+        if (!$e) {
+            return null;
+        }
+        $bank = in_array($e->payment_method, ['check', 'bank_transfer', 'card'], true);
+        // No Expense Ref: the sample is a new expense, and an identical one is skipped.
+        return [
+            'ref' => '',
+            'expense_date' => self::date($e->expense_date),
+            'main_account' => $e->parent_code ? "{$e->parent_code} {$e->parent_name}" : '',
+            'sub_account' => "{$e->account_code} {$e->account_name}",
+            'paid_from' => $bank ? 'Prime Bank' : 'Petty Cash',
+            'paid_by' => $e->payment_method === 'check' ? 'Cheque' : ($bank ? 'Bank Transfer' : 'Cash'),
+            'amount' => self::money($e->amount), 'vendor_name' => $e->vendor_name, 'description' => $e->description,
+            'store' => $e->store_name, 'status' => ucfirst((string) $e->status), 'notes' => $e->notes,
+        ];
+    }
 
     private static function supplier(string $companyId): ?array
     {

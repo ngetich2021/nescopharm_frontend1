@@ -127,6 +127,7 @@ class DataImportController extends Controller
                 'cleaning_logs' => $this->importCleaningLogs($body, $cells, $user, $headingRow),
                 'temperature_logs' => $this->importTemperatureLogs($body, $cells, $user, $headingRow),
                 'payroll_history' => $this->importPayrollHistory($body, $cells, $user, $headingRow),
+                'expenses' => $this->importExpenses($body, $cells, $user, $headingRow),
             };
             $dryRun ? DB::rollBack() : DB::commit();
         } catch (\Throwable $e) {
@@ -807,6 +808,226 @@ class DataImportController extends Controller
             ]);
             $summary['created']++;
             $results[] = $result + ['status' => 'created'];
+        }
+
+        return [$summary, $results];
+    }
+
+    /**
+     * Expenses charged to ledger sub-accounts and paid from Petty Cash (cash) or Prime Bank (cheque /
+     * transfer). A row with an Expense Ref corrects that expense - how the accountant moves old
+     * expenses to the right ledger account in bulk. Ledger entries follow through LedgerSyncObserver
+     * once the import commits (a preview posts nothing).
+     */
+    private function importExpenses(array $body, \Closure $cells, $user, int $headingRow): array
+    {
+        $companyId = $user->company_id;
+        $summary = $this->blankSummary();
+        $results = [];
+
+        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)->where('account_type', 'expense')
+            ->where('is_active', true)->get(['id', 'account_code', 'account_name', 'parent_id']);
+        $parents = $accounts->pluck('parent_id')->filter()->flip();
+        $postable = $accounts->filter(fn ($a) => !isset($parents[$a->id]));
+        $byCode = $postable->keyBy(fn ($a) => mb_strtolower(trim($a->account_code)));
+        $byName = $postable->groupBy(fn ($a) => $this->nameKey($a->account_name));
+        $allById = $accounts->keyBy('id');
+        $rootOf = function ($a) use ($allById) {
+            while ($a->parent_id && isset($allById[$a->parent_id])) {
+                $a = $allById[$a->parent_id];
+            }
+            return $a;
+        };
+        $stores = \App\Models\Store::where('company_id', $companyId)->get(['id', 'name']);
+        $storeByKey = $stores->keyBy(fn ($s) => $this->nameKey($s->name));
+        $accountNames = \App\Models\ChartOfAccount::where('company_id', $companyId)->get(['id', 'account_code', 'account_name'])
+            ->mapWithKeys(fn ($a) => [$a->id => "{$a->account_code} {$a->account_name}"]);
+        $today = now()->toDateString();
+        $methodLabel = fn ($m) => ['cash' => 'Petty Cash (Cash)', 'check' => 'Prime Bank (Cheque)', 'bank_transfer' => 'Prime Bank (Bank Transfer)', 'card' => 'Prime Bank (Card)'][$m] ?? (string) $m;
+
+        $findAccount = function (string $text) use ($byCode, $byName) {
+            $text = trim($text);
+            if (preg_match('/^(\d{3,6})\b/', $text, $m) && isset($byCode[$m[1]])) {
+                return $byCode[$m[1]];
+            }
+            $hits = $byName->get($this->nameKey(preg_replace('/^\d{3,6}\s*-?\s*/', '', $text)));
+            return $hits && $hits->count() === 1 ? $hits->first() : null;
+        };
+
+        foreach ($body as $offset => $row) {
+            if ($this->isBlankRow($row)) {
+                continue;
+            }
+            $cell = $cells($row);
+            $line = $headingRow + $offset + 2;
+            $summary['rows']++;
+            $result = ['row' => $line, 'key' => $cell('ref') ?: $cell('expense_date'), 'name' => trim($cell('description') . ' - ' . $cell('vendor_name'), ' -')];
+            $fail = function (string $message) use (&$summary, &$results, $result) {
+                $summary['errors']++;
+                $results[] = $result + ['status' => 'error', 'message' => $message];
+            };
+
+            $existing = null;
+            if ($cell('ref') !== '') {
+                $existing = \App\Models\Expense::where('company_id', $companyId)
+                    ->where(fn ($q) => Str::isUuid($cell('ref')) ? $q->where('id', $cell('ref')) : $q->whereRaw('false'))->first();
+                if (!$existing) {
+                    $fail("No expense with Expense Ref \"{$cell('ref')}\" - leave it blank for a new expense.");
+                    continue;
+                }
+            }
+
+            $date = $this->date($cell('expense_date'));
+            if (!$date) {
+                $fail($date === null ? 'Date is required.' : "Date \"{$cell('expense_date')}\" can't be read - write it day first, e.g. 19/11/2026.");
+                continue;
+            }
+            if ($date > $today) {
+                $fail('Date ' . \Carbon\Carbon::parse($date)->format('d/m/Y') . ' is in the future.');
+                continue;
+            }
+            $amount = $this->number($cell('amount'));
+            if ($amount === null || $amount <= 0) {
+                $fail('Amount must be a number above 0.');
+                continue;
+            }
+            if ($cell('vendor_name') === '' || $cell('description') === '') {
+                $fail('Paid To and Description are required.');
+                continue;
+            }
+            if ($cell('sub_account') === '') {
+                $fail('Sub-account is required (e.g. 6400 Transport).');
+                continue;
+            }
+            $account = $findAccount($cell('sub_account'));
+            // An expense kept on an account no longer offered (e.g. Inventory) may stay there.
+            if (!$account && $existing && $existing->account_id && $this->nameKey($cell('sub_account')) === $this->nameKey($accountNames[$existing->account_id] ?? '')) {
+                $account = (object) ['id' => $existing->account_id, 'account_code' => '', 'account_name' => $accountNames[$existing->account_id], 'parent_id' => null];
+            }
+            if (!$account) {
+                $fail("No active sub-account \"{$cell('sub_account')}\" under Cost of Sales or Expenses.");
+                continue;
+            }
+            if ($cell('main_account') !== '' && isset($allById[$account->id])) {
+                $main = $rootOf($allById[$account->id]);
+                $given = $cell('main_account');
+                $code = preg_match('/^(\d{3,6})/', $given, $m) ? $m[1] : null;
+                if (($code && $code !== $main->account_code) || (!$code && $this->nameKey($given) !== $this->nameKey($main->account_name))) {
+                    $fail(trim("{$account->account_code} {$account->account_name}") . " is under {$main->account_code} {$main->account_name}, not \"{$given}\".");
+                    continue;
+                }
+            }
+
+            $from = $this->nameKey($cell('paid_from'));
+            $bank = match (true) {
+                in_array($from, ['pettycash', 'cash', 'cashathand', 'cashathandpettycash', 'petty'], true) => false,
+                in_array($from, ['primebank', 'bank', 'prime'], true) => true,
+                default => null,
+            };
+            if ($bank === null) {
+                $fail("Paid From must be Petty Cash or Prime Bank, not \"{$cell('paid_from')}\".");
+                continue;
+            }
+            $by = $this->nameKey($cell('paid_by'));
+            $method = match (true) {
+                $by === '' => $bank ? 'check' : 'cash',
+                $by === 'cash' => 'cash',
+                in_array($by, ['cheque', 'check', 'chq'], true) => 'check',
+                in_array($by, ['banktransfer', 'transfer', 'eft', 'rtgs'], true) => 'bank_transfer',
+                default => null,
+            };
+            if ($method === null || ($bank && $method === 'cash') || (!$bank && $method !== 'cash')) {
+                $fail($method === null
+                    ? "Paid By must be Cash, Cheque or Bank Transfer, not \"{$cell('paid_by')}\"."
+                    : ($bank ? 'Prime Bank pays by Cheque or Bank Transfer, not Cash.' : 'Petty Cash pays in Cash; a cheque or transfer is Prime Bank.'));
+                continue;
+            }
+
+            $status = strtolower($cell('status')) ?: ($existing->status ?? 'approved');
+            if (!in_array($status, ['approved', 'paid', 'pending', 'rejected'], true)) {
+                $fail('Status must be Approved, Paid or Pending.');
+                continue;
+            }
+            $storeId = null;
+            if ($cell('store') !== '') {
+                $store = $storeByKey->get($this->nameKey($cell('store')));
+                if (!$store) {
+                    $fail("No store called \"{$cell('store')}\".");
+                    continue;
+                }
+                $storeId = $store->id;
+            }
+
+            $fields = [
+                'account_id' => $account->id,
+                'store_id' => $storeId,
+                'vendor_name' => $cell('vendor_name'),
+                'description' => $cell('description'),
+                'amount' => round($amount, 2),
+                'expense_date' => $date,
+                'payment_method' => $method,
+                'notes' => $cell('notes') ?: null,
+                'status' => $status,
+            ];
+
+            if ($existing) {
+                // Cells come in with line breaks folded to spaces: text differing only in spacing is unchanged.
+                $same = fn ($a, $b) => preg_replace('/\s+/', ' ', trim((string) $a)) === preg_replace('/\s+/', ' ', trim((string) $b));
+                $changes = [];
+                foreach ($fields as $field => $to) {
+                    $from = $field === 'expense_date' ? \Carbon\Carbon::parse($existing->expense_date)->toDateString() : $existing->getRawOriginal($field);
+                    $equal = in_array($field, ['amount'], true) ? abs((float) $from - (float) $to) < 0.005 : $same($from, $to);
+                    if (!$equal) {
+                        $show = fn ($v) => match ($field) {
+                            'account_id' => $accountNames[$v] ?? '-',
+                            'store_id' => $stores->firstWhere('id', $v)?->name ?? '-',
+                            'payment_method' => $methodLabel($v),
+                            'expense_date' => $v ? \Carbon\Carbon::parse($v)->format('d/m/Y') : '-',
+                            default => $v,
+                        };
+                        $changes[] = ['field' => $field === 'account_id' ? 'ledger account' : ($field === 'payment_method' ? 'paid from' : $field), 'from' => $show($from), 'to' => $show($to)];
+                    }
+                }
+                if (!$changes) {
+                    $summary['unchanged']++;
+                    $results[] = $result + ['status' => 'unchanged'];
+                    continue;
+                }
+                if ($existing->account_id !== $account->id) {
+                    $fields['category_id'] = \App\Models\Expense::categoryForAccount($companyId, $account->id);
+                }
+                if ($status !== 'pending' && !$existing->approved_by) {
+                    $fields['approved_by'] = $user->id;
+                }
+                $existing->update($fields);
+                $summary['updated']++;
+                $results[] = $result + ['status' => 'updated', 'changes' => $changes,
+                    'message' => collect($changes)->map(fn ($c) => "{$c['field']}: {$c['from']} -> {$c['to']}")->implode('; ')];
+                continue;
+            }
+
+            $duplicate = \App\Models\Expense::where('company_id', $companyId)->whereDate('expense_date', $date)
+                ->where('amount', round($amount, 2))->where('account_id', $account->id)
+                ->whereRaw('LOWER(TRIM(vendor_name)) = ?', [mb_strtolower($cell('vendor_name'))])
+                ->whereRaw('LOWER(TRIM(description)) = ?', [mb_strtolower($cell('description'))])->exists();
+            if ($duplicate) {
+                $summary['unchanged']++;
+                $results[] = $result + ['status' => 'unchanged', 'message' => 'Already recorded - skipped.'];
+                continue;
+            }
+
+            \App\Models\Expense::create($fields + [
+                'id' => (string) Str::uuid(),
+                'company_id' => $companyId,
+                'category_id' => \App\Models\Expense::categoryForAccount($companyId, $account->id),
+                'is_recurring' => false,
+                'tags' => [],
+                'created_by' => $user->id,
+                'approved_by' => $status === 'pending' ? null : $user->id,
+            ]);
+            $summary['created']++;
+            $results[] = $result + ['status' => 'created', 'message' => trim("{$account->account_code} {$account->account_name}") . ' - '
+                . $methodLabel($method) . ' ' . number_format($amount, 2)];
         }
 
         return [$summary, $results];

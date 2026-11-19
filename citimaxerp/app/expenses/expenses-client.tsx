@@ -6,14 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DollarSign, Calendar, FileText, Search, ChevronDown, Download, Upload, Plus } from "lucide-react"
+import { DollarSign, Calendar, FileText, Search, ChevronDown, Upload, Plus, FileSpreadsheet, FilePen } from "lucide-react"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
-import { ExpensesTable } from "./components/expenses-table"
+import { ExpensesTable, expensePaidFrom } from "./components/expenses-table"
 import { CreateExpenseModal } from "./components/create-expense-modal"
 import { ExpenseDetailsSheet } from "./components/expense-details-sheet"
 import { useAuth } from "@/lib/auth-context"
-import { getExpenses, getExpenseCategories } from "@/lib/expenses"
-import type { Expense, ExpenseCategory, ExpenseStatus } from "@/types/expenses"
+import { getExpenses, getExpenseCategories, getExpenseLedgerAccounts } from "@/lib/expenses"
+import { expenseAccountLabel, type Expense, type ExpenseCategory, type ExpenseLedgerGroup, type ExpenseStatus } from "@/types/expenses"
+import { fetchImportSchema, downloadTemplate, type ImportSchema } from "@/lib/data-import"
+import { ImportDialog } from "@/app/settings/data-import/components/import-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -39,6 +42,67 @@ export function ExpensesClient() {
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [isBulkActionOpen, setIsBulkActionOpen] = useState(false)
+  const [ledgerGroups, setLedgerGroups] = useState<ExpenseLedgerGroup[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<string>("all")
+  const [importSchema, setImportSchema] = useState<ImportSchema | null>(null)
+  const [expenseSchema, setExpenseSchema] = useState<ImportSchema | null>(null)
+
+  useEffect(() => {
+    if (!companyId) return
+    getExpenseLedgerAccounts().then((d) => setLedgerGroups(d.groups)).catch(() => {})
+  }, [companyId])
+
+  // "6000 Expenses" for a sub-account, from the ledger groups.
+  const mainAccountOf = (accountId?: string | null) => {
+    const g = ledgerGroups.find((x) => x.accounts.some((a) => a.id === accountId))
+    return g ? `${g.code} ${g.name}` : ""
+  }
+
+  // Expenses import (Data Import "expenses" sheet): blank template, Download to Edit, upload with preview.
+  const loadExpenseSchema = async () =>
+    expenseSchema ?? fetchImportSchema("expenses").then((sc) => { setExpenseSchema(sc); return sc })
+  const handleTemplate = async () => {
+    try {
+      downloadTemplate(await loadExpenseSchema(), { fileName: "Expenses Import Template.xlsx" })
+    } catch (err: any) {
+      toast({ title: "Could not download the template", description: err?.message, variant: "destructive" })
+    }
+  }
+  // The listed expenses (after search and filters), each with its Expense Ref, to correct in Excel and upload back.
+  const handleDownloadToEdit = async () => {
+    try {
+      const rows = filteredExpenses.map((e) => {
+        const bank = e.payment_method === "check" || e.payment_method === "bank_transfer" || e.payment_method === "card"
+        return {
+          ref: e.id,
+          expense_date: e.expense_date ? displayDate(new Date(e.expense_date)) : "",
+          main_account: mainAccountOf(e.account_id),
+          sub_account: e.account ? `${e.account.account_code} ${e.account.account_name}` : "",
+          paid_from: bank ? "Prime Bank" : "Petty Cash",
+          paid_by: e.payment_method === "check" ? "Cheque" : bank ? "Bank Transfer" : "Cash",
+          amount: Number(e.amount) || 0,
+          vendor_name: e.vendor_name,
+          description: e.description,
+          store: (e as any).store?.name || "",
+          status: e.status ? e.status.charAt(0).toUpperCase() + e.status.slice(1) : "",
+          notes: e.notes || "",
+        }
+      })
+      downloadTemplate(await loadExpenseSchema(), {
+        rows,
+        fileName: documentFileName([sessionCompanyName(), "Expenses to Edit", todayFileDate()]) + ".xlsx",
+      })
+    } catch (err: any) {
+      toast({ title: "Could not download the expenses", description: err?.message, variant: "destructive" })
+    }
+  }
+  const handleImport = async () => {
+    try {
+      setImportSchema(await loadExpenseSchema())
+    } catch (err: any) {
+      toast({ title: "Could not open the import", description: err?.message, variant: "destructive" })
+    }
+  }
 
   const expenseStatuses: ExpenseStatus[] = ["pending", "approved", "rejected", "paid"]
 
@@ -115,19 +179,22 @@ export function ExpensesClient() {
   const handleExport = useTableExport(() => ({
     fileName: documentFileName([sessionCompanyName(), "Expenses", todayFileDate()]),
     title: "Expenses",
-    headers: ["S/No", "Date", "Description", "Category", "Amount", "Status", "Notes", "Created By"],
-    moneyColumns: [4],
+    headers: ["S/No", "Date", "Paid To", "Description", "Account", "Ledger Account", "Paid From", "Amount", "Status", "Notes", "Created By"],
+    moneyColumns: [7],
     rows: filteredExpenses.map((e, i) => [
       i + 1,
       e.expense_date ? displayDate(new Date(e.expense_date)) : "",
+      e.vendor_name || "",
       e.description,
-      e.category?.name || "",
+      mainAccountOf(e.account_id),
+      expenseAccountLabel(e),
+      expensePaidFrom(e.payment_method),
       Number(e.amount) || 0,
       e.status,
       e.notes || "",
       `${e.created_by?.first_name || ""} ${e.created_by?.last_name || ""}`.trim(),
     ]),
-    footer: [["", "", "", "Total", filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0), "", "", ""]],
+    footer: [["", "", "", "", "", "", "Total", filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0), "", "", ""]],
   }))
 
   // Client-side filtering by vendor name and description
@@ -137,7 +204,12 @@ export function ExpensesClient() {
       (expense.vendor_name || "").toLowerCase().includes(searchLower) ||
       (expense.description || "").toLowerCase().includes(searchLower)
     const matchesStatus = selectedStatus === "all" || expense.status === selectedStatus
-    return matchesSearch && matchesStatus
+    const matchesAccount =
+      selectedAccount === "all" ||
+      expense.account_id === selectedAccount ||
+      (selectedAccount.startsWith("group:") &&
+        !!ledgerGroups.find((g) => `group:${g.id}` === selectedAccount)?.accounts.some((a) => a.id === expense.account_id))
+    return matchesSearch && matchesStatus && matchesAccount
   })
 
   // Calculate stats
@@ -249,8 +321,27 @@ export function ExpensesClient() {
                 </SelectContent>
               </Select>
             </div>
+            <Select value={selectedAccount} onValueChange={(v) => { setSelectedAccount(v); setCurrentPage(1) }}>
+              <SelectTrigger className="w-full md:w-[240px]">
+                <SelectValue placeholder="All ledger accounts" />
+              </SelectTrigger>
+              <SelectContent className="max-h-96">
+                <SelectItem value="all">All ledger accounts</SelectItem>
+                {ledgerGroups.flatMap((g) => [
+                  <SelectItem key={`g-${g.id}`} value={`group:${g.id}`} className="font-semibold">
+                    {g.code} {g.name} (all)
+                  </SelectItem>,
+                  ...g.accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id} className="pl-8">
+                      <span className="font-mono text-xs text-muted-foreground mr-2">{a.code}</span>
+                      {a.name}
+                    </SelectItem>
+                  )),
+                ])}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex space-x-2 flex-wrap items-center">
+          <div className="flex gap-2 flex-wrap items-center">
             {selectedExpenses.length > 0 && (
               <Button
                 variant="default"
@@ -272,9 +363,26 @@ export function ExpensesClient() {
               </Button>
             </PermissionGuard>
             <ExportMenu onExport={handleExport} disabled={filteredExpenses.length === 0} />
-            <Button variant="outline" size="sm">
-              <Upload className="mr-2 h-4 w-4" /> Import
-            </Button>
+            <PermissionGuard permissions={["can_create_expenses", "can_manage_system", "can_manage_company"]} hideOnDenied>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Upload className="mr-2 h-4 w-4" /> Import
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuItem onClick={handleImport}>
+                    <Upload className="mr-2 h-4 w-4" /> Import from Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleTemplate}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Download blank template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownloadToEdit} disabled={filteredExpenses.length === 0}>
+                    <FilePen className="mr-2 h-4 w-4" /> Download to Edit ({filteredExpenses.length})
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </PermissionGuard>
           </div>
         </div>
 
@@ -290,6 +398,7 @@ export function ExpensesClient() {
               onExpenseSelect={handleExpenseSelect}
               selectedExpenses={selectedExpenses}
               onSelectionChange={setSelectedExpenses}
+              startIndex={(currentPage - 1) * rowsPerPage + 1}
             />
           )}
         </div>
@@ -359,6 +468,12 @@ export function ExpensesClient() {
             initialData={selectedExpense}
           />
         </PermissionGuard>
+
+        <ImportDialog
+          schema={importSchema}
+          onClose={() => setImportSchema(null)}
+          onImported={() => { fetchExpensesAndCategories(); setPettyRefresh((n) => n + 1) }}
+        />
 
         {/* Details Sheet */}
         {selectedExpense && (

@@ -120,7 +120,7 @@ class AssistantTools
                 'sort' => ['type' => 'string', 'enum' => ['order_value', 'orders', 'balance', 'name'], 'description' => 'Default order_value (highest first)'],
             ], []],
             'receipts_summary' => ['Money received from customers in a period: total, by payment method, latest receipts.', $range, []],
-            'expenses_summary' => ['Expenses (expenditure) in a period: total, by category and status, latest expenses.', $range + [
+            'expenses_summary' => ['Expenses (expenditure) in a period: total, by ledger account (e.g. 6400 Transport) and status, by Paid From (Petty Cash / Prime Bank), latest expenses. "category" filters by ledger account code or name.', $range + [
                 'category' => ['type' => 'string', 'description' => 'Optional category name'],
             ], []],
             'cash_book' => ['Bank Book (Prime Bank) and Cash Book (Cash at Hand / Petty Cash): each money account\'s balance now, and for one book the opening balance, receipts, payments, closing balance and entries in a period (date, particulars, voucher type - Receipt, Payment, Contra = bank-to-cash withdrawal - voucher no., amount). Use for "bank balance", "cash at hand", "petty cash", "cash book", "bank book", "what did we withdraw".', $range + [
@@ -864,21 +864,29 @@ class AssistantTools
         $base = function () use ($from, $to, $args) {
             $q = Expense::where('expenses.company_id', $this->companyId)->whereBetween('expense_date', [$from, $to]);
             if (!empty($args['category'])) {
-                $q->whereHas('category', fn ($c) => $c->where('name', 'ilike', '%' . $args['category'] . '%'));
+                $term = '%' . $args['category'] . '%';
+                $q->where(fn ($w) => $w->whereHas('account', fn ($a) => $a->where('account_name', 'ilike', $term)->orWhere('account_code', 'ilike', $term))
+                    ->orWhereHas('category', fn ($c) => $c->where('name', 'ilike', $term)));
             }
             return $q;
         };
-        $byCategory = $base()->leftJoin('expense_categories as c', 'c.id', '=', 'expenses.category_id')
-            ->groupBy('c.name')->selectRaw("coalesce(c.name, 'Uncategorised') as category, count(*) as n, sum(expenses.amount) as total")
+        $byCategory = $base()->leftJoin('chart_of_accounts as a', 'a.id', '=', 'expenses.account_id')
+            ->groupBy('a.account_code', 'a.account_name')
+            ->selectRaw("coalesce(a.account_code || ' ' || a.account_name, 'No ledger account') as category, count(*) as n, sum(expenses.amount) as total")
             ->orderByDesc('total')->get();
         $byStatus = $base()->groupBy('status')->selectRaw('status, sum(amount) as total')->pluck('total', 'status');
-        $latest = $base()->with('category:id,name')->orderByDesc('expense_date')->limit(10)->get();
+        $byPaidFrom = $base()->selectRaw("CASE WHEN payment_method IN ('check','bank_transfer','card') THEN 'Prime Bank' ELSE 'Petty Cash' END as source, sum(amount) as total")
+            ->groupByRaw("CASE WHEN payment_method IN ('check','bank_transfer','card') THEN 'Prime Bank' ELSE 'Petty Cash' END")->pluck('total', 'source');
+        $latest = $base()->with('account:id,account_code,account_name')->orderByDesc('expense_date')->limit(10)->get();
         return [
             'period' => ['from' => $from, 'to' => $to],
             'total' => self::money($byCategory->sum('total')),
             'by_status' => $byStatus->map(fn ($v) => self::money($v)),
-            'by_category' => $byCategory->map(fn ($r) => ['category' => $r->category, 'count' => (int) $r->n, 'total' => self::money($r->total)]),
-            'latest' => $latest->map(fn ($e) => ['date' => substr((string) $e->expense_date, 0, 10), 'description' => $e->description, 'category' => $e->category?->name, 'amount' => self::money($e->amount), 'status' => $e->status, 'vendor' => $e->vendor_name]),
+            'by_paid_from' => $byPaidFrom->map(fn ($v) => self::money($v)),
+            'by_ledger_account' => $byCategory->map(fn ($r) => ['account' => $r->category, 'count' => (int) $r->n, 'total' => self::money($r->total)]),
+            'latest' => $latest->map(fn ($e) => ['date' => substr((string) $e->expense_date, 0, 10), 'description' => $e->description,
+                'ledger_account' => $e->account ? "{$e->account->account_code} {$e->account->account_name}" : null, 'amount' => self::money($e->amount),
+                'paid_from' => in_array($e->payment_method, ['check', 'bank_transfer', 'card'], true) ? 'Prime Bank' : 'Petty Cash', 'status' => $e->status, 'vendor' => $e->vendor_name]),
         ];
     }
 

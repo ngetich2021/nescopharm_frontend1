@@ -520,7 +520,8 @@ class LedgerPostingService
     // =====================================================================
 
     /**
-     * Expense: DR expense account for its category / CR Cash/Bank.
+     * Expense: DR its ledger account (or its category's) / CR what paid it - Petty Cash for cash,
+     * Prime Bank for a cheque or transfer.
      */
     public function syncExpense(Expense $expense, bool $deleted = false): ?JournalEntry
     {
@@ -547,7 +548,10 @@ class LedgerPostingService
                     'reference' => 'EXP-' . substr($expense->id, 0, 8),
                     'description' => "Expense: {$label}",
                     'lines' => [
-                        ['key' => 'miscellaneous_expense', 'context' => ['context_type' => 'expense_category', 'context_id' => $expense->category_id], 'debit' => $amount, 'description' => $label],
+                        // The ledger account chosen on the expense; older ones without it go by their category.
+                        $expense->account_id
+                            ? ['account_id' => $expense->account_id, 'debit' => $amount, 'description' => $label]
+                            : ['key' => 'miscellaneous_expense', 'context' => ['context_type' => 'expense_category', 'context_id' => $expense->category_id], 'debit' => $amount, 'description' => $label],
                         ['method' => $expense->payment_method, 'credit' => $amount, 'description' => "Paid ({$expense->payment_method}) - {$label}"],
                     ],
                 ];

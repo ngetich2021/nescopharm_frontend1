@@ -9,7 +9,7 @@ import { ArrowLeft, Pencil, Trash2, ExternalLink, ArrowRightLeft } from "lucide-
 import apiCall from "@/lib/api"
 import Link from "next/link"
 import { getExpenseById, deleteExpense } from "@/lib/expenses"
-import type { Expense } from "@/types/expenses"
+import { expenseAccountLabel, type Expense } from "@/types/expenses"
 import { useToast } from "@/hooks/use-toast"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -202,8 +202,8 @@ export default function ExpenseDetailsPage() {
             <p className="text-lg">{expense.description}</p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">Category</p>
-            <p className="text-lg">{expense.category_name}</p>
+            <p className="text-sm font-medium text-gray-500">Ledger Account</p>
+            <p className="text-lg">{expenseAccountLabel(expense)}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500">Date</p>

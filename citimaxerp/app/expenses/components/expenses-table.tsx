@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, Trash2, Pencil, Eye, Check } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { Expense, ExpenseCategory } from "@/types/expenses"
+import { expenseAccountLabel, type Expense, type ExpenseCategory } from "@/types/expenses"
 import { formatCurrency } from "@/lib/utils"
 import { deleteExpense, approveExpense } from "@/lib/expenses"
 import { useToast } from "@/hooks/use-toast"
@@ -34,6 +34,15 @@ interface ExpensesTableProps {
   onExpenseSelect: (expense: Expense) => void
   selectedExpenses: string[]
   onSelectionChange: (selected: string[]) => void
+  /** S/No of the first row (pages after the first continue the count). */
+  startIndex?: number
+}
+
+/** Petty Cash for cash, Prime Bank for a cheque / transfer. */
+export function expensePaidFrom(method?: string | null): string {
+  if (method === "check") return "Prime Bank (Cheque)"
+  if (method === "bank_transfer" || method === "card") return "Prime Bank (Transfer)"
+  return "Petty Cash"
 }
 
 export function ExpensesTable({
@@ -43,6 +52,7 @@ export function ExpensesTable({
   onExpenseSelect,
   selectedExpenses,
   onSelectionChange,
+  startIndex = 1,
 }: ExpensesTableProps) {
   const { toast } = useToast()
   const { hasPermission } = usePermissions()
@@ -143,9 +153,11 @@ export function ExpensesTable({
                 onCheckedChange={handleSelectAll}
               />
             </TableHead>
+            <TableHead className="w-[60px]">S/No</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Category</TableHead>
+            <TableHead>Ledger Account</TableHead>
+            <TableHead>Paid From</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Created By</TableHead>
@@ -153,7 +165,7 @@ export function ExpensesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {expenses.map((expense) => (
+          {expenses.map((expense, index) => (
             <TableRow
               key={expense.id}
               className="cursor-pointer hover:bg-muted/50"
@@ -165,22 +177,22 @@ export function ExpensesTable({
                   onCheckedChange={(checked) => handleSelectOne(expense.id, !!checked)}
                 />
               </TableCell>
-              <TableCell>{displayDate(new Date(expense.expense_date))}</TableCell>
+              <TableCell className="text-muted-foreground">{startIndex + index}</TableCell>
+              <TableCell className="whitespace-nowrap">{displayDate(new Date(expense.expense_date))}</TableCell>
               <TableCell className="max-w-[200px] truncate text-muted-foreground" title={expense.description || ""}>
                 {expense.description || "-"}
               </TableCell>
-              <TableCell>
-                <Badge 
-                  variant="outline" 
-                  style={{ 
-                    backgroundColor: expense.category?.color || '#f3f4f6',
-                    color: expense.category?.color ? '#ffffff' : '#374151',
-                    borderColor: expense.category?.color || '#d1d5db'
-                  }}
-                >
-                  {expense.category?.name || "Uncategorized"}
-                </Badge>
+              <TableCell className="whitespace-nowrap">
+                {expense.account ? (
+                  <span>
+                    <span className="font-mono text-xs text-muted-foreground mr-1.5">{expense.account.account_code}</span>
+                    {expense.account.account_name}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">{expenseAccountLabel(expense)}</span>
+                )}
               </TableCell>
+              <TableCell className="whitespace-nowrap text-sm">{expensePaidFrom(expense.payment_method)}</TableCell>
               <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
               <TableCell>
                 {expense.status === "approved" ? (

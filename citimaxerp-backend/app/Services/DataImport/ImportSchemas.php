@@ -25,6 +25,38 @@ class ImportSchemas
             'cleaning_logs' => self::cleaningLogs(),
             'temperature_logs' => self::temperatureLogs(),
             'payroll_history' => self::payrollHistory(),
+            'expenses' => self::expenses(),
+        ];
+    }
+
+    /**
+     * Expenses in bulk: each row charged to a ledger sub-account (6400 Transport under 6000 Expenses,
+     * 5010 Cost of Goods Sold under 5000 Cost of Sales) and paid from Petty Cash or Prime Bank.
+     * Rows carrying an Expense Ref (from Expenses > Download to Edit) correct that expense instead.
+     */
+    private static function expenses(): array
+    {
+        return [
+            'key' => 'expenses',
+            'label' => 'Expenses',
+            'order' => 11,
+            'description' => 'One row per expense: the ledger sub-account it is charged to and where the money came from - Petty Cash (Cash at Hand) for cash, Prime Bank for a cheque or bank transfer. Approved and Paid rows post to the books straight away. To correct expenses already in the system (e.g. move old ones to the right ledger account), use Expenses > Download to Edit, change the cells, and upload the file here.',
+            'matching' => 'A row with an Expense Ref updates that expense (its ledger entry is re-posted to the new account). A row without one is added, unless an expense with the same Date, Amount, Sub-account, Paid To and Description is already there - then it is skipped, so the same file can be uploaded twice safely. Sub-account is found by its code (6400) or name (Transport) and must be an active sub-account under Cost of Sales or Expenses.',
+            'permission' => 'can_create_expenses',
+            'columns' => [
+                ['key' => 'ref', 'label' => 'Expense Ref', 'type' => 'text', 'example' => '', 'aliases' => ['expenseref', 'expenseid', 'id', 'ref'], 'help' => 'Filled in by Download to Edit. Leave blank for a new expense; do not change it.'],
+                ['key' => 'expense_date', 'label' => 'Date', 'type' => 'date', 'required' => true, 'example' => '19/11/2026', 'aliases' => ['expensedate', 'datepaid', 'paymentdate'], 'help' => 'Day first: 19/11/2026. Not in the future.'],
+                ['key' => 'main_account', 'label' => 'Account', 'type' => 'text', 'example' => '6000 Expenses', 'aliases' => ['mainaccount', 'ledger', 'ledgeraccount', 'group'], 'help' => 'Optional check: the main account (5000 Cost of Sales or 6000 Expenses). The sub-account must sit under it.'],
+                ['key' => 'sub_account', 'label' => 'Sub-account', 'type' => 'text', 'required' => true, 'example' => '6400 Transport', 'aliases' => ['subaccount', 'expenseaccount', 'accountname', 'accountcode'], 'help' => 'Code (6400), name (Transport) or both (6400 Transport).'],
+                ['key' => 'paid_from', 'label' => 'Paid From', 'type' => 'choice', 'choices' => ['Petty Cash', 'Prime Bank'], 'required' => true, 'example' => 'Petty Cash', 'aliases' => ['paidfrom', 'source', 'whopays', 'from'], 'help' => 'Petty Cash (Cash at Hand) or Prime Bank.'],
+                ['key' => 'paid_by', 'label' => 'Paid By', 'type' => 'choice', 'choices' => ['Cash', 'Cheque', 'Bank Transfer'], 'example' => 'Cash', 'aliases' => ['paidby', 'paymentmethod', 'method', 'mode'], 'help' => 'Blank: Cash from Petty Cash, Cheque from Prime Bank.'],
+                ['key' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'example' => '2500', 'aliases' => ['amountksh', 'total', 'value']],
+                ['key' => 'vendor_name', 'label' => 'Paid To', 'type' => 'text', 'required' => true, 'example' => 'Boda rider - John', 'aliases' => ['paidto', 'vendor', 'vendorname', 'payee', 'supplier']],
+                ['key' => 'description', 'label' => 'Description', 'type' => 'text', 'required' => true, 'example' => 'Delivery to Kitale', 'aliases' => ['particulars', 'details', 'narration']],
+                ['key' => 'store', 'label' => 'Store', 'type' => 'text', 'example' => '', 'aliases' => ['storename', 'branch'], 'help' => 'Optional; the store name as in the system.'],
+                ['key' => 'status', 'label' => 'Status', 'type' => 'choice', 'choices' => ['Approved', 'Paid', 'Pending'], 'example' => 'Approved', 'help' => 'Blank counts as Approved. Pending waits for approval and does not post yet.'],
+                ['key' => 'notes', 'label' => 'Notes', 'type' => 'text', 'example' => '', 'aliases' => ['remarks', 'reference', 'chequeno', 'chequenumber']],
+            ],
         ];
     }
 

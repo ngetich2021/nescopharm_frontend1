@@ -6,7 +6,9 @@ export interface Expense {
   id: string
   company_id: string
   store_id: string | null
-  category_id: string
+  category_id: string | null
+  account_id?: string | null
+  account?: { id: string; account_code: string; account_name: string; parent_id: string | null } | null
   vendor_name: string
   description: string
   amount: number
@@ -96,3 +98,27 @@ export interface Store {
 export type PaymentMethod = "cash" | "card" | "bank_transfer" | "check" | "other"
 export type RecurringFrequency = "weekly" | "monthly" | "quarterly" | "yearly"
 export type ExpenseStatus = "pending" | "approved" | "rejected" | "paid"
+
+/** Ledger account an expense is charged to: main account (5000 Cost of Sales, 6000 Expenses) -> sub-account. */
+export interface ExpenseLedgerGroup {
+  id: string
+  code: string
+  name: string
+  accounts: { id: string; code: string; name: string }[]
+}
+
+/** Where an expense is paid from: Petty Cash (cash) or Prime Bank (cheque / transfer). */
+export interface ExpensePaidFrom {
+  key: "petty_cash" | "prime_bank"
+  methods: PaymentMethod[]
+  account_id: string
+  code: string | null
+  name: string | null
+  balance: number
+}
+
+/** "6400 Transport" - the account an expense is charged to, else its old category. */
+export function expenseAccountLabel(e: Pick<Expense, "account" | "category">): string {
+  if (e.account) return `${e.account.account_code} ${e.account.account_name}`
+  return e.category?.name || "Not set"
+}

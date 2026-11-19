@@ -1,5 +1,5 @@
 import apiCall from "./api";
-import type { Expense, ExpenseCategory, PaymentMethod, RecurringFrequency, ExpenseStatus, Store } from "@/types/expenses";
+import type { Expense, ExpenseCategory, PaymentMethod, RecurringFrequency, ExpenseStatus, Store, ExpenseLedgerGroup, ExpensePaidFrom } from "@/types/expenses";
 
 // API Response interface for typing the response
 interface ExpenseApiResponse {
@@ -388,4 +388,13 @@ export async function getStores(): Promise<Store[]> {
   } catch (error: any) {
     throw new Error(`Failed to fetch stores data: ${error.message || "Unknown error"}`);
   }
+}
+
+/** Ledger accounts an expense can be charged to, and the two places it can be paid from. */
+export async function getExpenseLedgerAccounts(): Promise<{ groups: ExpenseLedgerGroup[]; paid_from: ExpensePaidFrom[] }> {
+  const response = await apiCall<{ status: string; message?: string; data?: { groups: ExpenseLedgerGroup[]; paid_from: ExpensePaidFrom[] } }>(
+    "/expense-ledger-accounts", "GET", undefined, true
+  );
+  if (response.status === "success" && response.data) return response.data;
+  throw new Error(typeof response.message === "string" ? response.message : "Failed to load ledger accounts");
 }

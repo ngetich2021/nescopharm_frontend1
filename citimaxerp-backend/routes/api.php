@@ -670,6 +670,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/expenses/{id}/reject', [ExpenseController::class, 'reject'])->name('expenses.reject');
     Route::post('/expenses/{id}/mark-as-paid', [ExpenseController::class, 'markAsPaid'])->name('expenses.mark_as_paid');
     Route::get('/expense-summary', [ExpenseController::class, 'summary'])->name('expenses.summary');
+    Route::get('/expense-ledger-accounts', [ExpenseController::class, 'ledgerAccounts'])->name('expenses.ledger_accounts');
 
     // Debt routes
     Route::get('debts/customers', [DebtController::class, 'customersWithDebt']);

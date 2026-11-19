@@ -31,7 +31,7 @@ import {
 import Image from "next/image"
 import { getExpenseById } from "@/lib/expenses"
 import { formatCurrency } from "@/lib/utils"
-import type { Expense } from "@/types/expenses"
+import { expenseAccountLabel, type Expense } from "@/types/expenses"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
@@ -201,8 +201,8 @@ export function ExpenseDetailsSheet({ expenseId, isOpen, onClose, onEditClick }:
                           <Tag className="h-4 w-4" style={{ color: expense.category?.color || '#6b7280' }} />
                         </div>
                         <div>
-                          <p className="text-xs text-gray-600">Category</p>
-                          <p className="text-sm font-bold text-gray-900">{expense.category?.name || "Uncategorized"}</p>
+                          <p className="text-xs text-gray-600">Ledger Account</p>
+                          <p className="text-sm font-bold text-gray-900">{expenseAccountLabel(expense)}</p>
                         </div>
                       </div>
                     </div>

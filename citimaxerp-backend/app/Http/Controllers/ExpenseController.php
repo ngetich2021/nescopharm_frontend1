@@ -61,7 +61,7 @@ class ExpenseController extends Controller
 
         try {
             $user = $request->user();
-            $query = Expense::with(['category', 'createdBy', 'approvedBy']);
+            $query = Expense::with(['category', 'account:id,account_code,account_name,parent_id', 'store:id,name', 'createdBy', 'approvedBy']);
 
             // Filter by company
             if (!$this->hasPermission($request, 'can_manage_all_expenses')) {
@@ -73,6 +73,10 @@ class ExpenseController extends Controller
             // Apply filters
             if ($request->filled('category_id')) {
                 $query->where('category_id', $request->input('category_id'));
+            }
+
+            if ($request->filled('account_id')) {
+                $query->where('account_id', $request->input('account_id'));
             }
 
             if ($request->filled('store_id')) {
@@ -172,7 +176,8 @@ class ExpenseController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'category_id' => 'required|uuid|exists:expense_categories,id',
+            'account_id' => 'required_without:category_id|nullable|uuid',
+            'category_id' => 'required_without:account_id|nullable|uuid|exists:expense_categories,id',
             'store_id' => 'nullable|uuid|exists:stores,id',
             'vendor_name' => 'required|string|max:255',
             'description' => 'required|string',
@@ -207,13 +212,22 @@ class ExpenseController extends Controller
                 ], 400);
             }
 
-            // Check if the expense category belongs to the user's company
-            $category = ExpenseCategory::find($request->input('category_id'));
-            if (!$category || $category->company_id !== $companyId) {
-                return response()->json([
-                    'status' => 'failed',
-                    'message' => 'The selected expense category does not belong to your company.',
-                ], 403);
+            // The ledger account it is charged to (a sub-account under Cost of Sales / Expenses).
+            $categoryId = $request->input('category_id');
+            $accountId = $request->input('account_id');
+            if ($accountId) {
+                if ($error = $this->ledgerAccountError($companyId, $accountId)) {
+                    return response()->json(['status' => 'failed', 'message' => $error], 422);
+                }
+                $categoryId = Expense::categoryForAccount($companyId, $accountId);
+            } else {
+                $category = ExpenseCategory::find($categoryId);
+                if (!$category || $category->company_id !== $companyId) {
+                    return response()->json([
+                        'status' => 'failed',
+                        'message' => 'The selected expense category does not belong to your company.',
+                    ], 403);
+                }
             }
 
             // If store_id is provided, check if it belongs to the user's company
@@ -231,7 +245,8 @@ class ExpenseController extends Controller
             $expense = Expense::create([
                 'id' => (string) Str::uuid(),
                 'company_id' => $companyId,
-                'category_id' => $request->input('category_id'),
+                'category_id' => $categoryId,
+                'account_id' => $accountId,
                 'store_id' => $request->input('store_id'),
                 'vendor_name' => $request->input('vendor_name'),
                 'description' => $request->input('description'),
@@ -251,7 +266,7 @@ class ExpenseController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Expense created successfully.',
-                'expense' => $expense->load(['category', 'store', 'createdBy']),
+                'expense' => $expense->load(['category', 'account:id,account_code,account_name,parent_id', 'store', 'createdBy']),
             ], 201);
         } catch (\Exception $e) {
             Log::error('Failed to create expense', ['error' => $e->getMessage()]);
@@ -282,7 +297,7 @@ class ExpenseController extends Controller
         try {
             $user = $request->user();
             $query = Expense::where('id', $id)
-                ->with(['category', 'store', 'createdBy', 'approvedBy']);
+                ->with(['category', 'account:id,account_code,account_name,parent_id', 'store', 'createdBy', 'approvedBy']);
 
             if (!$this->hasPermission($request, 'can_manage_all_expenses')) {
                 $query->where('company_id', $user->company_id);
@@ -329,7 +344,8 @@ class ExpenseController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'category_id' => 'sometimes|required|uuid|exists:expense_categories,id',
+            'account_id' => 'nullable|uuid',
+            'category_id' => 'nullable|uuid|exists:expense_categories,id',
             'store_id' => 'nullable|uuid|exists:stores,id',
             'vendor_name' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|required|string',
@@ -372,8 +388,22 @@ class ExpenseController extends Controller
                 ], 403);
             }
 
+            // A new ledger account: the category follows it (the one already posting there, if any).
+            $extra = [];
+            if ($request->filled('account_id') && $request->input('account_id') !== $expense->account_id) {
+                if ($error = $this->ledgerAccountError($expense->company_id, $request->input('account_id'))) {
+                    return response()->json(['status' => 'failed', 'message' => $error], 422);
+                }
+                $extra = [
+                    'account_id' => $request->input('account_id'),
+                    'category_id' => Expense::categoryForAccount($expense->company_id, $request->input('account_id')),
+                ];
+            } elseif ($request->filled('category_id') && !$request->filled('account_id')) {
+                $extra = ['account_id' => Expense::accountForCategory($expense->company_id, $request->input('category_id'))];
+            }
+
             // Check if the expense category belongs to the expense's company
-            if ($request->filled('category_id')) {
+            if ($request->filled('category_id') && !array_key_exists('category_id', $extra)) {
                 $category = ExpenseCategory::find($request->input('category_id'));
                 if (!$category || $category->company_id !== $expense->company_id) {
                     return response()->json([
@@ -411,7 +441,7 @@ class ExpenseController extends Controller
             }
 
             // Update the expense
-            $expense->update($request->only([
+            $expense->update(array_merge($request->only([
                 'category_id',
                 'store_id',
                 'vendor_name',
@@ -425,12 +455,12 @@ class ExpenseController extends Controller
                 'recurring_frequency',
                 'tags',
                 'status',
-            ]));
+            ]), $extra));
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Expense updated successfully.',
-                'expense' => $expense->fresh(['category', 'store', 'createdBy', 'approvedBy']),
+                'expense' => $expense->fresh(['category', 'account:id,account_code,account_name,parent_id', 'store', 'createdBy', 'approvedBy']),
             ], 200);
         } catch (\Exception $e) {
             Log::error('Failed to update expense', ['error' => $e->getMessage(), 'id' => $id]);
@@ -905,5 +935,78 @@ class ExpenseController extends Controller
                 'message' => 'Failed to retrieve expense summary: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * What an expense can be charged to and paid from. Accounts: each main expense account
+     * (5000 Cost of Sales, 6000 Expenses ...) with the sub-accounts under it that take postings.
+     * Paid from: Petty Cash (Cash at Hand) for cash, Prime Bank for a cheque or transfer.
+     */
+    public function ledgerAccounts(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_expenses', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view expenses.'], 403);
+        }
+        $companyId = $user->company_id;
+
+        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)->where('account_type', 'expense')
+            ->where('is_active', true)->orderBy('account_code')
+            ->get(['id', 'account_code', 'account_name', 'account_subtype', 'parent_id']);
+        $hasChildren = $accounts->pluck('parent_id')->filter()->flip();
+        $byId = $accounts->keyBy('id');
+        $rootOf = function ($a) use ($byId) {
+            while ($a->parent_id && isset($byId[$a->parent_id])) {
+                $a = $byId[$a->parent_id];
+            }
+            return $a;
+        };
+
+        $groups = $accounts->filter(fn ($a) => !$a->parent_id || !isset($byId[$a->parent_id]))->map(function ($root) use ($accounts, $hasChildren, $rootOf) {
+            $subs = $accounts->filter(fn ($a) => $a->id !== $root->id && !isset($hasChildren[$a->id]) && $rootOf($a)->id === $root->id)
+                ->map(fn ($a) => ['id' => $a->id, 'code' => $a->account_code, 'name' => $a->account_name])->values();
+            // A main account nothing sits under takes postings itself.
+            if ($subs->isEmpty()) {
+                $subs = collect([['id' => $root->id, 'code' => $root->account_code, 'name' => $root->account_name]]);
+            }
+            return ['id' => $root->id, 'code' => $root->account_code, 'name' => $root->account_name, 'accounts' => $subs];
+        })->values();
+
+        $mapped = fn (array $keys) => DB::table('company_account_mappings')->where('company_id', $companyId)
+            ->whereNull('context_type')->where('is_active', true)->whereIn('mapping_key', $keys)
+            ->orderByRaw("CASE mapping_key " . collect($keys)->map(fn ($k, $i) => "WHEN '{$k}' THEN {$i}")->implode(' ') . " END")
+            ->value('chart_of_account_id');
+        $sources = collect([
+            ['key' => 'petty_cash', 'methods' => ['cash'], 'account_id' => $mapped(['cash_on_hand', 'petty_cash'])],
+            ['key' => 'prime_bank', 'methods' => ['check', 'bank_transfer'], 'account_id' => $mapped(['main_bank'])],
+        ])->filter(fn ($s) => $s['account_id']);
+        $money = \App\Models\ChartOfAccount::whereIn('id', $sources->pluck('account_id'))->get();
+        $balances = app(\App\Services\LedgerBalanceService::class)->balances($companyId, null, $money);
+        $paidFrom = $sources->map(function ($s) use ($money, $balances) {
+            $a = $money->firstWhere('id', $s['account_id']);
+            return $s + ['code' => $a?->account_code, 'name' => $a?->account_name, 'balance' => (float) ($balances[$s['account_id']] ?? 0)];
+        })->values();
+
+        return response()->json(['status' => 'success', 'data' => ['groups' => $groups, 'paid_from' => $paidFrom]]);
+    }
+
+    /** Why an account can't take an expense, or null when it can. */
+    private function ledgerAccountError(string $companyId, string $accountId): ?string
+    {
+        $account = \App\Models\ChartOfAccount::where('company_id', $companyId)->find($accountId);
+        if (!$account) {
+            return 'Choose a ledger account from your chart of accounts.';
+        }
+        if (!$account->is_active) {
+            return "{$account->account_code} {$account->account_name} is inactive. Choose another account.";
+        }
+        if ($account->account_type !== 'expense') {
+            return "{$account->account_code} {$account->account_name} is not an expense account. Choose one under Cost of Sales or Expenses.";
+        }
+        if (\App\Models\ChartOfAccount::where('parent_id', $account->id)->where('is_active', true)->exists()) {
+            return "{$account->account_code} {$account->account_name} is a main account. Choose the sub-account under it.";
+        }
+
+        return null;
     }
 }

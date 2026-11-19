@@ -19,6 +19,7 @@ class Expense extends Model
         'company_id',
         'store_id',
         'category_id',
+        'account_id',
         'expense_number',
         'vendor_name',
         'description',
@@ -48,6 +49,13 @@ class Expense extends Model
 
     protected static function booted(): void
     {
+        // Expenses made elsewhere (allowances, imports) name only a category: charge its account.
+        static::saving(function (Expense $expense) {
+            if (!$expense->account_id && $expense->category_id) {
+                $expense->account_id = self::accountForCategory($expense->company_id, $expense->category_id);
+            }
+        });
+
         static::saved(function (Expense $expense) {
             if (!($expense->wasRecentlyCreated || $expense->wasChanged('status'))) {
                 return;
@@ -125,6 +133,38 @@ class Expense extends Model
     public function category()
     {
         return $this->belongsTo(ExpenseCategory::class, 'category_id');
+    }
+
+    /**
+     * The ledger account the expense is charged to (e.g. 6400 Transport under 6000 Expenses).
+     */
+    public function account()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'account_id');
+    }
+
+    /** The account a category posts to: its own mapping, else the company's general expense account. */
+    public static function accountForCategory(?string $companyId, ?string $categoryId): ?string
+    {
+        if (!$companyId) {
+            return null;
+        }
+        $base = \Illuminate\Support\Facades\DB::table('company_account_mappings')->where('company_id', $companyId)
+            ->where('mapping_key', 'miscellaneous_expense')->where('is_active', true)->whereNotNull('chart_of_account_id');
+
+        return ($categoryId ? (clone $base)->where('context_type', 'expense_category')->where('context_id', $categoryId)->value('chart_of_account_id') : null)
+            ?? (clone $base)->whereNull('context_type')->value('chart_of_account_id');
+    }
+
+    /** The category that already posts to an account (the most used one), so category reports keep working. */
+    public static function categoryForAccount(string $companyId, string $accountId): ?string
+    {
+        return \Illuminate\Support\Facades\DB::table('company_account_mappings as m')
+            ->join('expense_categories as c', \Illuminate\Support\Facades\DB::raw('c.id::text'), '=', \Illuminate\Support\Facades\DB::raw('m.context_id::text'))
+            ->where('m.company_id', $companyId)->where('m.mapping_key', 'miscellaneous_expense')->where('m.is_active', true)
+            ->where('m.context_type', 'expense_category')->where('m.chart_of_account_id', $accountId)
+            ->orderByRaw('(SELECT COUNT(*) FROM expenses e WHERE e.category_id = c.id) DESC')
+            ->value('c.id');
     }
 
     /**
