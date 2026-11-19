@@ -53,9 +53,16 @@ import { DeliveryInvoicesImport, TransporterStatement } from "./delivery-invoice
 import { ImportHistoryDialog } from "@/components/import-history-dialog";
 import { ALL_ROWS, TablePager } from "@/components/ui/table-pager";
 
-// Imported invoices for deliveries made before the system have no order, only what the old records said.
+// The sale it delivered, by its NSK number. Imported invoices for deliveries made before the system have
+// no order, only what the old records said, which is the customer/destination (shown under Customer).
 const orderLabel = (invoice: DeliveryInvoice) =>
-  orderRef(invoice.order_dispatch?.order as any) || invoice.order_reference || invoice.order_dispatch?.order_id || "—";
+  orderRef(invoice.order_dispatch?.order as any) || "—";
+const customerLabel = (invoice: DeliveryInvoice) => {
+  const c: any = invoice.order_dispatch?.order?.customer;
+  return c?.business_name || c?.display_name || c?.name || invoice.order_reference || "—";
+};
+// The rate it was charged at gives the zone when the invoice itself has none.
+const zoneLabel = (invoice: DeliveryInvoice) => invoice.zone || (invoice as any).delivery_rate?.zone || "—";
 
 // 12/07/2026
 const shortDate = (date?: string | null) => {
@@ -229,15 +236,16 @@ export function DeliveryInvoicesTable() {
     }
   };
 
-  const exportColumns = ["S/No", "Invoice #", "Date", "Order", "Transporter", "Transporter Inv.", "Zone", "Cartons", "Rate/Carton", "Total", "Status"];
+  const exportColumns = ["S/No", "Invoice #", "Date", "Order", "Customer", "Transporter", "Transporter Inv.", "Zone", "Cartons", "Rate/Carton", "Total", "Status"];
   const exportRow = (invoice: DeliveryInvoice, i: number) => [
     i + 1,
     invoice.invoice_number,
     shortDate(invoice.invoice_date || invoice.created_at),
     orderLabel(invoice),
+    customerLabel(invoice),
     invoice.transporter_name,
     invoice.transporter_invoice_number || "",
-    invoice.zone,
+    zoneLabel(invoice),
     Number(invoice.number_of_cartons) || 0,
     Number(invoice.rate_per_carton) || 0,
     Number(invoice.total_amount) || 0,
@@ -252,9 +260,9 @@ export function DeliveryInvoicesTable() {
       title: "Delivery Invoices",
       subtitle: search ? `Search: ${search}` : undefined,
       headers: exportColumns,
-      moneyColumns: [8, 9],
+      moneyColumns: [9, 10],
       rows: all.map(exportRow),
-      footer: [["", "", "", "", "", "", "Total", all.reduce((s, d) => s + (Number(d.number_of_cartons) || 0), 0), null,
+      footer: [["", "", "", "", "", "", "", "Total", all.reduce((s, d) => s + (Number(d.number_of_cartons) || 0), 0), null,
         all.reduce((s, d) => s + (Number(d.total_amount) || 0), 0), ""]],
     };
   });
@@ -269,7 +277,7 @@ export function DeliveryInvoicesTable() {
       fileName: `delivery-invoice-${invoice.invoice_number}`,
       title: `Delivery Invoice ${invoice.invoice_number}`,
       headers: exportColumns,
-      moneyColumns: [8, 9],
+      moneyColumns: [9, 10],
       rows: [exportRow(invoice, 0)],
     }, userProfile?.company);
   };
@@ -352,6 +360,7 @@ export function DeliveryInvoicesTable() {
                       Order {getSortIcon("order_number")}
                     </div>
                   </TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead className="cursor-pointer" onClick={() => toggleSort("transporter_name")}>
                     <div className="flex items-center gap-1">
                       Transporter {getSortIcon("transporter_name")}
@@ -388,9 +397,10 @@ export function DeliveryInvoicesTable() {
                     <TableCell className="text-sm text-muted-foreground">{rowNumber}</TableCell>
                     <TableCell className="font-medium whitespace-nowrap">{invoice.invoice_number}</TableCell>
                     <TableCell className="whitespace-nowrap">{shortDate(invoice.invoice_date || invoice.created_at)}</TableCell>
-                    <TableCell className="font-medium">{orderLabel(invoice)}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{orderLabel(invoice)}</TableCell>
+                    <TableCell>{customerLabel(invoice)}</TableCell>
                     <TableCell>{invoice.transporter_name}</TableCell>
-                    <TableCell className="capitalize">{invoice.zone}</TableCell>
+                    <TableCell className="capitalize">{zoneLabel(invoice)}</TableCell>
                     <TableCell>{invoice.number_of_cartons}</TableCell>
                     <TableCell className="font-semibold">KES {Number(invoice.total_amount).toLocaleString()}</TableCell>
                     <TableCell>
@@ -475,8 +485,12 @@ export function DeliveryInvoicesTable() {
                   <p className="font-medium">{viewingInvoice.invoice_number}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Order ID</Label>
+                  <Label className="text-xs text-muted-foreground">Order</Label>
                   <p className="font-medium">{orderLabel(viewingInvoice)}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Customer</Label>
+                  <p className="font-medium">{customerLabel(viewingInvoice)}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Transporter</Label>
@@ -484,7 +498,7 @@ export function DeliveryInvoicesTable() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Zone</Label>
-                  <p className="font-medium capitalize">{viewingInvoice.zone}</p>
+                  <p className="font-medium capitalize">{zoneLabel(viewingInvoice)}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Number of Cartons</Label>

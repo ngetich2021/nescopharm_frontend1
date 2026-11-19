@@ -254,12 +254,11 @@ class DeliveryInvoiceController extends Controller
 
         $names = DeliveryInvoice::where('company_id', $user->company_id)->pluck('transporter_name')
             ->concat(\App\Models\DeliveryRate::where('company_id', $user->company_id)->pluck('transporter_name'))
-            ->filter()->map(fn ($n) => trim($n))->unique(fn ($n) => mb_strtolower($n));
+            ->filter()->map(fn ($n) => trim($n))->unique(fn ($n) => DeliveryInvoice::transporterKey($n));
 
         // Read only: a transporter that has never been invoiced has no supplier record yet and is skipped.
         $rows = $names->map(function ($name) use ($user) {
-            $supplier = \App\Models\Supplier::where('company_id', $user->company_id)
-                ->whereRaw('lower(trim(name)) = ?', [mb_strtolower($name)])->first();
+            $supplier = DeliveryInvoice::findTransporterSupplier($user->company_id, $name);
             if (!$supplier) {
                 return null;
             }
@@ -273,7 +272,7 @@ class DeliveryInvoiceController extends Controller
                 'paid' => round($paid, 2),
                 'balance' => round($billed - $paid, 2),
             ];
-        })->filter()->sortBy('name')->values();
+        })->filter()->unique('supplier_id')->sortBy('name')->values();
 
         return response()->json(['status' => 'success', 'data' => $rows]);
     }

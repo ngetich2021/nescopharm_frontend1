@@ -120,6 +120,32 @@ class OrderDispatchController extends Controller
         if ($request->has('end_date')) {
             $query->whereDate('created_at', '<=', $request->end_date);
         }
+        // One box for everything: ODI number, order/invoice number (NSK/0443, 443), the customer's
+        // business or contact name ("reale"), who created it, notes and products.
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $like = '%' . $search . '%';
+            // Stored as ODI-<company>-0464 but shown as ODI-0464: match the number part.
+            $odi = preg_match('/^odi-?\s*(\d+)$/i', $search, $m) ? '%-' . $m[1] . '%' : null;
+            $query->where(function ($q) use ($search, $like, $odi) {
+                $q->where('dispatch_number', 'ilike', $like)
+                    ->when($odi, fn ($q) => $q->orWhere('dispatch_number', 'ilike', $odi))
+                    ->orWhere('notes', 'ilike', $like)
+                    ->orWhereHas('order', fn ($o) => $o->where('order_number', 'ilike', $like)
+                        ->orWhereHas('invoice', fn ($i) => $i->whereNumberMatches($search))
+                        ->orWhereHas('customer', fn ($c) => $c->where('business_name', 'ilike', $like)->orWhere('name', 'ilike', $like)))
+                    ->orWhereHas('createdBy', fn ($u) => $u->whereRaw("concat_ws(' ', first_name, last_name) ilike ?", [$like]))
+                    ->orWhereHas('items.product', fn ($p) => $p->where('name', 'ilike', $like));
+            });
+        }
+
+        // Cards above the list: every dispatch matching the search and filters, not just this page.
+        $stats = (clone $query)->reorder()->toBase()->selectRaw("
+            count(*) as total,
+            count(*) filter (where order_dispatches.status not in ('delivered', 'cancelled')) as pending,
+            count(*) filter (where order_dispatches.status = 'delivered') as completed,
+            count(*) filter (where exists (select 1 from order_dispatch_items i where i.order_dispatch_id = order_dispatches.id and coalesce(i.damaged_quantity, 0) > 0)) as issues
+        ")->first();
 
         $perPage = $request->get('per_page', 15);
         $perPage = min($perPage, 100);
@@ -174,6 +200,12 @@ class OrderDispatchController extends Controller
                 'last_page' => $dispatches->lastPage(),
                 'per_page' => $dispatches->perPage(),
                 'total' => $dispatches->total(),
+            ],
+            'stats' => [
+                'total' => (int) $stats->total,
+                'pending' => (int) $stats->pending,
+                'completed' => (int) $stats->completed,
+                'issues' => (int) $stats->issues,
             ],
         ], 200);
     }

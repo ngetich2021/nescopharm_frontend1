@@ -38,6 +38,7 @@ import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { usePermissions } from "@/hooks/use-permissions"
 import { FileLink } from "@/components/file-preview"
+import Link from "next/link"
 
 function reviewerName(entry: Logistics) {
   const r = entry.delivery_note_reviewed_by
@@ -45,14 +46,30 @@ function reviewerName(entry: Logistics) {
   return [r.first_name, r.last_name].filter(Boolean).join(" ") || null
 }
 
+// The delivery note is issued with the order (it prints with the invoice) once the dispatch goes out;
+// what comes back later is the customer's stamped copy, uploaded here.
 function DeliveryNoteCell({ entry }: { entry: Logistics }) {
+  const dispatchId = (entry as any).order_dispatch_id || entry.order_dispatch?.id
+  const issued = dispatchId ? (
+    <Link href={`/dispatch/${dispatchId}/delivery-note`} onClick={(e) => e.stopPropagation()}
+      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline whitespace-nowrap">
+      <Badge className="bg-green-100 text-green-800 border-green-500 hover:bg-green-100">Issued</Badge> View
+    </Link>
+  ) : null
   if (!entry.delivery_note_file) {
-    return <Badge className="bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-100">No</Badge>
+    return (
+      <div className="space-y-1">
+        {issued ?? <Badge className="bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-100">No</Badge>}
+        {issued && <p className="text-xs text-muted-foreground whitespace-nowrap">Stamped copy: not uploaded</p>}
+      </div>
+    )
   }
   const status = entry.delivery_note_status
   return (
+    <div className="space-y-1">
+    {issued}
     <div className="flex items-center gap-2">
-      <Badge className="bg-green-100 text-green-800 border-green-500 hover:bg-green-100">Yes</Badge>
+      <Badge className="bg-green-100 text-green-800 border-green-500 hover:bg-green-100">Stamped</Badge>
       {entry.delivery_note_url && (
         <FileLink
           href={entry.delivery_note_url}
@@ -66,6 +83,7 @@ function DeliveryNoteCell({ entry }: { entry: Logistics }) {
       {status === "approved" && <span className="text-xs font-medium text-green-700">Approved</span>}
       {status === "pending_review" && <span className="text-xs font-medium text-amber-700">Awaiting review</span>}
       {status === "resubmit_requested" && <span className="text-xs font-medium text-red-700">Resubmit</span>}
+    </div>
     </div>
   )
 }

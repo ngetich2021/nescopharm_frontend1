@@ -358,6 +358,7 @@ export async function listOrderDispatches(params?: {
   order_id?: string;
   status?: string;
   approval_status?: string;
+  search?: string;
   page?: number;
   per_page?: number;
 }): Promise<{
@@ -369,6 +370,7 @@ export async function listOrderDispatches(params?: {
     per_page: number;
     total: number;
   };
+  stats?: { total: number; pending: number; completed: number; issues: number };
 }> {
   const query = params
     ? "?" +
@@ -387,6 +389,7 @@ export async function listOrderDispatches(params?: {
       per_page: number;
       total: number;
     };
+    stats?: { total: number; pending: number; completed: number; issues: number };
   }>(`/order-dispatches${query}`, "GET", undefined, true);
   return response;
 }

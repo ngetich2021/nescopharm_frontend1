@@ -109,11 +109,37 @@ class DeliveryInvoice extends Model
         return 'DI-' . str_pad((string) ($max + 1), 5, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * A transporter name reduced to what identifies it: "Imevo Ltd", "IMEVO LIMITED" and "Imevo Ltd." are
+     * one transporter (case, dots, commas, extra spaces and Ltd/Limited, Co/Company are ignored).
+     */
+    public static function transporterKey(?string $name): string
+    {
+        $key = mb_strtolower(trim((string) $name));
+        $key = preg_replace('/[.,]/u', ' ', $key);
+        $key = preg_replace('/\blimited\b/u', 'ltd', $key);
+        $key = preg_replace('/\bcompany\b/u', 'co', $key);
+        return trim(preg_replace('/\s+/u', ' ', $key));
+    }
+
+    /** The company's existing supplier for this transporter name (same transporterKey), or null. */
+    public static function findTransporterSupplier(string $companyId, ?string $name): ?Supplier
+    {
+        $key = self::transporterKey($name);
+        if ($key === '') {
+            return null;
+        }
+        $first = explode(' ', $key)[0];
+        return Supplier::where('company_id', $companyId)->where('name', 'ilike', "%{$first}%")
+            ->orderBy('created_at')->get()
+            ->first(fn (Supplier $s) => self::transporterKey($s->name) === $key);
+    }
+
     /** The supplier record for a transporter, matched on the name and created the first time it is used. */
     public static function transporterSupplier(string $companyId, string $name): Supplier
     {
         $name = trim($name);
-        return Supplier::where('company_id', $companyId)->whereRaw('lower(trim(name)) = ?', [mb_strtolower($name)])->first()
+        return self::findTransporterSupplier($companyId, $name)
             ?? Supplier::create([
                 'id' => (string) \Illuminate\Support\Str::uuid(),
                 'company_id' => $companyId,

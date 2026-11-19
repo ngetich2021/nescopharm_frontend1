@@ -37,6 +37,9 @@ export default function DispatchPage() {
   const [dispatchToReturn, setDispatchToReturn] = useState<OrderDispatch | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [lastPage, setLastPage] = useState(1);
+  const [serverStats, setServerStats] = useState({ total: 0, pending: 0, completed: 0, issues: 0 });
   const [searchDebounceTimer, setSearchDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [approvalFilter, setApprovalFilter] = useState("all");
@@ -49,11 +52,17 @@ export default function DispatchPage() {
   const fetchDispatches = async () => {
     setLoading(true);
     try {
+      // Search, filters and paging all run on the server, so they cover every dispatch, not one page.
       const response = await listOrderDispatches({
         page: currentPage,
-        per_page: rowsPerPage
+        per_page: rowsPerPage,
+        search: debouncedSearch.trim() || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        approval_status: approvalFilter !== "all" ? approvalFilter : undefined,
       });
-      
+      setLastPage(response.meta?.last_page || 1);
+      if (response.stats) setServerStats(response.stats);
+
       // Handle both array response and paginated response structures
       // Based on lib, it returns { status, data, meta }
       if (response && Array.isArray(response.data)) {
@@ -80,7 +89,7 @@ export default function DispatchPage() {
 
   useEffect(() => {
     fetchDispatches();
-  }, [currentPage, rowsPerPage]); // Refetch when pagination changes
+  }, [currentPage, rowsPerPage, debouncedSearch, statusFilter, approvalFilter]);
 
   // Cleanup debounce timer on unmount
   useEffect(() => {
@@ -172,63 +181,21 @@ export default function DispatchPage() {
       clearTimeout(searchDebounceTimer);
     }
     
-    // Set new timer - no need for API call, just local filtering
-    const timer = setTimeout(() => {
-      // Search is now handled by client-side filtering for now
-    }, 300);
+    // Ask the server once typing pauses.
+    const timer = setTimeout(() => setDebouncedSearch(value), 350);
     
     setSearchDebounceTimer(timer);
   };
 
-  const getStatsData = () => {
-    const totalDispatches = dispatches.length;
-    const pendingDispatches = dispatches.filter(d => 
-      d.items?.some(item => (item.delivered_quantity || 0) < item.quantity)
-    ).length;
-    const completedDispatches = dispatches.filter(d => 
-      d.items?.every(item => (item.delivered_quantity || 0) >= item.quantity)
-    ).length;
-    // Note: 'returned' status isn't explicitly in the simple JSON, 
-    // assuming we might need to check for damaged or specific status
-    const returnedDispatches = dispatches.filter(d => 
-      d.items?.some(item => (item.damaged_quantity || 0) > 0)
-    ).length;
-    
-    return { totalDispatches, pendingDispatches, completedDispatches, returnedDispatches };
+  // The server returns this page of the matching dispatches, the page count and the card totals.
+  const paginatedDispatches = Array.isArray(dispatches) ? dispatches : [];
+  const totalPages = lastPage;
+  const stats = {
+    totalDispatches: serverStats.total,
+    pendingDispatches: serverStats.pending,
+    completedDispatches: serverStats.completed,
+    returnedDispatches: serverStats.issues,
   };
-
-  // Apply client-side filtering
-  const filteredDispatches = Array.isArray(dispatches) ? dispatches.filter((dispatch) => {
-    // Status filter
-    if (statusFilter !== "all" && dispatch.status?.toLowerCase() !== statusFilter.toLowerCase()) return false;
-
-    // Approval filter
-    if (approvalFilter !== "all" && dispatch.approval_status?.toLowerCase() !== approvalFilter.toLowerCase()) return false;
-
-    // Search filter
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      dispatch.dispatch_number?.toLowerCase().includes(q) ||
-      dispatch.order?.order_number?.toLowerCase().includes(q) ||
-      matchesDocNumber(dispatch.order?.invoice?.invoice_number, search) ||
-      dispatch.order?.customer?.name?.toLowerCase().includes(q) ||
-      dispatch.created_by?.first_name?.toLowerCase().includes(q) ||
-      dispatch.created_by?.last_name?.toLowerCase().includes(q) ||
-      dispatch.notes?.toLowerCase().includes(q) ||
-      dispatch.items?.some(item =>
-        item.product?.name?.toLowerCase().includes(q)
-      )
-    );
-  }) : [];
-
-  const totalPages = Math.ceil(filteredDispatches.length / rowsPerPage);
-  // If we are doing client side pagination on the filtered results:
-  const paginatedDispatches = filteredDispatches.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
-  // Note: The API supports pagination, but here we are mixing client/server a bit. 
-  // Ideally we should use server side search + pagination, but keeping consistent with previous implementation style.
-  
-  const stats = getStatsData();
 
   return (
     <PermissionGuard permissions={["can_view_dispatch_menu", "can_manage_system", "can_manage_company"]}>
@@ -327,7 +294,7 @@ export default function DispatchPage() {
             <div className="relative w-full sm:w-auto">
               <Input
                 className="pl-8 w-full sm:max-w-sm"
-                placeholder="Search dispatches..."
+                placeholder="Search customer (e.g. reale), NSK/0443, ODI, product..."
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
               />

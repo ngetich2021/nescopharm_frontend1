@@ -16,6 +16,8 @@ export interface DeliveryRate {
   approval_notes: string | null;
   // From the server: why the signed-in user may not approve it (an accountant who raised or edited it).
   approval_block?: string | null;
+  // Dispatches still on the road with an unpaid delivery invoice on this rate: deleting it sends them back.
+  open_dispatches?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -68,6 +70,8 @@ export async function rejectDeliveryRate(id: string, notes?: string): Promise<De
   return response.delivery_rate;
 }
 
-export async function deleteDeliveryRate(id: string): Promise<void> {
-  await apiCall<any>(`/delivery-rates/${id}`, "DELETE");
+/** Returns the server's message, which lists any dispatches sent back to be dispatched again. */
+export async function deleteDeliveryRate(id: string): Promise<string> {
+  const response = await apiCall<any>(`/delivery-rates/${id}`, "DELETE");
+  return response?.message || "Delivery rate deleted.";
 }

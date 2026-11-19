@@ -42,6 +42,7 @@ import { Loader2, Plus, Check, X, Eye, Trash2, ChevronLeft, ChevronRight, MoreVe
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/rbac";
+import { getSuppliers } from "@/lib/suppliers";
 import {
   DeliveryRate,
   DeliveryZone,
@@ -93,8 +94,12 @@ export function DeliveryRatesTab() {
   const canApprove = hasPermission(userProfile as any, "can_approve_delivery_rates");
   const canDelete = canCreate || canApprove;
 
+  // Transporters are suppliers: offering their names keeps a rate on the supplier's own account
+  // (the server also matches "Imevo Ltd" to "Imevo Limited").
+  const [supplierNames, setSupplierNames] = useState<string[]>([]);
   useEffect(() => {
     loadRates();
+    getSuppliers().then((list) => setSupplierNames(list.map((s) => s.name).filter(Boolean))).catch(() => {});
   }, []);
 
   const loadRates = async () => {
@@ -188,8 +193,8 @@ export function DeliveryRatesTab() {
   const handleDelete = async (id: string) => {
     setDeletingId(id);
     try {
-      await deleteDeliveryRate(id);
-      toast({ title: "Success", description: "Delivery rate deleted." });
+      const message = await deleteDeliveryRate(id);
+      toast({ title: "Deleted", description: message });
       setDeletingId(null);
       loadRates();
     } catch (error: any) {
@@ -479,7 +484,7 @@ export function DeliveryRatesTab() {
               <Label htmlFor="transporter_name">Transporter Name</Label>
               <Input
                 id="transporter_name"
-                placeholder="e.g. FedEx, DHL"
+                placeholder="Pick the transporter (a supplier) or type a new one"
                 list="transporter_name_options"
                 value={form.transporter_name}
                 onChange={(e) => setForm({ ...form, transporter_name: e.target.value })}
@@ -487,6 +492,10 @@ export function DeliveryRatesTab() {
               {/* "Local Riders" is always offered as Dispatch Through; its rates are added here. */}
               <datalist id="transporter_name_options">
                 <option value="Local Riders" />
+                {Array.from(new Set([...allRates.map((r) => r.transporter_name), ...supplierNames]))
+                  .filter((n) => n && n !== "Local Riders")
+                  .sort((a, b) => a.localeCompare(b))
+                  .map((n) => <option key={n} value={n} />)}
               </datalist>
             </div>
             <div className="grid gap-2">
@@ -564,7 +573,14 @@ export function DeliveryRatesTab() {
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Delete Delivery Rate</DialogTitle>
-            <DialogDescription>This action cannot be undone.</DialogDescription>
+            <DialogDescription>
+              {(() => {
+                const n = allRates.find((r) => r.id === deletingId)?.open_dispatches || 0;
+                return n > 0
+                  ? `${n} dispatch${n === 1 ? " was" : "es were"} sent on this rate and ${n === 1 ? "its" : "their"} delivery invoice${n === 1 ? " is" : "s are"} unpaid. ${n === 1 ? "It goes" : "They go"} back to be dispatched again (Dispatch Order) with the right rate, and ${n === 1 ? "that invoice is" : "those invoices are"} removed. Paid or delivered ones are kept. This cannot be undone.`
+                  : "This cannot be undone. Dispatches already sent and paid on this rate are kept.";
+              })()}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeletingId(null)}>Cancel</Button>
