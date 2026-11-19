@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { getSupplierStatement, SupplierStatement, SupplierBillRow } from "@/lib/suppliers"
-import { ArrowLeft, Printer, Loader2 } from "lucide-react"
+import { ArrowLeft, Printer, Loader2, AlarmClock } from "lucide-react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { BillsDue } from "@/app/supplier-payments/components/bills-due"
 import { useToast } from "@/hooks/use-toast"
 import { documentFileName, filePeriod, printWithFileName } from "@/lib/document-names"
 import { addCanvasToPdf, fixTextOffset } from "@/lib/pdf-capture"
@@ -78,6 +80,7 @@ export default function SupplierStatementPage({ params }: { params: Promise<{ id
   const [isLoading, setIsLoading] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [billsDueOpen, setBillsDueOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   // Optional sections, left off (screen, print and downloads) unless ticked.
@@ -113,6 +116,14 @@ export default function SupplierStatementPage({ params }: { params: Promise<{ id
     load({ all: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // A payment made from Bills Due for Payment shows on the statement straight away.
+  useEffect(() => {
+    const refresh = () => load(dateFrom && dateTo ? { from: dateFrom, to: dateTo } : { all: true })
+    window.addEventListener("supplier-payment-created", refresh)
+    return () => window.removeEventListener("supplier-payment-created", refresh)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, dateFrom, dateTo])
 
   const applyPreset = (range: [string, string]) => {
     setDateFrom(range[0])
@@ -329,6 +340,11 @@ export default function SupplierStatementPage({ params }: { params: Promise<{ id
                   <Input type="date" className="h-8 w-[150px]" value={cutOff} onChange={(e) => e.target.value && setCutOff(e.target.value)} />
                 </label>
               )}
+              {/* This supplier's bills past their credit days, to tick and pay */}
+              <Button size="sm" variant="outline" className="h-8 border-red-300 text-red-700 hover:bg-red-50" onClick={() => setBillsDueOpen(true)}>
+                <AlarmClock className="h-4 w-4 mr-2" />
+                Bills Due for Payment
+              </Button>
             </div>
 
             <div className="flex gap-2">
@@ -341,6 +357,15 @@ export default function SupplierStatementPage({ params }: { params: Promise<{ id
           </div>
         </div>
       </div>
+
+      <Sheet open={billsDueOpen} onOpenChange={setBillsDueOpen}>
+        <SheetContent className="!w-[1100px] !max-w-[95vw] overflow-y-auto print:hidden" style={{ width: 1100, maxWidth: "95vw" }}>
+          <SheetHeader>
+            <SheetTitle>{supplierName} - Bills Due for Payment</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">{billsDueOpen && <BillsDue supplierId={id} />}</div>
+        </SheetContent>
+      </Sheet>
 
       <div className="container mx-auto px-4 py-8 print:p-0 print:m-0 print:max-w-none">
         <Card

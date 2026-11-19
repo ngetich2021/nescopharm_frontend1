@@ -29,7 +29,7 @@ type Show = "due" | "by_date" | "all"
  * Bills Due for Payment: every supplier's unpaid bills and delivery invoices, each due on its date plus
  * that supplier's credit days (Imevo: 30). Tick the ones to pay and Pay opens the payment form with them.
  */
-export function BillsDue() {
+export function BillsDue({ supplierId }: { supplierId?: string } = {}) {
   const { hasPermission } = usePermissions()
   const canPay = hasPermission("can_create_payments")
   const company = useOptionalAuth()?.userProfile?.company
@@ -38,7 +38,8 @@ export function BillsDue() {
   const [error, setError] = useState<string | null>(null)
   const [payBy, setPayBy] = useState(todayString())
   const [show, setShow] = useState<Show>("due")
-  const [supplierFilter, setSupplierFilter] = useState("all")
+  // On a supplier's statement: that supplier only.
+  const [supplierFilter, setSupplierFilter] = useState(supplierId ?? "all")
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [preset, setPreset] = useState<{ supplierId: string; invoices: { type: string; id: string; amount: number }[] } | null>(null)
@@ -47,7 +48,27 @@ export function BillsDue() {
     setLoading(true)
     setError(null)
     try {
-      setData(await getBillsDue(date))
+      const res = await getBillsDue(date)
+      if (supplierId) {
+        // The cards then add up this supplier's bills only.
+        const mine = res.rows.filter((r) => r.supplier_id === supplierId)
+        const part = (st: BillDue["status"]) => {
+          const rs = mine.filter((r) => r.status === st)
+          return { count: rs.length, amount: rs.reduce((t, r) => t + r.to_pay, 0) }
+        }
+        const dueNow = part("Due")
+        const dueBy = part("Due by pay date")
+        res.rows = mine
+        res.summary = {
+          due_now: dueNow,
+          due_by_pay_date: dueBy,
+          to_pay: { count: dueNow.count + dueBy.count, amount: dueNow.amount + dueBy.amount },
+          not_yet_due: part("Not yet due"),
+          cheques_pending: mine.reduce((t, r) => t + r.cheque_pending, 0),
+          outstanding: mine.reduce((t, r) => t + r.balance, 0),
+        }
+      }
+      setData(res)
       setSelected({})
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load bills due")
@@ -136,7 +157,7 @@ export function BillsDue() {
                 <SelectItem value="all">All unpaid bills</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+            {!supplierId && <Select value={supplierFilter} onValueChange={setSupplierFilter}>
               <SelectTrigger className="h-8 w-[220px]"><SelectValue placeholder="All suppliers" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All suppliers</SelectItem>
@@ -144,7 +165,7 @@ export function BillsDue() {
                   <SelectItem key={id} value={id}>{name}</SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </Select>}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
               Pay by
               <Input

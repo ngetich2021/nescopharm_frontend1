@@ -1,7 +1,5 @@
 import { SupplierPaymentsTable } from "./components/supplier-payments-table"
 import { SupplierPaymentsSummary } from "./components/supplier-payments-summary"
-import { BillsDue } from "./components/bills-due"
-
 export const metadata = {
   title: "Payments | Citimax - Enterprise Resource Management",
   description: "Manage and track payments to suppliers",
@@ -16,9 +14,6 @@ export default function SupplierPaymentsPage() {
       </div>
 
       <SupplierPaymentsSummary />
-
-      {/* Unpaid bills past their supplier's credit days, to pick and pay */}
-      <BillsDue />
 
       <SupplierPaymentsTable />
     </div>
