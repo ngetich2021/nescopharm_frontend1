@@ -252,8 +252,14 @@ class SupplierController extends Controller
             });
 
         // Optional period: what came before it is one opening balance line, what came after is left out.
+        // ?period=all: the whole account, from the first record to today (the full statement page's default).
         $from = $request->filled('date_from') ? substr($request->input('date_from'), 0, 10) : null;
         $to = $request->filled('date_to') ? substr($request->input('date_to'), 0, 10) : null;
+        if ($request->input('period') === 'all') {
+            $from = $rows->isEmpty() ? now()->toDateString() : (string) $rows->first()['date'];
+            $to = now()->toDateString();
+        }
+        $allRows = $rows;
         if ($from || $to) {
             $before = $from ? $rows->filter(fn ($e) => $e['date'] < $from) : collect();
             $inPeriod = $rows->filter(fn ($e) => (!$from || $e['date'] >= $from) && (!$to || $e['date'] <= $to))->values();
@@ -266,6 +272,13 @@ class SupplierController extends Controller
             $balance = $rows->isEmpty() ? $opening : (float) $rows->last()['balance'];
         }
 
+        $termsDays = max(0, (int) $supplier->payment_terms_days);
+        // A period ending in the future (this month, say) is aged as at today.
+        $asAt = min($to ?: now()->toDateString(), now()->toDateString());
+        $company = \App\Models\Company::find($supplier->company_id, ['id', 'name', 'logo_url', 'letterhead_url']);
+        $periodFrom = $from ?: ($allRows->isEmpty() ? null : (string) $allRows->first()['date']);
+        $periodTo = $to ?: now()->toDateString();
+
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -275,8 +288,93 @@ class SupplierController extends Controller
                     'paid' => round($rows->sum('paid'), 2),
                     'balance' => $balance,
                 ],
+                'supplier' => $supplier->only(['id', 'name', 'contact_person', 'email', 'phone', 'address', 'tax_information',
+                    'payment_terms_type', 'payment_terms_days', 'payment_terms_description', 'credit_limit']),
+                'company' => $company ? ['name' => $company->name, 'logo_url' => $company->logo_url, 'letterhead_url' => $company->letterhead_url] : null,
+                'period' => [
+                    'from' => $periodFrom,
+                    'to' => $periodTo,
+                    'label' => ($periodFrom ? \Carbon\Carbon::parse($periodFrom)->format('d/m/Y') : '') . ' - ' . \Carbon\Carbon::parse($periodTo)->format('d/m/Y'),
+                ],
+                'opening_balance' => $from ? round((float) ($rows->first()['balance'] ?? 0), 2) : 0.0,
+                'closing_balance' => round($balance, 2),
+                'terms_days' => $termsDays,
+                'bills' => $this->billsPayable($allRows, $asAt, $termsDays),
             ],
         ]);
+    }
+
+    /**
+     * Each bill still on the account as at a date, as on the bills payable tracker: due on its date plus the
+     * supplier's credit days, payments and debit notes clearing the oldest bills first. Paid, Part Paid,
+     * Unpaid (within terms) or Overdue, with the days overdue and an ageing by the bill's age.
+     */
+    private function billsPayable($rows, string $asAt, int $termsDays): array
+    {
+        $upTo = $rows->filter(fn ($e) => $e['date'] <= $asAt);
+        $credit = round((float) $upTo->sum('paid'), 2);
+        $asAtDay = \Carbon\Carbon::parse($asAt)->startOfDay();
+        $n = $termsDays;
+        $buckets = [
+            ['label' => "Within terms (0-{$n} days)", 'amount' => 0.0],
+            ['label' => ($n + 1) . '-' . ($n + 30) . ' days', 'amount' => 0.0],
+            ['label' => ($n + 31) . '-' . ($n + 60) . ' days', 'amount' => 0.0],
+            ['label' => 'Over ' . ($n + 60) . ' days', 'amount' => 0.0],
+        ];
+
+        $bills = [];
+        foreach ($upTo->filter(fn ($e) => $e['billed'] > 0)->sortBy('date')->values() as $e) {
+            $amount = round((float) $e['billed'], 2);
+            $paid = round(min($amount, max(0, $credit)), 2);
+            $credit = round($credit - $paid, 2);
+            $balance = round($amount - $paid, 2);
+            $date = \Carbon\Carbon::parse($e['date'])->startOfDay();
+            $due = $date->copy()->addDays($termsDays);
+            $age = (int) $date->diffInDays($asAtDay, false);
+            $overdue = $balance > 0 && $due->lt($asAtDay) ? (int) $due->diffInDays($asAtDay) : 0;
+            $bucket = null;
+            if ($balance > 0) {
+                $bucket = $overdue === 0 ? 0 : ($overdue <= 30 ? 1 : ($overdue <= 60 ? 2 : 3));
+                $buckets[$bucket]['amount'] += $balance;
+            }
+            $bills[] = [
+                'date' => $e['date'],
+                'reference' => $e['reference'],
+                'description' => $e['description'],
+                'amount' => $amount,
+                'paid' => $paid,
+                'balance' => $balance,
+                'due_date' => $due->toDateString(),
+                'age_days' => max(0, $age),
+                'days_overdue' => $overdue,
+                'status' => $balance <= 0 ? 'Paid' : ($overdue > 0 ? 'Overdue' : ($paid > 0 ? 'Part Paid' : 'Unpaid')),
+                'bucket' => $bucket,
+            ];
+        }
+
+        $open = array_values(array_filter($bills, fn ($b) => $b['balance'] > 0));
+        $outstanding = round(array_sum(array_column($open, 'balance')), 2);
+        $overdue = round(array_sum(array_map(fn ($b) => $b['days_overdue'] > 0 ? $b['balance'] : 0, $open)), 2);
+        $nextDue = collect($open)->filter(fn ($b) => $b['days_overdue'] === 0)->min('due_date');
+
+        return [
+            'as_at' => $asAt,
+            'rows' => $bills,
+            'buckets' => array_map(fn ($b) => ['label' => $b['label'], 'amount' => round($b['amount'], 2)], $buckets),
+            'summary' => [
+                'billed' => round(array_sum(array_column($bills, 'amount')), 2),
+                'paid' => round(array_sum(array_column($bills, 'paid')), 2),
+                'outstanding' => $outstanding,
+                'overdue' => $overdue,
+                'within_terms' => round($outstanding - $overdue, 2),
+                'bills_open' => count($open),
+                'bills_overdue' => count(array_filter($open, fn ($b) => $b['days_overdue'] > 0)),
+                'bills_paid' => count($bills) - count($open),
+                // Paid ahead of the bills (an advance), not yet against any bill.
+                'advance' => max(0, $credit),
+                'next_due_date' => $nextDue,
+            ],
+        ];
     }
 
     public function store(Request $request)

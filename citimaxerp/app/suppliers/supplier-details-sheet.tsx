@@ -198,12 +198,40 @@ export function SupplierDetailsSheet({ supplierId, open, onOpenChange }: Supplie
                           <Receipt className="h-5 w-5" />
                           Account Statement
                         </span>
-                        <span className={`text-base ${statement.totals.balance > 0 ? "text-red-600" : "text-green-700"}`}>
-                          {statement.totals.balance > 0 ? "Owed " : "Balance "}KES {money(statement.totals.balance)}
+                        <span className="flex items-center gap-3">
+                          <span className={`text-base ${statement.totals.balance > 0 ? "text-red-600" : "text-green-700"}`}>
+                            {statement.totals.balance > 0 ? "Owed " : "Balance "}KES {money(statement.totals.balance)}
+                          </span>
+                          {/* The full statement: period, ageing by credit days, payment plan, print and download */}
+                          <Button variant="outline" size="sm" asChild>
+                            <a href={`/suppliers/${supplier.id}/statement`}>
+                              <FileText className="h-4 w-4 mr-2" />
+                              Full Statement
+                            </a>
+                          </Button>
                         </span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
+                      {statement.bills && statement.bills.summary.outstanding > 0 && (
+                        <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+                          <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2">
+                            <div className="text-blue-700">Unpaid, within {statement.terms_days ?? 0} days</div>
+                            <div className="font-semibold tabular-nums text-blue-800">KES {money(statement.bills.summary.within_terms)}</div>
+                            <div className="text-blue-700">{statement.bills.summary.bills_open - statement.bills.summary.bills_overdue} bills</div>
+                          </div>
+                          <div className="rounded border border-red-200 bg-red-50 px-3 py-2">
+                            <div className="text-red-700">Overdue, over {statement.terms_days ?? 0} days</div>
+                            <div className="font-semibold tabular-nums text-red-800">KES {money(statement.bills.summary.overdue)}</div>
+                            <div className="text-red-700">{statement.bills.summary.bills_overdue} bills</div>
+                          </div>
+                          <div className="rounded border bg-gray-50 px-3 py-2">
+                            <div className="text-gray-600">Next bill falls due</div>
+                            <div className="font-semibold">{statement.bills.summary.next_due_date ? shortDate(statement.bills.summary.next_due_date) : "—"}</div>
+                            <div className="text-gray-600">Net {statement.terms_days ?? 0} days</div>
+                          </div>
+                        </div>
+                      )}
                       {statement.entries.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No bills or payments recorded.</p>
                       ) : (

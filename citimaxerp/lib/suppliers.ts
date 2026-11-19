@@ -130,9 +130,61 @@ export interface SupplierStatementEntry {
   balance: number
 }
 
+/** A bill as on the bills payable tracker: due on its date + the supplier's credit days, paid oldest first. */
+export interface SupplierBillRow {
+  date: string
+  reference: string
+  description: string
+  amount: number
+  paid: number
+  balance: number
+  due_date: string
+  age_days: number
+  days_overdue: number
+  status: "Paid" | "Part Paid" | "Unpaid" | "Overdue"
+  bucket: number | null
+}
+
+export interface SupplierBillsPayable {
+  as_at: string
+  rows: SupplierBillRow[]
+  buckets: { label: string; amount: number }[]
+  summary: {
+    billed: number
+    paid: number
+    outstanding: number
+    overdue: number
+    within_terms: number
+    bills_open: number
+    bills_overdue: number
+    bills_paid: number
+    advance: number
+    next_due_date: string | null
+  }
+}
+
 export interface SupplierStatement {
   entries: SupplierStatementEntry[]
   totals: { billed: number; paid: number; balance: number }
+  supplier?: {
+    id: string
+    name: string
+    contact_person?: string | null
+    email?: string | null
+    phone?: string | null
+    address?: string | null
+    tax_information?: string | null
+    payment_terms_type?: string | null
+    payment_terms_days?: number | null
+    payment_terms_description?: string | null
+    credit_limit?: string | number | null
+  }
+  company?: { name: string; logo_url?: string | null; letterhead_url?: string | null } | null
+  period?: { from: string | null; to: string; label: string }
+  opening_balance?: number
+  closing_balance?: number
+  terms_days?: number
+  bills?: SupplierBillsPayable
 }
 
 // Bills, debit notes and payments with the running amount owed to the supplier.
@@ -175,8 +227,8 @@ export async function getSupplierLedger(id: string, period?: { from?: string; to
   throw new Error(response.message || "Failed to fetch supplier ledger")
 }
 
-export async function getSupplierStatement(id: string, period?: { from?: string; to?: string }): Promise<SupplierStatement> {
-  const qs = toQueryString({ date_from: period?.from, date_to: period?.to })
+export async function getSupplierStatement(id: string, period?: { from?: string; to?: string; all?: boolean }): Promise<SupplierStatement> {
+  const qs = toQueryString(period?.all ? { period: "all" } : { date_from: period?.from, date_to: period?.to })
   const response = await apiCall<{ status: string; data: SupplierStatement; message?: string }>(
     `/suppliers/${id}/statement${qs ? `?${qs}` : ""}`,
     "GET",
