@@ -27,6 +27,7 @@ import { getSuppliers } from "@/lib/suppliers"
 import { getPurchaseOrders } from "@/lib/purchaseorders"
 import { Loader2, CreditCard, Building2, Ticket, FileText, Banknote } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { PaidFromPicker } from "@/components/paid-from-picker"
 
 interface CreateSupplierPaymentSheetProps {
   isOpen: boolean
@@ -322,15 +323,6 @@ export default function CreateSupplierPaymentSheet({
     })
   }
 
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case "bank_transfer": return <Building2 className="mr-2 h-4 w-4" />
-      case "cash": return <Banknote className="mr-2 h-4 w-4" />
-      case "cheque": return <Ticket className="mr-2 h-4 w-4" />
-      default: return <CreditCard className="mr-2 h-4 w-4" />
-    }
-  }
-
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
@@ -492,31 +484,14 @@ export default function CreateSupplierPaymentSheet({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-5">
-                  {/* Payment Method */}
-                  <div className="space-y-2">
-                    <Label htmlFor="payment_method" className="text-sm font-medium">Payment Method *</Label>
-                    <Select
-                      value={formData.payment_method}
-                      onValueChange={(value) =>
-                        handleSelectChange("payment_method", value)
-                      }
-                    >
-                      <SelectTrigger className="h-10">
-                        <div className="flex items-center">
-                          {getPaymentMethodIcon(formData.payment_method)}
-                          <SelectValue placeholder="Select method" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="mpesa">M-Pesa</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="cheque">Cheque</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {/* Who pays: Petty Cash (cash) or Prime Bank (transfer, cheque, M-Pesa) */}
+                <PaidFromPicker
+                  method={formData.payment_method}
+                  onMethodChange={(value) => handleSelectChange("payment_method", value)}
+                  supplierName={suppliers.find((s) => s.id === formData.supplier_id)?.name ?? null}
+                />
 
+                <div className="grid grid-cols-2 gap-5">
                   {/* Transaction Reference */}
                   <div className="space-y-2">
                     <Label htmlFor="transaction_reference" className="text-sm font-medium">

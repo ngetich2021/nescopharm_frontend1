@@ -48,6 +48,28 @@ class BankTransferController extends Controller
         return response()->json(['status' => 'success', 'data' => $this->moneyAccounts($request->user()->company_id)]);
     }
 
+    /**
+     * Paid from (Petty Cash / Prime Bank, with balances) and the ledger account a supplier payment
+     * is charged to (Accounts Payables), for the supplier and transporter payment forms.
+     */
+    public function paymentSources(Request $request)
+    {
+        $allowed = collect(['can_create_payments', 'can_view_payments', 'can_pay_delivery_invoices', 'can_view_expenses', 'can_view_bank_accounts'])
+            ->contains(fn ($p) => $this->hasPermission($request, $p));
+        if (!$allowed) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view payment accounts.'], 403);
+        }
+        $companyId = $request->user()->company_id;
+        $payablesId = DB::table('company_account_mappings')->where('company_id', $companyId)->whereNull('context_type')
+            ->where('is_active', true)->where('mapping_key', 'accounts_payable')->value('chart_of_account_id');
+        $payables = $payablesId ? ChartOfAccount::find($payablesId, ['id', 'account_code', 'account_name']) : null;
+
+        return response()->json(['status' => 'success', 'data' => [
+            'paid_from' => app(\App\Services\CashBookService::class)->paymentSources($companyId),
+            'payables' => $payables ? ['id' => $payables->id, 'code' => $payables->account_code, 'name' => $payables->account_name] : null,
+        ]]);
+    }
+
     public function index(Request $request)
     {
         if (!$this->hasPermission($request, 'can_view_bank_accounts')) {

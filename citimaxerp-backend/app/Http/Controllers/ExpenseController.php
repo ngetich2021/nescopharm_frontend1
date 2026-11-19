@@ -950,10 +950,17 @@ class ExpenseController extends Controller
         }
         $companyId = $user->company_id;
 
-        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)->where('account_type', 'expense')
+        // Every main account of the chart (Assets ... Expenses); the money accounts that pay
+        // (Prime Bank, Cash at Hand) are left out - money moving between them is a transfer.
+        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)
             ->where('is_active', true)->orderBy('account_code')
             ->get(['id', 'account_code', 'account_name', 'account_subtype', 'parent_id']);
         $hasChildren = $accounts->pluck('parent_id')->filter()->flip();
+        $money = app(\App\Services\CashBookService::class)->moneyAccounts($companyId)->pluck('id')->flip();
+        // Nor the Opening Balance Difference, which only balances figures brought from the old system.
+        $openingDiff = DB::table('company_account_mappings')->where('company_id', $companyId)->whereNull('context_type')
+            ->where('mapping_key', 'opening_balance_equity')->value('chart_of_account_id');
+        $accounts = $accounts->reject(fn ($a) => (isset($money[$a->id]) && !isset($hasChildren[$a->id])) || $a->id === $openingDiff)->values();
         $byId = $accounts->keyBy('id');
         $rootOf = function ($a) use ($byId) {
             while ($a->parent_id && isset($byId[$a->parent_id])) {
@@ -972,20 +979,7 @@ class ExpenseController extends Controller
             return ['id' => $root->id, 'code' => $root->account_code, 'name' => $root->account_name, 'accounts' => $subs];
         })->values();
 
-        $mapped = fn (array $keys) => DB::table('company_account_mappings')->where('company_id', $companyId)
-            ->whereNull('context_type')->where('is_active', true)->whereIn('mapping_key', $keys)
-            ->orderByRaw("CASE mapping_key " . collect($keys)->map(fn ($k, $i) => "WHEN '{$k}' THEN {$i}")->implode(' ') . " END")
-            ->value('chart_of_account_id');
-        $sources = collect([
-            ['key' => 'petty_cash', 'methods' => ['cash'], 'account_id' => $mapped(['cash_on_hand', 'petty_cash'])],
-            ['key' => 'prime_bank', 'methods' => ['check', 'bank_transfer'], 'account_id' => $mapped(['main_bank'])],
-        ])->filter(fn ($s) => $s['account_id']);
-        $money = \App\Models\ChartOfAccount::whereIn('id', $sources->pluck('account_id'))->get();
-        $balances = app(\App\Services\LedgerBalanceService::class)->balances($companyId, null, $money);
-        $paidFrom = $sources->map(function ($s) use ($money, $balances) {
-            $a = $money->firstWhere('id', $s['account_id']);
-            return $s + ['code' => $a?->account_code, 'name' => $a?->account_name, 'balance' => (float) ($balances[$s['account_id']] ?? 0)];
-        })->values();
+        $paidFrom = app(\App\Services\CashBookService::class)->paymentSources($companyId, ['check', 'bank_transfer']);
 
         return response()->json(['status' => 'success', 'data' => ['groups' => $groups, 'paid_from' => $paidFrom]]);
     }
@@ -998,13 +992,13 @@ class ExpenseController extends Controller
             return 'Choose a ledger account from your chart of accounts.';
         }
         if (!$account->is_active) {
-            return "{$account->account_code} {$account->account_name} is inactive. Choose another account.";
+            return "{$account->account_name} is inactive. Choose another account.";
         }
-        if ($account->account_type !== 'expense') {
-            return "{$account->account_code} {$account->account_name} is not an expense account. Choose one under Cost of Sales or Expenses.";
+        if (app(\App\Services\CashBookService::class)->moneyAccounts($companyId)->contains('id', $account->id)) {
+            return "{$account->account_name} is where money is paid from, not what it pays for. Money moved between Prime Bank and Cash at Hand is a transfer (Finance > Bank Accounts).";
         }
         if (\App\Models\ChartOfAccount::where('parent_id', $account->id)->where('is_active', true)->exists()) {
-            return "{$account->account_code} {$account->account_name} is a main account. Choose the sub-account under it.";
+            return "{$account->account_name} is a main account. Choose the sub-account under it.";
         }
 
         return null;

@@ -825,10 +825,11 @@ class DataImportController extends Controller
         $summary = $this->blankSummary();
         $results = [];
 
-        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)->where('account_type', 'expense')
+        $accounts = \App\Models\ChartOfAccount::where('company_id', $companyId)
             ->where('is_active', true)->get(['id', 'account_code', 'account_name', 'parent_id']);
         $parents = $accounts->pluck('parent_id')->filter()->flip();
-        $postable = $accounts->filter(fn ($a) => !isset($parents[$a->id]));
+        $money = app(\App\Services\CashBookService::class)->moneyAccounts($companyId)->pluck('id')->flip();
+        $postable = $accounts->filter(fn ($a) => !isset($parents[$a->id]) && !isset($money[$a->id]));
         $byCode = $postable->keyBy(fn ($a) => mb_strtolower(trim($a->account_code)));
         $byName = $postable->groupBy(fn ($a) => $this->nameKey($a->account_name));
         $allById = $accounts->keyBy('id');
@@ -905,7 +906,7 @@ class DataImportController extends Controller
                 $account = (object) ['id' => $existing->account_id, 'account_code' => '', 'account_name' => $accountNames[$existing->account_id], 'parent_id' => null];
             }
             if (!$account) {
-                $fail("No active sub-account \"{$cell('sub_account')}\" under Cost of Sales or Expenses.");
+                $fail("No active sub-account \"{$cell('sub_account')}\" in the chart of accounts (Prime Bank and Cash at Hand are what pays, not what is paid for).");
                 continue;
             }
             if ($cell('main_account') !== '' && isset($allById[$account->id])) {

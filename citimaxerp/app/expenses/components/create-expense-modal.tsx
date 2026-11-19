@@ -35,9 +35,6 @@ import { FileLink } from "@/components/file-preview"
 const recurringFrequencies: RecurringFrequency[] = ["weekly", "monthly", "quarterly", "yearly"]
 const expenseStatuses: ExpenseStatus[] = ["pending", "approved", "rejected", "paid"]
 
-const ksh = (n: number) =>
-  `Ksh ${Math.abs(n).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${n < 0 ? " Cr" : ""}`
-
 const formSchema = z
   .object({
     vendorName: z.string().min(1, { message: "Who was paid is required." }),
@@ -263,25 +260,18 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
   }
 
   const sourceCard = (key: ExpensePaidFrom["key"], title: string, Icon: typeof Wallet) => {
-    const s = paidFrom.find((p) => p.key === key)
     const active = source === key
     return (
       <button
         type="button"
         onClick={() => form.setValue("paidFrom", key, { shouldDirty: true })}
         className={cn(
-          "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+          "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
           active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50",
         )}
       >
-        <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
-        <div className="min-w-0">
-          <div className="text-sm font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground truncate">
-            {s ? `${s.code} ${s.name}` : "Not set up in Account Mappings"}
-          </div>
-          {s && <div className="text-xs font-medium mt-0.5">Balance {ksh(s.balance)}</div>}
-        </div>
+        <Icon className={cn("h-5 w-5 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+        <span className="text-sm font-medium">{title}</span>
       </button>
     )
   }
@@ -315,13 +305,12 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder={loadingAccounts ? "Loading..." : "e.g. 6000 Expenses"} />
+                            <SelectValue placeholder={loadingAccounts ? "Loading..." : "e.g. Expenses"} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {groups.map((g) => (
                             <SelectItem key={g.id} value={g.id}>
-                              <span className="font-mono text-xs text-muted-foreground mr-2">{g.code}</span>
                               {g.name}
                             </SelectItem>
                           ))}
@@ -374,7 +363,7 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
                   <FormItem>
                     <FormLabel>Paid from</FormLabel>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {sourceCard("petty_cash", "Petty Cash (Cash at Hand)", Wallet)}
+                      {sourceCard("petty_cash", "Petty Cash / Cash at Hand", Wallet)}
                       {sourceCard("prime_bank", "Prime Bank", Landmark)}
                     </div>
                     <FormMessage />

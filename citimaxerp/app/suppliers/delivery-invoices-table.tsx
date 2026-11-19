@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
+import { PaidFromPicker } from "@/components/paid-from-picker";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -78,13 +79,6 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-gray-100 text-gray-800",
 };
 
-const PAYMENT_METHODS = [
-  { value: "cash", label: "Cash" },
-  { value: "mpesa", label: "M-Pesa" },
-  { value: "bank_transfer", label: "Bank Transfer" },
-  { value: "cheque", label: "Cheque" },
-  { value: "other", label: "Other" },
-];
 
 export function DeliveryInvoicesTable() {
   const router = useRouter();
@@ -95,7 +89,7 @@ export function DeliveryInvoicesTable() {
   const [payingInvoice, setPayingInvoice] = useState<DeliveryInvoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<DeliveryInvoice | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
   // Cheque payment safeguards
@@ -202,7 +196,7 @@ export function DeliveryInvoicesTable() {
 
   const openPayModal = (invoice: DeliveryInvoice) => {
     setPayingInvoice(invoice);
-    setPaymentMethod("");
+    setPaymentMethod("cash");
     setPaymentReference("");
     setPaymentDate("");
     setChequeNumber("");
@@ -694,19 +688,11 @@ export function DeliveryInvoicesTable() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="payment_method">Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger id="payment_method">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PaidFromPicker
+              method={paymentMethod}
+              onMethodChange={setPaymentMethod}
+              supplierName={payingInvoice?.transporter_name ?? null}
+            />
             <div className="grid gap-2">
               <Label htmlFor="payment_reference">Payment Reference (optional)</Label>
               <Input

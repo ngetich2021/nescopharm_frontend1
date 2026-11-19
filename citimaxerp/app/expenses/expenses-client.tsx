@@ -329,7 +329,7 @@ export function ExpensesClient() {
                 <SelectItem value="all">All ledger accounts</SelectItem>
                 {ledgerGroups.flatMap((g) => [
                   <SelectItem key={`g-${g.id}`} value={`group:${g.id}`} className="font-semibold">
-                    {g.code} {g.name} (all)
+                    {g.name} (all)
                   </SelectItem>,
                   ...g.accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id} className="pl-8">

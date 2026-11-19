@@ -56,6 +56,30 @@ class CashBookService
         })->values();
     }
 
+    /**
+     * Where a payment can come from: Petty Cash (Cash at Hand, paid in cash) or Prime Bank (cheque,
+     * transfer, M-Pesa...) - each with its ledger account and balance. The method chosen decides the
+     * account through the payment-method mappings (cash -> Cash at Hand, the rest -> Prime Bank).
+     */
+    public function paymentSources(string $companyId, array $bankMethods = ['cheque', 'bank_transfer', 'mpesa']): \Illuminate\Support\Collection
+    {
+        $mapped = fn (array $keys) => DB::table('company_account_mappings')->where('company_id', $companyId)
+            ->whereNull('context_type')->where('is_active', true)->whereIn('mapping_key', $keys)
+            ->orderByRaw('CASE mapping_key ' . collect($keys)->map(fn ($k, $i) => "WHEN '{$k}' THEN {$i}")->implode(' ') . ' END')
+            ->value('chart_of_account_id');
+        $sources = collect([
+            ['key' => 'petty_cash', 'methods' => ['cash'], 'account_id' => $mapped(['cash_on_hand', 'petty_cash'])],
+            ['key' => 'prime_bank', 'methods' => $bankMethods, 'account_id' => $mapped(['main_bank'])],
+        ])->filter(fn ($s) => $s['account_id']);
+        $money = ChartOfAccount::whereIn('id', $sources->pluck('account_id'))->get();
+        $balances = app(LedgerBalanceService::class)->balances($companyId, null, $money);
+
+        return $sources->map(function ($s) use ($money, $balances) {
+            $a = $money->firstWhere('id', $s['account_id']);
+            return $s + ['code' => $a?->account_code, 'name' => $a?->account_name, 'balance' => (float) ($balances[$s['account_id']] ?? 0)];
+        })->values();
+    }
+
     public function book(string $companyId, ChartOfAccount $account, ?string $dateFrom, ?string $dateTo, bool $showCorrections = false): array
     {
         $base = JournalEntry::where('company_id', $companyId)

@@ -935,6 +935,7 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     // Bank Accounts
     // Withdrawals / transfers between money accounts, with bank charges.
     Route::get('bank-transfers/accounts', [\App\Http\Controllers\BankTransferController::class, 'accounts']);
+    Route::get('payment-sources', [\App\Http\Controllers\BankTransferController::class, 'paymentSources']);
     Route::get('cash-books/{accountId}', [\App\Http\Controllers\BankTransferController::class, 'book']);
     Route::post('bank-transfers/from-expense/{expenseId}', [\App\Http\Controllers\BankTransferController::class, 'fromExpense']);
     Route::get('bank-transfers', [\App\Http\Controllers\BankTransferController::class, 'index']);

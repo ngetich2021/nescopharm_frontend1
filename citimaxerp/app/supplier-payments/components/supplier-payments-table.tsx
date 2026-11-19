@@ -45,6 +45,7 @@ import { ImportHistoryDialog } from "@/components/import-history-dialog"
 import { TablePager, usePaged } from "@/components/ui/table-pager"
 import CreateSupplierPaymentSheet from "./create-supplier-payment-sheet"
 import SupplierPaymentDetailsSheet from "./supplier-payment-details-sheet"
+import { paidFromLabel } from "@/components/paid-from-picker"
 
 export function SupplierPaymentsTable() {
   const { toast } = useToast()
@@ -397,7 +398,7 @@ export function SupplierPaymentsTable() {
                 <TableHead className="font-semibold">Supplier</TableHead>
                 <TableHead className="font-semibold">Invoices / PO</TableHead>
                 <TableHead className="font-semibold">Amount</TableHead>
-                <TableHead className="font-semibold">Method</TableHead>
+                <TableHead className="font-semibold">Paid From</TableHead>
                 <TableHead className="font-semibold">Date</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="text-right font-semibold">Actions</TableHead>
@@ -452,7 +453,7 @@ export function SupplierPaymentsTable() {
                       })()}
                     </TableCell>
                     <TableCell>Ksh. {parseFloat(payment.amount || "0").toLocaleString()}</TableCell>
-                    <TableCell className="capitalize">{payment.payment_method?.replace("_", " ") || "N/A"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{paidFromLabel(payment.payment_method)}</TableCell>
                     <TableCell>{payment.payment_date ? displayDate(new Date(payment.payment_date)) : "N/A"}</TableCell>
                     <TableCell>
                       <Badge className={getStatusBadgeClass(payment.status)}>{payment.status || "N/A"}</Badge>
