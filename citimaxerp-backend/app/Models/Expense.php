@@ -24,6 +24,9 @@ class Expense extends Model
         'vendor_name',
         'description',
         'amount',
+        'includes_vat',
+        'vat_rate',
+        'vat_amount',
         'expense_date',
         'payment_method',
         'receipt_url',
@@ -40,6 +43,9 @@ class Expense extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'includes_vat' => 'boolean',
+        'vat_rate' => 'decimal:2',
+        'vat_amount' => 'decimal:2',
         'expense_date' => 'date:Y-m-d',
         'is_recurring' => 'boolean',
         'tags' => 'array',
@@ -53,6 +59,15 @@ class Expense extends Model
         static::saving(function (Expense $expense) {
             if (!$expense->account_id && $expense->category_id) {
                 $expense->account_id = self::accountForCategory($expense->company_id, $expense->category_id);
+            }
+            // VAT inside the amount paid: 232,000 at 16% holds 32,000 VAT. Without it there is none.
+            if ($expense->includes_vat) {
+                $rate = (float) ($expense->vat_rate ?: self::DEFAULT_VAT_RATE);
+                $expense->vat_rate = $rate;
+                $expense->vat_amount = self::vatIn((float) $expense->amount, $rate);
+            } else {
+                $expense->vat_rate = null;
+                $expense->vat_amount = 0;
             }
         });
 
@@ -133,6 +148,14 @@ class Expense extends Model
     public function category()
     {
         return $this->belongsTo(ExpenseCategory::class, 'category_id');
+    }
+
+    public const DEFAULT_VAT_RATE = 16.0;
+
+    /** The VAT inside a VAT-inclusive amount: 232,000 at 16% -> 32,000. */
+    public static function vatIn(float $amount, float $rate = self::DEFAULT_VAT_RATE): float
+    {
+        return $rate > 0 ? round($amount * $rate / (100 + $rate), 2) : 0.0;
     }
 
     /**

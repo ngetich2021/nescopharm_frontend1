@@ -542,18 +542,26 @@ class LedgerPostingService
             } elseif ($postable && $this->money($expense->amount) > 0) {
                 $amount = $this->money($expense->amount);
                 $label = trim(($expense->description ?: 'Expense') . ($expense->vendor_name ? " - {$expense->vendor_name}" : ''));
+                // VAT included in the amount goes to the VAT Account; the expense account gets the rest.
+                $vat = $expense->includes_vat ? min($this->money($expense->vat_amount), $amount) : 0.0;
+                $net = round($amount - $vat, 2);
+                $lines = [
+                    // The ledger account chosen on the expense; older ones without it go by their category.
+                    $expense->account_id
+                        ? ['account_id' => $expense->account_id, 'debit' => $net, 'description' => $label]
+                        : ['key' => 'miscellaneous_expense', 'context' => ['context_type' => 'expense_category', 'context_id' => $expense->category_id], 'debit' => $net, 'description' => $label],
+                ];
+                if ($vat > 0) {
+                    $lines[] = ['key' => 'expense_vat', 'fallback' => 'input_vat', 'debit' => $vat,
+                        'description' => 'VAT ' . rtrim(rtrim(number_format((float) $expense->vat_rate, 2), '0'), '.') . "% - {$label}"];
+                }
+                $lines[] = ['method' => $expense->payment_method, 'credit' => $amount, 'description' => "Paid ({$expense->payment_method}) - {$label}"];
                 $desired = [
                     'date' => $expense->expense_date ?? $expense->created_at,
                     'prefix' => 'EXP',
                     'reference' => 'EXP-' . substr($expense->id, 0, 8),
                     'description' => "Expense: {$label}",
-                    'lines' => [
-                        // The ledger account chosen on the expense; older ones without it go by their category.
-                        $expense->account_id
-                            ? ['account_id' => $expense->account_id, 'debit' => $amount, 'description' => $label]
-                            : ['key' => 'miscellaneous_expense', 'context' => ['context_type' => 'expense_category', 'context_id' => $expense->category_id], 'debit' => $amount, 'description' => $label],
-                        ['method' => $expense->payment_method, 'credit' => $amount, 'description' => "Paid ({$expense->payment_method}) - {$label}"],
-                    ],
+                    'lines' => $lines,
                 ];
             }
         }

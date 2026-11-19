@@ -71,7 +71,8 @@ class ImportSamples
             'sub_account' => "{$e->account_code} {$e->account_name}",
             'paid_from' => $bank ? 'Prime Bank' : 'Petty Cash',
             'paid_by' => $e->payment_method === 'check' ? 'Cheque' : ($bank ? 'Bank Transfer' : 'Cash'),
-            'amount' => self::money($e->amount), 'vendor_name' => $e->vendor_name, 'description' => $e->description,
+            'amount' => self::money($e->amount), 'includes_vat' => !empty($e->includes_vat) ? 'Yes' : 'No',
+            'vendor_name' => $e->vendor_name, 'description' => $e->description,
             'store' => $e->store_name, 'status' => ucfirst((string) $e->status), 'notes' => $e->notes,
         ];
     }

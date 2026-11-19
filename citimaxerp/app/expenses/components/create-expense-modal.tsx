@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { createExpense, updateExpense, getExpenseLedgerAccounts } from "@/lib/expenses"
 import { useToast } from "@/hooks/use-toast"
+import { EXPENSE_VAT_RATE, vatIn } from "@/types/expenses"
 import type {
   Expense,
   ExpenseCategory,
@@ -44,6 +45,7 @@ const formSchema = z
     description: z.string().min(1, { message: "Description is required." }),
     groupId: z.string().min(1, { message: "Choose the main account." }),
     accountId: z.string().min(1, { message: "Choose the sub-account." }),
+    includesVat: z.boolean().default(false),
     expenseDate: z.date({ message: "Expense date is required." }),
     paidFrom: z.enum(["petty_cash", "prime_bank"] as const),
     bankMethod: z.enum(["check", "bank_transfer"] as const),
@@ -73,6 +75,7 @@ const blank = (): FormData => ({
   description: "",
   groupId: "",
   accountId: "",
+  includesVat: false,
   expenseDate: new Date(),
   paidFrom: "petty_cash",
   bankMethod: "check",
@@ -143,6 +146,7 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
         description: initialData.description,
         groupId: groups.find((g) => g.accounts.some((a) => a.id === accountId))?.id || "",
         accountId,
+        includesVat: !!initialData.includes_vat,
         expenseDate: new Date(initialData.expense_date),
         paidFrom: method === "check" || method === "bank_transfer" || method === "card" ? "prime_bank" : "petty_cash",
         bankMethod: method === "bank_transfer" || method === "card" ? "bank_transfer" : "check",
@@ -165,6 +169,10 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
   const accountId = form.watch("accountId")
   const source = form.watch("paidFrom")
   const isRecurring = form.watch("isRecurring")
+  const includesVat = form.watch("includesVat")
+  const amountTyped = Number.parseFloat(form.watch("amount") || "0") || 0
+  const vatAmount = includesVat ? vatIn(amountTyped) : 0
+  const money = (n: number) => `Ksh ${n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const group = groups.find((g) => g.id === groupId)
 
   // The expense's current account when it is no longer offered (e.g. an old one charged to Inventory).
@@ -228,6 +236,8 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
         vendor_name: values.vendorName.trim(),
         description: values.description.trim(),
         amount: Number.parseFloat(values.amount),
+        includes_vat: values.includesVat,
+        vat_rate: values.includesVat ? EXPENSE_VAT_RATE : null,
         expense_date: format(values.expenseDate, "yyyy-MM-dd"),
         // Petty Cash is paid in cash; Prime Bank by cheque or transfer.
         payment_method: values.paidFrom === "petty_cash" ? "cash" : values.bankMethod,
@@ -429,6 +439,43 @@ export function CreateExpenseModal({ isOpen, onClose, onExpenseCreatedOrUpdated,
                   <div className="hidden md:block" />
                 )}
               </div>
+
+              {/* VAT: does the amount paid include VAT? */}
+              <FormField
+                control={form.control}
+                name="includesVat"
+                render={({ field }) => (
+                  <FormItem className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <FormLabel className="m-0">Amount includes VAT ({EXPENSE_VAT_RATE}%)</FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          {field.value ? "The VAT in it goes to the VAT Account." : "Off: the amount has no VAT."}
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </div>
+                    {field.value && (
+                      <div className="grid grid-cols-3 gap-2 rounded-md bg-muted/50 p-3 text-sm">
+                        <div>
+                          <div className="text-xs text-muted-foreground">Amount paid</div>
+                          <div className="font-medium tabular-nums">{money(amountTyped)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">VAT {EXPENSE_VAT_RATE}%</div>
+                          <div className="font-semibold tabular-nums">{money(vatAmount)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Expense (excl. VAT)</div>
+                          <div className="font-medium tabular-nums">{money(Math.round((amountTyped - vatAmount) * 100) / 100)}</div>
+                        </div>
+                      </div>
+                    )}
+                  </FormItem>
+                )}
+              />
             </Section>
 
             {/* 3. Details */}

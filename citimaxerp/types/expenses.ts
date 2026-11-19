@@ -9,6 +9,10 @@ export interface Expense {
   category_id: string | null
   account_id?: string | null
   account?: { id: string; account_code: string; account_name: string; parent_id: string | null } | null
+  /** The amount paid includes VAT; vat_amount of it goes to the VAT Account. */
+  includes_vat?: boolean
+  vat_rate?: number | string | null
+  vat_amount?: number | string | null
   vendor_name: string
   description: string
   amount: number
@@ -115,6 +119,13 @@ export interface ExpensePaidFrom {
   code: string | null
   name: string | null
   balance: number
+}
+
+export const EXPENSE_VAT_RATE = 16
+
+/** The VAT inside a VAT-inclusive amount: 232,000 at 16% -> 32,000 (same rounding as the server). */
+export function vatIn(amount: number, rate: number = EXPENSE_VAT_RATE): number {
+  return rate > 0 ? Math.round(((amount * rate) / (100 + rate)) * 100) / 100 : 0
 }
 
 /** "6400 Transport" - the account an expense is charged to, else its old category. */

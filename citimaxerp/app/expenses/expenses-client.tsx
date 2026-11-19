@@ -81,6 +81,7 @@ export function ExpensesClient() {
           paid_from: bank ? "Prime Bank" : "Petty Cash",
           paid_by: e.payment_method === "check" ? "Cheque" : bank ? "Bank Transfer" : "Cash",
           amount: Number(e.amount) || 0,
+          includes_vat: e.includes_vat ? "Yes" : "No",
           vendor_name: e.vendor_name,
           description: e.description,
           store: (e as any).store?.name || "",
@@ -179,22 +180,34 @@ export function ExpensesClient() {
   const handleExport = useTableExport(() => ({
     fileName: documentFileName([sessionCompanyName(), "Expenses", todayFileDate()]),
     title: "Expenses",
-    headers: ["S/No", "Date", "Paid To", "Description", "Account", "Ledger Account", "Paid From", "Amount", "Status", "Notes", "Created By"],
-    moneyColumns: [7],
-    rows: filteredExpenses.map((e, i) => [
-      i + 1,
-      e.expense_date ? displayDate(new Date(e.expense_date)) : "",
-      e.vendor_name || "",
-      e.description,
-      mainAccountOf(e.account_id),
-      expenseAccountLabel(e),
-      expensePaidFrom(e.payment_method),
-      Number(e.amount) || 0,
-      e.status,
-      e.notes || "",
-      `${e.created_by?.first_name || ""} ${e.created_by?.last_name || ""}`.trim(),
-    ]),
-    footer: [["", "", "", "", "", "", "Total", filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0), "", "", ""]],
+    headers: ["S/No", "Date", "Paid To", "Description", "Account", "Ledger Account", "Paid From", "Amount", "VAT", "Excl. VAT", "Status", "Notes", "Created By"],
+    moneyColumns: [7, 8, 9],
+    rows: filteredExpenses.map((e, i) => {
+      const amount = Number(e.amount) || 0
+      const vat = e.includes_vat ? Number(e.vat_amount) || 0 : 0
+      return [
+        i + 1,
+        e.expense_date ? displayDate(new Date(e.expense_date)) : "",
+        e.vendor_name || "",
+        e.description,
+        mainAccountOf(e.account_id),
+        expenseAccountLabel(e),
+        expensePaidFrom(e.payment_method),
+        amount,
+        vat,
+        Math.round((amount - vat) * 100) / 100,
+        e.status,
+        e.notes || "",
+        `${e.created_by?.first_name || ""} ${e.created_by?.last_name || ""}`.trim(),
+      ]
+    }),
+    footer: [[
+      "", "", "", "", "", "", "Total",
+      filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+      filteredExpenses.reduce((s, e) => s + (e.includes_vat ? Number(e.vat_amount) || 0 : 0), 0),
+      filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0) - (e.includes_vat ? Number(e.vat_amount) || 0 : 0), 0),
+      "", "", "",
+    ]],
   }))
 
   // Client-side filtering by vendor name and description

@@ -88,6 +88,7 @@ class CompanyAccountMapping extends Model
         // Liabilities
         'accounts_payable' => ['description' => 'Accounts Payable', 'type' => 'liability', 'required' => true],
         'vat_payable' => ['description' => 'VAT Payable (Output VAT)', 'type' => 'liability', 'required' => false],
+        'expense_vat' => ['description' => 'VAT Account (VAT included in expenses)', 'type' => 'liability', 'required' => false],
         'customer_deposits' => ['description' => 'Customer Deposits', 'type' => 'liability', 'required' => false],
         
         // Income

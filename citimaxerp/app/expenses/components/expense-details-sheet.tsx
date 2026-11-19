@@ -171,6 +171,14 @@ export function ExpenseDetailsSheet({ expenseId, isOpen, onClose, onEditClick }:
                       <div>
                         <p className="text-sm text-green-700 mb-1">Total Amount</p>
                         <p className="text-3xl font-bold text-green-900">{formatCurrency(expense.amount)}</p>
+                        {expense.includes_vat ? (
+                          <p className="text-xs text-green-800 mt-1">
+                            Includes VAT {Number(expense.vat_rate) || 16}%: {formatCurrency(Number(expense.vat_amount) || 0)} (VAT Account) · Excl. VAT{" "}
+                            {formatCurrency((Number(expense.amount) || 0) - (Number(expense.vat_amount) || 0))}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-green-700 mt-1">No VAT</p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-green-600 mb-1">Expense Date</p>

@@ -959,8 +959,15 @@ class DataImportController extends Controller
                 $storeId = $store->id;
             }
 
+            $includesVat = $this->yesNo($cell('includes_vat'));
+            if ($cell('includes_vat') !== '' && !in_array(strtolower($cell('includes_vat')), ['yes', 'y', 'no', 'n', 'true', 'false', '1', '0'], true)) {
+                $fail("Includes VAT must be Yes or No, not \"{$cell('includes_vat')}\".");
+                continue;
+            }
+
             $fields = [
                 'account_id' => $account->id,
+                'includes_vat' => (bool) $includesVat,
                 'store_id' => $storeId,
                 'vendor_name' => $cell('vendor_name'),
                 'description' => $cell('description'),
@@ -977,12 +984,17 @@ class DataImportController extends Controller
                 $changes = [];
                 foreach ($fields as $field => $to) {
                     $from = $field === 'expense_date' ? \Carbon\Carbon::parse($existing->expense_date)->toDateString() : $existing->getRawOriginal($field);
-                    $equal = in_array($field, ['amount'], true) ? abs((float) $from - (float) $to) < 0.005 : $same($from, $to);
+                    $equal = match ($field) {
+                        'amount' => abs((float) $from - (float) $to) < 0.005,
+                        'includes_vat' => (bool) $from === (bool) $to,
+                        default => $same($from, $to),
+                    };
                     if (!$equal) {
                         $show = fn ($v) => match ($field) {
                             'account_id' => $accountNames[$v] ?? '-',
                             'store_id' => $stores->firstWhere('id', $v)?->name ?? '-',
                             'payment_method' => $methodLabel($v),
+                            'includes_vat' => $v ? 'Yes' : 'No',
                             'expense_date' => $v ? \Carbon\Carbon::parse($v)->format('d/m/Y') : '-',
                             default => $v,
                         };
@@ -1028,7 +1040,8 @@ class DataImportController extends Controller
             ]);
             $summary['created']++;
             $results[] = $result + ['status' => 'created', 'message' => trim("{$account->account_code} {$account->account_name}") . ' - '
-                . $methodLabel($method) . ' ' . number_format($amount, 2)];
+                . $methodLabel($method) . ' ' . number_format($amount, 2)
+                . ($includesVat ? ' incl. VAT ' . number_format(\App\Models\Expense::vatIn($amount), 2) : '')];
         }
 
         return [$summary, $results];
