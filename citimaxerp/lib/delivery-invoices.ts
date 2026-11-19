@@ -190,6 +190,12 @@ export async function payDeliveryInvoice(
   return response.delivery_invoice;
 }
 
+/** Delete an unpaid delivery invoice; its dispatch goes back to Dispatch Order to be entered again. Returns the server's message. */
+export async function deleteDeliveryInvoice(id: string): Promise<string> {
+  const response = await apiCall<{ status: string; message: string }>(`/delivery-invoices/${id}`, "DELETE");
+  return response?.message || "Delivery invoice deleted.";
+}
+
 /** Accounting corrects a delivery invoice: the amount agreed (not rate x cartons), cartons, transporter inv. no., date, notes. */
 export async function updateDeliveryInvoice(
   id: string,

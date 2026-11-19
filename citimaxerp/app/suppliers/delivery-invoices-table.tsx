@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Wallet, Eye, MoreHorizontal, FileText, Download, Search, ArrowUp, ArrowDown, Pencil } from "lucide-react";
+import { Loader2, Wallet, Eye, MoreHorizontal, FileText, Download, Search, ArrowUp, ArrowDown, Pencil, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
@@ -46,7 +46,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/rbac";
-import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, updateDeliveryInvoice, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
+import { DeliveryInvoice, getDeliveryInvoices, payDeliveryInvoice, updateDeliveryInvoice, deleteDeliveryInvoice, DeliveryInvoicesResponse } from "@/lib/delivery-invoices";
 import { exportTable, type ExportFormat } from "@/lib/table-export";
 import { ExportMenu, ExportSubMenu, useTableExport } from "@/components/export-menu";
 import { DeliveryInvoicesImport, TransporterStatement } from "./delivery-invoices-excel";
@@ -147,6 +147,23 @@ export function DeliveryInvoicesTable() {
       loadInvoices();
     } catch (error: any) {
       toast({ title: "Could not save", description: error.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Delete a wrong (unpaid) invoice: its dispatch goes back to Dispatch Order to be entered again.
+  const [deleting, setDeleting] = useState<DeliveryInvoice | null>(null);
+  const handleDelete = async () => {
+    if (!deleting) return;
+    setSubmitting(true);
+    try {
+      const message = await deleteDeliveryInvoice(deleting.id);
+      toast({ title: "Deleted", description: message });
+      setDeleting(null);
+      loadInvoices();
+    } catch (error: any) {
+      toast({ title: "Could not delete", description: error.message || "Please try again.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -440,6 +457,11 @@ export function DeliveryInvoicesTable() {
                                 <Wallet className="mr-2 h-4 w-4" />
                                 Pay Invoice
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setDeleting(invoice)}>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete &amp; Re-dispatch
+                              </DropdownMenuItem>
                             </>
                           )}
                         </DropdownMenuContent>
@@ -636,6 +658,27 @@ export function DeliveryInvoicesTable() {
             <Button onClick={handleSaveEdit} disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.invoice_number}?</DialogTitle>
+            <DialogDescription>
+              {deleting && (deleting.order_dispatch
+                ? `KES ${Number(deleting.total_amount).toLocaleString()} to ${deleting.transporter_name} for ${orderLabel(deleting)} is removed, and ${orderLabel(deleting)} goes back to Dispatches with "Dispatch Order" so it can be entered again with the right transporter, rate and cartons. Its stock and delivery note stay as they are.`
+                : `KES ${Number(deleting.total_amount).toLocaleString()} to ${deleting.transporter_name} is removed from the transporter's account.`)}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

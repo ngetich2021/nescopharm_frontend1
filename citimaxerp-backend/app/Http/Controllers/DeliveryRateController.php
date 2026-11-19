@@ -57,11 +57,6 @@ class DeliveryRateController extends Controller
         $rates = $query->orderBy('transporter_name')->orderBy('zone')->get();
         // The tab shows Approve from this, so it never disagrees with approve().
         $rates->each(fn (DeliveryRate $rate) => $rate->setAttribute('approval_block', $this->approvalBlock($rate, $user)));
-        // How many dispatches deleting each rate would send back to be dispatched again (one query for all).
-        $open = DeliveryInvoice::whereIn('delivery_rate_id', $rates->pluck('id'))->where('status', 'pending')->whereNull('supplier_payment_id')
-            ->whereHas('orderDispatch', fn ($q) => $q->whereNotIn('status', ['delivered', 'cancelled']))
-            ->selectRaw('delivery_rate_id, count(*) as n')->groupBy('delivery_rate_id')->pluck('n', 'delivery_rate_id');
-        $rates->each(fn (DeliveryRate $rate) => $rate->setAttribute('open_dispatches', (int) ($open[$rate->id] ?? 0)));
 
         return response()->json([
             'status' => 'success',
@@ -273,60 +268,11 @@ class DeliveryRateController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Unauthorized to delete delivery rates.'], 403);
         }
 
-        // Dispatches sent out on this rate whose delivery invoice is still unpaid go back to be
-        // dispatched again (Dispatch Order shows on them), and those invoices are removed.
-        $reopened = \Illuminate\Support\Facades\DB::transaction(function () use ($rate) {
-            $numbers = $this->openDispatchInvoices($rate)->get()
-                ->map(fn (DeliveryInvoice $invoice) => $this->reopenDispatch($invoice))->filter()->values();
-            $rate->delete();
-            return $numbers;
-        });
+        // Only the rate goes: invoices and dispatches already raised on it keep their transporter, zone,
+        // rate per carton and amounts. A wrong delivery invoice is deleted from the invoice itself.
+        $rate->delete();
 
-        $message = 'Delivery rate deleted.';
-        if ($reopened->isNotEmpty()) {
-            $message .= ' ' . $reopened->count() . ' dispatch' . ($reopened->count() === 1 ? '' : 'es')
-                . ' sent on it went back to be dispatched again, and ' . ($reopened->count() === 1 ? 'its' : 'their')
-                . ' delivery invoice' . ($reopened->count() === 1 ? ' was' : 's were') . ' removed: ' . $reopened->implode(', ') . '.';
-        }
-
-        return response()->json(['status' => 'success', 'message' => $message, 'reopened' => $reopened], 200);
-    }
-
-    /**
-     * Unpaid delivery invoices raised on this rate whose dispatch is still on the road (not delivered):
-     * deleting the rate sends these dispatches back to be dispatched again.
-     */
-    protected function openDispatchInvoices(DeliveryRate $rate)
-    {
-        return DeliveryInvoice::where('delivery_rate_id', $rate->id)
-            ->where('status', 'pending')
-            ->whereNull('supplier_payment_id')
-            ->whereHas('orderDispatch', fn ($q) => $q->whereNotIn('status', ['delivered', 'cancelled']));
-    }
-
-    /**
-     * Undo the "Dispatch Order" step for this invoice's dispatch: its logistics record and the unpaid
-     * delivery invoice go (the books follow), and the dispatch is approved and waiting again. Its stock
-     * stays taken (that happened when the dispatch was created) and its delivery note is reused.
-     * Returns the dispatch's invoice number (NSK) or dispatch number.
-     */
-    protected function reopenDispatch(DeliveryInvoice $invoice): ?string
-    {
-        $dispatch = $invoice->orderDispatch()->with('order.invoice:id,order_id,invoice_number')->first();
-        if (!$dispatch) {
-            return null;
-        }
-
-        \App\Models\Logistic::where('delivery_invoice_id', $invoice->id)
-            ->when($dispatch->logistic_id, fn ($q) => $q->orWhere('id', $dispatch->logistic_id))
-            ->get()->each->delete();
-        \App\Models\SupplierPaymentAllocation::where('invoice_type', \App\Models\SupplierPaymentAllocation::DELIVERY_INVOICE)
-            ->where('invoice_id', $invoice->id)->whereNull('applied_at')->delete();
-        $invoice->delete();
-
-        $dispatch->forceFill(['logistic_id' => null, 'status' => 'approved', 'dispatch_date' => null])->save();
-
-        return $dispatch->order?->invoice?->invoice_number ?: $dispatch->dispatch_number;
+        return response()->json(['status' => 'success', 'message' => 'Delivery rate deleted.'], 200);
     }
 
     /** The name to store: an existing supplier's exact name when it is the same transporter ("Imevo Ltd" = "Imevo Limited"). */

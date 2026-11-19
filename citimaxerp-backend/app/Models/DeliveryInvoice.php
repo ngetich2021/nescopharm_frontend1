@@ -209,6 +209,29 @@ class DeliveryInvoice extends Model
         $this->recordPayment($userId, $paymentMethod, $paymentReference, $paymentDate);
     }
 
+    /**
+     * Delete this unpaid invoice and undo the "Dispatch Order" step it came from, so the dispatch can be
+     * entered again (right transporter/rate/cartons): its logistics record goes, the dispatch is approved
+     * and waiting again, and the books drop the invoice. Stock stays taken (that happened when the
+     * dispatch was created) and the delivery note is reused. Returns the NSK (or dispatch) number.
+     */
+    public function deleteAndReopenDispatch(): ?string
+    {
+        $dispatch = $this->orderDispatch()->with('order.invoice:id,order_id,invoice_number')->first();
+
+        if ($dispatch) {
+            Logistic::where('delivery_invoice_id', $this->id)
+                ->when($dispatch->logistic_id, fn ($q) => $q->orWhere('id', $dispatch->logistic_id))
+                ->get()->each->delete();
+            $dispatch->forceFill(['logistic_id' => null, 'status' => 'approved', 'dispatch_date' => null])->save();
+        }
+        SupplierPaymentAllocation::where('invoice_type', SupplierPaymentAllocation::DELIVERY_INVOICE)
+            ->where('invoice_id', $this->id)->whereNull('applied_at')->delete();
+        $this->delete();
+
+        return $dispatch ? ($dispatch->order?->invoice?->invoice_number ?: $dispatch->dispatch_number) : null;
+    }
+
     /** Cancelling also cancels its payment, which takes both back out of the books. */
     public function cancel()
     {

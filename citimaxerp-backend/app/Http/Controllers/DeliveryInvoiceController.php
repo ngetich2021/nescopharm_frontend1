@@ -427,6 +427,40 @@ class DeliveryInvoiceController extends Controller
         ], 200);
     }
 
+    /**
+     * Delete an unpaid delivery invoice raised in error (wrong transporter, rate or cartons): its dispatch
+     * goes back to "Dispatch Order" so it can be entered again. Accounting (Accountant) or an admin.
+     */
+    public function destroy(Request $request, $id)
+    {
+        $user = $request->user();
+
+        if (!$this->hasPermission($request, 'can_pay_delivery_invoices', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Only accounting can delete delivery invoices.'], 403);
+        }
+
+        $invoice = DeliveryInvoice::with('orderDispatch')->where('company_id', $user->company_id)->find($id);
+        if (!$invoice) {
+            return response()->json(['status' => 'failed', 'message' => 'Delivery invoice not found.'], 404);
+        }
+        if ($invoice->status === 'paid' || $invoice->supplier_payment_id) {
+            return response()->json(['status' => 'failed', 'message' => "{$invoice->invoice_number} is paid, so it cannot be deleted. Cancel or delete its payment on the transporter's Account Statement first."], 422);
+        }
+        if ($invoice->orderDispatch?->status === 'delivered') {
+            return response()->json(['status' => 'failed', 'message' => "The dispatch for {$invoice->invoice_number} is already delivered, so it cannot be dispatched again. Use Edit Amount / Details to correct the invoice instead."], 422);
+        }
+
+        $number = $invoice->invoice_number;
+        $reopened = \Illuminate\Support\Facades\DB::transaction(fn () => $invoice->deleteAndReopenDispatch());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $reopened
+                ? "{$number} deleted. {$reopened} is back on Dispatches with Dispatch Order, ready to be entered again."
+                : "{$number} deleted.",
+        ], 200);
+    }
+
     public function cancel(Request $request, $id)
     {
         $user = $request->user();

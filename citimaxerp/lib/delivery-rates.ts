@@ -16,8 +16,6 @@ export interface DeliveryRate {
   approval_notes: string | null;
   // From the server: why the signed-in user may not approve it (an accountant who raised or edited it).
   approval_block?: string | null;
-  // Dispatches still on the road with an unpaid delivery invoice on this rate: deleting it sends them back.
-  open_dispatches?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

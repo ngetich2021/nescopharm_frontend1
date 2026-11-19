@@ -635,6 +635,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/delivery-invoices/{id}', [\App\Http\Controllers\DeliveryInvoiceController::class, 'update']);
     Route::post('/delivery-invoices/{id}/pay',[\App\Http\Controllers\DeliveryInvoiceController::class, 'pay']);
     Route::post('/delivery-invoices/{id}/cancel', [\App\Http\Controllers\DeliveryInvoiceController::class, 'cancel']);
+    Route::delete('/delivery-invoices/{id}', [\App\Http\Controllers\DeliveryInvoiceController::class, 'destroy']);
 
     // Delivery Notes (auto-generated once a dispatch is marked delivered)
     Route::get('/delivery-notes', [\App\Http\Controllers\DeliveryNoteController::class, 'index']);

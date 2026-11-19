@@ -574,12 +574,8 @@ export function DeliveryRatesTab() {
           <DialogHeader>
             <DialogTitle>Delete Delivery Rate</DialogTitle>
             <DialogDescription>
-              {(() => {
-                const n = allRates.find((r) => r.id === deletingId)?.open_dispatches || 0;
-                return n > 0
-                  ? `${n} dispatch${n === 1 ? " was" : "es were"} sent on this rate and ${n === 1 ? "its" : "their"} delivery invoice${n === 1 ? " is" : "s are"} unpaid. ${n === 1 ? "It goes" : "They go"} back to be dispatched again (Dispatch Order) with the right rate, and ${n === 1 ? "that invoice is" : "those invoices are"} removed. Paid or delivered ones are kept. This cannot be undone.`
-                  : "This cannot be undone. Dispatches already sent and paid on this rate are kept.";
-              })()}
+              Only the rate is deleted. Delivery invoices and dispatches already raised on it are not changed.
+              This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
