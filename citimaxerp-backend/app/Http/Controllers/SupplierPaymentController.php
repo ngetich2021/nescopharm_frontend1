@@ -362,6 +362,94 @@ class SupplierPaymentController extends Controller
     }
 
     /**
+     * Bills due for payment, every supplier: each unpaid bill and delivery invoice, due on its date plus
+     * the supplier's credit days (Payment Terms Days), with days overdue. ?pay_by (default today) marks
+     * what must be paid by then; a pending cheque already put on a bill is shown so it is not paid twice.
+     */
+    public function due(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_payments', $user->company_id)
+            && !$this->hasPermission($request, 'can_create_payments', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view bills due.'], 403);
+        }
+        $today = now()->startOfDay();
+        $payBy = $request->filled('pay_by') ? \Carbon\Carbon::parse($request->input('pay_by'))->startOfDay() : $today->copy();
+
+        $suppliers = Supplier::where('company_id', $user->company_id)->get(['id', 'name', 'payment_terms_days'])->keyBy('id');
+        $ids = $suppliers->keys()->all();
+
+        $bills = AccountsPayable::where('company_id', $user->company_id)->whereIn('vendor_id', $ids)
+            ->whereNotIn('status', ['draft', 'cancelled', 'paid'])
+            ->where(fn ($q) => $q->whereNull('metadata')->orWhereRaw("coalesce(metadata::jsonb->>'kind', '') <> 'debit_note'"))
+            ->where('balance_amount', '>', 0)
+            ->get()
+            ->map(fn ($b) => ['type' => SupplierPaymentAllocation::BILL, 'id' => $b->id, 'supplier_id' => $b->vendor_id,
+                'number' => $b->invoice_number, 'date' => $b->invoice_date?->toDateString(), 'description' => $b->description,
+                'total' => (float) $b->total_amount, 'paid' => (float) $b->paid_amount, 'balance' => (float) $b->balance_amount]);
+        $deliveries = DeliveryInvoice::with('orderDispatch.order:id,order_number')
+            ->where('company_id', $user->company_id)->whereIn('supplier_id', $ids)->where('status', 'pending')
+            ->get()
+            ->map(fn ($d) => ['type' => SupplierPaymentAllocation::DELIVERY_INVOICE, 'id' => $d->id, 'supplier_id' => $d->supplier_id,
+                'number' => SupplierPaymentAllocation::label($d), 'date' => ($d->invoice_date ?? $d->created_at)?->toDateString(),
+                'description' => 'Delivery - ' . ($d->order_reference ?: $d->orderDispatch?->order?->order_number)
+                    . ($d->number_of_cartons ? " ({$d->number_of_cartons} ctns)" : ''),
+                'total' => (float) $d->total_amount, 'paid' => (float) $d->amount_paid, 'balance' => (float) $d->total_amount - (float) $d->amount_paid])
+            ->filter(fn ($d) => $d['balance'] > 0.004);
+
+        // Cheques written but not yet cleared, by the invoice they pay.
+        $pendingCheques = DB::table('supplier_payment_allocations as a')
+            ->join('supplier_payments as p', 'p.id', '=', 'a.supplier_payment_id')
+            ->where('a.company_id', $user->company_id)->whereNull('a.applied_at')->where('p.status', 'pending')
+            ->groupBy('a.invoice_type', 'a.invoice_id')
+            ->selectRaw("a.invoice_type, a.invoice_id, sum(a.amount) as amount, string_agg(coalesce(p.payment_number, ''), ', ') as refs")
+            ->get()->keyBy(fn ($r) => "{$r->invoice_type}:{$r->invoice_id}");
+
+        $rows = $bills->concat($deliveries)->map(function ($i) use ($suppliers, $today, $payBy, $pendingCheques) {
+            $s = $suppliers[$i['supplier_id']] ?? null;
+            $terms = max(0, (int) ($s?->payment_terms_days ?? 0));
+            $date = \Carbon\Carbon::parse($i['date'] ?? $today)->startOfDay();
+            $due = $date->copy()->addDays($terms);
+            $cheque = $pendingCheques["{$i['type']}:{$i['id']}"] ?? null;
+            $balance = round($i['balance'], 2);
+            $toPay = round(max(0, $balance - (float) ($cheque->amount ?? 0)), 2);
+            return $i + [
+                'supplier_name' => $s?->name,
+                'terms_days' => $terms,
+                'total' => round($i['total'], 2),
+                'paid' => round($i['paid'], 2),
+                'balance' => $balance,
+                'cheque_pending' => round((float) ($cheque->amount ?? 0), 2),
+                'cheque_refs' => $cheque ? trim($cheque->refs, ', ') : null,
+                'to_pay' => $toPay,
+                'due_date' => $due->toDateString(),
+                'age_days' => max(0, (int) $date->diffInDays($today, false)),
+                // 0 = due today; negative = days until due.
+                'days_overdue' => (int) $due->diffInDays($today, false),
+                'status' => $due->lte($today) ? 'Due' : ($due->lte($payBy) ? 'Due by pay date' : 'Not yet due'),
+            ];
+        })->sortBy([['due_date', 'asc'], ['number', 'asc']])->values();
+
+        $sum = fn ($c) => round($c->sum('to_pay'), 2);
+        $dueNow = $rows->where('status', 'Due');
+        $dueBy = $rows->where('status', 'Due by pay date');
+
+        return response()->json(['status' => 'success', 'data' => [
+            'today' => $today->toDateString(),
+            'pay_by' => $payBy->toDateString(),
+            'rows' => $rows,
+            'summary' => [
+                'due_now' => ['count' => $dueNow->count(), 'amount' => $sum($dueNow)],
+                'due_by_pay_date' => ['count' => $dueBy->count(), 'amount' => $sum($dueBy)],
+                'to_pay' => ['count' => $dueNow->count() + $dueBy->count(), 'amount' => round($sum($dueNow) + $sum($dueBy), 2)],
+                'not_yet_due' => ['count' => $rows->where('status', 'Not yet due')->count(), 'amount' => $sum($rows->where('status', 'Not yet due'))],
+                'cheques_pending' => round($rows->sum('cheque_pending'), 2),
+                'outstanding' => round($rows->sum('balance'), 2),
+            ],
+        ]]);
+    }
+
+    /**
      * Unpaid supplier bills (not debit notes) and the transporter's delivery invoices, with what each still
      * owes after payments already put on it. Oldest first, the order payments clear them in.
      */

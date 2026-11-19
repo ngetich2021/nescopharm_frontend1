@@ -70,6 +70,14 @@ export function SupplierPaymentsTable() {
     }
   }, [companyId])
 
+  // A payment made from Bills Due for Payment shows here straight away.
+  useEffect(() => {
+    const refresh = () => fetchPayments()
+    window.addEventListener("supplier-payment-created", refresh)
+    return () => window.removeEventListener("supplier-payment-created", refresh)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function fetchPayments() {
     setIsLoading(true)
     setError(null)
@@ -112,7 +120,8 @@ export function SupplierPaymentsTable() {
   const { pageRows: paginatedPayments, start, pager } = usePaged(filteredPayments, 20, `${search}|${statusFilter}`)
 
   const handlePaymentCreated = () => {
-    fetchPayments()
+    // Refreshes this table and Bills Due for Payment.
+    window.dispatchEvent(new Event("supplier-payment-created"))
     toast({
       title: "Success",
       description: "Payment recorded successfully."

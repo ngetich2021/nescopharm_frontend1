@@ -32,6 +32,8 @@ interface CreateSupplierPaymentSheetProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   onPaymentCreated: () => void
+  // From Bills Due for Payment: open on this supplier with these invoices ticked (amount = their total).
+  preset?: { supplierId: string; invoices: { type: string; id: string; amount: number }[] } | null
 }
 
 interface Supplier {
@@ -54,6 +56,7 @@ export default function CreateSupplierPaymentSheet({
   isOpen,
   onOpenChange,
   onPaymentCreated,
+  preset,
 }: CreateSupplierPaymentSheetProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -85,8 +88,10 @@ export default function CreateSupplierPaymentSheet({
     if (isOpen) {
       fetchSuppliers()
       fetchPurchaseOrders()
+      if (preset?.supplierId) setFormData((f) => ({ ...f, supplier_id: preset.supplierId, purchase_order_id: "" }))
     }
-  }, [isOpen])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, preset])
 
   // Filter POs based on selected supplier
   useEffect(() => {
@@ -107,7 +112,21 @@ export default function CreateSupplierPaymentSheet({
     let cancelled = false
     setLoadingInvoices(true)
     getOpenSupplierInvoices(formData.supplier_id)
-      .then((rows) => { if (!cancelled) setOpenInvoices(rows) })
+      .then((rows) => {
+        if (cancelled) return
+        setOpenInvoices(rows)
+        // Tick the invoices picked on Bills Due for Payment.
+        if (preset && preset.supplierId === formData.supplier_id && preset.invoices.length) {
+          const next: Record<string, string> = {}
+          for (const p of preset.invoices) {
+            const inv = rows.find((r) => r.type === p.type && r.id === p.id)
+            if (inv) next[`${inv.type}:${inv.id}`] = String(Math.min(inv.balance, p.amount))
+          }
+          const total = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+          setPayOn(next)
+          if (total > 0) setFormData((f) => ({ ...f, amount: String(Math.round(total * 100) / 100) }))
+        }
+      })
       .catch(() => { if (!cancelled) setOpenInvoices([]) })
       .finally(() => { if (!cancelled) setLoadingInvoices(false) })
     return () => { cancelled = true }

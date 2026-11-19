@@ -697,6 +697,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Supplier Payment routes
     Route::get('/supplier-payments/open-invoices/{supplierId}', [SupplierPaymentController::class, 'openInvoices']);
+    Route::get('/supplier-payments/due', [SupplierPaymentController::class, 'due']);
     Route::post('/supplier-payments/{id}/cancel', [SupplierPaymentController::class, 'cancel']);
     Route::apiResource('supplier-payments', SupplierPaymentController::class);
 

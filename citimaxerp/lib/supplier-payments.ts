@@ -337,6 +337,47 @@ export async function getOpenSupplierInvoices(supplierId: string): Promise<OpenS
     return response.data ?? [];
 }
 
+/** An unpaid bill or delivery invoice on Bills Due for Payment: due on its date + the supplier's credit days. */
+export interface BillDue {
+    type: SupplierInvoiceType;
+    id: string;
+    supplier_id: string;
+    supplier_name: string | null;
+    terms_days: number;
+    number: string;
+    date: string | null;
+    description: string | null;
+    total: number;
+    paid: number;
+    balance: number;
+    cheque_pending: number; // a cheque written for it, not yet cleared
+    cheque_refs: string | null;
+    to_pay: number; // balance less pending cheques
+    due_date: string;
+    age_days: number;
+    days_overdue: number; // 0 = due today, negative = days until due
+    status: "Due" | "Due by pay date" | "Not yet due";
+}
+
+export interface BillsDueResponse {
+    today: string;
+    pay_by: string;
+    rows: BillDue[];
+    summary: {
+        due_now: { count: number; amount: number };
+        due_by_pay_date: { count: number; amount: number };
+        to_pay: { count: number; amount: number };
+        not_yet_due: { count: number; amount: number };
+        cheques_pending: number;
+        outstanding: number;
+    };
+}
+
+export async function getBillsDue(payBy?: string): Promise<BillsDueResponse> {
+    const response = await apiCall<{ data: BillsDueResponse }>(`/supplier-payments/due${payBy ? `?pay_by=${payBy}` : ""}`, "GET");
+    return response.data;
+}
+
 /** "PUR-131, DI-00012" - the invoices a payment paid, for tables and exports. */
 export function invoicesPaidLabel(payment: SupplierPayment): string {
     return ((payment.invoices_paid ?? []) as SupplierInvoicePaid[]).map((i) => i.number).join(", ");
