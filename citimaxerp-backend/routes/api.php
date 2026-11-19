@@ -936,6 +936,12 @@ Route::middleware('auth:sanctum')->prefix('finance')->group(function () {
     // Withdrawals / transfers between money accounts, with bank charges.
     Route::get('bank-transfers/accounts', [\App\Http\Controllers\BankTransferController::class, 'accounts']);
     Route::get('payment-sources', [\App\Http\Controllers\BankTransferController::class, 'paymentSources']);
+    // Bank Reconciliation Statement (Tally BRS): bank dates per Bank Book entry, saved reconciliations.
+    Route::get('brs/accounts', [\App\Http\Controllers\BankReconciliationStatementController::class, 'accounts']);
+    Route::get('brs/{accountId}', [\App\Http\Controllers\BankReconciliationStatementController::class, 'show']);
+    Route::post('brs/{accountId}/bank-dates', [\App\Http\Controllers\BankReconciliationStatementController::class, 'bankDates']);
+    Route::post('brs/{accountId}/complete', [\App\Http\Controllers\BankReconciliationStatementController::class, 'complete']);
+    Route::delete('brs/statements/{statementId}', [\App\Http\Controllers\BankReconciliationStatementController::class, 'reopen']);
     Route::get('cash-books/{accountId}', [\App\Http\Controllers\BankTransferController::class, 'book']);
     Route::post('bank-transfers/from-expense/{expenseId}', [\App\Http\Controllers\BankTransferController::class, 'fromExpense']);
     Route::get('bank-transfers', [\App\Http\Controllers\BankTransferController::class, 'index']);
