@@ -313,16 +313,20 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
     })
   }
 
+  // An invoice raised from an order bills what the order sold: its lines are changed on the order.
+  const fromOrder = !!invoice?.order_id
+  const orderLabel = invoice?.reference_number || "its order"
+
   const addProductToLineItem = (index: number, product: any, variant?: any) => {
     form.setValue(`line_items.${index}.product_id`, product.id)
-    if (variant) {
-      form.setValue(`line_items.${index}.variant_id`, variant.id)
-      form.setValue(`line_items.${index}.description`, sizedName(product.name, variant.name))
-    } else {
-      form.setValue(`line_items.${index}.description`, product.name)
+    // A size belongs to one product: never carry the previous product's size over.
+    form.setValue(`line_items.${index}.variant_id`, variant?.id ?? '')
+    form.setValue(`line_items.${index}.description`, variant ? sizedName(product.name, variant.name) : product.name)
+    // Real prices live in the price lists; a base price of 0 must not wipe the typed price.
+    const basePrice = parseFloat(product.price || "0")
+    if (basePrice > 0) {
+      form.setValue(`line_items.${index}.unit_price`, basePrice)
     }
-    // Sizes share the item's price.
-    form.setValue(`line_items.${index}.unit_price`, parseFloat(product.price || "0"))
     form.setValue(`line_items.${index}.etims_tax_type_code`, invoiceTaxCodeForProduct(product))
     setShowProductSearch(null)
     setProductSearchTerm("")
@@ -396,7 +400,7 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
         payment_type: paymentType,
         notes: data.notes,
         terms_and_conditions: data.terms_and_conditions,
-        line_items: data.line_items.map(item => {
+        line_items: fromOrder ? undefined : data.line_items.map(item => {
           const lineSubtotal = Number(item.quantity) * Number(item.unit_price)
           
           // Calculate proportional discount for this line item
@@ -752,13 +756,51 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
                   <CardTitle>Line Items</CardTitle>
-                  <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Item
-                  </Button>
+                  {!fromOrder && (
+                    <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Item
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {fields.map((field, index) => (
+                  {fromOrder && (
+                    <>
+                      <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        These items come from order {orderLabel}. To change a product, quantity, price or discount, edit the order; this invoice updates to match.
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-xs text-muted-foreground">
+                              <th className="py-2 pr-2">S/No</th>
+                              <th className="py-2 pr-2">Item</th>
+                              <th className="py-2 pr-2">Batch</th>
+                              <th className="py-2 pr-2 text-right">Quantity</th>
+                              <th className="py-2 pr-2 text-right">Price</th>
+                              <th className="py-2 text-right">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fields.map((_, index) => {
+                              const item = form.watch(`line_items.${index}`)
+                              return (
+                                <tr key={index} className="border-b last:border-0">
+                                  <td className="py-2 pr-2">{index + 1}</td>
+                                  <td className="py-2 pr-2">{item?.description}</td>
+                                  <td className="py-2 pr-2">{item?.batch_number || "-"}</td>
+                                  <td className="py-2 pr-2 text-right">{Number(item?.quantity || 0).toLocaleString()} {item?.unit}</td>
+                                  <td className="py-2 pr-2 text-right">{formatCurrency(Number(item?.unit_price || 0))}</td>
+                                  <td className="py-2 text-right">{formatCurrency(Number(item?.quantity || 0) * Number(item?.unit_price || 0))}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  {!fromOrder && fields.map((field, index) => (
                     <div key={field.id} className="border rounded-lg p-3 space-y-3">
                       {/* Single row layout for line item */}
                       <div className="grid grid-cols-12 gap-3 items-start">
@@ -992,7 +1034,7 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
                     </div>
                   ))}
 
-                  {fields.length === 0 && (
+                  {!fromOrder && fields.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
                       No line items added yet. Click "Add Item" to get started.
                     </div>
@@ -1007,7 +1049,7 @@ export function EditInvoiceSheet({ open, onClose, invoiceId, onSuccess }: EditIn
                     {/* Left Column - Discount controls */}
                     <div className="space-y-6">
                       {/* Discount Settings */}
-                      <div className="space-y-3">
+                      <div className={`space-y-3 ${fromOrder ? "hidden" : ""}`}>
                         <div className="flex items-center gap-4">
                           <div className="flex items-center space-x-2">
                             <Switch

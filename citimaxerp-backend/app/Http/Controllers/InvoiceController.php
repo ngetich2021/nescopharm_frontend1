@@ -484,6 +484,17 @@ class InvoiceController extends Controller
             return response()->json(['message' => $validator->errors(), 'errors' => $validator->errors()], 422);
         }
 
+        // An invoice raised from an order bills exactly what the order sold (and what left stock):
+        // its lines are changed on the order, which brings the invoice with it. Editing them here
+        // once billed 1,000 gloves at 0.00 under another product (NSK/0461, 19/11/2026).
+        if ($request->has('line_items') && $invoice->order_id) {
+            $orderRef = Order::withTrashed()->find($invoice->order_id);
+            $label = $orderRef ? preg_replace('/^ORD-[0-9a-f]{8}-/', 'ORD-', $orderRef->order_number) : 'its order';
+            return response()->json([
+                'message' => "This invoice's items come from order {$label}. Edit the order to change products, quantities or prices; the invoice updates to match.",
+            ], 422);
+        }
+
         try {
             DB::beginTransaction();
 
