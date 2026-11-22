@@ -47,6 +47,39 @@ class PaymentController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
+    /**
+     * Every invoice a receipt paid, oldest first: invoice_numbers (["NSK/0412", "NSK/0420"]) and
+     * invoice_lines with the amount on each. Most receipts carry no order - they are spread over
+     * the customer's invoices by allocation - so the order's invoice alone shows nothing for them.
+     * Falls back to the receipt's own invoice. One query for the whole list.
+     */
+    protected function attachInvoiceNumbers($payments): void
+    {
+        $allocated = \App\Models\PaymentAllocation::with('invoice:id,invoice_number,file_number,invoice_date')
+            ->whereIn('payment_id', $payments->pluck('id'))
+            ->get(['payment_id', 'invoice_id', 'amount_allocated'])
+            ->groupBy('payment_id');
+
+        $direct = Invoice::whereIn('id', $payments->pluck('invoice_id')->filter()->unique()->values())
+            ->pluck('invoice_number', 'id');
+
+        foreach ($payments as $payment) {
+            $lines = $allocated->get($payment->id, collect())
+                ->filter(fn ($a) => $a->invoice && (float) $a->amount_allocated > 0)
+                ->sortBy(fn ($a) => (string) $a->invoice->invoice_date . $a->invoice->invoice_number)
+                ->groupBy(fn ($a) => $a->invoice->invoice_number)
+                ->map(fn ($group, $number) => ['invoice_number' => $number, 'amount' => round((float) $group->sum('amount_allocated'), 2)])
+                ->values();
+
+            if ($lines->isEmpty() && $payment->invoice_id && isset($direct[$payment->invoice_id])) {
+                $lines = collect([['invoice_number' => $direct[$payment->invoice_id], 'amount' => null]]);
+            }
+
+            $payment->setAttribute('invoice_numbers', $lines->pluck('invoice_number')->all());
+            $payment->setAttribute('invoice_lines', $lines->all());
+        }
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -102,6 +135,7 @@ class PaymentController extends Controller
             $query->orderBy($sortField, $sortDirection);
 
             $payments = $query->get();
+            $this->attachInvoiceNumbers($payments);
 
             return response()->json([
                 'status' => 'success',

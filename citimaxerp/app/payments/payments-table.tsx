@@ -49,6 +49,14 @@ import { paymentMethodLabel } from "@/lib/payment-methods"
 import { PeriodFilter, inPeriod, periodLabel, presetPeriod, type Period } from "@/components/period-filter"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 
+// The invoices a receipt paid (oldest first), else its order's invoice; money not on any invoice is
+// customer credit, shown as "On account".
+export function receiptInvoices(payment: Payment): string {
+  const numbers: string[] = payment.invoice_numbers ?? []
+  if (numbers.length) return numbers.join(", ")
+  return orderRef(payment.order as any) || (payment.status?.toLowerCase() === "completed" ? "On account" : "N/A")
+}
+
 // The day a receipt counts on: its payment date, or the day it was entered when it has none.
 export function receiptDate(payment: Payment): string {
   return payment.payment_date || payment.created_at
@@ -182,6 +190,7 @@ export function PaymentsTable() {
         (getPaymentCustomerDisplayName(payment).toLowerCase().includes(search.toLowerCase())) ||
         (payment.customer?.business_name && payment.customer.business_name.toLowerCase().includes(search.toLowerCase())) ||
         matchesDocNumber((payment.order as any)?.invoice?.invoice_number, search) ||
+        (payment.invoice_numbers ?? []).some((n: string) => matchesDocNumber(n, search)) ||
         (payment.order?.order_number && payment.order.order_number.toLowerCase().includes(search.toLowerCase()))
       )
   )
@@ -199,7 +208,7 @@ export function PaymentsTable() {
       i + 1,
       p.transaction_id || "N/A",
       getPaymentCustomerDisplayName(p),
-      orderRef(p.order as any) || "N/A",
+      receiptInvoices(p),
       parseFloat(p.amount_paid) || 0,
       paymentMethodLabel(p.payment_method),
       displayDate(receiptDate(p)),
@@ -462,7 +471,7 @@ export function PaymentsTable() {
                     </TableCell>
                     <TableCell className="font-medium">{payment.transaction_id || "N/A"}</TableCell>
                     <TableCell>{getPaymentCustomerDisplayName(payment)}</TableCell>
-                    <TableCell>{orderRef(payment.order as any) || "N/A"}</TableCell>
+                    <TableCell className="max-w-[220px]">{receiptInvoices(payment)}</TableCell>
                     <TableCell>{formatCurrency(payment.amount_paid || "0")}</TableCell>
                     <TableCell>{paymentMethodLabel(payment.payment_method)}</TableCell>
                     <TableCell>{payment.payment_date ? displayDate(new Date(payment.payment_date)) : displayDate(new Date(payment.created_at))}</TableCell>

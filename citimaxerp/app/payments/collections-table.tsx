@@ -12,14 +12,13 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getPayments, type Payment } from "@/lib/payments"
 import { fetchCheques, type Cheque } from "@/lib/cheques"
-import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { formatCurrency } from "@/lib/utils"
 import { paymentMethodLabel } from "@/lib/payment-methods"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { PeriodFilter, inPeriod, periodLabel, presetPeriod, toDayKey, type Period } from "@/components/period-filter"
 import { PaymentsTableSkeleton } from "./payments-table-skeleton"
-import { receiptDate } from "./payments-table"
+import { receiptDate, receiptInvoices } from "./payments-table"
 
 // Collections = all money collected from customers: completed receipts (cash, M-Pesa, bank and
 // cheques that have matured and cleared) plus received cheques still in hand (pending - not yet
@@ -51,7 +50,7 @@ function receiptRow(p: Payment): CollectionRow {
     kind: "receipt",
     reference: p.transaction_id || "N/A",
     customer: customerName(p.customer),
-    invoices: orderRef(p.order as any) || "N/A",
+    invoices: receiptInvoices(p),
     method: paymentMethodLabel(p.payment_method),
     date: receiptDate(p),
     maturity: "",
