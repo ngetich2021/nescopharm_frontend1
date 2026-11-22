@@ -1,5 +1,7 @@
 import { PaymentsTable } from "./payments-table"
 import { PaymentsSummary } from "./payments-summary"
+import { CollectionsTable } from "./collections-table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export const metadata = {
   title: "Receipts | Citimax - Enterprise Resource Management",
@@ -14,9 +16,22 @@ export default function PaymentsPage() {
         <p className="text-muted-foreground">Track, manage, and analyze your order receipts in one place.</p>
       </div>
 
-      <PaymentsSummary />
-      
-      <PaymentsTable />
+      <Tabs defaultValue="receipts" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="receipts">Receipts</TabsTrigger>
+          <TabsTrigger value="collections">Collections</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="receipts" className="space-y-6">
+          <PaymentsSummary />
+          <PaymentsTable />
+        </TabsContent>
+
+        {/* Everything collected: receipts plus post-dated cheques still in hand. */}
+        <TabsContent value="collections">
+          <CollectionsTable />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

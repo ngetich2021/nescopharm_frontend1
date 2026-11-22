@@ -23,7 +23,6 @@ import {
   MoreHorizontal,
   Search,
   Filter,
-  Download,
   Upload,
   CreditCard,
   ChevronLeft,
@@ -47,6 +46,13 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { formatCurrency } from "@/lib/utils"
 import { paymentMethodLabel } from "@/lib/payment-methods"
+import { PeriodFilter, inPeriod, periodLabel, presetPeriod, type Period } from "@/components/period-filter"
+import { ExportMenu, useTableExport } from "@/components/export-menu"
+
+// The day a receipt counts on: its payment date, or the day it was entered when it has none.
+export function receiptDate(payment: Payment): string {
+  return payment.payment_date || payment.created_at
+}
 
 function getPaymentCustomerDisplayName(payment: Payment) {
   const customer = payment.customer
@@ -60,6 +66,7 @@ export function PaymentsTable() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [period, setPeriod] = useState<Period>(() => presetPeriod("all"))
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
@@ -169,7 +176,8 @@ export function PaymentsTable() {
   const filteredPayments = payments.filter(
     (payment) =>
       (statusFilter === "all" || payment.status.toLowerCase() === statusFilter) &&
-      (search === "" || 
+      inPeriod(receiptDate(payment), period) &&
+      (search === "" ||
         (payment.transaction_id && payment.transaction_id.toLowerCase().includes(search.toLowerCase())) ||
         (getPaymentCustomerDisplayName(payment).toLowerCase().includes(search.toLowerCase())) ||
         (payment.customer?.business_name && payment.customer.business_name.toLowerCase().includes(search.toLowerCase())) ||
@@ -177,6 +185,29 @@ export function PaymentsTable() {
         (payment.order?.order_number && payment.order.order_number.toLowerCase().includes(search.toLowerCase()))
       )
   )
+
+  // Totals follow the search, status and period. Failed and pending are listed but never counted as received.
+  const completedShown = filteredPayments.filter((p) => p.status.toLowerCase() === "completed")
+  const totalShown = completedShown.reduce((sum, p) => sum + (parseFloat(p.amount_paid) || 0), 0)
+
+  const handleExport = useTableExport(() => ({
+    fileName: `receipts-${period.from || "all"}-${period.to || "time"}`,
+    title: "Receipts",
+    subtitle: periodLabel(period),
+    headers: ["S/No", "Transaction ID", "Customer", "Invoice #", "Amount", "Method", "Date", "Status"],
+    rows: filteredPayments.map((p, i) => [
+      i + 1,
+      p.transaction_id || "N/A",
+      getPaymentCustomerDisplayName(p),
+      orderRef(p.order as any) || "N/A",
+      parseFloat(p.amount_paid) || 0,
+      paymentMethodLabel(p.payment_method),
+      displayDate(receiptDate(p)),
+      p.status,
+    ]),
+    footer: [["", "", "Total Received (completed)", "", totalShown, "", "", `${completedShown.length} receipts`]],
+    moneyColumns: [4],
+  }))
 
   const totalPages = Math.ceil(filteredPayments.length / rowsPerPage)
   const paginatedPayments = filteredPayments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
@@ -204,6 +235,8 @@ export function PaymentsTable() {
     
     return () => clearTimeout(timer)
   }, [search, statusFilter])
+
+  useEffect(() => setCurrentPage(1), [period])
 
   const handleRowClick = (paymentId: string) => {
     setSelectedPaymentId(paymentId)
@@ -280,6 +313,7 @@ export function PaymentsTable() {
                 </SelectContent>
               </Select>
             </div>
+            <PeriodFilter value={period} onChange={setPeriod} />
           </div>
           <div className="flex space-x-2">
             {selectedPayments.length > 0 && (
@@ -330,10 +364,7 @@ export function PaymentsTable() {
               <CreditCard className="mr-2 h-4 w-4" />
               Receive Payment
             </Button>
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            <ExportMenu onExport={handleExport} disabled={filteredPayments.length === 0} />
             <div className="relative">
               <input type="file" id="import-file" className="hidden" accept=".csv" onChange={() => {}} />
               <Button onClick={() => document.getElementById("import-file")?.click()} variant="outline" size="sm">
@@ -342,6 +373,16 @@ export function PaymentsTable() {
               </Button>
             </div>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-md border bg-gray-50 px-4 py-2 text-sm">
+          <span className="text-muted-foreground">{periodLabel(period)}</span>
+          <span>
+            Received: <span className="font-semibold">{formatCurrency(totalShown)}</span>
+          </span>
+          <span>
+            Completed receipts: <span className="font-semibold">{completedShown.length}</span>
+          </span>
+          <span className="text-muted-foreground">Rows shown: {filteredPayments.length}</span>
         </div>
         <div className="rounded-md border bg-white">
           <Table>
