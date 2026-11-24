@@ -83,6 +83,12 @@ function getStatusBadge(status: string) {
           Approved
         </Badge>
       );
+    case "payment_initiated":
+      return (
+        <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+          Payment initiated
+        </Badge>
+      );
     case "paid":
       return (
         <Badge variant="secondary" className="bg-green-100 text-green-800">
@@ -414,6 +420,26 @@ export default function PayrollRunDetailPage() {
                 ? formatKES(run.total_housing_levy)
                 : "---"}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">HELB</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-indigo-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono">{formatKES(run.total_helb ?? 0)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">NITA (employer)</CardTitle>
+            <ShieldCheck className="h-4 w-4 text-gray-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono">{formatKES(run.total_nita ?? 0)}</div>
           </CardContent>
         </Card>
       </div>

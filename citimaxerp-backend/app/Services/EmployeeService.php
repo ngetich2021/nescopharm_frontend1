@@ -69,6 +69,8 @@ class EmployeeService
                 'allowances' => $data['allowances'] ?? [],
                 'deductions' => $data['deductions'] ?? [],
                 'created_by' => $createdBy,
+                'statutory_deductions_apply' => $data['statutory_deductions_apply'] ?? true,
+                'shif_exempt' => $data['shif_exempt'] ?? false,
             ];
 
             if ($this->hasEmployeeApproverColumns()) {

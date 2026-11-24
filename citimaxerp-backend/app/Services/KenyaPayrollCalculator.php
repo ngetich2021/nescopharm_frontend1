@@ -1,138 +1,123 @@
 <?php
 namespace App\Services;
 
+/**
+ * Kenyan statutory payroll, exactly as the client's Payroll & KRA Compliance Tracker computes it:
+ * - NSSF (Year 4, Feb 2026): 6% employee + 6% employer of pay up to the UEL 108,000
+ *   (Tier I on the first 9,000, Tier II the rest)
+ * - SHIF 2.75% of gross, minimum 300, no cap
+ * - Affordable Housing Levy 1.5% employee + 1.5% employer of gross
+ * - PAYE on gross less NSSF, SHIF and Housing Levy, monthly bands 10 / 25 / 30 / 32.5 / 35%,
+ *   less personal relief 2,400 and insurance relief (15%, max 5,000)
+ * - NITA KES 50 per employee per month (employer cost)
+ * Every statutory amount is rounded to whole shillings.
+ *
+ * Options: statutory => false (no statutory deductions at all, e.g. a fixed net pay as instructed),
+ * shif_exempt => true (no SHIF deducted).
+ */
 class KenyaPayrollCalculator
 {
-    // NSSF Act 2013 — Year 4 rates effective 1 February 2026
-    private const LEL       = '9000.00';
-    private const UEL       = '108000.00';
-    private const NSSF_RATE = '0.06';
-    private const TIER1_MAX = '540.00';
-    private const TIER2_MAX = '5940.00';
+    private const LEL       = 9000;
+    private const UEL       = 108000;
+    private const NSSF_RATE = 0.06;
 
-    // SHIF (Social Health Authority, 2024)
-    private const SHIF_RATE = '0.0275';
-    private const SHIF_MIN  = '300.00';
+    private const SHIF_RATE = 0.0275;
+    private const SHIF_MIN  = 300;
 
-    // Affordable Housing Levy
-    private const HOUSING_RATE = '0.015';
+    private const HOUSING_RATE = 0.015;
 
-    // PAYE (Finance Act 2023)
-    private const PERSONAL_RELIEF  = '2400.00';
-    private const INS_RELIEF_RATE   = '0.15';
-    private const INS_RELIEF_MAX    = '5000.00';
+    private const PERSONAL_RELIEF = 2400;
+    private const INS_RELIEF_RATE = 0.15;
+    private const INS_RELIEF_MAX  = 5000;
 
-    // Monthly PAYE bands [upper_limit_or_null, rate_string]
+    public const NITA_LEVY = 50;
+
+    // Monthly PAYE bands [upper_limit_or_null, rate]
     private const TAX_BANDS = [
-        ['24000.00',  '0.10'],
-        ['32333.00',  '0.25'],
-        ['500000.00', '0.30'],
-        ['800000.00', '0.325'],
-        [null,        '0.35'],
+        [24000, 0.10],
+        [32333, 0.25],
+        [500000, 0.30],
+        [800000, 0.325],
+        [null, 0.35],
     ];
 
     /**
-     * Calculate all statutory deductions for a given gross pay.
      * All monetary values returned as strings with 2 decimal places.
+     *
+     * @param array{statutory?: bool, shif_exempt?: bool} $options
      */
-    public function calculate(string $grossPay, string $insurancePremium = '0.00'): array
+    public function calculate(string $grossPay, string $insurancePremium = '0.00', array $options = []): array
     {
+        $gross = (float) $grossPay;
+        $statutory = $options['statutory'] ?? true;
+        $shifExempt = $options['shif_exempt'] ?? false;
+
+        if (!$statutory || $gross <= 0) {
+            $zero = $this->fmt(0);
+            return [
+                'nssf_tier1' => $zero, 'nssf_tier2' => $zero, 'nssf_employee' => $zero, 'nssf_employer' => $zero,
+                'taxable_pay' => $zero,
+                'paye_before_relief' => $zero, 'personal_relief' => $zero, 'insurance_relief' => $zero, 'paye' => $zero,
+                'shif' => $zero, 'housing_levy_employee' => $zero, 'housing_levy_employer' => $zero,
+                'nita' => $zero,
+            ];
+        }
+
         // --- NSSF ---
-        $nssfTier1    = $this->calcNssfTier1($grossPay);
-        $nssfTier2    = $this->calcNssfTier2($grossPay);
-        $nssfEmployee = bcadd($nssfTier1, $nssfTier2, 2);
-        $nssfEmployer = $nssfEmployee;
+        $nssfEmployee = round(self::NSSF_RATE * min($gross, self::UEL));
+        $nssfTier1 = min($nssfEmployee, round(self::NSSF_RATE * min($gross, self::LEL)));
+        $nssfTier2 = $nssfEmployee - $nssfTier1;
 
         // --- SHIF ---
-        $shifCalc = bcmul($grossPay, self::SHIF_RATE, 2);
-        $shif     = bccomp($shifCalc, self::SHIF_MIN, 2) < 0 ? self::SHIF_MIN : $shifCalc;
+        $shif = $shifExempt ? 0 : max(self::SHIF_MIN, round(self::SHIF_RATE * $gross));
 
         // --- Housing Levy ---
-        $housingLevyEmployee = bcmul($grossPay, self::HOUSING_RATE, 2);
-        $housingLevyEmployer = $housingLevyEmployee;
+        $housingEmployee = round(self::HOUSING_RATE * $gross);
+        $housingEmployer = $housingEmployee;
 
         // --- PAYE ---
-        $taxablePay = bcsub(bcsub(bcsub($grossPay, $nssfEmployee, 2), $shif, 2), $housingLevyEmployee, 2);
-        if (bccomp($taxablePay, '0.00', 2) < 0) {
-            $taxablePay = '0.00';
-        }
-
-        $payeBeforeRelief = $this->applyTaxBands($taxablePay);
-        $insuranceRelief  = $this->calcInsuranceRelief($insurancePremium);
-        $totalRelief      = bcadd(self::PERSONAL_RELIEF, $insuranceRelief, 2);
-        $paye             = bcsub($payeBeforeRelief, $totalRelief, 2);
-        if (bccomp($paye, '0.00', 2) < 0) {
-            $paye = '0.00';
-        }
+        $taxable = max(0, $gross - $nssfEmployee - $shif - $housingEmployee);
+        $taxBefore = round($this->applyTaxBands($taxable));
+        $insuranceRelief = min(self::INS_RELIEF_RATE * max(0, (float) $insurancePremium), self::INS_RELIEF_MAX);
+        $paye = max(0, round($taxBefore - self::PERSONAL_RELIEF - $insuranceRelief));
 
         return [
-            'nssf_tier1'             => $nssfTier1,
-            'nssf_tier2'             => $nssfTier2,
-            'nssf_employee'          => $nssfEmployee,
-            'nssf_employer'          => $nssfEmployer,
-            'taxable_pay'            => $taxablePay,
-            'paye_before_relief'     => $payeBeforeRelief,
-            'personal_relief'        => self::PERSONAL_RELIEF,
-            'insurance_relief'       => $insuranceRelief,
-            'paye'                   => $paye,
-            'shif'                   => $shif,
-            'housing_levy_employee'  => $housingLevyEmployee,
-            'housing_levy_employer'  => $housingLevyEmployer,
+            'nssf_tier1'             => $this->fmt($nssfTier1),
+            'nssf_tier2'             => $this->fmt($nssfTier2),
+            'nssf_employee'          => $this->fmt($nssfEmployee),
+            'nssf_employer'          => $this->fmt($nssfEmployee),
+            'taxable_pay'            => $this->fmt($taxable),
+            'paye_before_relief'     => $this->fmt($taxBefore),
+            'personal_relief'        => $this->fmt(self::PERSONAL_RELIEF),
+            'insurance_relief'       => $this->fmt($insuranceRelief),
+            'paye'                   => $this->fmt($paye),
+            'shif'                   => $this->fmt($shif),
+            'housing_levy_employee'  => $this->fmt($housingEmployee),
+            'housing_levy_employer'  => $this->fmt($housingEmployer),
+            'nita'                   => $this->fmt(self::NITA_LEVY),
         ];
     }
 
-    private function calcNssfTier1(string $gross): string
+    private function applyTaxBands(float $taxable): float
     {
-        $base         = bccomp($gross, self::LEL, 2) >= 0 ? self::LEL : $gross;
-        $contribution = bcmul($base, self::NSSF_RATE, 2);
-        return bccomp($contribution, self::TIER1_MAX, 2) > 0 ? self::TIER1_MAX : $contribution;
-    }
-
-    private function calcNssfTier2(string $gross): string
-    {
-        if (bccomp($gross, self::LEL, 2) <= 0) {
-            return '0.00';
-        }
-        $ceiling      = bccomp($gross, self::UEL, 2) >= 0 ? self::UEL : $gross;
-        $aboveLel     = bcsub($ceiling, self::LEL, 2);
-        $contribution = bcmul($aboveLel, self::NSSF_RATE, 2);
-        return bccomp($contribution, self::TIER2_MAX, 2) > 0 ? self::TIER2_MAX : $contribution;
-    }
-
-    private function applyTaxBands(string $taxablePay): string
-    {
-        $tax  = '0.00';
-        $prev = '0.00';
-
+        $tax = 0.0;
+        $prev = 0.0;
         foreach (self::TAX_BANDS as [$upper, $rate]) {
-            if (bccomp($taxablePay, $prev, 2) <= 0) break;
-
-            if ($upper === null) {
-                $chargeable = bcsub($taxablePay, $prev, 2);
-                $tax        = bcadd($tax, bcmul($chargeable, $rate, 2), 2);
+            if ($taxable <= $prev) {
                 break;
             }
-
-            $bandTop    = bccomp($taxablePay, $upper, 2) < 0 ? $taxablePay : $upper;
-            $chargeable = bcsub($bandTop, $prev, 2);
-
-            if (bccomp($chargeable, '0.00', 2) > 0) {
-                $tax = bcadd($tax, bcmul($chargeable, $rate, 2), 2);
+            $top = $upper === null ? $taxable : min($taxable, $upper);
+            $tax += ($top - $prev) * $rate;
+            if ($upper === null) {
+                break;
             }
-
             $prev = $upper;
-            if (bccomp($taxablePay, $upper, 2) <= 0) break;
         }
-
         return $tax;
     }
 
-    private function calcInsuranceRelief(string $premium): string
+    private function fmt(float|int $v): string
     {
-        if (bccomp($premium, '0.00', 2) <= 0) {
-            return '0.00';
-        }
-        $relief = bcmul($premium, self::INS_RELIEF_RATE, 2);
-        return bccomp($relief, self::INS_RELIEF_MAX, 2) > 0 ? self::INS_RELIEF_MAX : $relief;
+        return number_format((float) $v, 2, '.', '');
     }
 }

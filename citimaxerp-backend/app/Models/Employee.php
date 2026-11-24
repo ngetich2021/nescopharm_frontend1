@@ -52,6 +52,8 @@ class Employee extends Model
         'deductions',
         'metadata',
         'created_by',
+        'statutory_deductions_apply',
+        'shif_exempt',
     ];
 
     protected $casts = [
@@ -62,6 +64,8 @@ class Employee extends Model
         'hourly_rate' => 'decimal:2',
         // 'tax_dependents' => 'integer',
         'is_active' => 'boolean',
+        'statutory_deductions_apply' => 'boolean',
+        'shif_exempt' => 'boolean',
         'allowances' => 'array',
         'deductions' => 'array',
         'metadata' => 'array',
@@ -80,6 +84,16 @@ class Employee extends Model
     public function setIsActiveAttribute($value)
     {
         $this->attributes['is_active'] = $value === true || $value === 'true' || $value === 1 || $value === '1';
+    }
+
+    public function setStatutoryDeductionsApplyAttribute($value)
+    {
+        $this->attributes['statutory_deductions_apply'] = !($value === false || $value === 'false' || $value === 0 || $value === '0' || $value === 'N' || $value === 'n');
+    }
+
+    public function setShifExemptAttribute($value)
+    {
+        $this->attributes['shif_exempt'] = $value === true || $value === 'true' || $value === 1 || $value === '1' || $value === 'Y' || $value === 'y';
     }
 
     protected static function boot()

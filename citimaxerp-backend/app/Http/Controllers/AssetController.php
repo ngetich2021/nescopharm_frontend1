@@ -204,6 +204,85 @@ class AssetController extends Controller
     }
 
     /**
+     * Depreciation Schedule by asset - year-end projection, as the register's Schedule sheet: for each
+     * year-end (31/12 from the first year-end, rolling 12 months) the accumulated depreciation, the
+     * charge for the year and the net book value. Depreciation stops once an asset is fully depreciated.
+     * ?first_year_end=2025-12-31&years=6 (defaults: 31/12 of the commencement year, 6 years)
+     */
+    public function schedule(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->hasPermission($request, 'can_view_assets', $user->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized to view assets.', 'data' => null], 403);
+        }
+        $first = $request->filled('first_year_end')
+            ? \Carbon\Carbon::parse($request->input('first_year_end'))->endOfDay()
+            : \Carbon\Carbon::parse(Asset::COMMENCEMENT_DATE)->endOfYear();
+        $years = max(1, min(15, (int) $request->input('years', 6)));
+        $yearEnds = collect(range(0, $years - 1))->map(fn ($i) => $first->copy()->addMonthsNoOverflow(12 * $i)->endOfMonth()->toDateString())->all();
+
+        $query = Asset::forCompany($user->company_id);
+        if ($request->filled('category')) {
+            $query->where('category', $request->input('category'));
+        }
+        $assets = $query->orderByRaw('asset_code IS NULL, asset_code')->orderBy('name')->get();
+
+        $totals = array_fill_keys($yearEnds, ['accumulated' => 0.0, 'charge' => 0.0, 'nbv' => 0.0]);
+        $rows = $assets->map(function (Asset $a) use ($yearEnds, $first, &$totals) {
+            $base = $a->depreciationAsAt($yearEnds[0]);
+            $prevAcc = (float) $a->depreciationAsAt($first->copy()->subYear()->toDateString())['accumulated_depreciation'];
+            $cols = [];
+            foreach ($yearEnds as $ye) {
+                $d = $a->depreciationAsAt($ye);
+                $acc = round((float) $d['accumulated_depreciation'], 2);
+                $charge = round($acc - $prevAcc, 2);
+                // Not yet bought at this year-end: no book value yet.
+                $bought = !$a->depreciation_start_date || \Carbon\Carbon::parse($a->depreciation_start_date)->lte($ye);
+                $nbv = $bought ? round((float) $d['net_book_value'], 2) : 0.0;
+                $cols[] = ['year_end' => $ye, 'accumulated' => $acc, 'charge' => $charge, 'nbv' => $nbv];
+                $totals[$ye]['accumulated'] += $acc;
+                $totals[$ye]['charge'] += $charge;
+                $totals[$ye]['nbv'] += $nbv;
+                $prevAcc = $acc;
+            }
+            return [
+                'id' => $a->id,
+                'asset_code' => $a->asset_code,
+                'name' => $a->name,
+                'category' => $a->category,
+                'purchase_date' => $a->purchase_date ? \Carbon\Carbon::parse($a->purchase_date)->toDateString() : null,
+                'total_cost' => (float) $base['total_cost'],
+                'depreciation_start_date' => $a->depreciation_start_date ? \Carbon\Carbon::parse($a->depreciation_start_date)->toDateString() : null,
+                'depreciable_amount' => (float) $base['depreciable_amount'],
+                'monthly_depreciation' => (float) $base['monthly_depreciation'],
+                'life_months' => (int) round(((float) $a->useful_life_years) * 12),
+                'status' => $a->status,
+                'years' => $cols,
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Depreciation schedule retrieved successfully.',
+            'data' => [
+                'year_ends' => $yearEnds,
+                'rows' => $rows,
+                'totals' => [
+                    'total_cost' => round($rows->sum('total_cost'), 2),
+                    'depreciable_amount' => round($rows->sum('depreciable_amount'), 2),
+                    'monthly_depreciation' => round($rows->sum('monthly_depreciation'), 2),
+                    'years' => collect($totals)->map(fn ($t, $ye) => [
+                        'year_end' => $ye,
+                        'accumulated' => round($t['accumulated'], 2),
+                        'charge' => round($t['charge'], 2),
+                        'nbv' => round($t['nbv'], 2),
+                    ])->values(),
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Bulk import assets from parsed spreadsheet rows. With dry_run truthy the
      * rows are validated and a per-row summary is returned without persisting;
      * otherwise valid rows are inserted and invalid rows are skipped.

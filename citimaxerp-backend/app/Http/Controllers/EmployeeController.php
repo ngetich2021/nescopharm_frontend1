@@ -237,6 +237,8 @@ class EmployeeController extends Controller
             'bank_account' => 'nullable|string|max:50',
             'bank_branch' => 'nullable|string|max:100',
             'is_active' => 'sometimes|boolean',
+            'statutory_deductions_apply' => 'sometimes|boolean',
+            'shif_exempt' => 'sometimes|boolean',
             'employment_status' => 'sometimes|in:active,inactive,terminated',
             'department' => 'nullable|string|max:100',
             'position' => 'nullable|string|max:100',
@@ -281,7 +283,7 @@ class EmployeeController extends Controller
         // can_approve_salary_changes specifically - can_update_employees alone
         // (which covers the rest of the record: name, address, status, etc.)
         // isn't enough to change what someone gets paid.
-        $salaryFields = ['basic_salary', 'hourly_rate', 'payment_frequency', 'allowances', 'deductions'];
+        $salaryFields = ['basic_salary', 'hourly_rate', 'payment_frequency', 'allowances', 'deductions', 'statutory_deductions_apply', 'shif_exempt'];
         $changingSalary = collect($salaryFields)->contains(function ($field) use ($request, $employee) {
             if (!$request->has($field)) {
                 return false;
@@ -309,7 +311,8 @@ class EmployeeController extends Controller
                 'date_of_birth', 'gender', 'national_id', 'address', 'city', 'state', 'postal_code',
                 'hire_date', 'termination_date', 'employment_type', 'payment_frequency',
                 'basic_salary', 'hourly_rate', 'bank_name', 'bank_account', 'bank_branch',
-                'is_active', 'department', 'position', 'supervisor_id', 'allowances', 'deductions', 'user_id'
+                'is_active', 'department', 'position', 'supervisor_id', 'allowances', 'deductions', 'user_id',
+                'statutory_deductions_apply', 'shif_exempt',
             ];
 
             if ($this->hasEmployeeApproverColumns()) {

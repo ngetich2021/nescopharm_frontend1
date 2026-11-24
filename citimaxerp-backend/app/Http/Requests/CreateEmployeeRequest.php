@@ -37,6 +37,8 @@ class CreateEmployeeRequest extends FormRequest
             'position' => 'nullable|string|max:100',
             'supervisor_id' => 'nullable|uuid|exists:employees,id',
             'is_active' => 'sometimes|boolean',
+            'statutory_deductions_apply' => 'sometimes|boolean',
+            'shif_exempt' => 'sometimes|boolean',
             'employment_status' => 'sometimes|in:active,inactive,terminated',
             
             // Address Information

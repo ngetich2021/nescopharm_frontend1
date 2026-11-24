@@ -191,6 +191,7 @@ class CashBookService
             Expense::class => 'Payment',
             BankTransfer::class => 'Contra',
             PayrollRun::class => 'Payroll',
+            \App\Models\StatutoryPayment::class => 'Statutory Payment',
             DeliveryInvoice::class => 'Delivery Invoice',
             AccountsPayable::class => 'Purchase',
             JournalEntry::class => $entry->entry_type === 'manual' ? 'Journal' : 'Reversal',

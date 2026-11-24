@@ -10,7 +10,7 @@ import {
   createPayrollRun,
   processPayrollRun,
   approvePayrollRun,
-  markPayrollRunPaid,
+  reopenPayrollRun,
   deletePayrollRun,
   formatKES,
   monthName,
@@ -62,6 +62,11 @@ import { Trash2, FileSpreadsheet, Upload } from "lucide-react";
 import { fetchImportSchema, downloadTemplate, type ImportSchema } from "@/lib/data-import";
 import { ImportDialog } from "@/app/settings/data-import/components/import-dialog";
 import { displayDate } from "@/lib/date-format";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Send, Undo2 } from "lucide-react";
+import { PayRunDialog } from "./components/PayRunDialog";
+import { StatutoryPaymentsTab } from "./components/StatutoryPaymentsTab";
+import { PaymentHistoryTab } from "./components/PaymentHistoryTab";
 
 const MONTHS = [
   "January",
@@ -90,6 +95,12 @@ function getStatusBadge(status: string) {
       return (
         <Badge variant="secondary" className="bg-blue-100 text-blue-800">
           Approved
+        </Badge>
+      );
+    case "payment_initiated":
+      return (
+        <Badge variant="secondary" className="bg-purple-100 text-purple-800" title="Payment voucher prepared - not yet posted to the bank">
+          Payment initiated
         </Badge>
       );
     case "paid":
@@ -130,8 +141,10 @@ export default function PayrollPage() {
   // Action loading states
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [payTarget, setPayTarget] = useState<{ run: PayrollRun; mode: "initiate" | "confirm" } | null>(null);
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [tab, setTab] = useState("runs");
 
   // Payroll History: past payrolls from Excel (one row per employee per month), preview first.
   const [historySchema, setHistorySchema] = useState<ImportSchema | null>(null);
@@ -283,24 +296,19 @@ export default function PayrollPage() {
     }
   };
 
-  const handleMarkPaid = async (run: PayrollRun) => {
-    setMarkingPaidId(run.id);
+  const handleReopen = async (run: PayrollRun) => {
+    const label = `${monthName(run.pay_month)} ${run.pay_year}`;
+    if (!confirm(`Send the ${label} payroll back to draft to correct it? Its payroll entry in the books is reversed until it is approved again.`)) return;
+    setReopeningId(run.id);
     try {
-      await markPayrollRunPaid(run.id);
-      toast({
-        title: "Success",
-        description: "Payroll run marked as paid.",
-      });
+      await reopenPayrollRun(run.id);
+      toast({ title: "Back to draft", description: `${label} can now be re-processed and approved again.` });
       loadRuns();
       loadStats();
     } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err?.message ?? "Failed to mark as paid.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: err?.message ?? "Could not send the payroll back to draft.", variant: "destructive" });
     } finally {
-      setMarkingPaidId(null);
+      setReopeningId(null);
     }
   };
 
@@ -433,6 +441,21 @@ export default function PayrollPage() {
         </Card>
       </div>
 
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="runs">Payroll Runs</TabsTrigger>
+          <TabsTrigger value="statutory">Statutory Payments</TabsTrigger>
+          <TabsTrigger value="history">Payment History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="statutory">
+          {tab === "statutory" && <StatutoryPaymentsTab />}
+        </TabsContent>
+        <TabsContent value="history">
+          {tab === "history" && <PaymentHistoryTab />}
+        </TabsContent>
+
+        <TabsContent value="runs" className="space-y-4">
       {/* Payroll Runs Table */}
       <Card>
         <CardHeader className="pb-3">
@@ -455,6 +478,7 @@ export default function PayrollPage() {
                 <TableHead>Period</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Paid Date</TableHead>
+                <TableHead>Paid From</TableHead>
                 <TableHead>Employees</TableHead>
                 <TableHead className="text-right">Total Gross</TableHead>
                 <TableHead className="text-right">Total Net</TableHead>
@@ -464,7 +488,7 @@ export default function PayrollPage() {
             <TableBody>
               {runsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
+                  <TableCell colSpan={9} className="text-center py-12">
                     <div className="flex items-center justify-center gap-2 text-muted-foreground">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
                       Loading...
@@ -474,7 +498,7 @@ export default function PayrollPage() {
               ) : runs.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center py-12 text-muted-foreground"
                   >
                     No payroll runs yet
@@ -493,7 +517,11 @@ export default function PayrollPage() {
                       )}
                     </TableCell>
                     <TableCell>{getStatusBadge(run.status)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{run.status === "paid" && run.paid_at ? displayDate(run.paid_at) : "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{run.status === "paid" && (run.payment_date || run.paid_at) ? displayDate(run.payment_date || run.paid_at) : "-"}</TableCell>
+                    <TableCell className="text-sm">
+                      {run.payment_account?.account_name ?? "-"}
+                      {run.payment_reference && <div className="text-xs text-muted-foreground">ref {run.payment_reference}</div>}
+                    </TableCell>
                     <TableCell>{run.payslips_count ?? 0}</TableCell>
                     <TableCell className="text-right font-mono">
                       {formatKES(run.total_gross)}
@@ -531,15 +559,35 @@ export default function PayrollPage() {
                               <CheckCircle2 className="h-4 w-4" />
                             </Button>
                           )}
-                        {run.status === "approved" && hasPermission("can_process_payroll") && (
+                        {run.status === "approved" && !run.is_historical && hasPermission("can_process_payroll") && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Mark as paid"
-                            onClick={() => handleMarkPaid(run)}
-                            disabled={markingPaidId === run.id}
+                            title="Initiate payment (prepare the payment voucher - no bank entry yet)"
+                            onClick={() => setPayTarget({ run, mode: "initiate" })}
                           >
-                            <CreditCard className="h-4 w-4" />
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {(run.status === "approved" || run.status === "payment_initiated") && !run.is_historical && hasPermission("can_process_payroll") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Confirm paid - choose the bank account, date and reference; posts to the bank"
+                            onClick={() => setPayTarget({ run, mode: "confirm" })}
+                          >
+                            <CreditCard className="h-4 w-4 text-green-700" />
+                          </Button>
+                        )}
+                        {(run.status === "approved" || run.status === "payment_initiated") && !run.is_historical && hasPermission("can_approve_payroll") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Send back to draft to correct"
+                            onClick={() => handleReopen(run)}
+                            disabled={reopeningId === run.id}
+                          >
+                            <Undo2 className="h-4 w-4" />
                           </Button>
                         )}
                         {hasPermission("can_delete_payroll") && (
@@ -606,6 +654,15 @@ export default function PayrollPage() {
           </div>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
+
+      <PayRunDialog
+        run={payTarget?.run ?? null}
+        mode={payTarget?.mode ?? "confirm"}
+        onClose={() => setPayTarget(null)}
+        onDone={() => { loadRuns(); loadStats(); }}
+      />
 
       <ImportDialog
         schema={importSchema}

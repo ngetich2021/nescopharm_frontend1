@@ -3,9 +3,11 @@
 import { useState } from "react"
 import { AssetsSummary } from "./assets-summary"
 import { AssetsTable } from "./assets-table"
+import { AssetsSchedule } from "./assets-schedule"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export const dynamic = "force-dynamic"
 
@@ -18,6 +20,7 @@ export default function AssetsPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   // Depreciation and net book value are worked out as at this date.
   const [asAt, setAsAt] = useState(today)
+  const [tab, setTab] = useState("register")
   const handleRefresh = () => setRefreshKey((k) => k + 1)
 
   return (
@@ -30,15 +33,29 @@ export default function AssetsPage() {
               Every asset with its ID, tag, location and the person it is assigned to, with straight-line depreciation and net book value.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="assets-as-at" className="whitespace-nowrap text-sm text-muted-foreground">As at</Label>
-            <Input id="assets-as-at" type="date" className="w-[170px]" value={asAt} onChange={(e) => e.target.value && setAsAt(e.target.value)} />
-          </div>
+          {tab === "register" && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="assets-as-at" className="whitespace-nowrap text-sm text-muted-foreground">As at</Label>
+              <Input id="assets-as-at" type="date" className="w-[170px]" value={asAt} onChange={(e) => e.target.value && setAsAt(e.target.value)} />
+            </div>
+          )}
         </div>
 
-        <AssetsSummary refreshKey={refreshKey} asAt={asAt} />
+        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="register">Register</TabsTrigger>
+            <TabsTrigger value="schedule">Schedule</TabsTrigger>
+          </TabsList>
 
-        <AssetsTable asAt={asAt} onDataChanged={handleRefresh} />
+          <TabsContent value="register" className="space-y-6">
+            <AssetsSummary refreshKey={refreshKey} asAt={asAt} />
+            <AssetsTable asAt={asAt} onDataChanged={handleRefresh} />
+          </TabsContent>
+
+          <TabsContent value="schedule">
+            {tab === "schedule" && <AssetsSchedule key={refreshKey} />}
+          </TabsContent>
+        </Tabs>
       </div>
     </PermissionGuard>
   )

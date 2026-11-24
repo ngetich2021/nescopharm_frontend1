@@ -71,10 +71,12 @@ class CompanyAccountingSettings extends Model
         'lock_closed_periods',
         'current_period_end',
         'payroll_posts_to_ledger',
+        'payroll_posting_start',
     ];
 
     protected $casts = [
         'payroll_posts_to_ledger' => 'boolean',
+        'payroll_posting_start' => 'date:Y-m-d',
         'auto_record_cash_sales' => 'boolean',
         'credit_sales_on_invoice_send' => 'boolean',
         'auto_record_customer_payments' => 'boolean',

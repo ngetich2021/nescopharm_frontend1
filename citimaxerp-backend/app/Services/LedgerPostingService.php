@@ -72,6 +72,7 @@ class LedgerPostingService
             $model instanceof AccountsPayable => [$this->syncSupplierBill($model, $deleted)],
             $model instanceof \App\Models\DeliveryInvoice => [$this->syncDeliveryInvoice($model, $deleted)],
             $model instanceof PayrollRun => $this->syncPayrollRun($model, $deleted),
+            $model instanceof \App\Models\StatutoryPayment => [$this->syncStatutoryPayment($model, $deleted)],
             $model instanceof \App\Models\BankTransfer => [$this->syncBankTransfer($model, $deleted)],
             default => [],
         };
@@ -586,7 +587,8 @@ class LedgerPostingService
         // A company that books salaries as monthly expenses keeps payroll off the ledger, or every
         // month's salaries would be counted twice.
         // A past payroll entered for the record (is_historical) never posts: those salaries are in the books already.
-        if (!$deleted && !$run->is_historical && $settings && $settings->payroll_posts_to_ledger !== false && in_array($run->status, ['approved', 'paid'], true)) {
+        // From payroll_posting_start on only: salaries before it were booked as expenses.
+        if (!$deleted && $this->payrollPosts($run, $settings) && in_array($run->status, ['approved', 'payment_initiated', 'paid'], true)) {
             // Payslips with no gross pay can still carry a statutory minimum
             // (e.g. SHIF 300) that is never actually withheld, so they are
             // left out - otherwise the entry cannot balance.
@@ -596,13 +598,16 @@ class LedgerPostingService
                 COALESCE(SUM(paye),0) paye, COALESCE(SUM(shif),0) shif,
                 COALESCE(SUM(housing_levy_employee),0) housing_levy, COALESCE(SUM(housing_levy_employer),0) housing_levy_employer,
                 COALESCE(SUM(total_custom_deductions),0) + COALESCE(SUM(other_deductions),0) deductions,
+                COALESCE(SUM(helb),0) helb, COALESCE(SUM(nita),0) nita,
                 COALESCE(SUM(salary_advance_deduction),0) advance_deductions
             ')->first()->toArray();
             $period = Carbon::create((int) $run->pay_year, (int) $run->pay_month, 1)->endOfMonth();
             $label = $period->format('F Y');
             $housingEmployer = $this->money($t['housing_levy_employer']);
             $housingTotal = $this->money($t['housing_levy']) + $housingEmployer;
-            $otherDeductions = $this->money($t['deductions']);
+            $helb = $this->money($t['helb']);
+            $nita = $this->money($t['nita']);
+            $otherDeductions = round($this->money($t['deductions']) - $helb, 2);
 
             if ($this->money($t['gross']) > 0) {
                 $accrualDesired = [
@@ -614,10 +619,13 @@ class LedgerPostingService
                         ['key' => 'salaries_expense', 'fallback' => 'miscellaneous_expense', 'debit' => $this->money($t['gross']), 'description' => "Gross salaries {$label}"],
                         ['key' => 'nssf_employer_expense', 'fallback' => 'salaries_expense', 'debit' => $this->money($t['nssf_employer']), 'description' => "Employer NSSF {$label}"],
                         ['key' => 'housing_levy_employer_expense', 'fallback' => 'salaries_expense', 'debit' => $housingEmployer, 'description' => "Employer housing levy {$label}"],
+                        ['key' => 'nita_expense', 'fallback' => 'salaries_expense', 'debit' => $nita, 'description' => "NITA levy {$label}"],
                         ['key' => 'paye_payable', 'credit' => $this->money($t['paye']), 'description' => "PAYE {$label}"],
                         ['key' => 'nssf_payable', 'credit' => $this->money($t['nssf_employee']) + $this->money($t['nssf_employer']), 'description' => "NSSF {$label}"],
                         ['key' => 'shif_payable', 'credit' => $this->money($t['shif']), 'description' => "SHIF {$label}"],
                         ['key' => 'housing_levy_payable', 'credit' => $housingTotal, 'description' => "Housing levy {$label}"],
+                        ['key' => 'helb_payable', 'fallback' => 'payroll_deductions_payable', 'credit' => $helb, 'description' => "HELB {$label}"],
+                        ['key' => 'nita_payable', 'fallback' => 'payroll_deductions_payable', 'credit' => $nita, 'description' => "NITA levy {$label}"],
                         ['key' => 'payroll_deductions_payable', 'credit' => $otherDeductions, 'description' => "Other payroll deductions {$label}"],
                         ['key' => 'staff_advances', 'credit' => $this->money($t['advance_deductions']), 'description' => "Salary advances recovered {$label}"],
                         ['key' => 'salaries_payable', 'credit' => $this->money($t['net']), 'description' => "Net pay {$label}"],
@@ -627,15 +635,19 @@ class LedgerPostingService
                 ];
             }
 
+            // Only a confirmed payment moves money: from the account chosen when it was paid.
             if ($run->status === 'paid' && $this->money($t['net']) > 0) {
+                $ref = $run->payment_reference ? " - ref {$run->payment_reference}" : '';
                 $payoutDesired = [
-                    'date' => $run->paid_at ?? $period,
+                    'date' => $run->payment_date ?? $run->paid_at ?? $period,
                     'prefix' => 'PRL',
                     'reference' => "PAYOUT-{$period->format('Y-m')}",
-                    'description' => "Salaries paid {$label}",
+                    'description' => "Salaries paid {$label}{$ref}",
                     'lines' => [
                         ['key' => 'salaries_payable', 'debit' => $this->money($t['net']), 'description' => "Net pay settled {$label}"],
-                        ['method' => 'bank_transfer', 'credit' => $this->money($t['net']), 'description' => "Salary payout {$label}"],
+                        $run->payment_account_id
+                            ? ['account_id' => $run->payment_account_id, 'credit' => $this->money($t['net']), 'description' => "Salary payout {$label}{$ref}"]
+                            : ['method' => $run->payment_method ?: 'bank_transfer', 'credit' => $this->money($t['net']), 'description' => "Salary payout {$label}{$ref}"],
                     ],
                 ];
             }
@@ -645,6 +657,62 @@ class LedgerPostingService
             $this->syncEntry($run, 'payroll_accrual', $accrualDesired),
             $this->syncEntry($run, 'payroll_payment', $payoutDesired),
         ];
+    }
+
+    /**
+     * Whether this payroll month posts to the ledger: not a past "record" run, payroll posting on,
+     * and on or after the company's payroll_posting_start (months before it were booked as expenses).
+     */
+    public function payrollPosts(PayrollRun $run, $settings = null): bool
+    {
+        $settings ??= $this->settings($run->company_id);
+        if ($run->is_historical || !$settings || $settings->payroll_posts_to_ledger === false) {
+            return false;
+        }
+        $start = $settings->payroll_posting_start ?? null;
+        if ($start) {
+            $periodEnd = Carbon::create((int) $run->pay_year, (int) $run->pay_month, 1)->endOfMonth();
+            if ($periodEnd->lt(Carbon::parse($start)->startOfDay())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A statutory deduction paid to its authority: DR the payable the payroll credited (PAYE, NSSF,
+     * SHIF, Housing Levy, HELB, NITA) / CR the bank or cash account it was paid from. Employer
+     * shares were expensed when the payroll was approved, so nothing is expensed here.
+     */
+    public function syncStatutoryPayment(\App\Models\StatutoryPayment $payment, bool $deleted = false): ?JournalEntry
+    {
+        $desired = null;
+        $run = $payment->payrollRun;
+        $amount = $this->money($payment->amount);
+        $def = \App\Models\StatutoryPayment::ITEMS[$payment->item] ?? null;
+
+        if (!$deleted && $run && $def && $amount > 0 && $this->payrollPosts($run)) {
+            [$label, $authority, , $key, $fallback] = $def;
+            $period = Carbon::create((int) $run->pay_year, (int) $run->pay_month, 1)->format('F Y');
+            $line = ['key' => $key, 'debit' => $amount, 'description' => "{$label} {$period} paid to {$authority}"];
+            if ($fallback) {
+                $line['fallback'] = $fallback;
+            }
+            $desired = [
+                'date' => $payment->payment_date,
+                'prefix' => 'STP',
+                'reference' => $payment->reference,
+                'description' => "{$label} {$period} - {$authority} - ref {$payment->reference}",
+                'lines' => [
+                    $line,
+                    $payment->account_id
+                        ? ['account_id' => $payment->account_id, 'credit' => $amount, 'description' => "{$label} {$period} payment"]
+                        : ['method' => $payment->payment_method ?: 'bank_transfer', 'credit' => $amount, 'description' => "{$label} {$period} payment"],
+                ],
+            ];
+        }
+
+        return $this->syncEntry($payment, 'statutory_payment', $desired);
     }
 
     /**

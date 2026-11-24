@@ -29,6 +29,12 @@ class PayrollRun extends Model
         'paid_by',
         'paid_at',
         'is_historical',
+        'payment_account_id',
+        'payment_method',
+        'payment_reference',
+        'payment_date',
+        'payment_initiated_by',
+        'payment_initiated_at',
     ];
 
     protected $casts = [
@@ -37,7 +43,19 @@ class PayrollRun extends Model
         'pay_year' => 'integer',
         'approved_at' => 'datetime',
         'paid_at' => 'datetime',
+        'payment_date' => 'date:Y-m-d',
+        'payment_initiated_at' => 'datetime',
     ];
+
+    public function paymentAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'payment_account_id');
+    }
+
+    public function statutoryPayments(): HasMany
+    {
+        return $this->hasMany(StatutoryPayment::class, 'payroll_run_id');
+    }
 
     /**
      * Get the company that owns this payroll run.

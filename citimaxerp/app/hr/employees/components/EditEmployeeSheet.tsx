@@ -105,7 +105,9 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
     bank_name: "",
     bank_account: "",
     bank_branch: "",
-    
+    statutory_deductions_apply: true,
+    shif_exempt: false,
+
     // Statutory Details
     statutory_details: {
       kra_pin: "",
@@ -243,7 +245,9 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
         bank_name: employee.bank_name || "",
         bank_account: employee.bank_account || "",
         bank_branch: employee.bank_branch || "",
-        
+        statutory_deductions_apply: (employee as any).statutory_deductions_apply !== false,
+        shif_exempt: Boolean((employee as any).shif_exempt),
+
         // Statutory Details
         statutory_details: {
           kra_pin: employee.statutory_details?.kra_pin || "",
@@ -352,6 +356,8 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
         leave_approver_id: formData.leave_approver_id || null,
         salary_advance_approver_id: formData.salary_advance_approver_id || null,
         user_id: formData.user_id || null,
+        statutory_deductions_apply: formData.statutory_deductions_apply,
+        shif_exempt: formData.shif_exempt,
         statutory_details: {
           kra_pin: formData.statutory_details.kra_pin?.trim() || null,
           nssf_number: formData.statutory_details.nssf_number?.trim() || null,
@@ -1087,6 +1093,28 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
                       onChange={(e) => setFormData({ ...formData, statutory_details: { ...formData.statutory_details, has_insurance_relief: e.target.checked } })}
                     />
                     <Label htmlFor="has_insurance_relief">Has Insurance Relief</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="statutory_deductions_apply"
+                      checked={formData.statutory_deductions_apply}
+                      onChange={(e) => setFormData({ ...formData, statutory_deductions_apply: e.target.checked })}
+                    />
+                    <Label htmlFor="statutory_deductions_apply">Statutory deductions apply (PAYE, NSSF, SHIF, Housing Levy, NITA)</Label>
+                  </div>
+                  {!formData.statutory_deductions_apply && (
+                    <p className="text-xs text-amber-700">Paid a fixed amount with no statutory deductions. Under Kenyan law an employee&apos;s pay is subject to PAYE, NSSF, SHIF and Housing Levy - confirm this is right.</p>
+                  )}
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="shif_exempt"
+                      checked={formData.shif_exempt}
+                      disabled={!formData.statutory_deductions_apply}
+                      onChange={(e) => setFormData({ ...formData, shif_exempt: e.target.checked })}
+                    />
+                    <Label htmlFor="shif_exempt">SHIF exempt (no SHIF deducted)</Label>
                   </div>
                   {formData.statutory_details.has_insurance_relief && (
                     <div className="space-y-2">

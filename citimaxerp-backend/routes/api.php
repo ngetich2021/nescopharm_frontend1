@@ -146,6 +146,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Payroll Runs (Kingston-style)
     Route::get('payroll-runs/stats', [\App\Http\Controllers\PayrollRunController::class, 'stats']);
+    Route::get('payroll-runs/payment-accounts', [\App\Http\Controllers\PayrollRunController::class, 'paymentAccounts']);
+    Route::post('payroll-runs/{id}/initiate-payment', [\App\Http\Controllers\PayrollRunController::class, 'initiatePayment']);
+    Route::post('payroll-runs/{id}/reopen', [\App\Http\Controllers\PayrollRunController::class, 'reopen']);
+    // Statutory Payments (PAYE, NSSF, SHIF, Housing Levy, HELB, NITA)
+    Route::get('statutory-payments/obligations', [\App\Http\Controllers\StatutoryPaymentController::class, 'obligations']);
+    Route::get('statutory-payments/history', [\App\Http\Controllers\StatutoryPaymentController::class, 'history']);
+    Route::post('statutory-payments', [\App\Http\Controllers\StatutoryPaymentController::class, 'store']);
+    Route::delete('statutory-payments/{id}', [\App\Http\Controllers\StatutoryPaymentController::class, 'destroy']);
     Route::get('payroll-runs', [\App\Http\Controllers\PayrollRunController::class, 'index']);
     Route::post('payroll-runs', [\App\Http\Controllers\PayrollRunController::class, 'store']);
     Route::get('payroll-runs/{id}', [\App\Http\Controllers\PayrollRunController::class, 'show']);
@@ -686,6 +694,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Asset register routes
     Route::get('/assets/summary', [AssetController::class, 'summary'])->name('assets.summary');
+    Route::get('/assets/schedule', [AssetController::class, 'schedule'])->name('assets.schedule');
     Route::post('/assets/import', [AssetController::class, 'import'])->name('assets.import');
     Route::get('/asset-options', [AssetController::class, 'options'])->name('assets.options');
     Route::post('/asset-options', [AssetController::class, 'storeOption'])->name('assets.options.store');

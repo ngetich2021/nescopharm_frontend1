@@ -11,8 +11,14 @@ export interface PayrollRun {
   company_id: string
   pay_month: number
   pay_year: number
-  status: 'draft' | 'approved' | 'paid'
+  status: 'draft' | 'approved' | 'payment_initiated' | 'paid'
   notes: string | null
+  payment_account_id?: string | null
+  payment_method?: string | null
+  payment_reference?: string | null
+  payment_date?: string | null
+  payment_initiated_at?: string | null
+  payment_account?: { id: string; account_code: string; account_name: string } | null
   /** A past payroll entered for the record (Payroll History import): figures as typed, never posted to the books. */
   is_historical?: boolean
   created_by: string
@@ -33,6 +39,9 @@ export interface PayrollRun {
   total_housing_levy?: string | number | null
   total_deductions?: string | number | null
   total_advance_deductions?: string | number | null
+  total_housing_levy_employer?: string | number | null
+  total_nita?: string | number | null
+  total_helb?: string | number | null
 }
 
 export interface PayrollPayslip {
@@ -79,6 +88,8 @@ export interface PayrollPayslip {
   shif: string
   housing_levy_employee: string
   housing_levy_employer: string
+  nita?: string
+  helb?: string
   salary_advance_deduction: string
   other_deductions: string
   other_deductions_note: string | null
@@ -188,12 +199,166 @@ export async function approvePayrollRun(id: string): Promise<PayrollRun> {
   return res.data
 }
 
-export async function markPayrollRunPaid(id: string): Promise<PayrollRun> {
-  const res = await apiCall<ApiSuccessResponse<PayrollRun>>(
+/** A salary or statutory payment: where it was paid from and how. */
+export interface PaymentDetails {
+  account_id: string
+  payment_method: string
+  payment_date: string
+  payment_reference?: string
+}
+
+export interface MoneyAccount {
+  id: string
+  code: string
+  name: string
+  label: string
+  balance: number
+}
+
+export const PAYMENT_METHODS: Array<{ value: string; label: string }> = [
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'eft', label: 'EFT' },
+  { value: 'rtgs', label: 'RTGS' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'mpesa', label: 'M-Pesa' },
+  { value: 'cash', label: 'Cash' },
+]
+
+export const paymentMethodLabel = (m?: string | null) => PAYMENT_METHODS.find((x) => x.value === m)?.label ?? (m || '-')
+
+/** Bank and cash accounts a payment can come from (with ledger balances). */
+export async function fetchPaymentAccounts(): Promise<MoneyAccount[]> {
+  const res = await apiCall<ApiSuccessResponse<MoneyAccount[]>>('/payroll-runs/payment-accounts', 'GET')
+  return res.data ?? []
+}
+
+/** Approved -> Payment initiated: payment voucher prepared, nothing posted to the bank yet. */
+export async function initiatePayrollPayment(id: string, data: PaymentDetails): Promise<PayrollRun> {
+  const res = await apiCall<ApiSuccessResponse<PayrollRun>>(`/payroll-runs/${id}/initiate-payment`, 'POST', data)
+  return res.data
+}
+
+/** Confirm the salaries were paid: posts DR Net Salaries Payable / CR the chosen account. */
+export async function markPayrollRunPaid(id: string, data: PaymentDetails): Promise<{ run: PayrollRun; message: string }> {
+  const res = await apiCall<ApiSuccessResponse<PayrollRun> & { message: string }>(
     `/payroll-runs/${id}/mark-paid`,
     'POST',
+    data,
+  )
+  return { run: res.data, message: res.message }
+}
+
+/** Send an approved (unpaid) run back to draft to correct it. */
+export async function reopenPayrollRun(id: string): Promise<PayrollRun> {
+  const res = await apiCall<ApiSuccessResponse<PayrollRun>>(`/payroll-runs/${id}/reopen`, 'POST')
+  return res.data
+}
+
+// ---------------------------------------------------------------------------
+// Statutory obligations & payments
+// ---------------------------------------------------------------------------
+
+export type StatutoryItem = 'paye' | 'nssf' | 'shif' | 'housing_levy' | 'helb' | 'nita'
+
+export interface StatutoryPaymentRow {
+  id: string
+  amount: number
+  payment_date: string
+  reference: string
+  payment_method: string | null
+  account: string | null
+  attachment_url: string | null
+  notes: string | null
+  recorded_by: string | null
+}
+
+export interface StatutoryLine {
+  item: StatutoryItem
+  label: string
+  authority: string
+  period_label: string
+  employee_share: number
+  employer_share: number
+  due: number
+  paid: number
+  balance: number
+  status: 'Pending' | 'Partially Paid' | 'Fully Paid' | 'Nothing due'
+  due_date: string
+  overdue: boolean
+  days_late: number
+  payments: StatutoryPaymentRow[]
+}
+
+export interface StatutoryMonth {
+  payroll_run_id: string
+  pay_month: number
+  pay_year: number
+  period_label: string
+  run_status: string
+  posts_to_ledger: boolean
+  net_salaries: { amount: number; status: string; payment_date: string | null; reference: string | null; account: string | null }
+  lines: StatutoryLine[]
+  totals: { due: number; paid: number; balance: number }
+}
+
+export interface StatutoryObligations {
+  months: StatutoryMonth[]
+  totals: { due: number; paid: number; balance: number }
+}
+
+export interface PaymentHistoryRow {
+  type: string
+  period_label: string | null
+  payment_date: string | null
+  amount: number
+  account: string | null
+  payment_method: string | null
+  reference: string | null
+  paid_to: string | null
+  recorded_by: string | null
+  attachment_url: string | null
+}
+
+export async function fetchStatutoryObligations(year?: number): Promise<StatutoryObligations> {
+  const res = await apiCall<ApiSuccessResponse<StatutoryObligations>>(
+    `/statutory-payments/obligations${year ? `?year=${year}` : ''}`,
+    'GET',
   )
   return res.data
+}
+
+export async function fetchPaymentHistory(params?: { date_from?: string; date_to?: string }): Promise<PaymentHistoryRow[]> {
+  const q = new URLSearchParams()
+  if (params?.date_from) q.append('date_from', params.date_from)
+  if (params?.date_to) q.append('date_to', params.date_to)
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  const res = await apiCall<ApiSuccessResponse<PaymentHistoryRow[]>>(`/statutory-payments/history${qs}`, 'GET')
+  return res.data ?? []
+}
+
+export async function recordStatutoryPayment(data: {
+  payroll_run_id: string
+  item: StatutoryItem
+  amount: number
+  payment_date: string
+  account_id: string
+  payment_method: string
+  reference: string
+  notes?: string
+  attachment?: File | null
+}): Promise<string> {
+  const fd = new FormData()
+  Object.entries(data).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return
+    fd.append(k, v instanceof File ? v : String(v))
+  })
+  const res = await apiCall<{ message: string }>('/statutory-payments', 'POST', fd)
+  return (res as any)?.message ?? 'Payment recorded.'
+}
+
+export async function deleteStatutoryPayment(id: string): Promise<string> {
+  const res = await apiCall<{ message: string }>(`/statutory-payments/${id}`, 'DELETE')
+  return (res as any)?.message ?? 'Payment deleted.'
 }
 
 /** Delete a payroll run (any status) with its payslips; salary advances it deducted are owed again. */

@@ -200,6 +200,46 @@ export async function getAssetSummary(asAt?: string): Promise<AssetSummary> {
   return { totalAssets: 0, totalQuantity: 0, totalValue: 0, totalCategories: 0 }
 }
 
+export interface ScheduleYear {
+  year_end: string
+  accumulated: number
+  charge: number
+  nbv: number
+}
+
+export interface ScheduleRow {
+  id: string
+  asset_code: string | null
+  name: string
+  category: string | null
+  purchase_date: string | null
+  total_cost: number
+  depreciation_start_date: string | null
+  depreciable_amount: number
+  monthly_depreciation: number
+  life_months: number
+  status: string | null
+  years: ScheduleYear[]
+}
+
+export interface DepreciationSchedule {
+  year_ends: string[]
+  rows: ScheduleRow[]
+  totals: { total_cost: number; depreciable_amount: number; monthly_depreciation: number; years: ScheduleYear[] }
+}
+
+/** Depreciation Schedule by asset: accumulated depreciation, charge for the year and NBV at each year-end. */
+export async function getDepreciationSchedule(params?: { first_year_end?: string; years?: number; category?: string }): Promise<DepreciationSchedule> {
+  const response = await apiCall<{ status: string; data: DepreciationSchedule; message?: string }>(
+    `/assets/schedule${toQuery({ first_year_end: params?.first_year_end, years: params?.years ? String(params.years) : undefined, category: params?.category })}`,
+    "GET",
+    undefined,
+    true
+  )
+  if (response.status !== "success") throw new Error(response.message || "Failed to load the depreciation schedule")
+  return response.data
+}
+
 // The register's columns, in its order. Excel export uses these headings so the sheet imports back
 // (a row with an Asset ID already in the system updates that asset).
 const REGISTER_COLUMNS: { header: string; field: keyof Asset | "sno"; aliases?: string[] }[] = [

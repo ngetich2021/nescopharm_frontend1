@@ -171,7 +171,8 @@ class PayrollService
 
         // ── Statutory deductions via KenyaPayrollCalculator ─────────
         // Calculated on gross pay (basic + taxable allowances)
-        $calc = $this->calculator->calculate($grossPay, $insurancePremium);
+        $calc = $this->calculator->calculate($grossPay, $insurancePremium, self::statutoryOptions($employee));
+        $helb = self::helbAmount($deductionsSnapshot);
 
         // ── Salary advances ─────────────────────────────────────────
         $advances = $isPast ? collect() : SalaryAdvance::where('employee_id', $employee->id)
@@ -227,6 +228,8 @@ class PayrollService
             'shif'                    => $calc['shif'],
             'housing_levy_employee'   => $calc['housing_levy_employee'],
             'housing_levy_employer'   => $calc['housing_levy_employer'],
+            'nita'                    => $calc['nita'],
+            'helb'                    => $helb,
             'salary_advance_deduction' => $salaryAdvanceDeduction,
             'total_deductions'        => $totalDeductions,
             'net_pay'                 => $netPay,
@@ -269,21 +272,108 @@ class PayrollService
         ]);
     }
 
-    // ─── 4. Mark Paid ───────────────────────────────────────────────────
+    // ─── 4. Pay employees ───────────────────────────────────────────────
+    // Approved -> Payment initiated (voucher prepared, no bank entry) -> Paid (payment confirmed:
+    // net salaries leave the chosen bank / cash account - DR Net Salaries Payable / CR that account).
 
-    public function markPaid(PayrollRun $run, string $actorId): void
+    /**
+     * @param array{account_id: string, payment_method: string, payment_date: string, payment_reference?: ?string} $payment
+     */
+    public function initiatePayment(PayrollRun $run, string $actorId, array $payment): void
     {
         if ($run->status !== 'approved') {
             throw new \RuntimeException(
-                "Only approved payroll runs can be marked as paid. Current status: {$run->status}"
+                "Only approved payroll runs can have a payment initiated. Current status: {$run->status}"
             );
         }
 
         $run->update([
-            'status'  => 'paid',
-            'paid_by' => $actorId,
-            'paid_at' => now(),
+            'status'               => 'payment_initiated',
+            'payment_account_id'   => $payment['account_id'],
+            'payment_method'       => $payment['payment_method'],
+            'payment_date'         => $payment['payment_date'],
+            'payment_reference'    => $payment['payment_reference'] ?? null,
+            'payment_initiated_by' => $actorId,
+            'payment_initiated_at' => now(),
         ]);
+    }
+
+    /**
+     * Confirm the salaries were actually paid: posts the payment to the chosen account.
+     *
+     * @param array{account_id: string, payment_method: string, payment_date: string, payment_reference: string} $payment
+     */
+    public function markPaid(PayrollRun $run, string $actorId, array $payment): void
+    {
+        if (!in_array($run->status, ['approved', 'payment_initiated'], true)) {
+            throw new \RuntimeException(
+                $run->status === 'paid'
+                    ? 'This payroll is already paid - the payment was posted once and cannot be posted again.'
+                    : "Only approved payroll runs can be marked as paid. Current status: {$run->status}"
+            );
+        }
+
+        $duplicate = PayrollRun::where('company_id', $run->company_id)->where('id', '!=', $run->id)
+            ->where('status', 'paid')->whereRaw('LOWER(payment_reference) = ?', [mb_strtolower(trim($payment['payment_reference']))])
+            ->first();
+        if ($duplicate) {
+            throw new \RuntimeException(sprintf(
+                'Payment reference %s is already used for the %s payroll. Check the reference - the same payment cannot be recorded twice.',
+                $payment['payment_reference'],
+                date('F Y', mktime(0, 0, 0, $duplicate->pay_month, 1, $duplicate->pay_year)),
+            ));
+        }
+
+        $run->update([
+            'status'            => 'paid',
+            'payment_account_id' => $payment['account_id'],
+            'payment_method'    => $payment['payment_method'],
+            'payment_date'      => $payment['payment_date'],
+            'payment_reference' => trim($payment['payment_reference']),
+            'paid_by'           => $actorId,
+            'paid_at'           => \Carbon\Carbon::parse($payment['payment_date'])->setTimeFrom(now()),
+        ]);
+    }
+
+    /**
+     * Send an approved (or payment-initiated) run back to draft to correct it. Its payroll entry is
+     * reversed by the ledger sync. A paid run, or one with statutory payments, cannot go back.
+     */
+    public function reopenRun(PayrollRun $run): void
+    {
+        if (!in_array($run->status, ['approved', 'payment_initiated'], true)) {
+            throw new \RuntimeException("Only approved payroll runs that are not yet paid can be sent back to draft. Current status: {$run->status}");
+        }
+        if (\App\Models\StatutoryPayment::where('payroll_run_id', $run->id)->exists()) {
+            throw new \RuntimeException('Statutory payments are already recorded against this payroll - delete them first.');
+        }
+        $run->update([
+            'status' => 'draft',
+            'approved_by' => null, 'approved_at' => null,
+            'payment_account_id' => null, 'payment_method' => null, 'payment_date' => null, 'payment_reference' => null,
+            'payment_initiated_by' => null, 'payment_initiated_at' => null,
+        ]);
+    }
+
+    /** Calculator options from the employee: statutory deductions apply (Y/N) and SHIF exempt. */
+    public static function statutoryOptions(Employee $employee): array
+    {
+        return [
+            'statutory' => $employee->statutory_deductions_apply !== false,
+            'shif_exempt' => (bool) $employee->shif_exempt,
+        ];
+    }
+
+    /** HELB is a deduction named HELB (from the HELB deduction notice); remitted to HELB on its own. */
+    public static function helbAmount(array $deductions): string
+    {
+        $sum = '0.00';
+        foreach ($deductions as $d) {
+            if (preg_match('/\bhelb\b/i', (string) ($d['name'] ?? ''))) {
+                $sum = bcadd($sum, number_format((float) ($d['amount'] ?? 0), 2, '.', ''), 2);
+            }
+        }
+        return $sum;
     }
 
     // ─── 5. Generate Payslip PDF ────────────────────────────────────────

@@ -59,7 +59,10 @@ class PayrollRunController extends Controller
                 DB::raw('(SELECT SUM(housing_levy_employee) FROM payroll_payslips WHERE payroll_payslips.payroll_run_id = payroll_runs.id) as total_housing_levy'),
                 DB::raw('(SELECT SUM(total_custom_deductions) FROM payroll_payslips WHERE payroll_payslips.payroll_run_id = payroll_runs.id) as total_deductions'),
                 DB::raw('(SELECT SUM(salary_advance_deduction) FROM payroll_payslips WHERE payroll_payslips.payroll_run_id = payroll_runs.id) as total_advance_deductions'),
-            ]);
+                DB::raw('(SELECT SUM(housing_levy_employer) FROM payroll_payslips WHERE payroll_payslips.payroll_run_id = payroll_runs.id) as total_housing_levy_employer'),
+                DB::raw('(SELECT SUM(nita) FROM payroll_payslips WHERE payroll_payslips.payroll_run_id = payroll_runs.id) as total_nita'),
+                DB::raw('(SELECT SUM(helb) FROM payroll_payslips WHERE payroll_payslips.payroll_run_id = payroll_runs.id) as total_helb'),
+            ])->with('paymentAccount:id,account_code,account_name');
     }
 
     // -------------------------------------------------------------------------
@@ -318,19 +321,95 @@ class PayrollRunController extends Controller
     // POST /payroll-runs/{id}/mark-paid
     // -------------------------------------------------------------------------
 
+    /** Bank / cash accounts a salary or statutory payment can be paid from, with balances. */
+    public function paymentAccounts(Request $request): JsonResponse
+    {
+        $accounts = app(\App\Services\CashBookService::class)->moneyAccounts($request->user()->company_id);
+        return response()->json(['status' => 'success', 'data' => $accounts]);
+    }
+
+    private function paymentRules(bool $referenceRequired): array
+    {
+        return [
+            'account_id' => 'required|uuid',
+            'payment_method' => 'required|in:bank_transfer,cheque,mpesa,cash,rtgs,eft',
+            'payment_date' => 'required|date',
+            'payment_reference' => ($referenceRequired ? 'required' : 'nullable') . '|string|max:120',
+        ];
+    }
+
+    private function validatedPayment(Request $request, PayrollRun $run, bool $referenceRequired): array
+    {
+        $data = Validator::make($request->all(), $this->paymentRules($referenceRequired), [
+            'account_id.required' => 'Choose the bank account (or petty cash) the salaries are paid from.',
+            'payment_reference.required' => 'Enter the payment reference (bank transaction, cheque or M-Pesa code).',
+        ])->validate();
+        $ok = \App\Models\ChartOfAccount::where('company_id', $run->company_id)->where('id', $data['account_id'])->exists();
+        if (!$ok) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['account_id' => 'Choose one of the company\'s bank or cash accounts.']);
+        }
+        return $data;
+    }
+
+    // POST /payroll-runs/{id}/initiate-payment - payment voucher prepared, no bank entry yet.
+    public function initiatePayment(Request $request, string $id): JsonResponse
+    {
+        $run = PayrollRun::where('company_id', $request->user()->company_id)->find($id);
+        if (!$run) {
+            return response()->json(['status' => 'failed', 'message' => 'Payroll run not found.'], 404);
+        }
+        if (!$this->hasPermission($request, 'can_process_payroll', $run->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+        try {
+            $data = $this->validatedPayment($request, $run, false);
+            $this->payrollService->initiatePayment($run, $request->user()->id, $data);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 'failed', 'message' => collect($e->errors())->flatten()->first(), 'errors' => $e->errors()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['status' => 'failed', 'message' => $e->getMessage()], 400);
+        }
+        return response()->json(['status' => 'success', 'message' => 'Payment initiated - confirm it once the money has left the bank.', 'data' => $this->withAggregates(PayrollRun::where('id', $run->id))->first()]);
+    }
+
+    // POST /payroll-runs/{id}/reopen - back to draft to correct (reverses its payroll entry).
+    public function reopen(Request $request, string $id): JsonResponse
+    {
+        $run = PayrollRun::where('company_id', $request->user()->company_id)->find($id);
+        if (!$run) {
+            return response()->json(['status' => 'failed', 'message' => 'Payroll run not found.'], 404);
+        }
+        if (!$this->hasPermission($request, 'can_approve_payroll', $run->company_id)) {
+            return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
+        }
+        try {
+            $this->payrollService->reopenRun($run);
+        } catch (\RuntimeException $e) {
+            return response()->json(['status' => 'failed', 'message' => $e->getMessage()], 400);
+        }
+        return response()->json(['status' => 'success', 'message' => 'Payroll sent back to draft.', 'data' => $run->fresh()]);
+    }
+
     public function markPaid(Request $request, string $id): JsonResponse
     {
         try {
-            $run = PayrollRun::findOrFail($id);
+            $run = PayrollRun::where('company_id', $request->user()->company_id)->findOrFail($id);
             if (!$this->hasPermission($request, 'can_process_payroll', $run->company_id)) {
                 return response()->json(['status' => 'failed', 'message' => 'Unauthorized.'], 403);
             }
-            $this->payrollService->markPaid($run, $request->user()->id);
+            try {
+                $data = $this->validatedPayment($request, $run, true);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                return response()->json(['status' => 'failed', 'message' => collect($e->errors())->flatten()->first(), 'errors' => $e->errors()], 422);
+            }
+            $this->payrollService->markPaid($run, $request->user()->id, $data);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Payroll run marked as paid successfully.',
-                'data' => $run->fresh(),
+                'message' => app(\App\Services\LedgerPostingService::class)->payrollPosts($run)
+                    ? 'Salary payment confirmed and posted to ' . ($run->fresh()->paymentAccount?->account_name ?? 'the bank') . '.'
+                    : 'Salary payment confirmed (this month is not posted to the ledger - salaries before it were booked as expenses).',
+                'data' => $this->withAggregates(PayrollRun::where('id', $run->id))->first(),
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
@@ -699,12 +778,14 @@ class PayrollRunController extends Controller
 
             // Gross = basic salary + taxable allowances
             $calculator = app(\App\Services\KenyaPayrollCalculator::class);
-            $basicSalary = (string) $payslip->gross_pay; // gross_pay stores basic salary
+            // gross_pay = basic + the taxable allowances it was last calculated with: take those back out.
+            $oldTaxable = collect($payslip->allowances_json ?? [])->filter(fn ($a) => $a['is_taxable'] ?? true)->sum(fn ($a) => (float) ($a['amount'] ?? 0));
+            $basicSalary = number_format(max(0, (float) $payslip->gross_pay - $oldTaxable), 2, '.', '');
             $grossPay = bcadd($basicSalary, $totalTaxableAllowances, 2);
             $insurance = (string) ($payslip->insurance_relief_premium ?? '0.00');
 
             // Statutory deductions calculated on gross (basic + taxable allowances)
-            $calc = $calculator->calculate($grossPay, $insurance);
+            $calc = $calculator->calculate($grossPay, $insurance, PayrollService::statutoryOptions($payslip->employee));
 
             $otherDed = (string) ($request->input('other_deductions', '0') ?? '0');
             $advanceDed = (string) $payslip->salary_advance_deduction;
@@ -726,6 +807,9 @@ class PayrollRunController extends Controller
             if (bccomp($netPay, '0.00', 2) < 0) $netPay = '0.00';
 
             $payslip->update([
+                'gross_pay' => $grossPay,
+                'nita' => $calc['nita'],
+                'helb' => PayrollService::helbAmount($deductions),
                 'allowances_json' => $allowances,
                 'total_allowances' => $totalAllowances,
                 'deductions_json' => $deductions,

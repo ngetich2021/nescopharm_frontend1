@@ -142,8 +142,11 @@ class CompanyAccountMapping extends Model
         'shif_payable' => ['description' => 'SHIF Payable', 'type' => 'liability', 'required' => false],
         'housing_levy_payable' => ['description' => 'Housing Levy Payable', 'type' => 'liability', 'required' => false],
         'payroll_deductions_payable' => ['description' => 'Other Payroll Deductions Payable', 'type' => 'liability', 'required' => false],
+        'helb_payable' => ['description' => 'HELB Payable', 'type' => 'liability', 'required' => false],
+        'nita_payable' => ['description' => 'NITA Levy Payable', 'type' => 'liability', 'required' => false],
         'nssf_employer_expense' => ['description' => 'NSSF Employer Contribution', 'type' => 'expense', 'required' => false],
         'housing_levy_employer_expense' => ['description' => 'Housing Levy Employer Contribution', 'type' => 'expense', 'required' => false],
+        'nita_expense' => ['description' => 'NITA Levy (employer)', 'type' => 'expense', 'required' => false],
         'staff_advances' => ['description' => 'Staff Advances (salary advances)', 'type' => 'asset', 'required' => false],
 
         // Equity
