@@ -44,21 +44,21 @@ class InvoiceDeliveryDateService
 
     /**
      * Dates the order's invoice on its delivery note date. Returns true when it changed.
-     * $dryRun only reports.
+     * $dryRun only reports. $includeEtims also re-dates an invoice already sent to eTIMS (done
+     * once on 24/11/2026 for NSK/0288 and NSK/0460 while prod eTIMS was on DigiTax TEST).
      */
-    public function align(Invoice $invoice, bool $dryRun = false): bool
+    public function align(Invoice $invoice, bool $dryRun = false, bool $includeEtims = false): bool
     {
-        if (!$invoice->order_id || $invoice->type === 'credit_note' || $this->isLockedByEtims($invoice)) {
+        if (!$invoice->order_id || $invoice->type === 'credit_note' || (!$includeEtims && $this->isLockedByEtims($invoice))) {
             return false;
         }
         $order = $invoice->relationLoaded('order') ? $invoice->order : Order::find($invoice->order_id);
         if (!$order) {
             return false;
         }
+        // Always the delivery note date, even one before the order date (the user's call, 24/11/2026).
         $date = $this->deliveryNoteDate($order);
-        // Goods can't leave before they were ordered: such a dispatch date was mistyped, so the
-        // invoice keeps its date until the dispatch date is corrected (which re-dates it then).
-        if (!$date || ($order->order_date && $date < $order->order_date->toDateString())) {
+        if (!$date) {
             return false;
         }
 

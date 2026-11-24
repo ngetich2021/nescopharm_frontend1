@@ -13,31 +13,28 @@ use Illuminate\Console\Command;
  */
 class AlignInvoiceDatesToDeliveryNotes extends Command
 {
-    protected $signature = 'invoices:date-from-delivery-note {--dry-run : List what would change, change nothing}';
+    protected $signature = 'invoices:date-from-delivery-note {--dry-run : List what would change, change nothing} {--include-etims : Also re-date invoices already sent to eTIMS}';
     protected $description = 'Date each order invoice on its delivery note date (due date follows the credit period)';
 
     public function handle(InvoiceDeliveryDateService $dates): int
     {
         $dryRun = (bool) $this->option('dry-run');
+        $includeEtims = (bool) $this->option('include-etims');
         $changed = 0;
         $locked = 0;
 
         Invoice::whereNotNull('order_id')->where('type', 'sales')->with('order.latestOrderDispatch')
             ->orderBy('invoice_date')
-            ->chunk(200, function ($invoices) use ($dates, $dryRun, &$changed, &$locked) {
+            ->chunk(200, function ($invoices) use ($dates, $dryRun, $includeEtims, &$changed, &$locked) {
                 foreach ($invoices as $invoice) {
                     $before = [$invoice->invoice_date?->toDateString(), $invoice->due_date?->toDateString()];
                     $target = $invoice->order ? $dates->deliveryNoteDate($invoice->order) : null;
-                    if ($target && $target !== $before[0] && $dates->isLockedByEtims($invoice)) {
+                    if (!$includeEtims && $target && $target !== $before[0] && $dates->isLockedByEtims($invoice)) {
                         $locked++;
-                        $this->warn("{$invoice->invoice_number}: on eTIMS, kept at {$before[0]} (delivery note {$target})");
+                        $this->warn("{$invoice->invoice_number}: on eTIMS, kept at {$before[0]} (delivery note {$target}); --include-etims re-dates it");
                         continue;
                     }
-                    if ($target && $invoice->order->order_date && $target < $invoice->order->order_date->toDateString()) {
-                        $this->warn("{$invoice->invoice_number}: delivery note {$target} is before the order ({$invoice->order->order_date->toDateString()}), kept at {$before[0]}");
-                        continue;
-                    }
-                    if (!$dates->align($invoice, $dryRun)) {
+                    if (!$dates->align($invoice, $dryRun, $includeEtims)) {
                         continue;
                     }
                     $changed++;
