@@ -965,7 +965,7 @@ class ExpenseController extends Controller
             ->get(['id', 'account_code', 'account_name', 'account_subtype', 'parent_id']);
         $hasChildren = $accounts->pluck('parent_id')->filter()->flip();
         $money = app(\App\Services\CashBookService::class)->moneyAccounts($companyId)->pluck('id')->flip();
-        // Nor the Opening Balance Difference, which only balances figures brought from the old system.
+        // Nor the account opening balances go to (the Capital Account on prod) - never an expense.
         $openingDiff = DB::table('company_account_mappings')->where('company_id', $companyId)->whereNull('context_type')
             ->where('mapping_key', 'opening_balance_equity')->value('chart_of_account_id');
         $accounts = $accounts->reject(fn ($a) => (isset($money[$a->id]) && !isset($hasChildren[$a->id])) || $a->id === $openingDiff)->values();

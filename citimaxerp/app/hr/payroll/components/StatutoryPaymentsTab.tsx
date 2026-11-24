@@ -141,8 +141,8 @@ export function StatutoryPaymentsTab() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
+            <CardContent className="p-0">
+              <Table scroll>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-14">S/No</TableHead>

@@ -362,8 +362,8 @@ export function AssetsTable({ asAt, onDataChanged }: AssetsTableProps) {
           </div>
         </div>
 
-        <div className="rounded-md border bg-white overflow-x-auto">
-          <Table>
+        <div className="bg-white">
+          <Table scroll>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14">S/No</TableHead>

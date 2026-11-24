@@ -129,9 +129,9 @@ export function AssetsSchedule() {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto max-h-[70vh]">
-          <Table className="text-xs">
-            <TableHeader className="sticky top-0 z-10 bg-background">
+        <div>
+          <Table scroll className="text-xs">
+            <TableHeader>
               <TableRow>
                 <TableHead colSpan={10} />
                 {sections.map((s) => (
@@ -180,7 +180,7 @@ export function AssetsSchedule() {
               )}
             </TableBody>
             {rows.length > 0 && data && (
-              <TableFooter className="sticky bottom-0">
+              <TableFooter className="sticky bottom-0 bg-muted">
                 <TableRow>
                   <TableCell />
                   <TableCell colSpan={4} className="font-semibold">TOTAL ({rows.length} assets)</TableCell>

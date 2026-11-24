@@ -389,6 +389,11 @@ class FinancialStatementService
         $openingDifferenceId = \Illuminate\Support\Facades\DB::table('company_account_mappings')
             ->where('company_id', $this->companyId)->where('mapping_key', 'opening_balance_equity')
             ->whereNull('context_type')->where('is_active', true)->value('chart_of_account_id');
+        // Opening balances may go straight to the Capital Account (no Opening Balance Difference
+        // account): an account with sub-accounts is the Capital Account, never shown apart.
+        if ($openingDifferenceId && \App\Models\ChartOfAccount::where('parent_id', $openingDifferenceId)->exists()) {
+            $openingDifferenceId = null;
+        }
 
         // Initialize categories
         $currentAssets = [];

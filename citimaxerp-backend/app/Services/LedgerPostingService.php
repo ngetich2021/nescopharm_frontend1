@@ -453,8 +453,8 @@ class LedgerPostingService
                     ->where('account_code', $meta['debit_account_code'])->first(['id', 'account_type']);
                 $other['account_id'] = $chosen?->id;
                 // An equity code on a bill is a balance brought across from the old system. The only
-                // equity is the owners' Capital Account, so its other side is the Opening Balance
-                // Difference, never some other equity account (or the Equity heading itself).
+                // equity is the owners' Capital Account: its other side is the account mapped as
+                // opening_balance_equity (on prod the Capital Account itself since 24/11/2026).
                 if ($chosen?->account_type === 'equity') {
                     $other['account_id'] = $this->engine->setCompany($bill->company_id)->resolveAccountId('opening_balance_equity') ?: $chosen->id;
                     $other['description'] = 'Opening balance - ' . $supplierName;
