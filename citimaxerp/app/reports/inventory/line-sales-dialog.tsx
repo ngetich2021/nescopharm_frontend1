@@ -96,7 +96,7 @@ export function LineSalesDialog({ target, onClose, onShowMovements }: { target: 
           <DialogTitle>{target?.name}: where it went</DialogTitle>
           <DialogDescription>
             Sales that took this stock, {period}
-            {target?.price_list ? ` (price code ${target.price_list === "none" ? "none" : target.price_list})` : ""}. Click an invoice or customer to open it.
+            {target?.price_list ? ` (price code ${target.price_list.split(",").map((c) => (c === "none" ? "none" : c)).join(", ")})` : ""}. Click an invoice or customer to open it.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center justify-end gap-2">

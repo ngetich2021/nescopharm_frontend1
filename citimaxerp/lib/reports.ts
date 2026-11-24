@@ -126,7 +126,7 @@ export async function getInventoryReport(params: {
   brand?: string;
   date_from?: string;
   date_to?: string;
-  price_list?: string; // Stock Management: NSPH, NSPD ... or "none"
+  price_list?: string; // Stock Management: NSPH, NSPD ... or "none"; several joined by commas ("NSPH,NSPO")
   product_id?: string; // movement / line_sales: one item
   variant_id?: string; // a size, "none" (item without a size) or "all" (every size, line_sales)
   direction?: 'in' | 'out'; // movement

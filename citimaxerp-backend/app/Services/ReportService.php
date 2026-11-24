@@ -243,12 +243,10 @@ class ReportService
         // Pricing filter (NSPH, NSPD ... or "none" for lines sold without a code): Sold and the values
         // count only that list's lines (the code on the order line); stock (opening/closing) stays the
         // item's whole stock, so opening is worked out from all its sales.
-        $priceList = trim((string) ($filters['price_list'] ?? ''));
-        $onList = $priceList === ''
-            ? 'TRUE'
-            : ($priceList === 'none'
-                ? "COALESCE(order_items.price_label, '') = ''"
-                : "split_part(COALESCE(order_items.price_label, ''), ' ', 1) = " . DB::getPdo()->quote($priceList));
+        // Several lists at once: "NSPH,NSPO" (and "none" for lines without a code) count all of them.
+        $priceLists = self::priceLists($filters['price_list'] ?? null);
+        $priceList = implode(',', $priceLists);
+        $onList = $priceLists ? self::onPriceListsSql($priceLists) : 'TRUE';
         $listSoldBaseUnits = "SUM(CASE WHEN {$onList} THEN COALESCE(order_items.base_quantity, order_items.quantity) ELSE 0 END)";
         $listRevenue = "SUM(CASE WHEN {$onList} THEN order_items.quantity * order_items.unit_price + COALESCE(order_items.tax_amount, 0) ELSE 0 END)";
 
@@ -386,10 +384,11 @@ class ReportService
             return $row;
         })->values();
 
-        if ($priceList !== '') {
-            $onTier = $priceList === 'none'
-                ? collect()
-                : DB::table('product_price_tiers')->where('company_id', $this->companyId)->where('tier_name', $priceList)->pluck('product_id')->unique();
+        if ($priceLists) {
+            $codes = array_values(array_diff($priceLists, ['none']));
+            $onTier = $codes
+                ? DB::table('product_price_tiers')->where('company_id', $this->companyId)->whereIn('tier_name', $codes)->pluck('product_id')->unique()
+                : collect();
             $keep = $onTier->merge($items->where('sales_quantity', '>', 0)->pluck('product_id'))->flip();
             $items = $items->filter(fn ($r) => $keep->has($r['product_id']))->values();
         }
@@ -401,7 +400,9 @@ class ReportService
         // are left out of profit (their amount is shown), as sales without a cost are.
         $credits = collect(app(CreditNoteProfitService::class)->lines(
             $this->companyId, $dateFrom->toDateString(), $dateTo->toDateString(), $productIds->all()))
-            ->when($priceList !== '', fn ($c) => $c->filter(fn ($l) => $priceList === 'none' ? empty($l['price_list']) : ($l['price_list'] ?? null) === $priceList))
+            ->when($priceLists, fn ($c) => $c->filter(fn ($l) => empty($l['price_list'])
+                ? in_array('none', $priceLists, true)
+                : in_array($l['price_list'], $priceLists, true)))
             ->values();
         // Each item row carries its own credit notes, so the deduction follows the table's search and
         // filters (searching one item deducts only that item's credit notes). Credits are per product, so
@@ -737,6 +738,31 @@ class ReportService
     }
 
     /**
+     * The Pricing filter as a list: "NSPH,NSPO" or ["NSPH","NSPO"] (plus "none" for lines sold without a
+     * price code). Empty = every list.
+     */
+    public static function priceLists($value): array
+    {
+        $parts = is_array($value) ? $value : explode(',', (string) $value);
+        return array_values(array_unique(array_filter(array_map(fn ($v) => trim((string) $v), $parts), fn ($v) => $v !== '' && $v !== 'all')));
+    }
+
+    /** SQL: the order line was sold on one of these lists (by the code on the line, e.g. "NSPH 012"). */
+    private static function onPriceListsSql(array $priceLists): string
+    {
+        $pdo = DB::getPdo();
+        $codes = array_values(array_diff($priceLists, ['none']));
+        $parts = [];
+        if ($codes) {
+            $parts[] = "split_part(COALESCE(order_items.price_label, ''), ' ', 1) IN (" . implode(', ', array_map(fn ($c) => $pdo->quote($c), $codes)) . ')';
+        }
+        if (in_array('none', $priceLists, true)) {
+            $parts[] = "COALESCE(order_items.price_label, '') = ''";
+        }
+        return '(' . implode(' OR ', $parts) . ')';
+    }
+
+    /**
      * Where one stock line's sold units went, for the Sold figure in Stock Management: every sale that took
      * stock in the period (same rules as that figure) with its NSK invoice, customer, quantity and value.
      * Filters: product_id, variant_id (a size, "none" for the item itself, "all" for every size), date_from,
@@ -746,7 +772,7 @@ class ReportService
     {
         $dateTo = isset($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : Carbon::now();
         $dateFrom = isset($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : Carbon::now()->startOfMonth();
-        $priceList = trim((string) ($filters['price_list'] ?? ''));
+        $priceLists = self::priceLists($filters['price_list'] ?? null);
         $variant = $filters['variant_id'] ?? null;
 
         $rows = DB::table('order_items')
@@ -762,9 +788,7 @@ class ReportService
                 : $q->where('order_items.variant_id', $variant))
             ->whereNotNull('orders.stock_deducted_at')
             ->whereBetween('orders.stock_deducted_at', [$dateFrom, $dateTo])
-            ->when($priceList !== '', fn ($q) => $priceList === 'none'
-                ? $q->whereRaw("COALESCE(order_items.price_label, '') = ''")
-                : $q->whereRaw("split_part(COALESCE(order_items.price_label, ''), ' ', 1) = ?", [$priceList]))
+            ->when($priceLists, fn ($q) => $q->whereRaw(self::onPriceListsSql($priceLists)))
             ->orderBy('orders.stock_deducted_at')
             ->select(
                 'orders.id as order_id', 'orders.order_number', 'orders.stock_deducted_at', 'orders.customer_id',

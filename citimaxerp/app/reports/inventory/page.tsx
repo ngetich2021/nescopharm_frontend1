@@ -216,7 +216,14 @@ export default function InventoryReportPage() {
   const [categoryId, setCategoryId] = useState("all")
   const [storeId, setStoreId] = useState("all")
   // Stock Management: one price list's sales (NSPH, NSPD... or "none" for lines sold without a code).
+  // Pricing: "all", or the ticked lists joined, e.g. "NSPH,NSPO" ("none" = lines without a price code).
   const [priceList, setPriceList] = useState("all")
+  const [pricingOpen, setPricingOpen] = useState(false)
+  const pickedLists = priceList === "all" ? [] : priceList.split(",")
+  const togglePriceList = (code: string) => {
+    const next = pickedLists.includes(code) ? pickedLists.filter((c) => c !== code) : [...pickedLists, code]
+    setPriceList(next.length ? next.sort().join(",") : "all")
+  }
   const [priceLists, setPriceLists] = useState<string[]>([])
   const [status, setStatus] = useState("all")
   const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -906,14 +913,33 @@ export default function InventoryReportPage() {
               </SelectContent>
             </Select>
             {reportType === "stock_management" && (
-              <Select value={priceList} onValueChange={setPriceList}>
-                <SelectTrigger aria-label="Pricing"><SelectValue placeholder="All pricing" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All pricing</SelectItem>
-                  {priceLists.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  <SelectItem value="none">No price code</SelectItem>
-                </SelectContent>
-              </Select>
+              <Popover open={pricingOpen} onOpenChange={setPricingOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" aria-label="Pricing" aria-expanded={pricingOpen} className="w-full justify-between font-normal">
+                    <span className="truncate">
+                      {pickedLists.length ? pickedLists.map((c) => (c === "none" ? "No code" : c)).join(", ") : "All pricing"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-1" align="start">
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">Tick one or more price lists</p>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                    onClick={() => setPriceList("all")}
+                  >
+                    <Check className={cn("h-4 w-4", pickedLists.length ? "opacity-0" : "opacity-100")} />
+                    All pricing
+                  </button>
+                  {[...priceLists, "none"].map((code) => (
+                    <label key={code} className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent">
+                      <Checkbox checked={pickedLists.includes(code)} onCheckedChange={() => togglePriceList(code)} />
+                      {code === "none" ? "No price code" : code}
+                    </label>
+                  ))}
+                </PopoverContent>
+              </Popover>
             )}
             {reportType === "movement" && (
               <Select value={direction} onValueChange={(v) => setDirection(v as "all" | "in" | "out")}>
