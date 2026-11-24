@@ -7,15 +7,40 @@ export interface Asset {
   id: string
   company_id: string
   name: string
-  category: string | null
+  category: string | null // Asset Class
   serial_number: string | null
   location: string | null
   quantity: number
-  purchase_cost: number | string
+  purchase_cost: number | string // per piece
   notes?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+  // Fixed Asset Register fields
+  asset_code?: string | null // CMP-001
+  tag_number?: string | null // TAG-001
+  assigned_to?: string | null
+  supplier?: string | null
+  invoice_number?: string | null
+  purchase_date?: string | null
+  date_basis?: string | null
+  depreciation_method?: string | null
+  depreciation_rate?: number | string | null // % a year
+  useful_life_years?: number | string | null
+  residual_percent?: number | string | null
+  depreciation_start_date?: string | null
+  status?: string | null
+  original_category?: string | null
+  // Worked out by the server as at a date (today by default)
+  total_cost?: number | string | null
+  depreciable_amount?: number
+  annual_depreciation?: number
+  monthly_depreciation?: number
+  months_depreciated?: number
+  accumulated_depreciation?: number
+  net_book_value?: number
+  fully_depreciated?: boolean
+  as_at?: string
 }
 
 export interface CreateAssetPayload {
@@ -25,23 +50,77 @@ export interface CreateAssetPayload {
   location?: string
   quantity?: number
   purchase_cost?: number
+  total_cost?: number
   notes?: string
   is_active?: boolean
+  asset_code?: string
+  tag_number?: string
+  assigned_to?: string
+  supplier?: string
+  invoice_number?: string
+  purchase_date?: string
+  date_basis?: string
+  depreciation_method?: string
+  depreciation_rate?: number
+  useful_life_years?: number
+  residual_percent?: number
+  depreciation_start_date?: string
+  status?: string
+  original_category?: string
 }
 
 export type UpdateAssetPayload = Partial<CreateAssetPayload>
+
+export interface AssetClassSummary {
+  class: string
+  lines: number
+  quantity: number
+  total_cost: number
+  rate: number | null
+  useful_life_years: number | null
+  annual_depreciation: number
+  accumulated_depreciation: number
+  net_book_value: number
+}
 
 export interface AssetSummary {
   totalAssets: number
   totalQuantity: number
   totalValue: number
   totalCategories: number
+  accumulatedDepreciation?: number
+  netBookValue?: number
+  annualDepreciation?: number
+  unassigned?: number
+  byClass?: AssetClassSummary[]
+  asAt?: string
+}
+
+/** Straight-line rates by class (the register's Rates sheet); the server holds the same table. */
+export const ASSET_CLASSES: Record<string, { rate: number; life: number }> = {
+  "Computers & Laptops": { rate: 33.3333, life: 3 },
+  "Printers": { rate: 25, life: 4 },
+  "Furniture & Fittings": { rate: 12.5, life: 8 },
+  "Office Equipment": { rate: 12.5, life: 8 },
+  "Machinery & Equipment": { rate: 12.5, life: 8 },
+  "Material Handling Equipment": { rate: 20, life: 5 },
+  "Security Equipment": { rate: 20, life: 5 },
+  "Leasehold Improvements": { rate: 10, life: 10 },
+}
+export const ASSET_STATUSES = ["In Use", "In Store", "Under Repair", "Missing", "Disposed", "Written Off"]
+/** Trading began 01/10/2025: an asset bought earlier depreciates from then. */
+export const DEPRECIATION_COMMENCEMENT = "2025-10-01"
+
+export const isAssigned = (who?: string | null) => {
+  const w = (who || "").trim().toLowerCase()
+  return w !== "" && !["n/a", "na", "not assigned", "unassigned", "-"].includes(w)
 }
 
 export interface GetAssetsParams {
   is_active?: boolean
   category?: string
   search?: string
+  as_at?: string
 }
 
 function toQuery(params?: Record<string, any>): string {
@@ -104,10 +183,10 @@ export async function deleteAsset(id: string): Promise<void> {
   }
 }
 
-export async function getAssetSummary(): Promise<AssetSummary> {
+export async function getAssetSummary(asAt?: string): Promise<AssetSummary> {
   try {
     const response = await apiCall<{ status: string; data: AssetSummary; message?: string }>(
-      "/assets/summary",
+      `/assets/summary${toQuery({ as_at: asAt })}`,
       "GET",
       undefined,
       true
@@ -121,107 +200,142 @@ export async function getAssetSummary(): Promise<AssetSummary> {
   return { totalAssets: 0, totalQuantity: 0, totalValue: 0, totalCategories: 0 }
 }
 
-const EXPORT_HEADERS = {
-  "S/No": "sno",
-  "Asset Name/Description": "name",
-  "Category": "category",
-  "Serial/Model Number": "serial_number",
-  "Location/Department": "location",
-  "Qty (Pcs)": "quantity",
-  "Purchase Cost (Ksh)": "purchase_cost",
-} as const
+// The register's columns, in its order. Excel export uses these headings so the sheet imports back
+// (a row with an Asset ID already in the system updates that asset).
+const REGISTER_COLUMNS: { header: string; field: keyof Asset | "sno"; aliases?: string[] }[] = [
+  { header: "S/No", field: "sno" },
+  { header: "Asset ID", field: "asset_code", aliases: ["assetid", "assetcode", "assetno"] },
+  { header: "Asset Tag No.", field: "tag_number", aliases: ["assettagno", "tagno", "tagnumber", "tag"] },
+  { header: "Asset Description", field: "name", aliases: ["assetdescription", "assetnamedescription", "description", "assetname", "name"] },
+  { header: "Asset Class", field: "category", aliases: ["assetclass", "class", "category"] },
+  { header: "Serial / Model No.", field: "serial_number", aliases: ["serialmodelno", "serialmodelnumber", "serialno", "serialnumber", "serial", "modelno"] },
+  { header: "Location / Department", field: "location", aliases: ["locationdepartment", "location", "department"] },
+  { header: "Assigned To / User", field: "assigned_to", aliases: ["assignedtouser", "assignedto", "user", "custodian"] },
+  { header: "Supplier / Vendor", field: "supplier", aliases: ["suppliervendor", "supplier", "vendor"] },
+  { header: "Invoice No.", field: "invoice_number", aliases: ["invoiceno", "invoicenumber", "invoice"] },
+  { header: "Qty", field: "quantity", aliases: ["qty", "qtypcs", "quantity"] },
+  { header: "Purchase Date", field: "purchase_date", aliases: ["purchasedate", "dateofpurchase"] },
+  { header: "Date Basis", field: "date_basis", aliases: ["datebasis"] },
+  { header: "Total Cost (Ksh)", field: "total_cost", aliases: ["totalcostksh", "totalcost", "cost"] },
+  { header: "Unit Cost (Ksh)", field: "purchase_cost", aliases: ["unitcostksh", "unitcost", "purchasecostksh", "purchasecost"] },
+  { header: "Depreciation Method", field: "depreciation_method", aliases: ["depreciationmethod", "method"] },
+  { header: "Rate % p.a.", field: "depreciation_rate", aliases: ["ratepa", "rate", "depreciationrate"] },
+  { header: "Useful Life (Yrs)", field: "useful_life_years", aliases: ["usefullifeyrs", "usefullife", "life"] },
+  { header: "Residual Value %", field: "residual_percent", aliases: ["residualvalue", "residual"] },
+  { header: "Depreciation Start Date", field: "depreciation_start_date", aliases: ["depreciationstartdate", "depstartdate"] },
+  { header: "Annual Depreciation", field: "annual_depreciation" },
+  { header: "Monthly Depreciation", field: "monthly_depreciation" },
+  { header: "Months Depreciated", field: "months_depreciated" },
+  { header: "Accumulated Depreciation", field: "accumulated_depreciation" },
+  { header: "Net Book Value", field: "net_book_value" },
+  { header: "Status", field: "status", aliases: ["status"] },
+  { header: "Original Category", field: "original_category", aliases: ["originalcategory"] },
+]
+// Worked out by the system, never read back from a sheet.
+const COMPUTED: (keyof Asset)[] = ["annual_depreciation", "monthly_depreciation", "months_depreciated", "accumulated_depreciation", "net_book_value"]
+const MONEY_FIELDS: (keyof Asset)[] = ["total_cost", "purchase_cost", "annual_depreciation", "monthly_depreciation", "accumulated_depreciation", "net_book_value"]
+const DATE_FIELDS: (keyof Asset)[] = ["purchase_date", "depreciation_start_date"]
 
-// Map a spreadsheet header (any of several spellings) to an asset field.
-function headerToField(header: string): keyof CreateAssetPayload | "sno" | null {
-  const h = header.toLowerCase().trim()
-  if (h.includes("name") || h.includes("description")) return "name"
-  if (h.includes("category")) return "category"
-  if (h.includes("serial") || h.includes("model")) return "serial_number"
-  if (h.includes("location") || h.includes("department")) return "location"
-  if (h.includes("qty") || h.includes("quantity")) return "quantity"
-  if (h.includes("cost") || h.includes("value") || h.includes("price")) return "purchase_cost"
-  if (h === "s/no" || h === "sno" || h === "sno." || h.includes("s/no")) return "sno"
-  return null
-}
+const norm = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, "")
+const ddmmyyyy = (d?: string | null) => (d ? d.slice(0, 10).split("-").reverse().join("/") : "")
 
-export async function exportAssets(format: ExportFormat = "xlsx"): Promise<void> {
-  const assets = await getAssets()
-  const rows = assets.map((a, idx) => ({
-    "S/No": idx + 1,
-    "Asset Name/Description": a.name,
-    "Category": a.category || "",
-    "Serial/Model Number": a.serial_number || "",
-    "Location/Department": a.location || "",
-    "Qty (Pcs)": a.quantity,
-    "Purchase Cost (Ksh)": Number(a.purchase_cost) || 0,
-  }))
-  // Excel is the sheet the assets import reads back; PDF and CSV the same rows for reading.
-  if (format !== "xlsx") {
-    return exportRecords(format, rows, { fileName: documentFileName([sessionCompanyName(), "Assets Register", todayFileDate()]), title: "Assets Register", moneyColumns: [6] })
+function registerRow(a: Asset, idx: number): Record<string, string | number> {
+  const row: Record<string, string | number> = {}
+  for (const c of REGISTER_COLUMNS) {
+    if (c.field === "sno") row[c.header] = idx + 1
+    else if (c.field === "depreciation_method") row[c.header] = a.depreciation_method === "straight_line" ? "Straight Line" : a.depreciation_method || ""
+    else if (DATE_FIELDS.includes(c.field)) row[c.header] = ddmmyyyy(a[c.field] as string)
+    else if (MONEY_FIELDS.includes(c.field)) row[c.header] = Math.round((Number(a[c.field]) || 0) * 100) / 100
+    else if (["depreciation_rate", "useful_life_years", "residual_percent", "quantity", "months_depreciated"].includes(c.field)) row[c.header] = Number(a[c.field]) || 0
+    else row[c.header] = (a[c.field] as string) ?? ""
   }
-
-  const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [Object.fromEntries(Object.keys(EXPORT_HEADERS).map((k) => [k, ""]))])
-  sheet["!cols"] = Object.keys(EXPORT_HEADERS).map((k) => ({ wch: Math.max(k.length + 2, 18) }))
-  const book = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(book, sheet, "Assets")
-  XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Assets Register", todayFileDate()], "xlsx"))
+  return row
 }
 
-// The first row is a real asset from the register (importing it again skips it as already there).
+export async function exportAssets(format: ExportFormat = "xlsx", rowsToExport?: Asset[], asAt?: string): Promise<void> {
+  const assets = rowsToExport ?? (await getAssets({ as_at: asAt }))
+  const rows = assets.map(registerRow)
+  const title = `Fixed Asset Register${asAt ? ` as at ${ddmmyyyy(asAt)}` : ""}`
+  const fileName = documentFileName([sessionCompanyName(), "Fixed Asset Register", asAt ? ddmmyyyy(asAt).replace(/\//g, "-") : todayFileDate()])
+  if (format !== "xlsx") {
+    // PDF keeps to what fits a page: who has what, where, and what it is worth now.
+    const PDF_HEADERS = ["S/No", "Asset ID", "Asset Tag No.", "Asset Description", "Asset Class", "Location / Department", "Assigned To / User", "Qty", "Purchase Date", "Total Cost (Ksh)", "Accumulated Depreciation", "Net Book Value", "Status"]
+    const keep = format === "pdf" ? PDF_HEADERS : REGISTER_COLUMNS.map((c) => c.header)
+    const records = rows.map((r) => Object.fromEntries(keep.map((h) => [h, r[h]])))
+    const moneyHeaders = REGISTER_COLUMNS.filter((c) => MONEY_FIELDS.includes(c.field as keyof Asset)).map((c) => c.header)
+    const moneyColumns = keep.map((h, i) => (moneyHeaders.includes(h) ? i : -1)).filter((i) => i >= 0)
+    return exportRecords(format, records, { fileName, title, moneyColumns })
+  }
+  const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [Object.fromEntries(REGISTER_COLUMNS.map((c) => [c.header, ""]))])
+  sheet["!cols"] = REGISTER_COLUMNS.map((c) => ({ wch: Math.max(c.header.length + 2, 14) }))
+  const book = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(book, sheet, "Register")
+  XLSX.writeFile(book, documentFileName([sessionCompanyName(), "Fixed Asset Register", todayFileDate()], "xlsx"))
+}
+
+// The register's columns with one real asset as the example (importing it again leaves it as it is).
 export async function downloadAssetTemplate(): Promise<void> {
-  const headers = Object.keys(EXPORT_HEADERS).filter((h) => h !== "S/No")
   const sample = (await getAssets().catch(() => [] as Asset[]))[0]
+  const headers = REGISTER_COLUMNS.filter((c) => c.field !== "sno" && !COMPUTED.includes(c.field as keyof Asset))
   const example = sample
-    ? {
-        "Asset Name/Description": sample.name,
-        "Category": sample.category || "",
-        "Serial/Model Number": sample.serial_number || "",
-        "Location/Department": sample.location || "",
-        "Qty (Pcs)": sample.quantity,
-        "Purchase Cost (Ksh)": Number(sample.purchase_cost) || 0,
-      }
-    : {
-        "Asset Name/Description": "HP Pro 290 Desktop",
-        "Category": "Computers",
-        "Serial/Model Number": "4CE502BSF3",
-        "Location/Department": "Accounts",
-        "Qty (Pcs)": 1,
-        "Purchase Cost (Ksh)": 125000,
-      }
-  const sheet = XLSX.utils.json_to_sheet([example])
-  sheet["!cols"] = headers.map((k) => ({ wch: Math.max(k.length + 2, 18) }))
+    ? Object.fromEntries(Object.entries(registerRow(sample, 0)).filter(([h]) => headers.some((c) => c.header === h)))
+    : Object.fromEntries(headers.map((c) => [c.header, ""]))
+  const sheet = XLSX.utils.json_to_sheet([example], { header: headers.map((c) => c.header) })
+  sheet["!cols"] = headers.map((c) => ({ wch: Math.max(c.header.length + 2, 14) }))
   const book = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(book, sheet, "Assets")
-  XLSX.writeFile(book, "assets_import_template.xlsx")
+  XLSX.utils.book_append_sheet(book, sheet, "Register")
+  XLSX.writeFile(book, "fixed_asset_register_template.xlsx")
 }
 
-// Parse an uploaded spreadsheet into asset rows on the client.
+const fieldFor = (header: string) => {
+  const h = norm(header)
+  return REGISTER_COLUMNS.find((c) => c.field !== "sno" && (norm(c.header) === h || c.aliases?.includes(h)))?.field ?? null
+}
+
+// Reads the Fixed Asset Register workbook (its "Register" sheet, headings on any of the first rows)
+// or the older plain template.
 export async function parseAssetFile(file: File): Promise<CreateAssetPayload[]> {
   const buffer = await file.arrayBuffer()
-  const book = XLSX.read(buffer, { type: "array" })
-  const sheet = book.Sheets[book.SheetNames[0]]
-  const raw: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" })
+  const book = XLSX.read(buffer, { type: "array", cellDates: true })
+  const sheetName = book.SheetNames.find((n) => n.trim().toLowerCase() === "register") ?? book.SheetNames[0]
+  const grid: any[][] = XLSX.utils.sheet_to_json(book.Sheets[sheetName], { header: 1, defval: "", raw: true })
+  const headerIdx = grid.findIndex((r) => r.filter((c) => fieldFor(String(c)) !== null).length >= 2 && r.some((c) => fieldFor(String(c)) === "name"))
+  if (headerIdx < 0) return []
+  const fields = grid[headerIdx].map((c) => fieldFor(String(c)))
 
-  return raw.map((r) => {
-    const asset: CreateAssetPayload = { name: "" }
-    for (const [header, value] of Object.entries(r)) {
-      const field = headerToField(header)
-      if (!field || field === "sno") continue
-      if (field === "quantity") {
-        const n = parseInt(String(value).replace(/[^0-9.-]/g, ""), 10)
+  const out: CreateAssetPayload[] = []
+  for (const r of grid.slice(headerIdx + 1)) {
+    const asset: Record<string, any> = {}
+    fields.forEach((f, i) => {
+      if (!f || f === "sno" || COMPUTED.includes(f as keyof Asset)) return
+      const v = r[i]
+      if (v === "" || v === null || v === undefined) return
+      if (DATE_FIELDS.includes(f as keyof Asset)) {
+        if (v instanceof Date) asset[f] = `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`
+        else {
+          const m = String(v).trim().match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/) // dd/mm/yyyy
+          asset[f] = m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : String(v).trim()
+        }
+      } else if (f === "quantity") {
+        const n = parseInt(String(v).replace(/[^0-9.-]/g, ""), 10)
         asset.quantity = Number.isFinite(n) && n > 0 ? n : 1
-      } else if (field === "purchase_cost") {
-        const n = parseFloat(String(value).replace(/[^0-9.-]/g, ""))
-        asset.purchase_cost = Number.isFinite(n) ? n : 0
+      } else if (["total_cost", "purchase_cost", "depreciation_rate", "useful_life_years", "residual_percent"].includes(f)) {
+        const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ""))
+        if (Number.isFinite(n)) asset[f] = n
       } else {
-        ;(asset as any)[field] = String(value).trim()
+        asset[f] = String(v).trim()
       }
-    }
-    return asset
-  })
+    })
+    const name = String(asset.name ?? "").trim()
+    // Stop at the register's TOTAL line; skip blank rows.
+    if (!name && !asset.asset_code) continue
+    if (/^total/i.test(String(asset.asset_code ?? name))) break
+    out.push(asset as CreateAssetPayload)
+  }
+  return out
 }
 
-export type AssetOptionType = "category" | "department"
+export type AssetOptionType = "category" | "department" | "assignee"
 
 export async function getAssetOptions(type: AssetOptionType): Promise<string[]> {
   const response = await apiCall<{ status: string; data: string[]; message?: string }>(

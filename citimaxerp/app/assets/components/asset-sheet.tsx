@@ -18,6 +18,9 @@ import {
   getAssetOptions,
   createAssetOption,
   AssetOptionType,
+  ASSET_CLASSES,
+  ASSET_STATUSES,
+  DEPRECIATION_COMMENCEMENT,
 } from "@/lib/assets"
 import { useToast } from "@/hooks/use-toast"
 
@@ -35,9 +38,25 @@ const EMPTY: CreateAssetPayload = {
   location: "",
   quantity: 1,
   purchase_cost: 0,
+  total_cost: 0,
   notes: "",
   is_active: true,
+  asset_code: "",
+  tag_number: "",
+  assigned_to: "",
+  supplier: "",
+  invoice_number: "",
+  purchase_date: "",
+  date_basis: "",
+  depreciation_rate: undefined,
+  useful_life_years: undefined,
+  residual_percent: 0,
+  depreciation_start_date: "",
+  status: "In Use",
 }
+
+const MONEY = new Intl.NumberFormat("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const later = (a: string, b: string) => (a > b ? a : b)
 
 // A company-wide option picker with an inline "+" to add a new value.
 function OptionSelect({
@@ -175,6 +194,7 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
 
   useEffect(() => {
     if (asset) {
+      const num = (v: unknown) => (v === null || v === undefined || v === "" ? undefined : Number(v))
       setFormData({
         name: asset.name,
         category: asset.category || "",
@@ -182,27 +202,70 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
         location: asset.location || "",
         quantity: asset.quantity ?? 1,
         purchase_cost: Number(asset.purchase_cost) || 0,
+        total_cost: Number(asset.total_cost ?? (Number(asset.purchase_cost) || 0) * (asset.quantity || 1)),
         notes: asset.notes || "",
         is_active: asset.is_active,
+        asset_code: asset.asset_code || "",
+        tag_number: asset.tag_number || "",
+        assigned_to: asset.assigned_to || "",
+        supplier: asset.supplier || "",
+        invoice_number: asset.invoice_number || "",
+        purchase_date: asset.purchase_date?.slice(0, 10) || "",
+        date_basis: asset.date_basis || "",
+        depreciation_rate: num(asset.depreciation_rate),
+        useful_life_years: num(asset.useful_life_years),
+        residual_percent: num(asset.residual_percent) ?? 0,
+        depreciation_start_date: asset.depreciation_start_date?.slice(0, 10) || "",
+        status: asset.status || "In Use",
       })
     } else {
       setFormData(EMPTY)
     }
   }, [asset, open])
 
-  const handleChange = (field: keyof CreateAssetPayload, value: string | number | boolean) => {
+  const handleChange = (field: keyof CreateAssetPayload, value: string | number | boolean | undefined) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
+
+  // Choosing a class fills its straight-line rate and life (the register's Rates sheet).
+  const handleClass = (value: string) => {
+    const rates = ASSET_CLASSES[value]
+    setFormData((prev) => ({
+      ...prev,
+      category: value,
+      ...(rates ? { depreciation_rate: rates.rate, useful_life_years: rates.life } : {}),
+    }))
+  }
+
+  // Depreciation starts on the later of the purchase date and 01/10/2025 (when trading began).
+  const handlePurchaseDate = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      purchase_date: value,
+      depreciation_start_date: value ? later(value, DEPRECIATION_COMMENCEMENT) : prev.depreciation_start_date,
+    }))
+  }
+
+  const qty = Math.max(1, Number(formData.quantity) || 1)
+  const unitCost = (Number(formData.total_cost) || 0) / qty
+  const annual = formData.useful_life_years
+    ? ((Number(formData.total_cost) || 0) * (1 - (Number(formData.residual_percent) || 0) / 100)) / Number(formData.useful_life_years)
+    : 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     try {
+      // Line cost is what is typed; the per-piece cost follows from it.
+      const payload: CreateAssetPayload = { ...formData, purchase_cost: Math.round(unitCost * 100) / 100 }
+      for (const k of ["purchase_date", "depreciation_start_date", "asset_code"] as const) {
+        if (!payload[k]) delete payload[k]
+      }
       if (isEdit && asset) {
-        await updateAsset(asset.id, formData)
+        await updateAsset(asset.id, payload)
         toast({ title: "Success", description: "Asset updated successfully." })
       } else {
-        await createAsset(formData)
+        await createAsset(payload)
         toast({ title: "Success", description: "Asset created successfully." })
       }
       onSaved()
@@ -234,9 +297,27 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
               <CardTitle>Asset Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="name">Asset Name / Description *</Label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="asset_code">Asset ID</Label>
+                  <Input
+                    id="asset_code"
+                    value={formData.asset_code}
+                    onChange={(e) => handleChange("asset_code", e.target.value.toUpperCase())}
+                    placeholder={isEdit ? "e.g. FUR-001" : "Given automatically (e.g. FUR-038)"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tag_number">Asset Tag No.</Label>
+                  <Input
+                    id="tag_number"
+                    value={formData.tag_number}
+                    onChange={(e) => handleChange("tag_number", e.target.value.toUpperCase())}
+                    placeholder="e.g. TAG-069 (the label stuck on it)"
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-2">
+                  <Label htmlFor="name">Asset Description *</Label>
                   <Input
                     id="name"
                     value={formData.name}
@@ -247,13 +328,13 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
                 </div>
                 <OptionSelect
                   type="category"
-                  label="Category"
-                  placeholder="Select category"
+                  label="Asset Class"
+                  placeholder="Select class"
                   value={formData.category || ""}
-                  onChange={(v) => handleChange("category", v)}
+                  onChange={handleClass}
                 />
                 <div className="space-y-2">
-                  <Label htmlFor="serial_number">Serial / Model Number</Label>
+                  <Label htmlFor="serial_number">Serial / Model No.</Label>
                   <Input
                     id="serial_number"
                     value={formData.serial_number}
@@ -261,44 +342,152 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
                     placeholder="e.g. 4CE502BSF3"
                   />
                 </div>
-                <OptionSelect
-                  type="department"
-                  label="Location / Department"
-                  placeholder="Select department"
-                  value={formData.location || ""}
-                  onChange={(v) => handleChange("location", v)}
-                />
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity (Pcs)</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    min={1}
-                    value={formData.quantity}
-                    onChange={(e) => handleChange("quantity", parseInt(e.target.value) || 1)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="purchase_cost">Purchase Cost (Ksh)</Label>
-                  <Input
-                    id="purchase_cost"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={formData.purchase_cost}
-                    onChange={(e) => handleChange("purchase_cost", parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => handleChange("notes", e.target.value)}
-                    placeholder="Any additional notes"
-                  />
+                  <Label htmlFor="status">Status</Label>
+                  <Select value={formData.status || "In Use"} onValueChange={(v) => handleChange("status", v)}>
+                    <SelectTrigger id="status"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ASSET_STATUSES.map((st) => <SelectItem key={st} value={st}>{st}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Who Has It</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <OptionSelect
+                type="department"
+                label="Location / Department"
+                placeholder="Select location"
+                value={formData.location || ""}
+                onChange={(v) => handleChange("location", v)}
+              />
+              <OptionSelect
+                type="assignee"
+                label="Assigned To / User"
+                placeholder="Who is answerable for it"
+                value={formData.assigned_to || ""}
+                onChange={(v) => handleChange("assigned_to", v)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Purchase</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="supplier">Supplier / Vendor</Label>
+                <Input id="supplier" value={formData.supplier} onChange={(e) => handleChange("supplier", e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoice_number">Invoice No.</Label>
+                <Input id="invoice_number" value={formData.invoice_number} onChange={(e) => handleChange("invoice_number", e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="purchase_date">Purchase Date</Label>
+                <Input id="purchase_date" type="date" value={formData.purchase_date} onChange={(e) => handlePurchaseDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity (Pcs)</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min={1}
+                  className="w-32"
+                  value={formData.quantity}
+                  onChange={(e) => handleChange("quantity", parseInt(e.target.value) || 1)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="total_cost">Total Cost (Ksh)</Label>
+                <Input
+                  id="total_cost"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.total_cost}
+                  onChange={(e) => handleChange("total_cost", parseFloat(e.target.value) || 0)}
+                />
+                <p className="text-xs text-muted-foreground">Unit cost: Ksh {MONEY.format(unitCost)}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Depreciation (straight line)</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="depreciation_rate">Rate % p.a.</Label>
+                <Input
+                  id="depreciation_rate"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.0001"
+                  className="w-40"
+                  value={formData.depreciation_rate ?? ""}
+                  onChange={(e) => {
+                    const rate = e.target.value === "" ? undefined : parseFloat(e.target.value)
+                    setFormData((prev) => ({ ...prev, depreciation_rate: rate, useful_life_years: rate ? Math.round((100 / rate) * 100) / 100 : prev.useful_life_years }))
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="useful_life_years">Useful Life (Yrs)</Label>
+                <Input
+                  id="useful_life_years"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  className="w-40"
+                  value={formData.useful_life_years ?? ""}
+                  onChange={(e) => {
+                    const life = e.target.value === "" ? undefined : parseFloat(e.target.value)
+                    setFormData((prev) => ({ ...prev, useful_life_years: life, depreciation_rate: life ? Math.round((100 / life) * 10000) / 10000 : prev.depreciation_rate }))
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="residual_percent">Residual Value %</Label>
+                <Input
+                  id="residual_percent"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  className="w-40"
+                  value={formData.residual_percent ?? 0}
+                  onChange={(e) => handleChange("residual_percent", parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="depreciation_start_date">Depreciation Start Date</Label>
+                <Input
+                  id="depreciation_start_date"
+                  type="date"
+                  value={formData.depreciation_start_date}
+                  onChange={(e) => handleChange("depreciation_start_date", e.target.value)}
+                />
+              </div>
+              <p className="sm:col-span-2 text-xs text-muted-foreground">
+                About Ksh {MONEY.format(annual)} a year (Ksh {MONEY.format(annual / 12)} a month), charged from the start month until the cost is written off.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6 space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea id="notes" value={formData.notes} onChange={(e) => handleChange("notes", e.target.value)} placeholder="Any additional notes" />
             </CardContent>
           </Card>
 

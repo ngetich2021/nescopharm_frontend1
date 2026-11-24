@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useMemo } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
@@ -13,12 +13,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   MoreHorizontal,
   Search,
-  Filter,
-  Download,
   Upload,
   FileSpreadsheet,
   ChevronLeft,
@@ -42,6 +41,7 @@ import {
   downloadAssetTemplate,
   parseAssetFile,
   importAssets,
+  isAssigned,
 } from "@/lib/assets"
 import { ExportMenu } from "@/components/export-menu"
 import type { ExportFormat } from "@/lib/table-export"
@@ -49,6 +49,7 @@ import { AssetSheet } from "./components/asset-sheet"
 import { AssetDetailsSheet } from "./components/asset-details-sheet"
 import { useToast } from "@/hooks/use-toast"
 import { PermissionGuard } from "@/components/PermissionGuard"
+import { displayDate } from "@/lib/date-format"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,24 +62,41 @@ import {
 } from "@/components/ui/alert-dialog"
 
 interface AssetsTableProps {
+  asAt: string
   onDataChanged?: () => void
 }
 
-type SortKey = "name" | "category" | "serial_number" | "location" | "quantity" | "purchase_cost"
+type SortKey =
+  | "asset_code" | "tag_number" | "name" | "category" | "location" | "assigned_to" | "quantity"
+  | "purchase_date" | "total_cost" | "accumulated_depreciation" | "net_book_value" | "status"
 type SortDir = "asc" | "desc"
 
 const KES = new Intl.NumberFormat("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const NUMERIC: SortKey[] = ["quantity", "total_cost", "accumulated_depreciation", "net_book_value"]
+const UNASSIGNED = "__unassigned__"
 
-export function AssetsTable({ onDataChanged }: AssetsTableProps) {
+const STATUS_STYLE: Record<string, string> = {
+  "In Use": "bg-green-100 text-green-800",
+  "In Store": "bg-blue-100 text-blue-800",
+  "Under Repair": "bg-amber-100 text-amber-800",
+  Missing: "bg-red-100 text-red-800",
+  Disposed: "bg-gray-200 text-gray-700",
+  "Written Off": "bg-gray-200 text-gray-700",
+}
+
+export function AssetsTable({ asAt, onDataChanged }: AssetsTableProps) {
   const { toast } = useToast()
 
   const [assets, setAssets] = useState<Asset[]>([])
   const [search, setSearch] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [classFilter, setClassFilter] = useState("all")
+  const [locationFilter, setLocationFilter] = useState("all")
+  const [assigneeFilter, setAssigneeFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
   const [isLoading, setIsLoading] = useState(true)
-  const [sortKey, setSortKey] = useState<SortKey>("name")
+  const [sortKey, setSortKey] = useState<SortKey>("asset_code")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
   const [isSheetOpen, setIsSheetOpen] = useState(false)
@@ -86,7 +104,6 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
   const [viewingAsset, setViewingAsset] = useState<Asset | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null)
 
-  const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importPreview, setImportPreview] = useState<any>(null)
   const [importRows, setImportRows] = useState<any[] | null>(null)
@@ -94,12 +111,12 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
   useEffect(() => {
     fetchAssets()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [asAt])
 
   async function fetchAssets() {
     setIsLoading(true)
     try {
-      const data = await getAssets()
+      const data = await getAssets({ as_at: asAt })
       setAssets(data.filter((a) => a != null))
     } catch (err) {
       toast({
@@ -112,30 +129,32 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     }
   }
 
-  const categories = useMemo(() => {
-    return Array.from(new Set(assets.map((a) => a.category).filter(Boolean))) as string[]
-  }, [assets])
+  const distinct = (pick: (a: Asset) => string | null | undefined) =>
+    Array.from(new Set(assets.map(pick).filter((v): v is string => !!v))).sort((a, b) => a.localeCompare(b))
+  const classes = useMemo(() => distinct((a) => a.category), [assets]) // eslint-disable-line react-hooks/exhaustive-deps
+  const locations = useMemo(() => distinct((a) => a.location), [assets]) // eslint-disable-line react-hooks/exhaustive-deps
+  const assignees = useMemo(() => distinct((a) => (isAssigned(a.assigned_to) ? a.assigned_to : null)), [assets]) // eslint-disable-line react-hooks/exhaustive-deps
+  const statuses = useMemo(() => distinct((a) => a.status), [assets]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase().trim()
     return assets.filter((a) => {
-      const matchesCategory = categoryFilter === "all" || a.category === categoryFilter
-      const matchesSearch =
-        term === "" ||
-        a.name.toLowerCase().includes(term) ||
-        (a.category || "").toLowerCase().includes(term) ||
-        (a.serial_number || "").toLowerCase().includes(term) ||
-        (a.location || "").toLowerCase().includes(term)
-      return matchesCategory && matchesSearch
+      if (classFilter !== "all" && a.category !== classFilter) return false
+      if (locationFilter !== "all" && a.location !== locationFilter) return false
+      if (assigneeFilter === UNASSIGNED ? isAssigned(a.assigned_to) : assigneeFilter !== "all" && a.assigned_to !== assigneeFilter) return false
+      if (statusFilter !== "all" && a.status !== statusFilter) return false
+      if (!term) return true
+      return [a.name, a.category, a.serial_number, a.location, a.asset_code, a.tag_number, a.assigned_to, a.supplier, a.invoice_number]
+        .some((v) => (v || "").toLowerCase().includes(term))
     })
-  }, [assets, search, categoryFilter])
+  }, [assets, search, classFilter, locationFilter, assigneeFilter, statusFilter])
 
   const sorted = useMemo(() => {
     const copy = [...filtered]
     copy.sort((a, b) => {
-      let av: string | number = a[sortKey] as any
-      let bv: string | number = b[sortKey] as any
-      if (sortKey === "quantity" || sortKey === "purchase_cost") {
+      let av: string | number = (a as any)[sortKey]
+      let bv: string | number = (b as any)[sortKey]
+      if (NUMERIC.includes(sortKey)) {
         av = Number(av) || 0
         bv = Number(bv) || 0
       } else {
@@ -149,31 +168,41 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     return copy
   }, [filtered, sortKey, sortDir])
 
+  // The Total row follows the search and filters.
+  const totals = useMemo(() => ({
+    quantity: sorted.reduce((s, a) => s + (Number(a.quantity) || 0), 0),
+    cost: sorted.reduce((s, a) => s + (Number(a.total_cost) || 0), 0),
+    accumulated: sorted.reduce((s, a) => s + (Number(a.accumulated_depreciation) || 0), 0),
+    nbv: sorted.reduce((s, a) => s + (Number(a.net_book_value) || 0), 0),
+  }), [sorted])
+
   const totalPages = Math.max(1, Math.ceil(sorted.length / rowsPerPage))
   const pageSafe = Math.min(currentPage, totalPages)
   const paginated = sorted.slice((pageSafe - 1) * rowsPerPage, pageSafe * rowsPerPage)
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, categoryFilter, rowsPerPage])
+  }, [search, classFilter, locationFilter, assigneeFilter, statusFilter, rowsPerPage])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"))
     } else {
       setSortKey(key)
-      setSortDir("asc")
+      setSortDir(NUMERIC.includes(key) ? "desc" : "asc")
     }
   }
 
   const sortIcon = (key: SortKey) => {
     if (sortKey !== key) return <ChevronsUpDown className="h-3.5 w-3.5 ml-1 inline opacity-40" />
-    return sortDir === "asc" ? (
-      <ArrowUp className="h-3.5 w-3.5 ml-1 inline" />
-    ) : (
-      <ArrowDown className="h-3.5 w-3.5 ml-1 inline" />
-    )
+    return sortDir === "asc" ? <ArrowUp className="h-3.5 w-3.5 ml-1 inline" /> : <ArrowDown className="h-3.5 w-3.5 ml-1 inline" />
   }
+
+  const SortHead = ({ k, children, right }: { k: SortKey; children: React.ReactNode; right?: boolean }) => (
+    <TableHead className={`cursor-pointer select-none whitespace-nowrap ${right ? "text-right" : ""}`} onClick={() => toggleSort(k)}>
+      {children} {sortIcon(k)}
+    </TableHead>
+  )
 
   const handleSaved = () => {
     fetchAssets()
@@ -197,8 +226,8 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     }
   }
 
-  // Excel is the sheet the assets import reads back; PDF and CSV the same register for reading.
-  const handleExport = (format: ExportFormat) => exportAssets(format)
+  // The export follows the search and filters; Excel uses the register's columns so it imports back.
+  const handleExport = (format: ExportFormat) => exportAssets(format, sorted, asAt)
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -207,7 +236,7 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     try {
       const rows = await parseAssetFile(file)
       if (rows.length === 0) {
-        toast({ title: "Empty file", description: "No rows found in the file.", variant: "destructive" })
+        toast({ title: "Nothing to import", description: "No asset rows found. The sheet needs an Asset Description column.", variant: "destructive" })
         return
       }
       const result = await importAssets(rows, true)
@@ -229,10 +258,10 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     if (!importRows) return
     setIsImporting(true)
     try {
-      await importAssets(importRows, false)
+      const result = await importAssets(importRows, false)
       setImportPreview(null)
       setImportRows(null)
-      toast({ title: "Success", description: "Assets imported successfully." })
+      toast({ title: "Imported", description: `${result.summary.created} added, ${result.summary.updated} updated, ${result.summary.unchanged} unchanged.` })
       fetchAssets()
       if (onDataChanged) onDataChanged()
     } catch (error) {
@@ -246,40 +275,55 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
     }
   }
 
+  const willChange = importPreview ? importPreview.summary.created + importPreview.summary.updated : 0
+
   return (
     <>
       <div className="space-y-4">
-        <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:justify-between xl:items-start">
           <div className="flex flex-wrap gap-3">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               <Input
                 className="pl-8 w-[260px] max-w-full"
-                placeholder="Search assets..."
+                placeholder="Search ID, tag, item, person, serial..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="relative">
-              <Filter className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 z-10" />
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[200px] pl-8">
-                  <SelectValue placeholder="Filter by category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={classFilter} onValueChange={setClassFilter}>
+              <SelectTrigger className="w-[200px]"><SelectValue placeholder="Asset class" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All classes</SelectItem>
+                {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={locationFilter} onValueChange={setLocationFilter}>
+              <SelectTrigger className="w-[190px]"><SelectValue placeholder="Location" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All locations</SelectItem>
+                {locations.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+              <SelectTrigger className="w-[190px]"><SelectValue placeholder="Assigned to" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Everyone</SelectItem>
+                <SelectItem value={UNASSIGNED}>Not assigned to anyone</SelectItem>
+                {assignees.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {statuses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={fetchAssets} disabled={isLoading}>
+            <Button variant="outline" size="sm" onClick={fetchAssets} disabled={isLoading} aria-label="Refresh">
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
             <PermissionGuard permissions={["can_create_assets", "can_manage_assets", "can_manage_system", "can_manage_company"]} hideOnDenied>
@@ -296,20 +340,14 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
                 Add Asset
               </Button>
             </PermissionGuard>
-            <ExportMenu onExport={handleExport} />
+            <ExportMenu onExport={handleExport} disabled={isLoading || sorted.length === 0} />
             <PermissionGuard permissions={["can_create_assets", "can_manage_assets", "can_manage_system", "can_manage_company"]} hideOnDenied>
               <Button variant="outline" size="sm" onClick={downloadAssetTemplate}>
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Template
               </Button>
               <div className="relative">
-                <input
-                  type="file"
-                  id="import-assets-file"
-                  className="hidden"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={handleImportFile}
-                />
+                <input type="file" id="import-assets-file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleImportFile} />
                 <Button
                   onClick={() => document.getElementById("import-assets-file")?.click()}
                   variant="outline"
@@ -329,57 +367,57 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14">S/No</TableHead>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
-                  Asset Name/Description {sortIcon("name")}
-                </TableHead>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("category")}>
-                  Category {sortIcon("category")}
-                </TableHead>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("serial_number")}>
-                  Serial/Model No. {sortIcon("serial_number")}
-                </TableHead>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("location")}>
-                  Location/Department {sortIcon("location")}
-                </TableHead>
-                <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("quantity")}>
-                  Qty {sortIcon("quantity")}
-                </TableHead>
-                <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("purchase_cost")}>
-                  Purchase Cost (Ksh) {sortIcon("purchase_cost")}
-                </TableHead>
+                <SortHead k="asset_code">Asset ID</SortHead>
+                <SortHead k="tag_number">Tag No.</SortHead>
+                <SortHead k="name">Asset Description</SortHead>
+                <SortHead k="category">Class</SortHead>
+                <SortHead k="location">Location</SortHead>
+                <SortHead k="assigned_to">Assigned To</SortHead>
+                <SortHead k="quantity" right>Qty</SortHead>
+                <SortHead k="purchase_date">Purchase Date</SortHead>
+                <SortHead k="total_cost" right>Cost (Ksh)</SortHead>
+                <SortHead k="accumulated_depreciation" right>Accum. Dep. (Ksh)</SortHead>
+                <SortHead k="net_book_value" right>Net Book Value (Ksh)</SortHead>
+                <SortHead k="status">Status</SortHead>
                 <TableHead className="w-12">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center">
+                  <TableCell colSpan={14} className="h-32 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={14} className="h-32 text-center text-muted-foreground">
                     <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    No assets found. Add an asset or import from Excel to get started.
+                    No assets found. Add an asset or import the Fixed Asset Register.
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((asset, idx) => (
-                  <TableRow
-                    key={asset.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => setViewingAsset(asset)}
-                  >
-                    <TableCell className="text-muted-foreground">
-                      {(pageSafe - 1) * rowsPerPage + idx + 1}
-                    </TableCell>
+                  <TableRow key={asset.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingAsset(asset)}>
+                    <TableCell className="text-muted-foreground">{(pageSafe - 1) * rowsPerPage + idx + 1}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono text-xs">{asset.asset_code || "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono text-xs">{asset.tag_number || "-"}</TableCell>
                     <TableCell className="font-medium">{asset.name}</TableCell>
-                    <TableCell>{asset.category || "-"}</TableCell>
-                    <TableCell>{asset.serial_number || "-"}</TableCell>
-                    <TableCell>{asset.location || "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{asset.category || "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{asset.location || "-"}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {isAssigned(asset.assigned_to) ? asset.assigned_to : <span className="text-amber-700">Not assigned</span>}
+                    </TableCell>
                     <TableCell className="text-right">{asset.quantity}</TableCell>
-                    <TableCell className="text-right">{KES.format(Number(asset.purchase_cost) || 0)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{asset.purchase_date ? displayDate(new Date(asset.purchase_date)) : "-"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{KES.format(Number(asset.total_cost) || 0)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{KES.format(Number(asset.accumulated_depreciation) || 0)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{KES.format(Number(asset.net_book_value) || 0)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`whitespace-nowrap border-0 ${STATUS_STYLE[asset.status || ""] ?? "bg-gray-100 text-gray-700"}`}>
+                        {asset.status || "In Use"}
+                      </Badge>
+                    </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -418,6 +456,20 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
                 ))
               )}
             </TableBody>
+            {!isLoading && sorted.length > 0 && (
+              <TableFooter className="bg-gray-100">
+                <TableRow>
+                  <TableCell />
+                  <TableCell colSpan={6} className="font-semibold">Total ({sorted.length} asset{sorted.length === 1 ? "" : "s"})</TableCell>
+                  <TableCell className="text-right font-semibold">{totals.quantity.toLocaleString()}</TableCell>
+                  <TableCell />
+                  <TableCell className="text-right font-semibold tabular-nums">{KES.format(totals.cost)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">{KES.format(totals.accumulated)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">{KES.format(totals.nbv)}</TableCell>
+                  <TableCell colSpan={2} />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </div>
 
@@ -425,8 +477,7 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>
-              Showing {sorted.length === 0 ? 0 : (pageSafe - 1) * rowsPerPage + 1} to{" "}
-              {Math.min(pageSafe * rowsPerPage, sorted.length)} of {sorted.length} assets
+              Showing {sorted.length === 0 ? 0 : (pageSafe - 1) * rowsPerPage + 1} to {Math.min(pageSafe * rowsPerPage, sorted.length)} of {sorted.length} assets
             </span>
             <Select value={String(rowsPerPage)} onValueChange={(v) => setRowsPerPage(Number(v))}>
               <SelectTrigger className="w-[110px] h-8">
@@ -449,12 +500,7 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
             <span className="text-sm">
               Page {pageSafe} of {totalPages}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(pageSafe + 1)}
-              disabled={pageSafe >= totalPages}
-            >
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(pageSafe + 1)} disabled={pageSafe >= totalPages}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -470,7 +516,8 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete asset?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove &quot;{deleteTarget?.name}&quot; from the asset register. This action cannot be undone.
+              This will permanently remove {deleteTarget?.asset_code ? `${deleteTarget.asset_code} ` : ""}&quot;{deleteTarget?.name}&quot; from the
+              asset register. To keep its history, set its Status to Disposed or Written Off instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -488,29 +535,26 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
             <div className="p-6 border-b">
               <h2 className="text-lg font-semibold">Import Preview</h2>
-              <p className="text-sm text-gray-600 mt-1">Review the import summary before proceeding</p>
+              <p className="text-sm text-gray-600 mt-1">
+                A row whose Asset ID is already in the register updates that asset; other rows are added. Nothing is saved until you confirm.
+              </p>
             </div>
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-3 rounded">
-                  <div className="text-2xl font-bold text-blue-600">{importPreview.summary.created}</div>
-                  <div className="text-sm text-gray-600">New assets</div>
-                </div>
-                <div className="bg-red-50 p-3 rounded">
-                  <div className="text-2xl font-bold text-red-600">{importPreview.summary.errors}</div>
-                  <div className="text-sm text-gray-600">Errors (skipped)</div>
-                </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: "New assets", value: importPreview.summary.created, tone: "bg-blue-50 text-blue-600" },
+                  { label: "Updated", value: importPreview.summary.updated, tone: "bg-amber-50 text-amber-700" },
+                  { label: "Unchanged", value: importPreview.summary.unchanged, tone: "bg-gray-50 text-gray-600" },
+                  { label: "Errors (skipped)", value: importPreview.summary.errors, tone: "bg-red-50 text-red-600" },
+                ].map((c) => (
+                  <div key={c.label} className={`p-3 rounded ${c.tone}`}>
+                    <div className="text-2xl font-bold">{c.value}</div>
+                    <div className="text-sm text-gray-600">{c.label}</div>
+                  </div>
+                ))}
               </div>
-              {importPreview.summary.errors > 0 && importPreview.summary.created > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
-                  {importPreview.summary.errors} row(s) have problems and will be skipped. The{" "}
-                  {importPreview.summary.created} valid row(s) will still be imported.
-                </div>
-              )}
-              {importPreview.summary.created === 0 && (
-                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
-                  No valid rows to import. Make sure the Asset Name/Description column is filled in, then try again.
-                </div>
+              {willChange === 0 && (
+                <div className="bg-gray-50 border rounded p-3 text-sm text-gray-700">Nothing to change: every row already matches the register.</div>
               )}
               {importPreview.rows && importPreview.rows.length > 0 && (
                 <div className="mt-4">
@@ -520,20 +564,23 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
                       <thead className="bg-gray-100 sticky top-0">
                         <tr>
                           <th className="px-3 py-2 text-left">Row</th>
-                          <th className="px-3 py-2 text-left">Name</th>
+                          <th className="px-3 py-2 text-left">Asset</th>
                           <th className="px-3 py-2 text-left">Status</th>
-                          <th className="px-3 py-2 text-left">Message</th>
+                          <th className="px-3 py-2 text-left">Detail</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {importPreview.rows.slice(0, 50).map((row: any, idx: number) => (
+                        {importPreview.rows.map((row: any, idx: number) => (
                           <tr key={idx} className="border-t hover:bg-gray-50">
                             <td className="px-3 py-2">{row.row}</td>
                             <td className="px-3 py-2">{row.name}</td>
                             <td className="px-3 py-2">
                               <span
                                 className={`px-2 py-1 text-xs rounded ${
-                                  row.status === "created" ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800"
+                                  row.status === "created" ? "bg-blue-100 text-blue-800"
+                                    : row.status === "updated" ? "bg-amber-100 text-amber-800"
+                                    : row.status === "unchanged" ? "bg-gray-100 text-gray-700"
+                                    : "bg-red-100 text-red-800"
                                 }`}
                               >
                                 {row.status}
@@ -559,11 +606,9 @@ export function AssetsTable({ onDataChanged }: AssetsTableProps) {
               >
                 Cancel
               </Button>
-              <Button onClick={handleConfirmImport} disabled={isImporting || importPreview.summary.created === 0}>
+              <Button onClick={handleConfirmImport} disabled={isImporting || willChange === 0}>
                 {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {importPreview.summary.errors > 0
-                  ? `Import ${importPreview.summary.created} valid row(s)`
-                  : "Confirm Import"}
+                Confirm Import
               </Button>
             </div>
           </div>
