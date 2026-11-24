@@ -11,7 +11,9 @@ use Illuminate\Support\Str;
 
 /**
  * Allowances paid outside payroll (frequency "disbursed": one-time ones on their date, monthly ones
- * once a month) are expenses: each payment is an Expense under "Salaries & Allowances", linked to its
+ * once a month) are expenses: each payment is an Expense charged to the allowance's ledger sub-account
+ * (chosen account -> sub-account, like any expense; "Salaries & Allowances" when none was chosen) and
+ * paid from its Petty Cash / Prime Bank (cash when none was chosen), linked to its
  * allowance by a tag (allowance:<id>:<date>). They follow the allowance - added, changed or removed with
  * it - and, being paid expenses, post to the books (DR the category's expense account / CR cash).
  * Allowances paid through payroll are left alone: payroll carries them.
@@ -71,11 +73,17 @@ class AllowanceExpenseService
             $employee = $a->employee;
             $who = $employee ? trim("{$employee->first_name} {$employee->last_name}") : 'Employee';
             $category = $dates ? $this->categoryFor($a->company_id) : null;
+            // Charged like an expense: the chosen sub-account (its own category), else Salaries & Allowances.
+            $categoryId = $a->account_id
+                ? (Expense::categoryForAccount($a->company_id, $a->account_id) ?? $category?->id)
+                : $category?->id;
 
             foreach ($dates as $date) {
                 $tag = $prefix . $date;
                 $fields = [
-                    'category_id' => $category->id,
+                    'category_id' => $categoryId,
+                    'account_id' => $a->account_id,
+                    'payment_method' => $a->payment_method ?: 'cash',
                     'vendor_name' => $who,
                     'description' => "Allowance: {$a->name}" . ($employee?->employee_number ? " ({$employee->employee_number})" : ''),
                     'amount' => round((float) $a->amount, 2),
@@ -91,7 +99,6 @@ class AllowanceExpenseService
                     Expense::create($fields + [
                         'id' => (string) Str::uuid(),
                         'company_id' => $a->company_id,
-                        'payment_method' => 'cash',
                         'status' => 'approved', // as every expense here; approved expenses post to the books
                         'is_recurring' => false,
                         'tags' => ['allowance', $tag],

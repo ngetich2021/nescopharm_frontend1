@@ -325,12 +325,17 @@ export interface DisbursedAllowance {
   is_taxable: boolean;
   one_time?: boolean; // paid once, on `date` (added on HR > Allowances)
   date?: string | null;
+  // A one-time allowance is paid as an expense: the account charged and where the money came from.
+  expense_id?: string | null;
+  account_name?: string | null;
+  paid_from?: string | null;
   updated_at: string | null;
 }
 
 /** An allowance paid once outside payroll; it counts in ROI for Reps on its date. */
 export async function createOneTimeAllowance(payload: {
   employee_id: string; name: string; amount: number; date: string; is_taxable?: boolean;
+  account_id: string; payment_method: "cash" | "check" | "bank_transfer";
 }): Promise<{ message: string }> {
   return apiCall(`/employee-allowances/one-time`, 'POST', payload);
 }

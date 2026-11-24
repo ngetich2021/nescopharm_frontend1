@@ -35,7 +35,7 @@ class EmployeeAllowanceController extends Controller
         $start = \Carbon\Carbon::createFromFormat('Y-m-d', "{$month}-01")->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
-        $rows = EmployeeAllowance::with('employee:id,employee_number,first_name,last_name,department,position,is_active')
+        $rows = EmployeeAllowance::with(['employee:id,employee_number,first_name,last_name,department,position,is_active', 'account:id,account_code,account_name'])
             ->where('company_id', $user->company_id)
             ->allowances()
             ->active()
@@ -57,6 +57,10 @@ class EmployeeAllowanceController extends Controller
                 // One-time: paid once, on one day (made on this page).
                 'one_time' => self::isOneTime($a),
                 'date' => self::isOneTime($a) ? $a->effective_from->toDateString() : null,
+                // Where its expense sits in the books, and where the money came from.
+                'account_id' => $a->account_id,
+                'account_name' => $a->account?->account_name ?? \App\Services\AllowanceExpenseService::CATEGORY,
+                'paid_from' => in_array($a->payment_method, ['check', 'bank_transfer'], true) ? 'Prime Bank' : 'Petty Cash',
                 'updated_at' => $a->updated_at?->toIso8601String(),
             ])
             ->values();
@@ -88,7 +92,9 @@ class EmployeeAllowanceController extends Controller
     }
 
     // -------------------------------------------------------------------------
-    // POST /employee-allowances/one-time  {employee_id, name, amount, date, is_taxable}
+    // POST /employee-allowances/one-time  {employee_id, name, amount, date, is_taxable, account_id, payment_method}
+    // Like an expense, it is charged to a ledger sub-account (account -> sub-account) and paid from
+    // Petty Cash (cash) or Prime Bank (cheque / transfer); its expense takes both (24/11/2026).
     // An allowance paid once outside payroll (e.g. a rep's field allowance for a week). It is a
     // "disbursed" allowance dated that one day, so payroll leaves it out and it counts in ROI for Reps.
     // -------------------------------------------------------------------------
@@ -104,6 +110,11 @@ class EmployeeAllowanceController extends Controller
             'amount' => 'required|numeric|min:0.01',
             'date' => 'required|date',
             'is_taxable' => 'sometimes|boolean',
+            'account_id' => 'required|uuid',
+            'payment_method' => 'required|in:cash,check,bank_transfer',
+        ], [
+            'account_id.required' => 'Choose the account and sub-account the allowance is charged to.',
+            'payment_method.required' => 'Choose where the money came from: Petty Cash or Prime Bank.',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => 'failed', 'message' => $validator->errors()->first()], 422);
@@ -114,6 +125,9 @@ class EmployeeAllowanceController extends Controller
             return response()->json(['status' => 'failed', 'message' => 'Employee not found.'], 422);
         }
         $date = \Carbon\Carbon::parse($request->input('date'))->toDateString();
+        if ($error = app(\App\Http\Controllers\ExpenseController::class)->ledgerAccountError($companyId, $request->input('account_id'))) {
+            return response()->json(['status' => 'failed', 'message' => $error], 422);
+        }
 
         $allowance = EmployeeAllowance::create([
             'employee_id' => $employee->id,
@@ -126,11 +140,16 @@ class EmployeeAllowanceController extends Controller
             'effective_from' => $date,
             'effective_to' => $date,
             'is_active' => true,
+            'account_id' => $request->input('account_id'),
+            'payment_method' => $request->input('payment_method'),
         ]);
+        $allowance->load('account:id,account_name');
+        $from = $allowance->payment_method === 'cash' ? 'Petty Cash' : 'Prime Bank';
 
         return response()->json([
             'status' => 'success',
-            'message' => trim("{$employee->first_name} {$employee->last_name}") . ': ' . $allowance->name . ' of KES ' . number_format((float) $allowance->amount, 2) . ' recorded.',
+            'message' => trim("{$employee->first_name} {$employee->last_name}") . ': ' . $allowance->name . ' of KES ' . number_format((float) $allowance->amount, 2)
+                . " recorded as an expense charged to {$allowance->account?->account_name}, paid from {$from}.",
             'data' => $allowance,
         ], 201);
     }

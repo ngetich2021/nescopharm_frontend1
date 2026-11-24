@@ -105,7 +105,7 @@ export default function AllowancesPage() {
     fileName: documentFileName([sessionCompanyName(), `Disbursed Allowances ${month}`]),
     title: "Disbursed Allowances",
     subtitle: month,
-    headers: ["S/No", "Employee #", "Employee", "Department", "Position", "Allowance", "Type", "Amount (KES)", "Taxable", "Last Updated"],
+    headers: ["S/No", "Employee #", "Employee", "Department", "Position", "Allowance", "Type", "Amount (KES)", "Taxable", "Account", "Paid From", "Last Updated"],
     moneyColumns: [7],
     rows: visible.map((r, i) => [
       i + 1,
@@ -117,9 +117,11 @@ export default function AllowancesPage() {
       typeLabel(r),
       Number(r.amount) || 0,
       r.is_taxable ? "Yes" : "No",
+      r.account_name ?? "",
+      r.paid_from ?? "",
       r.updated_at ? format(new Date(r.updated_at), "dd/MM/yyyy HH:mm") : "",
     ]),
-    footer: [["", "", "", "", "", "", "Total", total, "", ""]],
+    footer: [["", "", "", "", "", "", "Total", total, "", "", "", ""]],
   }))
 
   return (
@@ -208,19 +210,20 @@ export default function AllowancesPage() {
                     </TableHead>
                   ))}
                   <TableHead>Type</TableHead>
+                  <TableHead>Account / Paid From</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length + 3} className="py-10 text-center">
+                    <TableCell colSpan={COLUMNS.length + 4} className="py-10 text-center">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : visible.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length + 3} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={COLUMNS.length + 4} className="py-10 text-center text-muted-foreground">
                       {search
                         ? "No allowances match your search."
                         : `No allowances paid outside payroll for ${monthLabel}. Add one with "One-time Allowance", or set an allowance's frequency to "Disbursed" on the employee.`}
@@ -249,6 +252,16 @@ export default function AllowancesPage() {
                       <TableCell>
                         <Badge variant="outline" className={r.one_time ? "border-blue-200 bg-blue-50 text-blue-700" : ""}>{typeLabel(r)}</Badge>
                       </TableCell>
+                      <TableCell className="text-sm">
+                        {r.account_name ? (
+                          <>
+                            <div>{r.account_name}</div>
+                            <div className="text-xs text-muted-foreground">{r.paid_from}</div>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">{r.one_time ? "Not in the books" : "Through payroll"}</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {r.one_time && (
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => removeOneTime(r)} title="Remove">
@@ -265,7 +278,7 @@ export default function AllowancesPage() {
                   <TableRow>
                     <TableCell colSpan={5} className="font-semibold">Total</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">{kes(total)}</TableCell>
-                    <TableCell colSpan={4} />
+                    <TableCell colSpan={5} />
                   </TableRow>
                 </TableFooter>
               )}

@@ -993,7 +993,7 @@ class ExpenseController extends Controller
     }
 
     /** Why an account can't take an expense, or null when it can. */
-    private function ledgerAccountError(string $companyId, string $accountId): ?string
+    public function ledgerAccountError(string $companyId, string $accountId): ?string
     {
         $account = \App\Models\ChartOfAccount::where('company_id', $companyId)->find($accountId);
         if (!$account) {

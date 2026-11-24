@@ -28,6 +28,8 @@ class EmployeeAllowance extends Model
         'effective_from',
         'effective_to',
         'is_active',
+        'account_id',     // ledger sub-account its expenses are charged to (like an expense)
+        'payment_method', // cash = Petty Cash; check / bank_transfer = Prime Bank
     ];
 
     protected $casts = [
@@ -56,6 +58,12 @@ class EmployeeAllowance extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /** The ledger sub-account the allowance's expenses are charged to. */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'account_id');
     }
 
     /**
