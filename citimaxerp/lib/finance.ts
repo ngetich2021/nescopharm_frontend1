@@ -440,8 +440,11 @@ export const getTrialBalance = async (params?: {
 }): Promise<{ accounts: TrialBalance[]; totals: any }> => {
   const queryString = params ? toQuery(params) : '';
   const url = queryString ? `/finance/trial-balance?${queryString}` : '/finance/trial-balance';
-  const response = await apiCall<{ accounts: TrialBalance[]; totals: any }>(url, 'GET');
-  return response;
+  // The API wraps the report in { status, message, data: { accounts, totals, ... } }.
+  const response = await apiCall<any>(url, 'GET');
+  const body = response?.data ?? response;
+  if (response?.status === 'failed') throw new Error(response?.message || 'Failed to load the trial balance');
+  return { accounts: body?.accounts ?? [], totals: body?.totals ?? null };
 };
 
 export const getAccountBalance = async (id: string, params?: {

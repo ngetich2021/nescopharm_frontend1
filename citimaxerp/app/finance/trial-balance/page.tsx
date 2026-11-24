@@ -54,20 +54,27 @@ export default function TrialBalancePage() {
     try {
       setIsLoading(true)
       const response = await getTrialBalance({ as_of_date: asOfDate })
+      const accounts = (response.accounts || []).map((a: any) => ({
+        ...a,
+        debit_balance: String(a.debit_balance ?? 0),
+        credit_balance: String(a.credit_balance ?? 0),
+      }))
+      const t = response.totals
       setTrialBalanceData({
-        accounts: response.accounts || [],
-        totals: response.totals || {
-          total_debits: "0.00",
-          total_credits: "0.00",
-          difference: "0.00",
-          is_balanced: true
-        }
+        accounts,
+        totals: {
+          total_debits: String(t?.total_debits ?? 0),
+          total_credits: String(t?.total_credits ?? 0),
+          difference: String(t?.difference ?? 0),
+          is_balanced: Boolean(t?.is_balanced),
+        },
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching trial balance:', error)
+      setTrialBalanceData(null)
       toast({
         title: "Error",
-        description: "Failed to fetch trial balance data. Please try again.",
+        description: error?.message || "Failed to fetch trial balance data. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -104,7 +111,11 @@ export default function TrialBalancePage() {
     return groups
   }, {} as Record<string, TrialBalance[]>) || {}
 
-  const accountTypeOrder = ['asset', 'liability', 'equity', 'income', 'revenue', 'expense']
+  const baseOrder = ['asset', 'liability', 'equity', 'income', 'revenue', 'expense']
+  // Any other account type still shows, after the usual ones.
+  const accountTypeOrder = [...baseOrder, ...Object.keys(groupedAccounts).filter((t) => !baseOrder.includes(t))]
+  const hasData = (trialBalanceData?.accounts.length ?? 0) > 0
+  let sno = 0
 
   if (isLoading) {
     return (
@@ -147,7 +158,9 @@ export default function TrialBalancePage() {
               </div>
             </div>
             <div className="flex items-center gap-2 mt-6">
-              {trialBalanceData?.totals.is_balanced ? (
+              {!hasData ? (
+                <span className="text-sm text-muted-foreground">No balances to show for this date</span>
+              ) : trialBalanceData?.totals.is_balanced ? (
                 <>
                   <CheckCircle className="h-5 w-5 text-green-600" />
                   <span className="text-sm text-green-600 font-medium">Trial Balance is Balanced</span>
@@ -175,6 +188,7 @@ export default function TrialBalancePage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-14">S/No</TableHead>
                 <TableHead>Account Code</TableHead>
                 <TableHead>Account Name</TableHead>
                 <TableHead>Account Type</TableHead>
@@ -194,7 +208,7 @@ export default function TrialBalancePage() {
                   <Fragment key={accountType}>
                     {/* Account Type Header */}
                     <TableRow className="bg-muted/50">
-                      <TableCell colSpan={3} className="font-semibold">
+                      <TableCell colSpan={4} className="font-semibold">
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className={getAccountTypeColor(accountType)}>
                             {accountType.toUpperCase()}
@@ -213,6 +227,7 @@ export default function TrialBalancePage() {
                     {/* Individual Accounts */}
                     {accounts.map((account) => (
                       <TableRow key={account.account_id}>
+                        <TableCell className="text-muted-foreground">{++sno}</TableCell>
                         <TableCell className="font-mono pl-8">{account.account_code}</TableCell>
                         <TableCell className="pl-8">{account.account_name}</TableCell>
                         <TableCell></TableCell>
@@ -230,7 +245,7 @@ export default function TrialBalancePage() {
 
               {/* Totals Row */}
               <TableRow className="border-t-2 border-black font-bold">
-                <TableCell colSpan={3} className="font-bold text-lg">TOTALS</TableCell>
+                <TableCell colSpan={4} className="font-bold text-lg">TOTALS</TableCell>
                 <TableCell className="font-mono text-right text-lg">
                   {formatCurrency(trialBalanceData?.totals.total_debits || '0')}
                 </TableCell>
@@ -240,9 +255,9 @@ export default function TrialBalancePage() {
               </TableRow>
 
               {/* Difference Row (if not balanced) */}
-              {!trialBalanceData?.totals.is_balanced && (
+              {hasData && !trialBalanceData?.totals.is_balanced && (
                 <TableRow className="bg-red-50">
-                  <TableCell colSpan={3} className="font-bold text-red-600">DIFFERENCE</TableCell>
+                  <TableCell colSpan={4} className="font-bold text-red-600">DIFFERENCE</TableCell>
                   <TableCell colSpan={2} className="font-mono text-right text-red-600 font-bold">
                     {formatCurrency(trialBalanceData?.totals.difference || '0')}
                   </TableCell>
