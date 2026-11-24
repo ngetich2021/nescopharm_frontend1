@@ -1345,6 +1345,42 @@ class ProductController extends Controller
             return $pick?->id;
         };
 
+        // A corrected batch number is the same batch renamed, not a new delivery. Fidel fixed a
+        // batch number in the exported sheet on 24/11/2026 and the upload made a second batch,
+        // counting the stock twice. When a row's number matches no batch, it takes over a batch of
+        // the same item and size whose own number is nowhere in the sheet for that item, with the
+        // same received date and the same quantity (received or available).
+        $sheetNumbers = [];
+        foreach (array_slice($rows, 1) as $sheetRow) {
+            $desc = isset($columns['description']) ? mb_strtolower(trim(preg_replace('/\s+/', ' ', (string) ($sheetRow[$columns['description']] ?? '')))) : '';
+            $num = trim(preg_replace('/\s+/', ' ', (string) ($sheetRow[$columns['batch_number']] ?? '')));
+            if ($desc !== '' && $num !== '') {
+                $sheetNumbers[$desc][$num] = true;
+            }
+        }
+        $batchesByItem = $existingBatches->flatten(1)->groupBy(fn ($b) => $b->product_id . '|' . ($b->variant_id ?? ''));
+        $takeRenamed = function ($product, $variant, ?string $receivedDate, array $row) use ($batchesByItem, &$usedBatchIds, $sheetNumbers) {
+            if (!$receivedDate) {
+                return null;
+            }
+            $names = [mb_strtolower(preg_replace('/\s+/', ' ', trim((string) $product->name)))];
+            if ($variant) {
+                $names[] = mb_strtolower(preg_replace('/\s+/', ' ', trim(ProductVariant::sizedName($product->name, $variant->name))));
+            }
+            $pick = ($batchesByItem->get($product->id . '|' . ($variant?->id ?? '')) ?? collect())
+                ->reject(fn ($b) => isset($usedBatchIds[$b->id]))
+                ->reject(fn ($b) => collect($names)->contains(fn ($n) => isset($sheetNumbers[$n][(string) $b->batch_number])))
+                ->filter(fn ($b) => optional($b->received_date)->toDateString() === $receivedDate)
+                ->filter(fn ($b) => (int) $b->quantity_available === $row['available'] || (int) $b->quantity_received === $row['received'])
+                ->sortByDesc(fn ($b) => ((int) $b->quantity_available === $row['available'] ? 2 : 0)
+                    + ($row['expiry'] && optional($b->expiry_date)->toDateString() === $row['expiry'] ? 1 : 0))
+                ->first();
+            if ($pick) {
+                $usedBatchIds[$pick->id] = true;
+            }
+            return $pick?->id;
+        };
+
         DB::beginTransaction();
         try {
             for ($i = 1; $i < count($rows); $i++) {
@@ -1463,11 +1499,13 @@ class ProductController extends Controller
                     'notes' => $cell('notes') ?: null,
                 ];
 
-                $existingBatchId = $takeBatch($batchKey($product->id, $variant?->id, $batchNumber), $date($cell('received_date')), [
+                $matchRow = [
                     'available' => (int) round($qtyAvailable),
                     'received' => (int) round($qtyReceived),
                     'expiry' => $expiry,
-                ]);
+                ];
+                $existingBatchId = $takeBatch($batchKey($product->id, $variant?->id, $batchNumber), $date($cell('received_date')), $matchRow)
+                    ?? $takeRenamed($product, $variant, $date($cell('received_date')), $matchRow);
                 if ($existingBatchId) {
                     $batch = InventoryBatch::find($existingBatchId);
                     // Only update the fields the user actually supplied so a
