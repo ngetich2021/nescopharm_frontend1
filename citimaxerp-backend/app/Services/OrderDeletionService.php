@@ -19,14 +19,23 @@ use Illuminate\Support\Facades\Schema;
  */
 class OrderDeletionService
 {
-    // Why the order can't be deleted, or null when it can. Nothing stops it any more: its credit
-    // notes, receipts, cheques and dispatch all go with it (old-system data is being re-entered).
+    // From 24/11/2026 nobody deletes an order or an invoice: not the Delete action, not the
+    // clean-up of rejected/cancelled orders, not Delete Customer. Rejected and cancelled orders
+    // stay on record with that status (their stock was already returned when declined).
+    public const NO_DELETE_MESSAGE = 'Orders and invoices cannot be deleted. Cancel or reject the order instead, or raise a credit note against its invoice.';
+
     public function blocker(Order $order): ?string
     {
-        return null;
+        return self::NO_DELETE_MESSAGE;
     }
 
     public function delete(Order $order): void
+    {
+        throw new \RuntimeException(self::NO_DELETE_MESSAGE);
+    }
+
+    /** The old deletion, kept unreachable for reference; nothing calls it. */
+    private function deleteForGood(Order $order): void
     {
         $invoice = Invoice::where('order_id', $order->id)->first();
 

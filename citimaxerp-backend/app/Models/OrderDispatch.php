@@ -83,6 +83,17 @@ class OrderDispatch extends Model
         };
         static::saved($syncStock);
         static::deleted($syncStock);
+
+        // The order's invoice is dated on its delivery note date (24/11/2026).
+        static::saved(function (OrderDispatch $dispatch) {
+            if (($dispatch->wasRecentlyCreated || $dispatch->wasChanged('dispatch_date')) && $order = Order::find($dispatch->order_id)) {
+                try {
+                    app(\App\Services\InvoiceDeliveryDateService::class)->alignForOrder($order);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Invoice not re-dated to its delivery note', ['order' => $order->order_number, 'error' => $e->getMessage()]);
+                }
+            }
+        });
     }
 
     /**

@@ -125,10 +125,10 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         <div className="grid grid-cols-[2fr_3fr] items-end mb-1">
           <h1 className="text-lg font-bold text-gray-900 tracking-wide leading-tight">INVOICE</h1>
           <div className="grid grid-cols-4 items-end">
-          {/* The day it was entered in the system, directly above the Dated box below. */}
-          {invoice.created_at && (
+          {/* The invoice's own date - its delivery note date - directly above the Dated box below. */}
+          {invoice.invoice_date && (
             <p className="col-start-2 px-2 text-xs text-gray-600 whitespace-nowrap">
-              Invoice Date: <span className="font-semibold text-gray-900">{displayDate(new Date(invoice.created_at))}</span>
+              Invoice Date: <span className="font-semibold text-gray-900">{displayDate(new Date(invoice.invoice_date))}</span>
             </p>
           )}
           <div className="col-start-3 col-span-2 flex flex-col items-end gap-0.5">

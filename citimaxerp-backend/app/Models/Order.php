@@ -178,6 +178,11 @@ class Order extends Model
     // filter on it, so an order must never be saved without one.
     protected static function booted(): void
     {
+        // Nobody deletes an order (24/11/2026); it is cancelled or rejected and stays on record.
+        static::deleting(function () {
+            throw new \RuntimeException(\App\Services\OrderDeletionService::NO_DELETE_MESSAGE);
+        });
+
         static::saving(function (Order $order) {
             if (empty($order->order_date)) {
                 $order->order_date = $order->getOriginal('order_date') ?? $order->created_at ?? now();

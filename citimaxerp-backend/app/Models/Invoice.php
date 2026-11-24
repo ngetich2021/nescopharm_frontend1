@@ -251,6 +251,13 @@ class Invoice extends Model
             }
         });
 
+        // Nobody deletes an invoice (24/11/2026); a wrong one is credited instead.
+        static::deleting(function ($model) {
+            if ($model->type !== 'credit_note') {
+                throw new \RuntimeException(\App\Services\OrderDeletionService::NO_DELETE_MESSAGE);
+            }
+        });
+
         static::creating(function ($model) {
             if (empty($model->id)) {
                 $model->id = (string) Str::uuid();
@@ -305,7 +312,7 @@ class Invoice extends Model
      * Due = invoice date + the customer's Credit Period. A bounced cheque debit stays due on receipt,
      * and a customer with no Credit Period keeps the invoice's own terms, never due before they run out.
      */
-    private function applyCreditPeriod(): void
+    public function applyCreditPeriod(): void
     {
         if ($this->type === 'credit_note' || str_starts_with((string) $this->invoice_number, self::DEBIT_PREFIX)) {
             return;

@@ -30,7 +30,7 @@ import {
   Printer,
   Maximize2
 } from "lucide-react"
-import { fetchInvoiceById, deleteInvoice, Invoice, sendInvoice, fetchSalesReps, assignSalesRep, SalesRep, fetchInvoicePaymentHistory } from "@/lib/invoices"
+import { fetchInvoiceById, Invoice, sendInvoice, fetchSalesReps, assignSalesRep, SalesRep, fetchInvoicePaymentHistory } from "@/lib/invoices"
 import { getInvoiceStatusColor, getInvoiceStatusLabel } from "@/lib/invoice-status"
 import { SendInvoiceModal } from "@/components/modals/send-invoice-modal"
 import apiCall from "@/lib/api"
@@ -203,26 +203,6 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  const handleDeleteInvoice = async () => {
-    if (!invoice) return
-    
-    if (!confirm('Are you sure you want to delete this invoice?')) return
-
-    try {
-      await deleteInvoice(invoice.id)
-      toast({
-        title: "Success",
-        description: "Invoice deleted successfully",
-      })
-      router.push('/sales')
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete invoice",
-        variant: "destructive",
-      })
-    }
-  }
 
 
   const handleSendEmail = () => {
@@ -547,13 +527,6 @@ export default function InvoiceDetailPage() {
               Download PDF
             </Button>
           </Link>
-
-          {(invoice.status === 'draft' || invoice.status === 'sent') && (
-            <Button variant="outline" size="sm" onClick={handleDeleteInvoice} className="text-primary hover:text-primary/80">
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-          )}
         </div>
       </div>
 

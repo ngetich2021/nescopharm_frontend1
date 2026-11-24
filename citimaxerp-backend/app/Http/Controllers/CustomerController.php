@@ -718,8 +718,17 @@ class CustomerController extends Controller
                 'message' => 'Unauthorized to delete customers.'
             ], 403);
         }
+        // Orders and invoices are never deleted (24/11/2026), so neither is a customer who has any.
+        $hasSales = \App\Models\Order::where('customer_id', $customer->id)->exists()
+            || \App\Models\Invoice::where('customer_id', $customer->id)->exists();
+        if ($hasSales) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'This customer has orders or invoices, which cannot be deleted, so the customer cannot be deleted either.',
+            ], 403);
+        }
         try {
-            // Their orders, invoices, credit notes, receipts and quotes go with them.
+            // Their credit notes, receipts and quotes go with them.
             $deleted = app(\App\Services\CustomerDeletionService::class)->summary($customer);
             app(\App\Services\CustomerDeletionService::class)->delete($customer);
             Log::info('Customer deleted with their records', ['user_id' => $request->user()->id, 'customer_id' => $customer->id] + $deleted);

@@ -257,27 +257,6 @@ export async function fetchOrderById(orderId: string): Promise<OrderDetail | nul
 }
 
 // Function to delete an order by its ID
-export async function deleteOrder(orderId: string): Promise<void> {
-  try {
-    const response = await apiCall<{ status: string; message?: string }>(
-      `/orders/${orderId}`,
-      "DELETE",
-      undefined,
-      true, // Requires authentication
-    )
-
-    if (response.status === "success") {
-      return
-    } else {
-      const errorMessage = typeof response.message === 'string'
-        ? response.message
-        : `Failed to delete order with ID ${orderId}`
-      throw new Error(errorMessage)
-    }
-  } catch (error: any) {
-    throw new Error(`An unexpected error occurred while deleting the order: ${error.message || "Unknown error"}.`)
-  }
-}
 
 // GM / Director approval that lets an order be invoiced.
 export async function approveOrderForInvoice(
@@ -314,9 +293,3 @@ export const rejectOrder = (orderId: string, reason: string) => decideOrder(orde
 export const cancelOrder = (orderId: string, reason?: string) => decideOrder(orderId, "cancel", reason)
 export const restoreOrder = (orderId: string) => decideOrder(orderId, "restore")
 
-// When a declined order is deleted (matches Order::REJECTED_KEEP_MINUTES / CANCELLED_KEEP_HOURS).
-export function declinedDeletesAt(order: { status?: string; rejected_at?: string | null; cancelled_at?: string | null }): Date | null {
-  if (order.status === "rejected" && order.rejected_at) return new Date(new Date(order.rejected_at).getTime() + 60 * 60 * 1000)
-  if (order.status === "cancelled" && order.cancelled_at) return new Date(new Date(order.cancelled_at).getTime() + 24 * 60 * 60 * 1000)
-  return null
-}

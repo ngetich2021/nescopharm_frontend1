@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, Mail, MoreHorizontal, Phone, Printer, MapPin, ChevronRight, HelpCircle, Truck, FileText, Plus, Eye, Download, CreditCard, History, Edit, Wallet, Trash2 } from "lucide-react"
 import { PermissionGuard } from "@/components/PermissionGuard"
-import { DeleteOrderConfirmationDialog } from "../components/DeleteOrderConfirmationDialog"
 import { CreditOveragePrompt } from "@/components/credit-overage-prompt"
 import { coversOverage } from "@/lib/credit-overage"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -30,7 +29,7 @@ import { fetchInvoices, fetchInvoiceByOrderId, Invoice, createInvoiceFromOrder }
 import { fetchCustomerCreditTerms, CustomerCreditTerms } from "@/lib/customers"
 import { getInvoiceStatusColor, getInvoiceStatusLabel } from "@/lib/invoice-status"
 import { getLogistics, createLogistics, CreateLogisticsData, Logistics as ApiLogistics } from "@/lib/logistics"
-import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, declinedDeletesAt, isPastSaleDate } from "@/lib/orders"
+import { fetchOrderById, OrderDetail, approveOrderForInvoice, rejectOrder, cancelOrder, restoreOrder, isPastSaleDate } from "@/lib/orders"
 import { useAuth } from "@/lib/auth-context"
 import { Textarea } from "@/components/ui/textarea"
 import { DeliveryLocation as ApiDeliveryLocation } from "@/lib/delivery-locations"
@@ -147,7 +146,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
 
   // Reject (deleted after an hour) or cancel (restorable for 24 hours, then deleted).
   const isDeclined = order.status === "rejected" || order.status === "cancelled"
-  const deletesAt = declinedDeletesAt(order)
   const [declineAction, setDeclineAction] = useState<"reject" | "cancel" | null>(null)
   const [declineReason, setDeclineReason] = useState("")
   const [isDeciding, setIsDeciding] = useState(false)
@@ -193,7 +191,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
   const [isPaymentHistoryModalOpen, setIsPaymentHistoryModalOpen] = useState(false)
   const [isMapPaymentModalOpen, setIsMapPaymentModalOpen] = useState(false)
   const [isEditOrderModalOpen, setIsEditOrderModalOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false)
   const [showCompletionDialog, setShowCompletionDialog] = useState(false)
   const [showPaymentMethodDialog, setShowPaymentMethodDialog] = useState(false)
@@ -743,17 +740,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
               Edit
             </Button>
           </PermissionGuard>
-          <PermissionGuard permissions={["can_delete_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              size="sm"
-              className="text-xs sm:text-sm h-8 sm:h-9 text-red-600 hover:text-red-700"
-            >
-              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Delete
-            </Button>
-          </PermissionGuard>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
@@ -791,13 +777,12 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
         </div>
       )}
 
-      {/* A declined order: when it goes, why, and (cancelled only) the way back. */}
+      {/* A declined order: why, and (cancelled only) the way back. It stays on record. */}
       {isDeclined && (
         <div className={`border rounded-lg p-3 sm:p-4 text-xs sm:text-sm flex flex-wrap items-center justify-between gap-2 ${order.status === "rejected" ? "bg-red-50 border-red-200 text-red-800" : "bg-gray-50 border-gray-300 text-gray-800"}`}>
           <div>
             <p className="font-medium">
               {order.status === "rejected" ? "This order was rejected" : "This order was cancelled"}
-              {deletesAt && ` and will be deleted ${deletesAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}.`}
             </p>
             {(order.rejection_reason || order.cancellation_reason) && (
               <p className="mt-0.5">Reason: {order.rejection_reason || order.cancellation_reason}</p>
@@ -818,8 +803,8 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {declineAction === "reject"
-              ? "The order will be deleted in 1 hour. This can't be undone."
-              : "The order can be restored for 24 hours. After that it is deleted."}
+              ? "The order stays on record as rejected and its stock goes back."
+              : "The order stays on record as cancelled and can be restored later."}
           </p>
           <div className="space-y-1.5">
             <Label>Reason{declineAction === "reject" ? " *" : " (optional)"}</Label>
@@ -1693,13 +1678,6 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
             description: "Dispatch created successfully. You can now submit it for approval.",
           })
         }}
-      />
-
-      <DeleteOrderConfirmationDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        onSuccess={() => router.push("/sales/orders")}
-        order={order}
       />
 
       {/* Edit Order Modal */}

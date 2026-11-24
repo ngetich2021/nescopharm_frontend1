@@ -13,7 +13,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   Eye,
   Edit,
-  Trash2,
   Send,
   Plus,
   Search,
@@ -32,7 +31,7 @@ import {
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Invoice, fetchInvoices, fetchInvoiceById, deleteInvoice, sendInvoice, parseInvoiceAmount, invoiceExport } from "@/lib/invoices"
+import { Invoice, fetchInvoices, fetchInvoiceById, sendInvoice, parseInvoiceAmount, invoiceExport } from "@/lib/invoices"
 import { exportTable, type ExportFormat } from "@/lib/table-export"
 import { ExportSubMenu } from "@/components/export-menu"
 import { useOptionalAuth } from "@/lib/auth-context"
@@ -45,7 +44,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { invalidateCacheKey } from "@/lib/data-cache"
 import { EditInvoiceSheet } from "@/components/sheets/edit-invoice-sheet"
-import { DeleteInvoiceConfirmationDialog } from "./components/DeleteInvoiceConfirmationDialog"
 import { documentFileName, fileDate } from "@/lib/document-names"
 
 interface InvoicesTableProps {
@@ -209,24 +207,11 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
   // Add state for edit sheet and delete dialog
   const [showEditSheet, setShowEditSheet] = useState(false)
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null)
 
   // Add handler functions for actions
   const handleEditInvoice = (invoiceId: string) => {
     setSelectedInvoiceId(invoiceId)
     setShowEditSheet(true)
-  }
-
-  const handleDeleteInvoice = (invoice: Invoice) => {
-    setInvoiceToDelete(invoice)
-    setIsDeleteDialogOpen(true)
-  }
-
-  const handleInvoiceDeleted = () => {
-    setIsDeleteDialogOpen(false)
-    setInvoiceToDelete(null)
-    refreshInvoices()
   }
 
   // Add ActionsDropdown component
@@ -273,18 +258,6 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleSendWhatsApp(invoice.id); }}>
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Send via WhatsApp
-              </DropdownMenuItem>
-            </>
-          )}
-          {invoice.status === 'draft' && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={(e) => { e.stopPropagation(); handleDeleteInvoice(invoice); }}
-                className="text-primary"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Invoice
               </DropdownMenuItem>
             </>
           )}
@@ -655,13 +628,6 @@ export function InvoicesTable({ initialInvoices = [] }: InvoicesTableProps) {
           }}
         />
       )}
-      
-      <DeleteInvoiceConfirmationDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        onSuccess={handleInvoiceDeleted}
-        invoice={invoiceToDelete}
-      />
     </div>
   )
 }

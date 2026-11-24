@@ -162,15 +162,6 @@ class OrderController extends Controller
             ], 403);
         }
 
-        // Declined orders past their time are cleared before listing, at most every 5 minutes,
-        // in case the scheduler (orders:purge-declined) isn't running.
-        if (\Illuminate\Support\Facades\Cache::add('orders:purge-declined', 1, 300)) {
-            try {
-                \Illuminate\Support\Facades\Artisan::call('orders:purge-declined');
-            } catch (\Throwable $e) {
-                Log::warning('Purging declined orders failed', ['error' => $e->getMessage()]);
-            }
-        }
 
         try {
             return $this->executeWithRetry(function () use ($request, $mine) {
@@ -1057,60 +1048,13 @@ class OrderController extends Controller
     }
 
 
+    // Orders are never deleted, by anyone (decided 24/11/2026).
     public function destroy(Request $request, $id)
     {
-        $user = $request->user();
-        if (!$this->hasPermission($request, 'can_delete_orders', $user->company_id)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Unauthorized to delete orders.',
-            ], 403);
-        }
-
-        $order = Order::where('id', $id)->first();
-        if (!$order) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Order not found.',
-            ], 404);
-        }
-
-        if (!$this->hasPermission($request, 'can_delete_orders', $order->company_id)) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Unauthorized to delete orders for this company.',
-            ], 403);
-        }
-
-        // Deleting takes the order's invoice, credit notes, receipts, cheques and dispatch with it
-        // (old-system orders are cleared this way so both systems match).
-        $deletion = app(\App\Services\OrderDeletionService::class);
-        if ($blocker = $deletion->blocker($order)) {
-            return response()->json(['status' => 'failed', 'message' => $blocker], 400);
-        }
-
-        try {
-            Log::info('Order delete attempt', [
-                'user_id' => $request->user()->id,
-                'order_id' => $id,
-            ]);
-            $deletion->delete($order);
-            Log::info('Order deleted', [
-                'user_id' => $request->user()->id,
-                'order_id' => $order->id,
-                'company_id' => $order->company_id,
-            ]);
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Order deleted successfully.',
-            ], 200);
-        } catch (\Exception $e) {
-            Log::error('Failed to delete order', ['error' => $e->getMessage()]);
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Failed to delete order: ' . $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'status' => 'failed',
+            'message' => \App\Services\OrderDeletionService::NO_DELETE_MESSAGE,
+        ], 403);
     }
 
     /**
@@ -1149,7 +1093,7 @@ class OrderController extends Controller
                 'status' => 'failed',
                 'message' => $order->status === 'cancelled'
                     ? 'This order is cancelled. Restore it first.'
-                    : 'This order was rejected and is about to be deleted.',
+                    : 'This order was rejected.',
             ], 400);
         }
 
@@ -1237,7 +1181,7 @@ class OrderController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => "Order {$order->order_number} rejected. It will be deleted in " . Order::REJECTED_KEEP_MINUTES . ' minutes.',
+            'message' => "Order {$order->order_number} rejected. It stays on record as rejected.",
             'order' => $order->fresh(),
         ]);
     }
@@ -1265,7 +1209,7 @@ class OrderController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => "Order {$order->order_number} cancelled. It can be restored for " . Order::CANCELLED_KEEP_HOURS . ' hours, then it is deleted.',
+            'message' => "Order {$order->order_number} cancelled. It stays on record and can be restored.",
             'order' => $order->fresh(),
         ]);
     }

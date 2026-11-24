@@ -574,35 +574,14 @@ class InvoiceController extends Controller
     /**
      * Remove the specified invoice.
      */
+    // Invoices are never deleted, by anyone (decided 24/11/2026). A wrong invoice is corrected
+    // on its order or cleared with a credit note.
     public function destroy(Request $request, string $id): JsonResponse
     {
-        $user = $request->user();
-        $companyId = $user->company_id;
-        if (!$this->hasPermission($request, 'can_delete_invoices', $companyId)) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        try {
-            $invoice = Invoice::where('company_id', $companyId)->findOrFail($id);
-
-            if ($invoice->amount_paid > 0) {
-                return response()->json(['message' => 'Cannot delete invoice with payments'], 400);
-            }
-
-            DB::beginTransaction();
-
-            // Delete line items
-            $invoice->lineItems()->delete();
-            $invoice->delete();
-
-            DB::commit();
-
-            return response()->json(['message' => 'Invoice deleted successfully']);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Failed to delete invoice', ['error' => $e->getMessage()]);
-            return response()->json(['message' => 'Failed to delete invoice', 'error' => $e->getMessage()], 500);
-        }
+        return response()->json([
+            'status' => 'failed',
+            'message' => 'Invoices cannot be deleted. Correct it on its order, or raise a credit note against it.',
+        ], 403);
     }
 
     /**
@@ -620,9 +599,6 @@ class InvoiceController extends Controller
         $logistic = $dispatch
             ? Logistic::where('order_dispatch_id', $dispatch->id)->latest()->first()
             : null;
-        $deliveryNote = $dispatch
-            ? DeliveryNote::where('order_dispatch_id', $dispatch->id)->latest()->first()
-            : null;
         // Chosen when the dispatch was raised, so the invoice is complete before logistics exist.
         $destination = collect([$logistic?->delivery_location, $logistic?->state])
             ->filter()
@@ -632,9 +608,9 @@ class InvoiceController extends Controller
             // A dispatch's delivery note and dispatch doc are the same physical document here.
             'dispatch_doc_no' => $dispatch?->dispatch_number,
             'delivery_note_number' => $dispatch?->dispatch_number,
-            'delivery_note_date' => $deliveryNote?->created_at?->toDateString()
-                ?? $dispatch?->dispatch_date?->toDateString()
-                ?? $dispatch?->created_at?->toDateString(),
+            // The dispatch's own date first: a past sale's delivery note was entered long after it
+            // was delivered, so the day the note was made is not its date.
+            'delivery_note_date' => app(\App\Services\InvoiceDeliveryDateService::class)->deliveryNoteDate($order),
             'dispatched_through' => $logistic?->logistics_provider
                 ?: ($dispatch?->dispatched_through
                     ?: ($logistic?->delivery_method ?: $order->deliveryDetails->first()?->delivery_method)),
@@ -678,6 +654,8 @@ class InvoiceController extends Controller
         if ($invoice->isDirty()) {
             $invoice->saveQuietly();
         }
+        // Dated on its delivery note (due date and ledger follow).
+        app(\App\Services\InvoiceDeliveryDateService::class)->align($invoice);
     }
 
     public function createFromOrder(Request $request, string $orderId): JsonResponse
@@ -738,10 +716,13 @@ class InvoiceController extends Controller
             // Calculate invoice status based on payment amount
             $amountPaid = $order->amount_paid ?? 0;
             $totalAmount = $order->final_amount;
-            // A past (pre-go-live) sale is invoiced on the day it was made, so sales, due date and aging fall in the right period.
-            $invoiceDate = $order->is_historical && $order->order_date
-                ? $order->order_date->toDateString()
-                : ($request->invoice_date ?? now()->toDateString());
+            // An invoice is dated on its delivery note (24/11/2026). Not dispatched yet: a past sale
+            // takes the day it was made, a new one today; it moves to the delivery note date once
+            // the order is dispatched (InvoiceDeliveryDateService).
+            $invoiceDate = app(\App\Services\InvoiceDeliveryDateService::class)->deliveryNoteDate($order)
+                ?? ($order->is_historical && $order->order_date
+                    ? $order->order_date->toDateString()
+                    : ($request->invoice_date ?? now()->toDateString()));
             $paymentOption = $request->input('payment_option');
             $alreadySettled = $totalAmount > 0 && (float) $amountPaid >= (float) $totalAmount;
 

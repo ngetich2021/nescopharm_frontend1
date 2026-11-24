@@ -311,14 +311,6 @@ export async function updateInvoice(invoiceId: string, updates: Partial<CreateIn
   }
 }
 
-export async function deleteInvoice(invoiceId: string): Promise<boolean> {
-  try {
-    await apiCall<{ message: string }>(`/invoices/${invoiceId}`, "DELETE", undefined, true);
-    return true;
-  } catch (error: any) {
-    throw new Error(`Failed to delete invoice: ${error.message || "Unknown error"}`);
-  }
-}
 
 export async function sendInvoice(invoiceId: string): Promise<Invoice> {
   try {

@@ -29,9 +29,8 @@ import {
 import { cn } from "@/lib/utils"
 import { CreateOrderModal } from "@/components/modals/create-order-modal"
 import { EditOrderModal } from "@/components/modals/edit-order-modal"
-import { DeleteOrderConfirmationDialog } from "./components/DeleteOrderConfirmationDialog"
 import { toast } from "@/components/ui/use-toast"
-import { fetchOrders, Order, fetchOrderById, OrderDetail, deleteOrder, isPastSaleDate, declinedDeletesAt } from "@/lib/orders"
+import { fetchOrders, Order, fetchOrderById, OrderDetail, isPastSaleDate } from "@/lib/orders"
 import { matchesDocNumber } from "@/lib/utils"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
@@ -59,8 +58,6 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
   const [isViewingOrder, setIsViewingOrder] = useState(false)
   
   // State for delete confirmation dialog
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null)
 
   const refreshOrders = useCallback(async () => {
     setIsRefreshing(true)
@@ -130,19 +127,6 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
     } finally {
       setIsRefreshing(false)
     }
-  }
-
-  // Function to handle deleting an order
-  const handleDeleteOrder = (order: Order) => {
-    setOrderToDelete(order)
-    setIsDeleteDialogOpen(true)
-  }
-
-  // Function to handle order deletion success
-  const handleOrderDeleted = () => {
-    setIsDeleteDialogOpen(false)
-    setOrderToDelete(null)
-    refreshOrders()
   }
 
   // Function to handle order update
@@ -231,16 +215,6 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditOrder(order.id); }}>
               <Edit className="h-4 w-4 mr-2" />
               Edit Order
-            </DropdownMenuItem>
-          </PermissionGuard>
-          <PermissionGuard permissions={["can_delete_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              className="text-primary"
-              onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order); }}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Order
             </DropdownMenuItem>
           </PermissionGuard>
         </DropdownMenuContent>
@@ -403,11 +377,6 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
                           {(order.is_historical || isPastSaleDate(order.order_date)) && (
                             <span className="text-[11px] text-muted-foreground">Past sale · no stock</span>
                           )}
-                          {declinedDeletesAt(order) && (
-                            <span className="text-[11px] text-red-600">
-                              Deletes {declinedDeletesAt(order)!.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          )}
                         </div>
                       )
                     })()}
@@ -445,15 +414,6 @@ export function OrdersTable({ initialOrders = [], isLoading: initialLoading = fa
         )}
       </PermissionGuard>
       
-      {/* Delete Order Confirmation Dialog */}
-      <PermissionGuard permissions={["can_delete_orders", "can_manage_system", "can_manage_company"]} hideOnDenied>
-        <DeleteOrderConfirmationDialog
-          open={isDeleteDialogOpen}
-          onOpenChange={setIsDeleteDialogOpen}
-          onSuccess={handleOrderDeleted}
-          order={orderToDelete}
-        />
-      </PermissionGuard>
       
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
