@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { PermissionGuard } from "@/components/PermissionGuard"
@@ -233,8 +234,10 @@ export default function InventoryReportPage() {
     if (to) setDateTo(to)
   }, [])
   const [search, setSearch] = useState("")
-  // Items picked in the "Items" box: the table and the summary cards show only these.
+  // Ticked items (the box beside S/No, or the Items picker): the cards, the Total row and the
+  // export add up only these. The table still lists everything unless "Show ticked only" is on.
   const [pickedItems, setPickedItems] = useState<Set<string>>(new Set())
+  const [tickedOnly, setTickedOnly] = useState(false)
   const [itemPickerOpen, setItemPickerOpen] = useState(false)
   // Click a heading to sort by it (again to reverse); sizes stay under their item.
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null)
@@ -299,7 +302,7 @@ export default function InventoryReportPage() {
     fetchReport()
   }, [fetchReport])
 
-  useEffect(() => setPage(1), [reportType, search, pickedItems, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort, lineFilter, direction])
+  useEffect(() => setPage(1), [reportType, search, tickedOnly, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort, lineFilter, direction])
 
   // History shortcut: Stock Movement for one line - an item (all its sizes) or one size. From Stock
   // Management the period stays; from Balance / Low stock it shows this year so far.
@@ -607,7 +610,7 @@ export default function InventoryReportPage() {
     return groupRows(data)
       .map((group) => {
         const [head, ...sizes] = group
-        if (pickedItems.size && !pickedItems.has(String(head.name ?? ""))) return null
+        if (tickedOnly && pickedItems.size && !pickedItems.has(String(head.name ?? ""))) return null
         let keptSizes = sizes
         if (reportType === "stock_management" && reorderOnly) keptSizes = keptSizes.filter((r) => r.needs_reorder)
         if (head.row_type !== "parent") {
@@ -629,7 +632,7 @@ export default function InventoryReportPage() {
           : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" })
         return sort.dir === "asc" ? cmp : -cmp
       })
-  }, [data, search, pickedItems, reorderOnly, reportType, sort])
+  }, [data, search, pickedItems, tickedOnly, reorderOnly, reportType, sort])
 
   // Every item in the report, by description, for the Items box.
   const itemOptions = useMemo(
@@ -645,6 +648,22 @@ export default function InventoryReportPage() {
     })
 
   const visibleRows = useMemo(() => visibleGroups.flat(), [visibleGroups])
+  // What the Total row, cards and export add up: the ticked items, or everything showing.
+  const tickedGroups = useMemo(
+    () => (pickedItems.size ? visibleGroups.filter((g) => pickedItems.has(String(g[0].name ?? ""))) : visibleGroups),
+    [visibleGroups, pickedItems],
+  )
+  const totalRows = useMemo(() => tickedGroups.flat(), [tickedGroups])
+  const visibleNames = useMemo(() => visibleGroups.map((g) => String(g[0].name ?? "")), [visibleGroups])
+  const allVisibleTicked = visibleNames.length > 0 && visibleNames.every((n) => pickedItems.has(n))
+  const someVisibleTicked = visibleNames.some((n) => pickedItems.has(n))
+  const toggleAllVisible = () =>
+    setPickedItems((prev) => {
+      const next = new Set(prev)
+      if (allVisibleTicked) visibleNames.forEach((n) => next.delete(n))
+      else visibleNames.forEach((n) => next.add(n))
+      return next
+    })
   const totalGroups = visibleGroups.length
   const size = pageSize === "all" ? Math.max(totalGroups, 1) : Number(pageSize)
   const pageCount = Math.max(Math.ceil(totalGroups / size), 1)
@@ -659,7 +678,7 @@ export default function InventoryReportPage() {
   // each item row carries its own credit notes, so searching one item deducts only that item's.
   const shown = useMemo(() => {
     if (reportType !== "stock_management") return null
-    const top = visibleRows.filter((r) => r.row_type !== "size")
+    const top = totalRows.filter((r) => r.row_type !== "size")
     const sum = (key: string) => top.reduce((s, r) => s + Number(r[key] || 0), 0)
     const value = sum("sales_revenue"), cost = sum("cost_of_sales"), profit = sum("gross_profit")
     const cValue = sum("credited_value"), cCost = sum("credited_cost"), cUncosted = sum("credited_uncosted")
@@ -667,7 +686,7 @@ export default function InventoryReportPage() {
     const netCost = cost - cCost
     const netProfit = profit - (cValue - cCost)
     return { cValue, cCost, cUncosted, numbers, netValue: value - cValue, netCost, netProfit, netPct: netCost > 0 ? Math.round((netProfit / netCost) * 1000) / 10 : null }
-  }, [reportType, visibleRows])
+  }, [reportType, totalRows])
   const creditRows: { label: string; value: string; cost: string; profit: string; pct: string; bold?: boolean }[] = shown && showCredit
     ? [
         {
@@ -686,7 +705,7 @@ export default function InventoryReportPage() {
   const exportReport = useTableExport(() => {
     const columns = allColumns.filter((c) => c.key !== "_history")
     let rowIndex = 0
-    const body = visibleRows.map((r) => {
+    const body = totalRows.map((r) => {
       const sno = ++rowIndex
       return columns.map((c): ExportCell => {
         if (c.key === "_sno") return sno
@@ -710,7 +729,7 @@ export default function InventoryReportPage() {
         ? [
             columns.map((c, i): ExportCell => {
               if (i === 1) return creditRows.length ? "Gross" : "Total"
-              const t = i > 1 && c.total ? c.total(visibleRows) : ""
+              const t = i > 1 && c.total ? c.total(totalRows) : ""
               return typeof t === "string" || typeof t === "number" ? t : "" // coloured totals (movement) stay off
             }),
             ...creditRows.map((fr) => columns.map((c, i): ExportCell => (i === 1 ? fr.label : c.key === "sales_revenue" ? fr.value : c.key === "cost_of_sales" ? fr.cost : c.key === "gross_profit" ? fr.profit : c.key === "profit_pct" ? fr.pct : ""))),
@@ -722,10 +741,10 @@ export default function InventoryReportPage() {
   // With items picked, the cards add up just those items' lines (same rows as the table).
   const cardSummary = useMemo((): Row | null => {
     if (!summary || !pickedItems.size) return summary
-    const lines = visibleRows.filter(isLine)
-    const top = visibleRows.filter((r) => r.row_type !== "size")
+    const lines = totalRows.filter(isLine)
+    const top = totalRows.filter((r) => r.row_type !== "size")
     if (reportType === "movement") {
-      const moves = visibleRows.filter((r) => r.direction)
+      const moves = totalRows.filter((r) => r.direction)
       return {
         ...summary,
         total_movements: moves.length,
@@ -736,8 +755,8 @@ export default function InventoryReportPage() {
     if (reportType === "stock_management") {
       return {
         ...summary,
-        total_closing_stock: sumOf(visibleRows, "closing_stock"),
-        total_closing_stock_value: sumOf(visibleRows, "closing_stock_value"),
+        total_closing_stock: sumOf(totalRows, "closing_stock"),
+        total_closing_stock_value: sumOf(totalRows, "closing_stock_value"),
         total_gross_profit: top.reduce((t, r) => t + Number(r.gross_profit || 0), 0),
         reorder_alert_count: lines.filter((r) => r.needs_reorder).length,
       }
@@ -745,14 +764,14 @@ export default function InventoryReportPage() {
     return {
       ...summary,
       total_items: lines.length,
-      total_products: visibleGroups.length,
-      total_stock: sumOf(visibleRows, "stock_quantity"),
-      total_available: sumOf(visibleRows, "available"),
-      total_value: sumOf(visibleRows, "stock_value"),
+      total_products: tickedGroups.length,
+      total_stock: sumOf(totalRows, "stock_quantity"),
+      total_available: sumOf(totalRows, "available"),
+      total_value: sumOf(totalRows, "stock_value"),
       low_stock_count: lines.filter((r) => r.stock_status === "low_stock").length,
       out_of_stock_count: lines.filter((r) => r.stock_status === "out_of_stock").length,
     }
-  }, [summary, pickedItems, visibleRows, visibleGroups, reportType])
+  }, [summary, pickedItems, totalRows, tickedGroups, reportType])
 
   const renderSummary = () => {
     const summary = cardSummary
@@ -925,7 +944,7 @@ export default function InventoryReportPage() {
               <Popover open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" role="combobox" aria-expanded={itemPickerOpen} className="w-full justify-between font-normal sm:w-80">
-                    {pickedItems.size ? `${pickedItems.size} item${pickedItems.size === 1 ? "" : "s"} selected` : "Items: all (choose specific items)"}
+                    {pickedItems.size ? `${pickedItems.size} item${pickedItems.size === 1 ? "" : "s"} ticked` : "Tick items (or use the boxes by S/No)"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -955,9 +974,15 @@ export default function InventoryReportPage() {
                 </Badge>
               ))}
               {pickedItems.size > 0 && (
-                <Button variant="ghost" size="sm" className="h-7" onClick={() => setPickedItems(new Set())}>
-                  Clear items
-                </Button>
+                <>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <Switch checked={tickedOnly} onCheckedChange={setTickedOnly} aria-label="Show ticked only" />
+                    Show ticked only
+                  </label>
+                  <Button variant="ghost" size="sm" className="h-7" onClick={() => { setPickedItems(new Set()); setTickedOnly(false) }}>
+                    Clear ticks
+                  </Button>
+                </>
               )}
             </div>
           </CardContent>
@@ -993,7 +1018,16 @@ export default function InventoryReportPage() {
                 <TableRow>
                   {columns.map((c) => (
                     <TableHead key={c.key} className={cn("whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-gray-600", c.align === "right" && "text-right", c.align === "center" && "text-center", c.className)}>
-                      {c.key === "_sno" || c.key === "_history" ? c.header : (
+                      {c.key === "_sno" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Checkbox
+                            checked={allVisibleTicked ? true : someVisibleTicked ? "indeterminate" : false}
+                            onCheckedChange={toggleAllVisible}
+                            aria-label="Tick every item showing"
+                          />
+                          {c.header}
+                        </span>
+                      ) : c.key === "_history" ? c.header : (
                         <button
                           type="button"
                           title="Sort"
@@ -1041,13 +1075,24 @@ export default function InventoryReportPage() {
                                 row.row_type === "parent" && "bg-slate-50 hover:bg-slate-100",
                                 row.row_type === "size" && "border-b-slate-100",
                                 row.stock_status === "out_of_stock" && reportType === "balance" && "bg-red-50/40",
+                                pickedItems.has(String(group[0].name ?? "")) && "bg-primary/5",
                               )}
                             >
                               {columns.map((c) => {
                                 const cellRow = c.key === "_sno" ? { ...row, _sno: sno } : row
                                 return (
                                   <TableCell key={c.key} className={cn("py-2.5 text-sm tabular-nums", c.align === "right" && "text-right", c.align === "center" && "text-center", c.className)}>
-                                    {c.render ? c.render(cellRow) : cellRow[c.key] ?? "-"}
+                                    {c.key === "_sno" && i === 0 ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <Checkbox
+                                          checked={pickedItems.has(String(row.name ?? ""))}
+                                          onCheckedChange={() => togglePicked(String(row.name ?? ""))}
+                                          onClick={(e) => e.stopPropagation()}
+                                          aria-label={`Tick ${row.name}`}
+                                        />
+                                        {c.render ? c.render(cellRow) : cellRow[c.key] ?? "-"}
+                                      </span>
+                                    ) : c.render ? c.render(cellRow) : cellRow[c.key] ?? "-"}
                                   </TableCell>
                                 )
                               })}
@@ -1073,7 +1118,9 @@ export default function InventoryReportPage() {
                   <TableRow>
                     {columns.map((c, i) => (
                       <TableCell key={c.key} className={cn("py-2.5 text-sm font-semibold tabular-nums", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                        {i <= 1 ? (i === 0 ? "" : creditRows.length ? "Gross" : "Total") : c.total ? c.total(visibleRows) : ""}
+                        {i <= 1
+                          ? (i === 0 ? "" : `${creditRows.length ? "Gross" : "Total"}${pickedItems.size ? ` (${tickedGroups.length} ticked item${tickedGroups.length === 1 ? "" : "s"})` : ""}`)
+                          : c.total ? c.total(totalRows) : ""}
                       </TableCell>
                     ))}
                   </TableRow>
