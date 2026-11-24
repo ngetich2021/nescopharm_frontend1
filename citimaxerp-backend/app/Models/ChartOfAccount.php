@@ -26,6 +26,7 @@ class ChartOfAccount extends Model
         'is_active',
         'is_system_account',
         'opening_balance',
+        'currency_code',
         'normal_balance',
         'tax_code',
         'level',

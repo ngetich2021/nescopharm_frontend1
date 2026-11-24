@@ -273,9 +273,17 @@ export default function ChartOfAccountsPage() {
     }
   }
 
-  const handleEditAccount = (account: ChartOfAccount) => {
-    setSelectedAccount(account)
-    setShowEditDialog(true)
+  // The list row carries only a few fields; Edit loads the whole account (opening balance,
+  // description, currency, what has been posted) so every value shows and nothing is wiped on save.
+  const handleEditAccount = async (account: ChartOfAccount) => {
+    try {
+      const resp = await getChartOfAccount(account.id)
+      setSelectedAccount(resp.account)
+      setShowEditDialog(true)
+    } catch (error) {
+      console.error('Error fetching account details:', error)
+      toast({ title: 'Error', description: 'Could not open the account for editing', variant: 'destructive' })
+    }
   }
 
   const handleViewAccount = async (id: string) => {

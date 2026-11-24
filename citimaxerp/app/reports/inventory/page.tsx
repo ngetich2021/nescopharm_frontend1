@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { useToast } from "@/hooks/use-toast"
 import { getInventoryReport } from "@/lib/reports"
@@ -33,6 +35,8 @@ import {
   Download,
   History,
   X,
+  Check,
+  ChevronsUpDown,
   Layers,
   Loader2,
   PackageX,
@@ -229,6 +233,9 @@ export default function InventoryReportPage() {
     if (to) setDateTo(to)
   }, [])
   const [search, setSearch] = useState("")
+  // Items picked in the "Items" box: the table and the summary cards show only these.
+  const [pickedItems, setPickedItems] = useState<Set<string>>(new Set())
+  const [itemPickerOpen, setItemPickerOpen] = useState(false)
   // Click a heading to sort by it (again to reverse); sizes stay under their item.
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null)
   const [reorderOnly, setReorderOnly] = useState(false)
@@ -292,7 +299,7 @@ export default function InventoryReportPage() {
     fetchReport()
   }, [fetchReport])
 
-  useEffect(() => setPage(1), [reportType, search, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort, lineFilter, direction])
+  useEffect(() => setPage(1), [reportType, search, pickedItems, pageSize, reorderOnly, categoryId, storeId, priceList, status, dateFrom, dateTo, sort, lineFilter, direction])
 
   // History shortcut: Stock Movement for one line - an item (all its sizes) or one size. From Stock
   // Management the period stays; from Balance / Low stock it shows this year so far.
@@ -600,6 +607,7 @@ export default function InventoryReportPage() {
     return groupRows(data)
       .map((group) => {
         const [head, ...sizes] = group
+        if (pickedItems.size && !pickedItems.has(String(head.name ?? ""))) return null
         let keptSizes = sizes
         if (reportType === "stock_management" && reorderOnly) keptSizes = keptSizes.filter((r) => r.needs_reorder)
         if (head.row_type !== "parent") {
@@ -621,7 +629,20 @@ export default function InventoryReportPage() {
           : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" })
         return sort.dir === "asc" ? cmp : -cmp
       })
-  }, [data, search, reorderOnly, reportType, sort])
+  }, [data, search, pickedItems, reorderOnly, reportType, sort])
+
+  // Every item in the report, by description, for the Items box.
+  const itemOptions = useMemo(
+    () => Array.from(new Set(groupRows(data).map((g) => String(g[0].name ?? "")).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data],
+  )
+  const togglePicked = (name: string) =>
+    setPickedItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
 
   const visibleRows = useMemo(() => visibleGroups.flat(), [visibleGroups])
   const totalGroups = visibleGroups.length
@@ -698,7 +719,43 @@ export default function InventoryReportPage() {
     }
   })
 
+  // With items picked, the cards add up just those items' lines (same rows as the table).
+  const cardSummary = useMemo((): Row | null => {
+    if (!summary || !pickedItems.size) return summary
+    const lines = visibleRows.filter(isLine)
+    const top = visibleRows.filter((r) => r.row_type !== "size")
+    if (reportType === "movement") {
+      const moves = visibleRows.filter((r) => r.direction)
+      return {
+        ...summary,
+        total_movements: moves.length,
+        total_in: moves.filter((r) => r.direction === "in").reduce((t, r) => t + Number(r.quantity || 0), 0),
+        total_out: moves.filter((r) => r.direction === "out").reduce((t, r) => t + Number(r.quantity || 0), 0),
+      }
+    }
+    if (reportType === "stock_management") {
+      return {
+        ...summary,
+        total_closing_stock: sumOf(visibleRows, "closing_stock"),
+        total_closing_stock_value: sumOf(visibleRows, "closing_stock_value"),
+        total_gross_profit: top.reduce((t, r) => t + Number(r.gross_profit || 0), 0),
+        reorder_alert_count: lines.filter((r) => r.needs_reorder).length,
+      }
+    }
+    return {
+      ...summary,
+      total_items: lines.length,
+      total_products: visibleGroups.length,
+      total_stock: sumOf(visibleRows, "stock_quantity"),
+      total_available: sumOf(visibleRows, "available"),
+      total_value: sumOf(visibleRows, "stock_value"),
+      low_stock_count: lines.filter((r) => r.stock_status === "low_stock").length,
+      out_of_stock_count: lines.filter((r) => r.stock_status === "out_of_stock").length,
+    }
+  }, [summary, pickedItems, visibleRows, visibleGroups, reportType])
+
   const renderSummary = () => {
+    const summary = cardSummary
     if (!summary) return null
     if (reportType === "movement") {
       return (
@@ -864,6 +921,45 @@ export default function InventoryReportPage() {
                 </SelectContent>
               </Select>
             )}
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-full">
+              <Popover open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" aria-expanded={itemPickerOpen} className="w-full justify-between font-normal sm:w-80">
+                    {pickedItems.size ? `${pickedItems.size} item${pickedItems.size === 1 ? "" : "s"} selected` : "Items: all (choose specific items)"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[min(24rem,calc(100vw-2rem))] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Type an item description" />
+                    <CommandList>
+                      <CommandEmpty>No item with that description in this report.</CommandEmpty>
+                      <CommandGroup>
+                        {itemOptions.map((name) => (
+                          <CommandItem key={name} value={name} onSelect={() => togglePicked(name)}>
+                            <Check className={cn("mr-2 h-4 w-4", pickedItems.has(name) ? "opacity-100" : "opacity-0")} />
+                            {name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {Array.from(pickedItems).map((name) => (
+                <Badge key={name} variant="secondary" className="gap-1 font-normal">
+                  {name}
+                  <button type="button" aria-label={`Remove ${name}`} onClick={() => togglePicked(name)}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {pickedItems.size > 0 && (
+                <Button variant="ghost" size="sm" className="h-7" onClick={() => setPickedItems(new Set())}>
+                  Clear items
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 

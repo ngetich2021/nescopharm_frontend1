@@ -23,6 +23,35 @@ import { Switch } from "@/components/ui/switch"
 import { financeApi, ChartOfAccount } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 
+// The subtypes the server accepts, under the type they belong to.
+const SUBTYPES: Record<string, { value: string; label: string }[]> = {
+  asset: [
+    { value: "current_asset", label: "Current Asset" },
+    { value: "fixed_asset", label: "Fixed Asset" },
+    { value: "other_asset", label: "Other Asset" },
+  ],
+  liability: [
+    { value: "current_liability", label: "Current Liability" },
+    { value: "long_term_liability", label: "Long-term Liability" },
+    { value: "other_liability", label: "Other Liability" },
+  ],
+  equity: [
+    { value: "owner_equity", label: "Owner Equity" },
+    { value: "retained_earnings", label: "Retained Earnings" },
+  ],
+  income: [
+    { value: "operating_income", label: "Operating Income" },
+    { value: "other_income", label: "Other Income" },
+  ],
+  expense: [
+    { value: "cost_of_goods_sold", label: "Cost of Goods Sold" },
+    { value: "operating_expense", label: "Operating Expense" },
+    { value: "other_expense", label: "Other Expense" },
+  ],
+}
+
+const money = (n: number) => n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 interface EditAccountDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -37,18 +66,25 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
   const [formData, setFormData] = useState({
     account_code: '',
     account_name: '',
-    account_type: '' as 'asset' | 'liability' | 'equity' | 'income' | 'expense' | 'cost_of_sales' | '',
+    account_type: '' as 'asset' | 'liability' | 'equity' | 'income' | 'expense' | '',
     account_subtype: '',
     description: '',
     is_active: true,
     opening_balance: '0',
+    current_balance: '0',
     currency_code: 'KES',
     normal_balance: '' as 'debit' | 'credit' | ''
   })
 
+  // Which of the two balances was typed last: that one is what gets saved.
+  const [balanceEdited, setBalanceEdited] = useState<'opening' | 'current' | null>(null)
+  // What has been posted to the account; current = opening + posted.
+  const posted = Number(account?.posted_balance ?? (Number(account?.current_balance ?? 0) - Number(account?.opening_balance ?? 0))) || 0
+
   // Update form data when account changes
   useEffect(() => {
     if (account) {
+      setBalanceEdited(null)
       setFormData({
         account_code: account.account_code || '',
         account_name: account.account_name || '',
@@ -56,7 +92,8 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
         account_subtype: account.account_subtype || '',
         description: account.description || '',
         is_active: account.is_active ?? true,
-        opening_balance: account.opening_balance || '0',
+        opening_balance: String(account.opening_balance ?? '0'),
+        current_balance: String(account.current_balance ?? account.opening_balance ?? '0'),
         currency_code: account.currency_code || 'KES',
         normal_balance: account.normal_balance || 'debit'
       })
@@ -84,7 +121,10 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
         account_subtype: formData.account_subtype,
         description: formData.description,
         is_active: formData.is_active,
-        opening_balance: formData.opening_balance,
+        // The balance typed last decides; the server works the opening balance out from a current one.
+        ...(balanceEdited === 'current'
+          ? { current_balance: formData.current_balance }
+          : { opening_balance: formData.opening_balance }),
         currency_code: formData.currency_code,
         ...(formData.normal_balance && { normal_balance: formData.normal_balance as 'debit' | 'credit' })
       })
@@ -96,11 +136,11 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
       
       onSuccess()
       onOpenChange(false)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating account:', error)
       toast({
         title: "Error",
-        description: "Failed to update account",
+        description: error?.message || "Failed to update account",
         variant: "destructive"
       })
     } finally {
@@ -112,6 +152,24 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
     setFormData(prev => ({
       ...prev,
       [field]: value
+    }))
+  }
+
+  // Opening and current balance move together: current = opening + what has been posted.
+  const handleOpeningChange = (value: string) => {
+    setBalanceEdited('opening')
+    setFormData(prev => ({
+      ...prev,
+      opening_balance: value,
+      current_balance: value === '' || isNaN(Number(value)) ? prev.current_balance : (Number(value) + posted).toFixed(2),
+    }))
+  }
+  const handleCurrentChange = (value: string) => {
+    setBalanceEdited('current')
+    setFormData(prev => ({
+      ...prev,
+      current_balance: value,
+      opening_balance: value === '' || isNaN(Number(value)) ? prev.opening_balance : (Number(value) - posted).toFixed(2),
     }))
   }
 
@@ -156,8 +214,12 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
               <Label htmlFor="account_type">Account Type *</Label>
               <Select
                 value={formData.account_type}
-                onValueChange={(value: 'asset' | 'liability' | 'equity' | 'income' | 'expense' | 'cost_of_sales') => {
+                onValueChange={(value: 'asset' | 'liability' | 'equity' | 'income' | 'expense') => {
                   handleInputChange('account_type', value)
+                  // Keep the subtype valid for the new type.
+                  if (!SUBTYPES[value]?.some(s => s.value === formData.account_subtype)) {
+                    handleInputChange('account_subtype', SUBTYPES[value]?.[0]?.value ?? '')
+                  }
                 }}
               >
                 <SelectTrigger>
@@ -168,20 +230,26 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
                   <SelectItem value="liability">Liability</SelectItem>
                   <SelectItem value="equity">Equity</SelectItem>
                   <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
-                  <SelectItem value="cost_of_sales">Cost of Sales</SelectItem>
+                  <SelectItem value="expense">Expense (incl. Cost of Sales)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="account_subtype">Account Subtype</Label>
-              <Input
-                id="account_subtype"
+              <Select
                 value={formData.account_subtype}
-                onChange={(e) => handleInputChange('account_subtype', e.target.value)}
-                placeholder="current_asset"
-              />
+                onValueChange={(value) => handleInputChange('account_subtype', value)}
+              >
+                <SelectTrigger id="account_subtype">
+                  <SelectValue placeholder="Select subtype" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(SUBTYPES[formData.account_type] ?? []).map(s => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -229,7 +297,7 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
                 type="number"
                 step="0.01"
                 value={formData.opening_balance}
-                onChange={(e) => handleInputChange('opening_balance', e.target.value)}
+                onChange={(e) => handleOpeningChange(e.target.value)}
                 placeholder="0.00"
               />
             </div>
@@ -239,12 +307,16 @@ export default function EditAccountDialog({ open, onOpenChange, onSuccess, accou
                 id="current_balance"
                 type="number"
                 step="0.01"
-                value={account.current_balance || formData.opening_balance}
-                readOnly
+                value={formData.current_balance}
+                onChange={(e) => handleCurrentChange(e.target.value)}
                 placeholder="0.00"
               />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Current balance = opening balance + KES {money(posted)} posted to this account. Change either one and the other follows;
+            posted entries are not touched.
+          </p>
 
           <div className="space-y-2">
             <div className="flex items-center space-x-2">

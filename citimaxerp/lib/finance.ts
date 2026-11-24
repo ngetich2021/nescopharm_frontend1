@@ -27,6 +27,8 @@ export interface ChartOfAccount {
   /** Balance in the account's normal direction (positive = normal side). */
   balance?: number;
   current_balance?: string | number | null;
+  /** What has been posted to the account (current balance minus opening balance); from the detail call. */
+  posted_balance?: number;
   currency_code?: string;
   created_at?: string;
   updated_at?: string;

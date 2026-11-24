@@ -147,6 +147,13 @@ class ChartOfAccountController extends Controller
             ], 403);
         }
 
+        // Current balance = opening balance + what has been posted, as the list shows it; Edit
+        // Account shows both and lets either be changed.
+        $current = (float) app(\App\Services\LedgerBalanceService::class)
+            ->balances($account->company_id, null, collect([$account]))->get($account->id, 0);
+        $account->setAttribute('current_balance', $current);
+        $account->setAttribute('posted_balance', round($current - (float) $account->opening_balance, 2));
+
         return response()->json([
             'status' => 'success',
             'message' => 'Account retrieved successfully.',
@@ -259,6 +266,9 @@ class ChartOfAccountController extends Controller
             'description' => 'nullable|string',
             'is_active' => 'boolean',
             'opening_balance' => 'nullable|numeric',
+            // The balance wanted today: the opening balance is set so that opening + posted = this.
+            'current_balance' => 'nullable|numeric',
+            'currency_code' => 'nullable|string|size:3',
             'normal_balance' => 'sometimes|required|in:debit,credit',
             'tax_code' => 'nullable|string|max:10',
         ]);
@@ -266,19 +276,29 @@ class ChartOfAccountController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'failed',
-                'message' => $validator->errors(),
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
             ], 400);
         }
 
         try {
             DB::beginTransaction();
 
-            $user = $request->user();
-            $account->update($request->only([
+            $fields = $request->only([
                 'account_code', 'account_name', 'account_type', 'account_subtype',
                 'parent_id', 'description', 'is_active', 'opening_balance',
-                'normal_balance', 'tax_code'
-            ]));
+                'normal_balance', 'tax_code', 'currency_code',
+            ]);
+            if ($request->filled('current_balance')) {
+                // Posted entries stay as they are; the difference goes on the opening balance.
+                // Worked out after any change of normal side, which flips what "posted" means.
+                $account->fill(array_intersect_key($fields, array_flip(['normal_balance'])));
+                $withoutOpening = (float) app(\App\Services\LedgerBalanceService::class)
+                    ->balances($account->company_id, null, collect([$account->replicate()->forceFill(['id' => $account->id, 'opening_balance' => 0])]))
+                    ->get($account->id, 0);
+                $fields['opening_balance'] = round((float) $request->input('current_balance') - $withoutOpening, 2);
+            }
+            $account->update($fields);
 
             DB::commit();
 
