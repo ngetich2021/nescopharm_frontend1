@@ -308,8 +308,7 @@ class LedgerPostingService
         // booking its cost again would take it out of Inventory twice. Likewise any past
         // (pre-go-live) sale whose stock never left in this system: cost follows the stock.
         $order = Order::whereKey($dispatch->order_id)->first(['id', 'is_historical', 'order_date', 'stock_deducted_at']);
-        $historical = !$order || $order->is_historical
-            || (Order::isHistoricalDate($order->order_date) && !$order->stock_deducted_at);
+        $historical = !$order || $order->is_historical;
 
         if (!$deleted && !$historical && $settings && $settings->perpetual_inventory) {
             $shippedStatuses = $settings->cogs_recognition === 'on_delivery' ? ['delivered'] : ['in_transit', 'delivered'];

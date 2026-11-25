@@ -341,10 +341,9 @@ class OrderController extends Controller
             ], 403);
         }
 
-        // A sale dated before go-live was made in the previous system: it counts towards sales
-        // and receivables but its goods left before the opening stock was taken, so it is
-        // neither checked against nor taken out of stock.
-        $isHistorical = Order::isHistoricalDate($request->input('order_date'));
+        // From 25/11/2026 there are no past orders: every new order, whatever its date, is checked
+        // against stock and takes it like any other. Orders already flagged is_historical stay so.
+        $isHistorical = false;
 
         try {
             Log::info('Order creation attempt', [
@@ -726,16 +725,9 @@ class OrderController extends Controller
             ], 400);
         }
 
-        // Re-dating an order across go-live moves it between a past sale (no stock, no approvals)
-        // and a normal one. An invoice, receipts or credit don't stop it (old sales are being
-        // entered and corrected): the invoice moves to the new date below.
+        // Re-dating never makes an order a past sale (or takes an existing one out of being one):
+        // from 25/11/2026 only orders already flagged is_historical are past sales.
         $toHistorical = null;
-        if ($request->filled('order_date')) {
-            $willBeHistorical = Order::isHistoricalDate($request->input('order_date'));
-            if ($willBeHistorical !== (bool) $order->is_historical) {
-                $toHistorical = $willBeHistorical;
-            }
-        }
 
         // The invoice date follows the order date, except on an invoice already signed by live eTIMS.
         $invoice = \App\Models\Invoice::where('order_id', $order->id)->first();
@@ -763,7 +755,7 @@ class OrderController extends Controller
 
         // A dispatched current sale ships what its dispatch lists, so its lines can't change under it.
         // (A past sale's dispatch is rewritten to match instead.)
-        $isPastSale = $order->is_historical || Order::isHistoricalDate($request->input('order_date', $order->order_date));
+        $isPastSale = (bool) $order->is_historical;
         if ($linesChanged && !$isPastSale) {
             $dispatch = \App\Models\OrderDispatch::where('order_id', $order->id)
                 ->where('status', '!=', 'cancelled')

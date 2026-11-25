@@ -59,10 +59,10 @@ class OrderStockService
         }
     }
 
-    // Flagged as brought across from the old system, or simply dated before go-live.
+    // Only an order already flagged as a past sale; the date alone no longer makes one (25/11/2026).
     private function isPastSale(Order $order): bool
     {
-        return (bool) $order->is_historical || Order::isHistoricalDate($order->order_date);
+        return (bool) $order->is_historical;
     }
 
     public function deduct(Order $order): void

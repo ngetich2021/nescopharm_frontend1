@@ -29,7 +29,6 @@ import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
-import { HISTORICAL_CUTOFF, PAST_SALES_UNTIL } from "@/lib/orders"
 
 type Customer = LibCustomer
 
@@ -59,7 +58,6 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-const formatCutoff = () => PAST_SALES_UNTIL.split("-").reverse().join("-")
 
 export function CreateOrderModal({
   children, 
@@ -80,9 +78,9 @@ export function CreateOrderModal({
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [notes, setNotes] = useState("")
   const [orderDate, setOrderDate] = useState(todayIso())
-  // A sale dated before go-live was made in the previous system: it is recorded for
-  // sales and accounts only, and the backend leaves stock untouched for it.
-  const isPastSale = orderDate < HISTORICAL_CUTOFF
+  // From 25/11/2026 there are no past sales: every new order, whatever its date, is checked
+  // against stock and credit and takes stock like any other.
+  const isPastSale = false
   // Global tax state removed in favor of per-product tax
   // const [includeTax, setIncludeTax] = useState(true)
   // const [taxRate, setTaxRate] = useState(16)
@@ -997,12 +995,6 @@ export function CreateOrderModal({
                 onChange={(e) => setOrderDate(e.target.value || todayIso())}
                 className="md:w-1/2"
               />
-              {isPastSale && (
-                <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Past sale (dated up to {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
-                  but stock will not change - those goods left before your opening stock was taken.
-                </p>
-              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

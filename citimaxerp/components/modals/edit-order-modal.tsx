@@ -24,7 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import apiCall from "@/lib/api"
 import { Product, ProductVariant, getProducts, getProductById } from "@/lib/products"
 import { getCustomers, Customer as LibCustomer, fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
-import { OrderDetail, HISTORICAL_CUTOFF, PAST_SALES_UNTIL } from "@/lib/orders"
+import { OrderDetail } from "@/lib/orders"
 import { fetchSalesReps, SalesRep } from "@/lib/invoices"
 import { orderTotals, vatRateForProduct } from "@/lib/invoice-tax"
 import { OrderVatSelect } from "@/components/order-vat-select"
@@ -75,7 +75,6 @@ const todayIso = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-const formatCutoff = () => PAST_SALES_UNTIL.split("-").reverse().join("-")
 
 type ProductWithVariants = Product & { variants?: ProductVariant[] }
 
@@ -96,9 +95,9 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [notes, setNotes] = useState("")
   const [orderDate, setOrderDate] = useState(todayIso())
-  // Moving the date before go-live turns the order into a past sale: sales and accounts
-  // only, no stock. Moving it back on or after go-live makes it a normal sale again.
-  const isPastSale = orderDate < HISTORICAL_CUTOFF
+  // Only an order already flagged as a past sale is one; changing the date never makes or
+  // unmakes one (25/11/2026: no more past sales by date).
+  const isPastSale = !!order?.is_historical
   // A past or invoiced sale is already settled through its invoice: correcting it (say, adding
   // VAT) mustn't demand credit headroom or a fresh payment. Payments go on the invoice.
   const isInvoiced = !!order?.invoice
@@ -1047,8 +1046,8 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
               />
               {isPastSale && (
                 <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  Past sale (dated up to {formatCutoff()}): it counts in sales, invoices and the customer&apos;s balance,
-                  but stock will not change - those goods left before your opening stock was taken.
+                  Past sale (brought across from the old system): it counts in sales, invoices and the customer&apos;s balance,
+                  but its stock does not change.
                 </p>
               )}
             </div>

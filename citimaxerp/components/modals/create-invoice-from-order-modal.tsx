@@ -13,7 +13,7 @@ import { useForm, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { createInvoiceFromOrder, CreateInvoiceFromOrderRequest, fetchSalesReps, SalesRep } from "@/lib/invoices"
-import { fetchOrders, fetchOrderById, Order, OrderDetail, isPastSaleDate } from "@/lib/orders"
+import { fetchOrders, fetchOrderById, Order, OrderDetail } from "@/lib/orders"
 import { fetchCustomerCreditTerms, CustomerCreditTerms, getCustomerDisplayName } from "@/lib/customers"
 import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 import { useToast } from "@/hooks/use-toast"
@@ -166,7 +166,7 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
   // the customer pay the same overage a second time.
   const creditOverage = 0
   // A past sale goes in on credit whatever the customer's terms: no approved terms needed.
-  const isPastSale = !!selectedOrder && (!!selectedOrder.is_historical || isPastSaleDate(selectedOrder.order_date))
+  const isPastSale = !!selectedOrder?.is_historical
   const needsCreditTerms = paymentOption === 'credit' && !isPastSale && !creditTerms?.credit_days
 
   const onSubmit: SubmitHandler<InvoiceFromOrderFormData> = async (data) => {

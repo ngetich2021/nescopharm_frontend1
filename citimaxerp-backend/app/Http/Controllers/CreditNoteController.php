@@ -873,15 +873,10 @@ class CreditNoteController extends Controller
 
             $creditNote->loadMissing('lineItems');
 
-            // A past sale (before go-live) never moved stock, so crediting it puts none back.
-            $pastSale = $original && (
-                ($original->order_id && \App\Models\Order::where('id', $original->order_id)->whereRaw('is_historical = true')->exists())
-                || \App\Models\Order::isHistoricalDate($original->invoice_date)
-            );
-            if (!$pastSale) {
-                foreach ($creditNote->lineItems as $lineItem) {
-                    $this->restoreInventoryForCreditNoteLineItem($creditNote, $lineItem, $user->id);
-                }
+            // Every credit note puts its goods back in stock, whatever sale it credits (25/11/2026:
+            // there is no past-sale exception any more).
+            foreach ($creditNote->lineItems as $lineItem) {
+                $this->restoreInventoryForCreditNoteLineItem($creditNote, $lineItem, $user->id);
             }
 
             $creditNote->update([

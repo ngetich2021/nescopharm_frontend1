@@ -132,7 +132,8 @@ class InvoiceOrderService
 
     public function isPastSale(Order $order): bool
     {
-        return (bool) $order->is_historical || Order::isHistoricalDate($order->order_date);
+        // Only an order already flagged as a past sale; the date alone no longer makes one (25/11/2026).
+        return (bool) $order->is_historical;
     }
 
     /**
