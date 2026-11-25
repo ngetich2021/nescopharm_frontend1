@@ -1190,10 +1190,14 @@ class StockAdjustmentController extends Controller
      */
     private function applyItemToInventory($item)
     {
-        // If batch_id is specified, adjust that batch
+        // Stock is the sum of the batches, and the product (and size) figure must move with them:
+        // before 25/11/2026 a line on a batch changed only the batch, and a decrease without a
+        // batch changed only the product (Gripe Water ADJ-0021, Bandage ADJ-0023, Transpore ADJ-0025).
         if ($item->batch_id) {
             $batch = InventoryBatch::findOrFail($item->batch_id);
             $batch->increment('quantity_available', $item->quantity_adjusted);
+            $batch->refresh()->updateStatus();
+            $this->moveStockFigures($item);
             return;
         }
 
@@ -1220,15 +1224,43 @@ class StockAdjustmentController extends Controller
         // batch-based stock views see it - not only the product total.
         if ($item->quantity_adjusted > 0) {
             $this->receiveIntoBatch($item);
+        } elseif ($item->quantity_adjusted < 0) {
+            $this->takeFromBatches($item, (int) -$item->quantity_adjusted);
         }
 
-        // Otherwise, adjust product or variant stock_quantity
+        $this->moveStockFigures($item);
+    }
+
+    /** The product's figure, and the size's when the line is on one, move by the adjusted quantity. */
+    private function moveStockFigures($item): void
+    {
         if ($item->variant_id) {
-            $variant = ProductVariant::findOrFail($item->variant_id);
-            $variant->increment('stock_quantity', $item->quantity_adjusted);
-        } else {
-            $product = Product::findOrFail($item->product_id);
-            $product->increment('stock_quantity', $item->quantity_adjusted);
+            ProductVariant::whereKey($item->variant_id)->increment('stock_quantity', $item->quantity_adjusted);
+        }
+        Product::whereKey($item->product_id)->increment('stock_quantity', $item->quantity_adjusted);
+    }
+
+    /** A decrease with no batch named comes out of the item's batches, soonest expiry first. */
+    private function takeFromBatches($item, int $quantity): void
+    {
+        $batches = InventoryBatch::where('product_id', $item->product_id)
+            ->where(fn ($q) => $item->variant_id ? $q->where('variant_id', $item->variant_id) : $q)
+            ->where('quantity_available', '>', 0)
+            ->orderByRaw('expiry_date IS NULL, expiry_date ASC')
+            ->orderBy('received_date')
+            ->lockForUpdate()
+            ->get();
+        if ((int) $batches->sum('quantity_available') < $quantity) {
+            throw new \RuntimeException("Only {$batches->sum('quantity_available')} in this item's batches, less than the {$quantity} to take off.");
+        }
+        foreach ($batches as $batch) {
+            if ($quantity <= 0) {
+                break;
+            }
+            $take = min($quantity, (int) $batch->quantity_available);
+            $batch->decrement('quantity_available', $take);
+            $batch->refresh()->updateStatus();
+            $quantity -= $take;
         }
     }
 

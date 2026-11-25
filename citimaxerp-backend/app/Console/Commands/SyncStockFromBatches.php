@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\DB;
  * variant) is a copy that some screens read - requisitions, orders, product lists - and it can
  * drift when a path changes a batch without refreshing it (e.g. a batch's expiry corrected after
  * a stock count had left it out as expired: Plaster Of Paris 4" showed 0 with 11,287 in batches).
- * This lists every product/variant whose figure differs from its batches and, with --fix, sets it.
+ * This lists every product/variant whose figure differs from its batches and, with --fix, sets the
+ * figure to the batches. Careful: the figure can be the right side (25/11/2026: 14 of 15 were, the
+ * batches had missed stock adjustments) - then correct the batches instead. Scheduled report-only.
  * Products with no batches at all are left alone.
  */
 class SyncStockFromBatches extends Command
@@ -56,6 +58,13 @@ class SyncStockFromBatches extends Command
             \Illuminate\Support\Facades\Log::info('stock:sync-from-batches corrected stock figures', [
                 'products' => array_map(fn ($r) => "{$r->name}: {$r->stored} -> {$r->total}", $products),
                 'variants' => array_map(fn ($r) => "{$r->product} / {$r->name}: {$r->stored} -> {$r->total}", $variants),
+            ]);
+        }
+
+        if (!$this->option('fix') && ($products || $variants)) {
+            \Illuminate\Support\Facades\Log::warning('Stock figures differ from their batches - check which is right', [
+                'products' => array_map(fn ($r) => "{$r->name}: figure {$r->stored}, batches {$r->total}", $products),
+                'variants' => array_map(fn ($r) => "{$r->product} / {$r->name}: figure {$r->stored}, batches {$r->total}", $variants),
             ]);
         }
 

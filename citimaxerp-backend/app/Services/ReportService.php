@@ -730,6 +730,7 @@ class ReportService
                 ],
                 'stock_count' => ['label' => 'Stock count', 'number' => $number, 'link' => $id ? "/inventory/stock-counts/{$id}" : '/inventory/stock-counts'],
                 'opening_stock' => ['label' => 'Opening stock', 'number' => $number],
+                'stock_correction' => ['label' => 'Stock correction', 'number' => $number],
                 'purchase_order_return' => ['label' => 'Return to supplier', 'number' => $number, 'link' => '/purchase-orders'],
                 default => [],
             };
