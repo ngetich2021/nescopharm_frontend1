@@ -131,7 +131,12 @@ class ProductReceiptController extends Controller
         if (!$this->hasPermission($request, 'can_manage_system')) {
             $query->where('company_id', $companyId);
         }
-        $receipts = $query->orderBy('created_at', 'desc')->paginate(20);
+        // per_page=all: every receipt (the Receipts page pages and searches them itself; with 20 a page
+        // it only ever saw the newest 20, so RCPT-0001.. went missing once there were more).
+        $perPage = $request->input('per_page') === 'all'
+            ? max(1, (clone $query)->count())
+            : min(max((int) $request->input('per_page', 20), 1), 500);
+        $receipts = $query->orderBy('created_at', 'desc')->paginate($perPage);
         return response()->json([
             'status' => 'success',
             'message' => 'Product receipts retrieved successfully.',

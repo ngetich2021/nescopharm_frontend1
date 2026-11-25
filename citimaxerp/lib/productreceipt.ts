@@ -292,7 +292,8 @@ export async function deleteProductReceipt(id: string): Promise<void> {
 
 // List all Product Receipts
 export async function listProductReceipts(): Promise<ProductReceipt[]> {
-  const response = await apiCall<any>("/whs/product-receipts", "GET", undefined, true);
+  // Every receipt: the page searches and pages them itself (the API's default 20 hid the oldest).
+  const response = await apiCall<any>("/whs/product-receipts?per_page=all", "GET", undefined, true);
   // The API returns { status, message, receipts: { data: [...] } }
   return response.receipts?.data || [];
 }
