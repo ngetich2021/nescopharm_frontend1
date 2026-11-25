@@ -713,7 +713,7 @@ class ReportService
                 })(),
                 'product_receipt' => (function () use ($receipts, $id, $number) {
                     $r = $receipts->get($id);
-                    return ['label' => 'Goods received', 'number' => self::shortDocNumber($r->product_receipt_number ?? null) ?? $number, 'link' => '/product-receipt', 'party' => $r->supplier_name ?? null];
+                    return ['label' => 'Goods received', 'number' => self::shortDocNumber($r->product_receipt_number ?? null) ?? $number, 'link' => $r ? "/product-receipt?receipt={$id}" : '/product-receipt', 'party' => $r->supplier_name ?? null];
                 })(),
                 'supplier_debit_note' => (function () use ($debitNotes, $id, $number) {
                     $d = $debitNotes->get($id);
@@ -721,7 +721,7 @@ class ReportService
                 })(),
                 'dispatch' => (function () use ($dispatches, $id, $number) {
                     $d = $dispatches->get($id);
-                    return ['label' => 'Dispatch', 'number' => self::shortDocNumber($d->dispatch_number ?? null) ?? $number, 'link' => '/dispatch', 'party' => ($d->to_user ?? '') !== '' ? $d->to_user : ($d->to_entity ?? null)];
+                    return ['label' => 'Dispatch', 'number' => self::shortDocNumber($d->dispatch_number ?? null) ?? $number, 'link' => $d ? "/dispatch/{$id}/delivery-note" : '/dispatch', 'party' => ($d->to_user ?? '') !== '' ? $d->to_user : ($d->to_entity ?? null)];
                 })(),
                 'stock_adjustment', 'stock_adjustment_item' => [
                     'label' => 'Stock adjustment',

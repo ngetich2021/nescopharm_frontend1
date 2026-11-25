@@ -4,7 +4,7 @@ import * as React from "react";
 import { format } from "date-fns";
 import { ProductReceiptDetailsModal } from "./ProductReceiptDetailsModal";
 import { ReceiptDebitNoteDialog } from "./ReceiptDebitNoteDialog";
-import { getProductReceipt, productReceiptExport } from "@/lib/productreceipt";
+import { getProductReceipt, productReceiptExport, shortReceiptNumber } from "@/lib/productreceipt";
 import { exportTable, type ExportFormat } from "@/lib/table-export";
 import { useAuth } from "@/lib/auth-context";
 import { ExportMenu, ExportSubMenu, useTableExport } from "@/components/export-menu";
@@ -90,7 +90,7 @@ export default function ProductReceiptTable({
       headers: ["S/No", "Receipt #", "Reference", "Date", "Store", "Supplier", "Document Type", "Items", "Total Qty", "Received By"],
       rows: list.map((r: any, i: number) => [
         i + 1,
-        r.product_receipt_number || "",
+        shortReceiptNumber(r.product_receipt_number),
         r.reference_number || "",
         r.created_at ? format(new Date(r.created_at), "dd/MM/yyyy") : "",
         r.store?.name || "",
@@ -132,7 +132,7 @@ export default function ProductReceiptTable({
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
               <Input
                 className="pl-8 max-w-sm"
-                placeholder="Search receipts..."
+                placeholder="Search receipt no. (RCPT-0031), supplier, invoice..."
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
               />
@@ -184,7 +184,9 @@ export default function ProductReceiptTable({
                   <TableCell colSpan={8} className="h-24 text-center">
                     <div className="text-gray-500">
                       <p className="font-semibold">No product receipts found</p>
-                      <p className="text-sm">Create your first receipt to get started</p>
+                      <p className="text-sm">
+                        {search?.trim() ? `Nothing matches "${search.trim()}"` : "Create your first receipt to get started"}
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -199,7 +201,7 @@ export default function ProductReceiptTable({
                       <TableCell className="font-medium">
                         <div className="flex flex-col">
                           <span className="text-sm font-semibold text-[#E30040]">
-                            {receipt.product_receipt_number || receipt.reference_number}
+                            {shortReceiptNumber(receipt.product_receipt_number) || receipt.reference_number}
                           </span>
                           {receipt.reference_number && receipt.product_receipt_number !== receipt.reference_number && (
                             <span className="text-xs text-gray-500 mt-1">

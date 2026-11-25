@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getProductReceipt, productReceiptExport, ProductReceiptApiResponse } from "@/lib/productreceipt";
+import { getProductReceipt, productReceiptExport, shortReceiptNumber, ProductReceiptApiResponse } from "@/lib/productreceipt";
 import { exportTable } from "@/lib/table-export";
 import { useAuth } from "@/lib/auth-context";
 import { ExportMenu } from "@/components/export-menu";
@@ -126,7 +126,7 @@ export function ProductReceiptDetailsModal({
             </SheetTitle>
             <SheetDescription>
               {receipt?.product_receipt_number ? (
-                <>View details for receipt {receipt.product_receipt_number}</>
+                <>View details for receipt {shortReceiptNumber(receipt.product_receipt_number)}</>
               ) : (
                 "Loading receipt details..."
               )}
@@ -161,7 +161,7 @@ export function ProductReceiptDetailsModal({
                             <Hash className="h-4 w-4" />
                             Receipt Number
                           </span>
-                          <span className="font-medium">{receipt.product_receipt_number}</span>
+                          <span className="font-medium">{shortReceiptNumber(receipt.product_receipt_number)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600 flex items-center gap-1">

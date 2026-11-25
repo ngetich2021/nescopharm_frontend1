@@ -8,7 +8,8 @@ import { CreateProductReceiptModal } from "./CreateProductReceiptModal";
 import { EditProductReceiptModal } from "./EditProductReceiptModal";
 import { DeleteProductReceiptConfirmationDialog } from "./DeleteProductReceiptConfirmationDialog";
 import { ProductReceiptDetailsModal } from "./ProductReceiptDetailsModal";
-import { listProductReceipts as getProductReceipts, type ProductReceipt } from "@/lib/productreceipt";
+import { listProductReceipts as getProductReceipts, shortReceiptNumber, type ProductReceipt } from "@/lib/productreceipt";
+import { Button } from "@/components/ui/button";
 import { invalidateCacheKey } from "@/lib/data-cache";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -50,6 +51,26 @@ export function ProductReceiptPage() {
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
+
+  // A report's Goods received link lands here with ?receipt=<id>: show that receipt alone and open it.
+  const [focusReceiptId, setFocusReceiptId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("receipt");
+    if (id) {
+      setFocusReceiptId(id);
+      setSelectedProductReceipt({ id } as ProductReceipt);
+      setViewModalOpen(true);
+    }
+  }, []);
+  const showAllReceipts = () => {
+    setFocusReceiptId(null);
+    window.history.replaceState(null, "", window.location.pathname);
+  };
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setCurrentPage(1);
+    if (focusReceiptId) showAllReceipts();
+  };
 
   // Track last fetch time for stale-time management
   const lastFetchTime = useRef<number>(0);
@@ -168,15 +189,27 @@ export function ProductReceiptPage() {
     };
   }, [revalidate]);
 
-  // Filter product receipts by search
-  const filteredProductReceipts = productReceipts.filter((receipt) => {
-    const searchLower = search.toLowerCase();
-    return (
-      receipt.supplier?.name?.toLowerCase().includes(searchLower) ||
-      receipt.reference_number?.toLowerCase().includes(searchLower) ||
-      receipt.document_type?.toLowerCase().includes(searchLower)
-    );
+  // Filter product receipts by search: the receipt number as shown (RCPT-0031) or stored, the supplier's
+  // invoice no., supplier, store, who received it, document type. Spaces separate words that must all match.
+  // Coming from a report (?receipt=<id>) shows that one receipt only, until "Show all receipts".
+  const filteredProductReceipts = productReceipts.filter((receipt: any) => {
+    if (focusReceiptId) return receipt.id === focusReceiptId;
+    const words = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    const text = [
+      shortReceiptNumber(receipt.product_receipt_number),
+      receipt.product_receipt_number,
+      receipt.reference_number,
+      receipt.supplier?.name,
+      receipt.store?.name,
+      receipt.store?.code,
+      receipt.recipient?.first_name,
+      receipt.recipient?.last_name,
+      String(receipt.document_type || "").replace(/_/g, " "),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return words.every((w) => text.includes(w));
   });
+  const focusedReceipt = focusReceiptId ? productReceipts.find((r) => r.id === focusReceiptId) : null;
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredProductReceipts.length / rowsPerPage);
@@ -263,7 +296,20 @@ export function ProductReceiptPage() {
         </div>
 
         <ProductReceiptSummary />
-        
+
+        {focusReceiptId && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+            <span>
+              Showing receipt{" "}
+              <span className="font-semibold">
+                {focusedReceipt ? shortReceiptNumber(focusedReceipt.product_receipt_number) || focusedReceipt.reference_number : "..."}
+              </span>{" "}
+              only
+            </span>
+            <Button variant="outline" size="sm" onClick={showAllReceipts}>Show all receipts</Button>
+          </div>
+        )}
+
         <ProductReceiptTable
           receipts={paginatedProductReceipts}
           allReceipts={filteredProductReceipts}
@@ -272,7 +318,7 @@ export function ProductReceiptPage() {
           onEditReceipt={handleEditProductReceipt}
           onDeleteReceipt={handleDeleteProductReceipt}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           currentPage={currentPage}
           totalPages={totalPages}
           rowsPerPage={rowsPerPage}

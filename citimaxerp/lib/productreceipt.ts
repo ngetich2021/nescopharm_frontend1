@@ -291,6 +291,11 @@ export async function deleteProductReceipt(id: string): Promise<void> {
 }
 
 // List all Product Receipts
+/** RCPT-9b267ea3-0031 -> RCPT-0031: the number as people see and type it (the middle part is the company). */
+export function shortReceiptNumber(number?: string | null): string {
+  return (number || "").replace(/^([A-Za-z]+)-[0-9a-f]{8}-(\d+)$/, "$1-$2");
+}
+
 export async function listProductReceipts(): Promise<ProductReceipt[]> {
   // Every receipt: the page searches and pages them itself (the API's default 20 hid the oldest).
   const response = await apiCall<any>("/whs/product-receipts?per_page=all", "GET", undefined, true);

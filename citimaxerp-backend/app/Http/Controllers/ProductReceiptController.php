@@ -1164,9 +1164,15 @@ class ProductReceiptController extends Controller
                 ->limit(5)
                 ->get();
 
-            // Total receipt value - Note: total_amount field may not exist in current schema
-            // $totalReceiptValue = (clone $baseQuery)->sum('total_amount') ?? 0;
-            $totalReceiptValue = 0; // Placeholder since total_amount column doesn't exist
+            // Total receipt value: the goods (quantity x buying price on each line) plus shipping and
+            // logistics, the same receipts as the counts above (it was a fixed 0 before).
+            $goodsValue = (float) DB::table('product_receipt_items')
+                ->join('product_receipts', 'product_receipt_items.product_receipt_id', '=', 'product_receipts.id')
+                ->whereIn('product_receipts.id', (clone $baseQuery)->select('product_receipts.id'))
+                ->sum(DB::raw('COALESCE(product_receipt_items.quantity, 0) * COALESCE(product_receipt_items.unit_price, 0)'));
+            $landedValue = (float) (clone $baseQuery)
+                ->sum(DB::raw('COALESCE(shipping_cost, 0) + COALESCE(logistics_cost, 0)'));
+            $totalReceiptValue = $goodsValue + $landedValue;
 
             // Average receipt value
             $averageReceiptValue = $totalReceipts > 0 ? ($totalReceiptValue / $totalReceipts) : 0;
