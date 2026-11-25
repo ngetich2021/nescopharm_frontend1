@@ -183,6 +183,17 @@ class Order extends Model
             throw new \RuntimeException(\App\Services\OrderDeletionService::NO_DELETE_MESSAGE);
         });
 
+        // The invoice is dated on the order date (25/11/2026): when the order date is changed, its invoice follows.
+        static::updated(function (Order $order) {
+            if ($order->wasChanged('order_date')) {
+                try {
+                    app(\App\Services\InvoiceDeliveryDateService::class)->alignForOrder($order);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Invoice date did not follow the order date', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+                }
+            }
+        });
+
         static::saving(function (Order $order) {
             if (empty($order->order_date)) {
                 $order->order_date = $order->getOriginal('order_date') ?? $order->created_at ?? now();

@@ -9,13 +9,20 @@ use App\Models\Order;
 use Illuminate\Support\Facades\DB;
 
 /**
- * An order's invoice is dated on its delivery note date (decided 24/11/2026, NSK/0232: order
- * 04/06/2026, delivered 12/06/2026 - the invoice is dated 12/06/2026). The due date then follows
- * the customer's Credit Period from that date (Invoice::applyCreditPeriod), and the ledger entry
- * moves with it (LedgerSyncObserver). Past sales included.
+ * An order's invoice is dated on its ORDER date: the invoice is a product of the order, so both show
+ * the same day (decided 25/11/2026, replacing the 24/11 delivery-note dating). The delivery note
+ * keeps its own date (the dispatch's), printed as "Delivery Note Date". The due date follows the
+ * customer's Credit Period from the invoice date (Invoice::applyCreditPeriod), and the invoice's
+ * sales entry in the books moves with it. Past sales included.
  */
 class InvoiceDeliveryDateService
 {
+    /** The order's date: its order_date, else the day it was made. */
+    public function orderDate(Order $order): ?string
+    {
+        return $order->order_date?->toDateString() ?? $order->created_at?->toDateString();
+    }
+
     /**
      * The delivery note date of the order's latest dispatch: the dispatch's own date (what a past
      * sale's dispatch was entered with), else the day the delivery note or dispatch was made.
@@ -43,9 +50,9 @@ class InvoiceDeliveryDateService
     }
 
     /**
-     * Dates the order's invoice on its delivery note date. Returns true when it changed.
-     * $dryRun only reports. $includeEtims also re-dates an invoice already sent to eTIMS (done
-     * once on 24/11/2026 for NSK/0288 and NSK/0460 while prod eTIMS was on DigiTax TEST).
+     * Dates the order's invoice on the order date (and records the delivery note's own date beside it).
+     * Returns true when the invoice date changed. $dryRun only reports. $includeEtims also re-dates an
+     * invoice already sent to eTIMS (prod eTIMS is on DigiTax TEST; ask before doing it once live).
      */
     public function align(Invoice $invoice, bool $dryRun = false, bool $includeEtims = false): bool
     {
@@ -56,34 +63,38 @@ class InvoiceDeliveryDateService
         if (!$order) {
             return false;
         }
-        // Always the delivery note date, even one before the order date (the user's call, 24/11/2026).
-        $date = $this->deliveryNoteDate($order);
+        $date = $this->orderDate($order);
         if (!$date) {
             return false;
         }
+        $noteDate = $this->deliveryNoteDate($order);
 
-        $changed = $invoice->invoice_date?->toDateString() !== $date
-            || $invoice->delivery_note_date?->toDateString() !== $date;
-        if ($changed && !$dryRun) {
-            DB::transaction(function () use ($invoice, $date) {
-                // Only the date moves, so the invoice's own sales entry is re-dated in place. A
-                // reverse-and-repost would date the reversal today and knock today's sales down.
-                JournalEntry::where('company_id', $invoice->company_id)
-                    ->where('source_type', Invoice::class)
-                    ->where('source_id', $invoice->id)
-                    ->where('status', 'posted')
-                    ->get()
-                    ->filter(fn (JournalEntry $e) => ($e->metadata['transaction_type'] ?? null) === 'sales_invoice')
-                    ->each(fn (JournalEntry $e) => $e->forceFill(['entry_date' => $date])->saveQuietly());
+        $changed = $invoice->invoice_date?->toDateString() !== $date;
+        $noteChanged = $noteDate && $invoice->delivery_note_date?->toDateString() !== $noteDate;
+        if (($changed || $noteChanged) && !$dryRun) {
+            DB::transaction(function () use ($invoice, $date, $noteDate, $changed) {
+                if ($changed) {
+                    // Only the date moves, so the invoice's own sales entry is re-dated in place. A
+                    // reverse-and-repost would date the reversal today and knock today's sales down.
+                    JournalEntry::where('company_id', $invoice->company_id)
+                        ->where('source_type', Invoice::class)
+                        ->where('source_id', $invoice->id)
+                        ->where('status', 'posted')
+                        ->get()
+                        ->filter(fn (JournalEntry $e) => ($e->metadata['transaction_type'] ?? null) === 'sales_invoice')
+                        ->each(fn (JournalEntry $e) => $e->forceFill(['entry_date' => $date])->saveQuietly());
 
-                $invoice->invoice_date = $date;
-                $invoice->delivery_note_date = $date;
-                // Due date from the customer's Credit Period, and overdue or not from that.
-                $invoice->applyCreditPeriod();
-                if ((float) $invoice->balance_amount > 0.005 && in_array($invoice->status, ['sent', 'overdue', 'partially_paid'], true)) {
-                    $invoice->status = $invoice->isOverdue()
-                        ? 'overdue'
-                        : ((float) $invoice->amount_paid + (float) $invoice->amount_credited > 0.005 ? 'partially_paid' : 'sent');
+                    $invoice->invoice_date = $date;
+                    // Due date from the customer's Credit Period, and overdue or not from that.
+                    $invoice->applyCreditPeriod();
+                    if ((float) $invoice->balance_amount > 0.005 && in_array($invoice->status, ['sent', 'overdue', 'partially_paid'], true)) {
+                        $invoice->status = $invoice->isOverdue()
+                            ? 'overdue'
+                            : ((float) $invoice->amount_paid + (float) $invoice->amount_credited > 0.005 ? 'partially_paid' : 'sent');
+                    }
+                }
+                if ($noteDate) {
+                    $invoice->delivery_note_date = $noteDate;
                 }
                 // Quietly: nothing else changed, so no ledger repost and no eTIMS submission.
                 $invoice->saveQuietly();

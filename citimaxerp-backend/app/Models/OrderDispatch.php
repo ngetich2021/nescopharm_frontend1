@@ -84,7 +84,7 @@ class OrderDispatch extends Model
         static::saved($syncStock);
         static::deleted($syncStock);
 
-        // The order's invoice is dated on its delivery note date (24/11/2026).
+        // The invoice keeps the order date; this records the delivery note's own date on it (25/11/2026).
         static::saved(function (OrderDispatch $dispatch) {
             if (($dispatch->wasRecentlyCreated || $dispatch->wasChanged('dispatch_date')) && $order = Order::find($dispatch->order_id)) {
                 try {

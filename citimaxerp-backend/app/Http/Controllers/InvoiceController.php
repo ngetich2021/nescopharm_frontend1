@@ -716,13 +716,10 @@ class InvoiceController extends Controller
             // Calculate invoice status based on payment amount
             $amountPaid = $order->amount_paid ?? 0;
             $totalAmount = $order->final_amount;
-            // An invoice is dated on its delivery note (24/11/2026). Not dispatched yet: a past sale
-            // takes the day it was made, a new one today; it moves to the delivery note date once
-            // the order is dispatched (InvoiceDeliveryDateService).
-            $invoiceDate = app(\App\Services\InvoiceDeliveryDateService::class)->deliveryNoteDate($order)
-                ?? ($order->is_historical && $order->order_date
-                    ? $order->order_date->toDateString()
-                    : ($request->invoice_date ?? now()->toDateString()));
+            // An order invoice is dated on its order date - the invoice is a product of the order
+            // (25/11/2026; InvoiceDeliveryDateService). The delivery note keeps its own date.
+            $invoiceDate = app(\App\Services\InvoiceDeliveryDateService::class)->orderDate($order)
+                ?? ($request->invoice_date ?? now()->toDateString());
             $paymentOption = $request->input('payment_option');
             $alreadySettled = $totalAmount > 0 && (float) $amountPaid >= (float) $totalAmount;
 
