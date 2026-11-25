@@ -18,6 +18,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('cheques:send-maturity-reminders')->dailyAt('08:00');
         $schedule->command('stock:send-low-stock-alerts')->dailyAt('07:30');
         $schedule->command('batches:refresh-status')->dailyAt('00:05');
+        // A product's stock figure is kept equal to the sum of its batches (drift shows wrong stock on requisitions/orders).
+        $schedule->command('stock:sync-from-batches --fix')->hourly()->withoutOverlapping();
         $schedule->command('employees:apply-terminations')->dailyAt('00:10');
         $schedule->command('customers:generate-statements')->monthlyOn(1, '01:00');
 

@@ -27,7 +27,8 @@ class RefreshInventoryBatchStatuses extends Command
         // A batch that was marked sold_out or expired can become active again
         // if stock was restored (e.g. an order that consumed it got edited
         // or deleted) and it hasn't actually expired.
-        $reactivated = InventoryBatch::whereIn('status', ['sold_out'])
+        // An expired batch whose expiry date was corrected to a later date is active again too.
+        $reactivated = InventoryBatch::whereIn('status', ['sold_out', 'expired'])
             ->where(function ($q) {
                 $q->whereNull('expiry_date')->orWhere('expiry_date', '>=', now()->toDateString());
             })

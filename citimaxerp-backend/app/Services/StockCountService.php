@@ -290,15 +290,17 @@ class StockCountService
     /** Keep the stored stock figure equal to what the batches hold. */
     protected function refreshStockTotal(string $productId, ?string $variantId): void
     {
+        // Every batch holding goods counts, whatever its status: a batch wrongly marked expired or
+        // sold out still has the stock (Plaster Of Paris 4" went to 0 with 11,287 in such a batch).
         $total = (int) InventoryBatch::where('product_id', $productId)
             ->when($variantId, fn ($q) => $q->where('variant_id', $variantId))
-            ->where('status', 'active')->where('quantity_available', '>', 0)
+            ->where('quantity_available', '>', 0)
             ->sum('quantity_available');
         if ($variantId) {
             ProductVariant::whereKey($variantId)->update(['stock_quantity' => $total]);
         }
         $productTotal = (int) InventoryBatch::where('product_id', $productId)
-            ->where('status', 'active')->where('quantity_available', '>', 0)->sum('quantity_available');
+            ->where('quantity_available', '>', 0)->sum('quantity_available');
         Product::whereKey($productId)->update(['stock_quantity' => $productTotal]);
     }
 }

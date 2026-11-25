@@ -404,10 +404,16 @@ class RequisitionController extends Controller
             ], 404);
         }
         $companyId = $requisition->company_id;
-        if (!$this->hasPermission($request, 'can_update_requisitions') || !$this->canManageCompany($request, $companyId)) {
+        // Who may edit: anyone with Update Requisitions, the requisition's own approver (to correct
+        // it before approving) and any Accountant - all within the requisition's company. It used to
+        // demand Manage Company too, which only the GM and Directors have, so approvers were refused.
+        $isApprover = (string) $requisition->approver_id === (string) $user->id;
+        $isAccountant = strtolower(trim((string) $user->role?->name)) === 'accountant';
+        $sameCompany = (string) $user->company_id === (string) $companyId || $this->hasPermission($request, 'can_manage_all_requisitions');
+        if (!$sameCompany || !($this->hasPermission($request, 'can_update_requisitions') || $isApprover || $isAccountant)) {
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Unauthorized to update this requisition.'
+                'message' => 'You cannot edit this requisition: it needs the Update Requisitions permission, or you must be its approver or an Accountant.'
             ], 403);
         }
         $data = $request->all();
@@ -435,11 +441,10 @@ class RequisitionController extends Controller
             }
         });
         if ($validator->fails()) {
-            $firstError = $validator->errors()->first();
             return response()->json([
                 'status' => 'failed',
-                'message' => 'Validation failed: ' . $firstError,
-                'message' => $validator->errors(), 'errors' => $validator->errors()
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
             ], 422);
         }
         $validated = $validator->validated();

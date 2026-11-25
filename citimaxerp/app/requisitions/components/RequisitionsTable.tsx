@@ -333,8 +333,12 @@ function ActionsDropdown({
   onApprove: () => void;
   onCreateDispatch: () => void;
 }) {
-  const { hasPermission } = useAuth();
-  const canEdit = requisition.status === "pending" && requisition.approval_status === "pending" && hasPermission("can_update_requisitions");
+  const { hasPermission, user } = useAuth();
+  // Editable while pending by anyone with Update Requisitions, its own approver, or an Accountant.
+  const isApprover = !!user?.id && String(requisition.approver_id) === String(user.id);
+  const isAccountant = String((user as any)?.role?.name ?? "").trim().toLowerCase() === "accountant";
+  const canEdit = requisition.status === "pending" && requisition.approval_status === "pending"
+    && (hasPermission("can_update_requisitions") || isApprover || isAccountant);
   const canDelete = requisition.status === "pending" && requisition.approval_status === "pending" && hasPermission("can_delete_requisitions");
   const canApprove = requisition.approval_status === "pending" && hasPermission("can_approve_requisitions");
   const canCreateDispatch = requisition.approval_status === "approved" && !requisition.dispatch_id;

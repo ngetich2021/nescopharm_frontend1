@@ -96,12 +96,27 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
     }
   }, [requisition, open]);
 
-  // Fetch products when sheet opens
+  // Fetch approvers when sheet opens
   useEffect(() => {
     if (open) {
       fetchProducts();
     }
   }, [open]);
+
+  // Products come from the server search, like Create: the first 100 alone left most items
+  // (e.g. Plaster Of Paris 4") out of the list.
+  useEffect(() => {
+    if (!open || !searchQuery.trim()) return;
+    const timer = setTimeout(async () => {
+      try {
+        const response = await getProducts(1, 50, { search: searchQuery });
+        setProducts(response.data || []);
+      } catch (error) {
+        console.error('Error searching products:', error);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, open]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -119,14 +134,12 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
 
   const fetchProducts = async () => {
     try {
-      const [productsResponse, usersData] = await Promise.all([
-        getProducts(1, 100),
-        // Only users who can actually approve a requisition (e.g. GM/Directors)
-        // should show up as approver options.
-        getUsers({ role_scope: "can_approve_requisitions" })
-      ]);
-      setProducts(productsResponse.data || []);
-      setUsers(usersData);
+      // Only users who can actually approve a requisition (e.g. GM/Directors)
+      // should show up as approver options.
+      const usersData = await getUsers({ role_scope: "can_approve_requisitions" });
+      // Keep the current approver selectable even when their role isn't in that list.
+      const current = requisition?.approver as User | undefined;
+      setUsers(current && !usersData.some((u) => u.id === current.id) ? [current, ...usersData] : usersData);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -137,10 +150,7 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredProducts = products;
 
   const addProduct = (product: LibProduct, variant?: any) => {
     const existingItemIndex = formData.items.findIndex(
@@ -225,6 +235,7 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
     
     try {
       const payload = {
+        approver_id: formData.approver_id || undefined,
         notes: formData.notes || undefined,
         items: formData.items.map(item => ({
           id: item.id,
@@ -401,6 +412,11 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
                                   <p className="text-xs text-gray-500">
                                     Stock: {product.stock_quantity} {product.unit_of_measurement}
                                   </p>
+                                  {Number(product.stock_quantity) <= 0 && (
+                                    <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-700">
+                                      Out of stock
+                                    </Badge>
+                                  )}
                                   {product.stock_quantity > 0 && product.stock_quantity <= 10 && (
                                     <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
                                       Low Stock
@@ -423,7 +439,6 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
                                           <SelectItem 
                                             key={variant.id} 
                                             value={variant.id}
-                                            disabled={variant.stock_quantity <= 0}
                                           >
                                             <div className="flex items-center justify-between w-full">
                                               <span>{variant.name}</span>
@@ -438,7 +453,6 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
                                     <Button
                                       size="sm"
                                       onClick={() => addProduct(product)}
-                                      disabled={product.stock_quantity <= 0}
                                       className="bg-primary hover:bg-primary/90"
                                     >
                                       <Plus className="h-4 w-4 mr-1" />
@@ -449,7 +463,6 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
                                   <Button
                                     size="sm"
                                     onClick={() => addProduct(product)}
-                                    disabled={product.stock_quantity <= 0}
                                     className="bg-[#E30040] hover:bg-[#E30040]/90"
                                   >
                                     <Plus className="h-4 w-4 mr-1" />
