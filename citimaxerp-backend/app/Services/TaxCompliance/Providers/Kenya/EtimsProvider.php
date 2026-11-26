@@ -548,11 +548,24 @@ class EtimsProvider implements TaxComplianceProvider
         );
     }
 
+    /**
+     * The buyer's KRA PIN as KRA accepts it (A or P, 9 digits, a letter), or null. Live KRA refuses
+     * the whole sale over a bad PIN ("n/a", a phone number, "PO51..." with a letter O), so a PIN that
+     * isn't valid is left off and the sale goes as one to a buyer without a PIN (the name still
+     * prints). It is never guessed or corrected: a near-miss could be someone else's PIN.
+     */
+    public static function customerTin(?string $pin): ?string
+    {
+        $pin = strtoupper(preg_replace('/\s+/', '', (string) $pin));
+
+        return preg_match('/^[AP]\d{9}[A-Z]$/', $pin) ? $pin : null;
+    }
+
     /** @return array<string, mixed> */
     private function buildSalePayload(CompanyEtimsConfig $config, Invoice $invoice): array
     {
         $invoice->loadMissing(['lineItems.product', 'customer']);
-        $customerTin = trim((string) $invoice->customer?->pin_number) ?: null;
+        $customerTin = self::customerTin($invoice->customer?->pin_number);
         $registrations = EtimsItemRegistration::query()
             ->where('company_id', $invoice->company_id)
             ->whereIn('product_id', $invoice->lineItems->pluck('product_id')->filter())
