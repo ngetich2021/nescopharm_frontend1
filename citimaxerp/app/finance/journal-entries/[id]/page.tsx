@@ -58,7 +58,8 @@ import {
   financeApi,
   formatCurrency, 
   getStatusColor,
-  JournalEntry
+  JournalEntry,
+  postedByName
 } from "@/lib/finance"
 import { useToast } from "@/hooks/use-toast"
 import { format, formatDistanceToNow } from "date-fns"
@@ -536,10 +537,10 @@ export default function JournalEntryDetailPage() {
                              <dt className="text-slate-500 mb-1">Last Updated</dt>
                              <dd className="font-medium text-slate-900">{format(new Date(entry.updated_at), "dd/MM/yyyy HH:mm")}</dd>
                           </div>
-                          {entry.posted_by && (
+                          {postedByName(entry) && (
                              <div>
                                 <dt className="text-slate-500 mb-1">Posted By</dt>
-                                <dd className="font-medium text-slate-900">{entry.posted_by}</dd>
+                                <dd className="font-medium text-slate-900">{postedByName(entry)}</dd>
                              </div>
                           )}
                           {entry.source_type && (
@@ -582,7 +583,7 @@ export default function JournalEntryDetailPage() {
                            <div className="space-y-1">
                               <p className="text-sm font-medium text-slate-900">
                                  Entry Posted
-                                 {entry.approver && <span className="text-slate-500 font-normal"> by {entry.approver.full_name}</span>}
+                                 {postedByName(entry) && <span className="text-slate-500 font-normal"> by {postedByName(entry)}</span>}
                               </p>
                               <p className="text-xs text-slate-500">{format(new Date(entry.posted_at), "dd/MM/yyyy HH:mm")}</p>
                            </div>

@@ -111,7 +111,8 @@ export interface JournalEntry {
   source_id?: string | null;
   source_type?: string | null;
   created_by: string;
-  posted_by?: string | null;
+  /** The poster's id, or the user object when the API loads the postedBy relation (same JSON key). */
+  posted_by?: string | { id: string; first_name?: string; last_name?: string; full_name?: string } | null;
   posted_at?: string | null;
   reversed_by?: string | null;
   reversed_at?: string | null;
@@ -123,6 +124,21 @@ export interface JournalEntry {
   items: JournalEntryItem[];
   creator?: JournalEntryCreator;
   approver?: JournalEntryApprover;
+}
+
+/**
+ * Who posted the entry, as a name. posted_by comes back as the user object when the postedBy
+ * relation is loaded; rendering that object directly crashed the Entry Details tab.
+ */
+export function postedByName(entry: Pick<JournalEntry, "posted_by" | "creator" | "approver">): string | null {
+  const p = entry.posted_by
+  if (!p) return null
+  if (typeof p === "object") {
+    return p.full_name || [p.first_name, p.last_name].filter(Boolean).join(" ") || null
+  }
+  if (entry.approver?.id === p) return entry.approver.full_name
+  if (entry.creator?.id === p) return entry.creator.full_name
+  return null
 }
 
 // Legacy interface for backward compatibility
