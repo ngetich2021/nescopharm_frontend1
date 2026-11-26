@@ -409,6 +409,7 @@ export interface PayrollMonthEmployee {
   paye: number
   helb: number
   salary_advance: number
+  loan_repayment: number
   other_deductions: number
   total_deductions: number
   net_pay: number

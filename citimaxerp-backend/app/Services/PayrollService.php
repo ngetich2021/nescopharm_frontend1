@@ -376,6 +376,23 @@ class PayrollService
         return $sum;
     }
 
+    /**
+     * A company loan repayment is a deduction named "... loan ..." (e.g. "office loan", "Company Loan
+     * Deduction") that is not HELB: it pays back money the company lent, so it reduces Loans & Advances
+     * (staff_advances) rather than sitting in Other Payroll Deductions Payable.
+     */
+    public static function loanAmount(array $deductions): string
+    {
+        $sum = '0.00';
+        foreach ($deductions as $d) {
+            $name = (string) ($d['name'] ?? '');
+            if (preg_match('/\bloans?\b/i', $name) && !preg_match('/\bhelb\b/i', $name)) {
+                $sum = bcadd($sum, number_format((float) ($d['amount'] ?? 0), 2, '.', ''), 2);
+            }
+        }
+        return $sum;
+    }
+
     // ─── 5. Generate Payslip PDF ────────────────────────────────────────
 
     public function generatePayslipPdf(PayrollPayslip $payslip)

@@ -26,6 +26,7 @@ const COLS: [keyof PayrollMonthEmployee, string][] = [
   ["paye", "PAYE"],
   ["helb", "HELB"],
   ["salary_advance", "Salary Advance"],
+  ["loan_repayment", "Company Loan Repayment"],
   ["other_deductions", "Other Deductions"],
   ["total_deductions", "Total Deductions"],
   ["net_pay", "Net Pay"],

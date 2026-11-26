@@ -270,7 +270,9 @@ export function PayrollLedgerDialog({ open, onOpenChange, runId, runLabel }: {
                   ? `What each payroll month owes ${data.paid_to}, what was paid and the balance (pay it in the Statutory Payments tab).`
                   : data.payees.kind === "employees"
                     ? "Net pay owed to each employee, month by month - paid once the month's salaries are confirmed paid."
-                    : "Other deductions held from each employee's pay, month by month, until paid over."}
+                    : data.key === "staff_advances"
+                      ? "Company loan and salary advance repayments taken from each employee's pay, month by month (each reduces what they owe)."
+                      : "Other deductions held from each employee's pay, month by month, until paid over."}
                 {" "}Payroll months that post to the books only (past &quot;Record&quot; months are not in the ledger).
               </p>
               <div className="max-h-[460px] overflow-auto rounded border">

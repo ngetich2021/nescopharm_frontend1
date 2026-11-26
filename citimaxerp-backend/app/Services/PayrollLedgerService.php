@@ -29,6 +29,8 @@ class PayrollLedgerService
         'helb_payable' => ['HELB Payable', 'Higher Education Loans Board', 'helb'],
         'nita_payable' => ['NITA Payable', 'National Industrial Training Authority', 'nita'],
         'payroll_deductions_payable' => ['Other Payroll Deductions Payable', 'As per each deduction', null],
+        // An asset: Dr = what staff still owe the company; payroll credits it with each loan / advance repayment.
+        'staff_advances' => ['Staff Loans & Advances', 'Recovered from staff pay', null],
     ];
 
     public function __construct(
@@ -109,7 +111,8 @@ class PayrollLedgerService
         foreach ($slips as $s) {
             $gross = $r2($s->gross_pay);
             $helb = $r2($s->helb);
-            $other = $r2((float) $s->total_custom_deductions + (float) $s->other_deductions - (float) $s->helb);
+            $loan = $r2(PayrollService::loanAmount(json_decode((string) $s->deductions_json, true) ?: []));
+            $other = $r2((float) $s->total_custom_deductions + (float) $s->other_deductions - (float) $s->helb - $loan);
             $employerCost = $r2($gross + (float) $s->nssf_employer + (float) $s->housing_levy_employer + (float) $s->nita);
             $employees[] = [
                 'employee_number' => $s->employee_number,
@@ -127,6 +130,7 @@ class PayrollLedgerService
                 'paye' => $r2($s->paye),
                 'helb' => $helb,
                 'salary_advance' => $r2($s->salary_advance_deduction),
+                'loan_repayment' => $loan,
                 'other_deductions' => $other,
                 'total_deductions' => $r2($s->total_deductions),
                 'net_pay' => $r2($s->net_pay),
@@ -188,7 +192,7 @@ class PayrollLedgerService
                 $line($acct('nita_payable', 'payroll_deductions_payable'), $narr, 0, $nita),
                 $line($acct('helb_payable', 'payroll_deductions_payable'), $narr, 0, $helb),
                 $line($acct('payroll_deductions_payable'), $narr, 0, $t('other_deductions')),
-                $line($acct('staff_advances'), $narr, 0, $t('salary_advance')),
+                $line($acct('staff_advances'), $narr, 0, $r2($t('salary_advance') + $t('loan_repayment'))),
             ], fn ($l) => $l['debit'] > 0 || $l['credit'] > 0));
             $journals[] = $this->journal('JV-PAY-1', $period->toDateString(), "Payroll run {$label}", $lines, $posts ? $postedNo('PAYROLL-') : null, $posts ? null : $notPosted);
         }
@@ -423,14 +427,15 @@ class PayrollLedgerService
 
         // Net pay / other deductions: one row per employee per month.
         $runs = $this->obligations->runs($companyId)->filter(fn ($r) => $inPeriod((int) $r->pay_year, (int) $r->pay_month));
-        // Other deductions as the payroll posts them: custom + other deductions, less HELB (its own account).
+        // Other deductions as the payroll posts them: custom + other deductions, less HELB and company
+        // loan repayments (each has its own account).
         $amount = $key === 'salaries_payable'
             ? 'COALESCE(p.net_pay,0)'
             : 'COALESCE(p.total_custom_deductions,0) + COALESCE(p.other_deductions,0) - COALESCE(p.helb,0)';
         $slips = DB::table('payroll_payslips as p')
             ->join('employees as e', 'e.id', '=', 'p.employee_id')
             ->whereIn('p.payroll_run_id', $runs->pluck('id'))->where('p.gross_pay', '>', 0)
-            ->select('p.payroll_run_id', 'e.employee_number', 'e.first_name', 'e.last_name')
+            ->select('p.payroll_run_id', 'p.deductions_json', 'p.salary_advance_deduction as advance', 'e.employee_number', 'e.first_name', 'e.last_name')
             ->selectRaw("{$amount} AS amount")
             ->orderBy('e.employee_number')->get()->groupBy('payroll_run_id');
 
@@ -439,6 +444,12 @@ class PayrollLedgerService
             $paid = $key === 'salaries_payable' && $run->status === 'paid';
             foreach ($slips->get($run->id, collect()) as $s) {
                 $amount = round((float) $s->amount, 2);
+                $loan = (float) PayrollService::loanAmount(json_decode((string) $s->deductions_json, true) ?: []);
+                if ($key === 'staff_advances') {
+                    $amount = round($loan + (float) $s->advance, 2); // what each employee paid back this month
+                } elseif ($key !== 'salaries_payable') {
+                    $amount = round($amount - $loan, 2);
+                }
                 if ($amount <= 0) {
                     continue;
                 }
@@ -447,11 +458,12 @@ class PayrollLedgerService
                     'employee_number' => $s->employee_number,
                     'period' => Carbon::create($run->pay_year, $run->pay_month, 1)->format('F Y'),
                     'amount' => $amount,
-                    'paid' => $paid ? $amount : 0.0,
-                    'balance' => $paid ? 0.0 : $amount,
+                    // A loan repayment is recovered the moment it is taken from pay.
+                    'paid' => $paid || $key === 'staff_advances' ? $amount : 0.0,
+                    'balance' => $paid || $key === 'staff_advances' ? 0.0 : $amount,
                     'status' => $key === 'salaries_payable'
                         ? ($paid ? 'Paid' : ($run->status === 'payment_initiated' ? 'Payment initiated' : 'Unpaid'))
-                        : 'Owed',
+                        : ($key === 'staff_advances' ? 'Recovered' : 'Owed'),
                     'paid_date' => $paid ? ($run->payment_date?->toDateString() ?? $run->paid_at?->toDateString()) : null,
                     'reference' => $paid ? $run->payment_reference : null,
                     'paid_from' => $paid ? $run->paymentAccount?->account_name : null,

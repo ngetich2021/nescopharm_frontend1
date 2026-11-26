@@ -606,7 +606,10 @@ class LedgerPostingService
             $housingTotal = $this->money($t['housing_levy']) + $housingEmployer;
             $helb = $this->money($t['helb']);
             $nita = $this->money($t['nita']);
-            $otherDeductions = round($this->money($t['deductions']) - $helb, 2);
+            // Company loan repayments (deductions named "... loan ...") reduce Loans & Advances, like salary advances.
+            $loans = round((float) $run->payslips()->where('gross_pay', '>', 0)->get(['deductions_json'])
+                ->sum(fn ($p) => (float) \App\Services\PayrollService::loanAmount($p->deductions_json ?? [])), 2);
+            $otherDeductions = round($this->money($t['deductions']) - $helb - $loans, 2);
 
             if ($this->money($t['gross']) > 0) {
                 $accrualDesired = [
@@ -626,7 +629,7 @@ class LedgerPostingService
                         ['key' => 'helb_payable', 'fallback' => 'payroll_deductions_payable', 'credit' => $helb, 'description' => "HELB {$label}"],
                         ['key' => 'nita_payable', 'fallback' => 'payroll_deductions_payable', 'credit' => $nita, 'description' => "NITA levy {$label}"],
                         ['key' => 'payroll_deductions_payable', 'credit' => $otherDeductions, 'description' => "Other payroll deductions {$label}"],
-                        ['key' => 'staff_advances', 'credit' => $this->money($t['advance_deductions']), 'description' => "Salary advances recovered {$label}"],
+                        ['key' => 'staff_advances', 'credit' => round($this->money($t['advance_deductions']) + $loans, 2), 'description' => "Salary advances and staff loans recovered {$label}"],
                         ['key' => 'salaries_payable', 'credit' => $this->money($t['net']), 'description' => "Net pay {$label}"],
                     ],
                     // Rounding on payslips can leave a cent or two; absorb it in net pay.
