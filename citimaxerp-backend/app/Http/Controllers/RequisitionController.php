@@ -252,9 +252,7 @@ class RequisitionController extends Controller
             $query->where('company_id', $user->company_id);
         }
 
-        if (!$canManageAllCompanies && !$this->hasPermission($request, 'can_manage_company', $user->company_id)) {
-            $query->where('requester_id', $user->id);
-        }
+        // Anyone who can view requisitions sees all of the company's, not only their own (26/11/2026).
 
         $requisitions = $query->orderByDesc('created_at')->paginate(20);
         return response()->json([
@@ -276,15 +274,11 @@ class RequisitionController extends Controller
         }
 
         $canManageAllCompanies = $this->canManageAllCompanies($request);
-        $canManageCompany = $this->hasPermission($request, 'can_manage_company', $user->company_id);
 
         $requisition = Requisition::with(['items.product', 'items.variant', 'requester', 'company', 'approver'])
             ->where('id', $id)
             ->when(!$canManageAllCompanies, function ($q) use ($user) {
                 $q->where('company_id', $user->company_id);
-            })
-            ->when(!$canManageAllCompanies && !$canManageCompany, function ($q) use ($user) {
-                $q->where('requester_id', $user->id);
             })
             ->first();
         if (!$requisition) {
@@ -321,12 +315,10 @@ class RequisitionController extends Controller
         }
 
         $canManageAllCompanies = $this->canManageAllCompanies($request);
-        $canManageCompany = $this->hasPermission($request, 'can_manage_company', $user->company_id);
 
         $requisition = Requisition::with(['items.product', 'items.variant', 'requester', 'company', 'approver'])
             ->where('id', $id)
             ->when(!$canManageAllCompanies, fn ($q) => $q->where('company_id', $user->company_id))
-            ->when(!$canManageAllCompanies && !$canManageCompany, fn ($q) => $q->where('requester_id', $user->id))
             ->first();
         if (!$requisition) {
             return response()->json([
