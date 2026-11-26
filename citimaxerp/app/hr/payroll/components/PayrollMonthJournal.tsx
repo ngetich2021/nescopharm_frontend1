@@ -105,9 +105,7 @@ export function PayrollMonthJournal({ runId }: { runId: string }) {
           <TabsTrigger value="summary">Ledger Summary</TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2">
-          {data.posts_to_ledger
-            ? <Badge className="bg-green-100 text-green-800">Posted to the books</Badge>
-            : <Badge variant="outline" className="bg-amber-50 text-amber-800">Not posted - shown for reference</Badge>}
+          {data.posts_to_ledger && <Badge className="bg-green-100 text-green-800">Posted to the books</Badge>}
           <ExportMenu onExport={onExport} label="Export workbook" />
         </div>
       </div>
