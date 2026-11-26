@@ -42,8 +42,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  BookOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PayrollLedgerDialog } from "../components/PayrollLedgerDialog";
 import { ViewPayslipDialog } from "../components/ViewPayslipDialog";
 import { EditPayslipDialog } from "../components/EditPayslipDialog";
 import { documentFileName, sessionCompanyName } from "@/lib/document-names"
@@ -124,6 +126,7 @@ export default function PayrollRunDetailPage() {
   const [viewPayslip, setViewPayslip] = useState<Payslip | null>(null);
   const [editPayslip, setEditPayslip] = useState<Payslip | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
 
   const handleProcess = async () => {
     setProcessing(true);
@@ -304,20 +307,27 @@ export default function PayrollRunDetailPage() {
             </Badge>
           )}
         </div>
-        {run.status === "draft" && !run.is_historical && hasPermission("can_create_payroll") && (
-          <Button
-            size="sm"
-            onClick={handleProcess}
-            disabled={processing}
-          >
-            {processing ? (
-              <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />Processing...</>
-            ) : (
-              <><Play className="h-4 w-4 mr-2" />{(run.payslips_count ?? 0) > 0 ? "Re-process Payroll" : "Process Payroll"}</>
-            )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setLedgerOpen(true)} title="Payroll accounts in the books: payables, entries (Dr/Cr) and payees">
+            <BookOpen className="h-4 w-4 mr-2" />
+            Open Ledger
           </Button>
-        )}
+          {run.status === "draft" && !run.is_historical && hasPermission("can_create_payroll") && (
+            <Button
+              size="sm"
+              onClick={handleProcess}
+              disabled={processing}
+            >
+              {processing ? (
+                <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />Processing...</>
+              ) : (
+                <><Play className="h-4 w-4 mr-2" />{(run.payslips_count ?? 0) > 0 ? "Re-process Payroll" : "Process Payroll"}</>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
+      <PayrollLedgerDialog open={ledgerOpen} onOpenChange={setLedgerOpen} />
 
       {/* Summary Cards - 8 cards in responsive grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

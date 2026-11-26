@@ -327,6 +327,87 @@ export async function fetchStatutoryObligations(year?: number): Promise<Statutor
   return res.data
 }
 
+// ---------------------------------------------------------------------------
+// Payroll ledger (Payroll > Open Ledger)
+// ---------------------------------------------------------------------------
+
+export type LedgerSide = 'Dr' | 'Cr'
+
+export interface PayrollLedgerAccount {
+  key: string
+  label: string
+  paid_to: string
+  account_code: string
+  account_name: string
+  debit: number
+  credit: number
+  entries: number
+  balance: { amount: number; side: LedgerSide }
+}
+
+export interface PayrollLedgerRow {
+  id: string
+  date: string | null
+  side: LedgerSide
+  particulars: string
+  other_accounts: string[]
+  voucher_type: string
+  voucher_no: string
+  narration: string | null
+  reversed: boolean
+  debit: number
+  credit: number
+  balance: number
+  balance_side: LedgerSide
+}
+
+export interface PayrollPayeeRow {
+  payee: string
+  employee_number?: string | null
+  period: string
+  employee_share?: number
+  employer_share?: number
+  amount: number
+  paid: number
+  balance: number
+  status: string
+  due_date?: string | null
+  paid_date?: string | null
+  reference?: string | null
+  paid_from?: string | null
+}
+
+export interface PayrollLedgerDetail {
+  key: string
+  label: string
+  paid_to: string
+  account: string
+  ledger: {
+    date_from: string | null
+    date_to: string | null
+    opening_balance: { amount: number; side: LedgerSide }
+    rows: PayrollLedgerRow[]
+    totals: { debit: number; credit: number }
+    closing_balance: { amount: number; side: LedgerSide }
+  }
+  payees: { kind: 'employees' | 'deductions' | 'statutory'; rows: PayrollPayeeRow[] }
+}
+
+export async function fetchPayrollLedgerAccounts(): Promise<PayrollLedgerAccount[]> {
+  const res = await apiCall<ApiSuccessResponse<PayrollLedgerAccount[]>>('/payroll-ledger/accounts', 'GET')
+  return res.data ?? []
+}
+
+export async function fetchPayrollLedger(key: string, p: { from?: string; to?: string; corrections?: boolean }): Promise<PayrollLedgerDetail> {
+  const q = new URLSearchParams()
+  if (p.from) q.append('date_from', p.from)
+  if (p.to) q.append('date_to', p.to)
+  if (p.corrections) q.append('corrections', '1')
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  const res = await apiCall<ApiSuccessResponse<PayrollLedgerDetail>>(`/payroll-ledger/${key}${qs}`, 'GET')
+  return res.data
+}
+
 export async function fetchPaymentHistory(params?: { date_from?: string; date_to?: string }): Promise<PaymentHistoryRow[]> {
   const q = new URLSearchParams()
   if (params?.date_from) q.append('date_from', params.date_from)

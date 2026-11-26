@@ -67,6 +67,8 @@ import { Send, Undo2 } from "lucide-react";
 import { PayRunDialog } from "./components/PayRunDialog";
 import { StatutoryPaymentsTab } from "./components/StatutoryPaymentsTab";
 import { PaymentHistoryTab } from "./components/PaymentHistoryTab";
+import { PayrollLedgerDialog } from "./components/PayrollLedgerDialog";
+import { BookOpen } from "lucide-react";
 
 const MONTHS = [
   "January",
@@ -131,6 +133,7 @@ export default function PayrollPage() {
   const [totalItems, setTotalItems] = useState(0);
   // Every month on one page by default (1 to N, continuous); page controls only matter past 120 runs.
   const [rowsPerPage, setRowsPerPage] = useState(120);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
 
   // New Run dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -324,6 +327,10 @@ export default function PayrollPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setLedgerOpen(true)} title="Payroll accounts in the books: payables, entries (Dr/Cr) and payees">
+            <BookOpen className="h-4 w-4 mr-2" />
+            Open Ledger
+          </Button>
           {hasPermission("can_create_payroll") && (
             <>
               <Button variant="outline" onClick={handleHistoryTemplate} title="Excel template for past payrolls: one row per employee per month">
@@ -700,6 +707,8 @@ export default function PayrollPage() {
       )}
         </TabsContent>
       </Tabs>
+
+      <PayrollLedgerDialog open={ledgerOpen} onOpenChange={setLedgerOpen} />
 
       <PayRunDialog
         run={payTarget?.run ?? null}
