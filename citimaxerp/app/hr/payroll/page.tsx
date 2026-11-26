@@ -129,7 +129,8 @@ export default function PayrollPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(12);
+  // Every month on one page by default (1 to N, continuous); page controls only matter past 120 runs.
+  const [rowsPerPage, setRowsPerPage] = useState(120);
 
   // New Run dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -648,7 +649,7 @@ export default function PayrollPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[12, 24, 36, 60].map((n) => (
+                {[12, 24, 60, 120].map((n) => (
                   <SelectItem key={n} value={String(n)}>{n}</SelectItem>
                 ))}
               </SelectContent>
