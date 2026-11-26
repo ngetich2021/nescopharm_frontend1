@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   PayrollRun,
@@ -129,7 +129,7 @@ export default function PayrollPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(12);
 
   // New Run dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -506,7 +506,15 @@ export default function PayrollPage() {
                 </TableRow>
               ) : (
                 runs.map((run, index) => (
-                  <TableRow key={run.id}>
+                  <React.Fragment key={run.id}>
+                  {(index === 0 || runs[index - 1].pay_year !== run.pay_year) && (
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableCell colSpan={9} className="py-2 font-semibold text-sm">
+                        {run.pay_year}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  <TableRow>
                     <TableCell className="text-muted-foreground">{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
                     <TableCell className="font-medium">
                       {monthName(run.pay_month)} {run.pay_year}
@@ -614,6 +622,7 @@ export default function PayrollPage() {
                       </div>
                     </TableCell>
                   </TableRow>
+                  </React.Fragment>
                 ))
               )}
             </TableBody>
@@ -622,19 +631,43 @@ export default function PayrollPage() {
       </Card>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+      {totalItems > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             Showing {(currentPage - 1) * rowsPerPage + 1} to{" "}
             {Math.min(currentPage * rowsPerPage, totalItems)} of {totalItems}{" "}
             runs
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">Rows per page</span>
+            <Select
+              value={String(rowsPerPage)}
+              onValueChange={(v) => { setRowsPerPage(Number(v)); setCurrentPage(1); }}
+            >
+              <SelectTrigger className="h-8 w-[72px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[12, 24, 36, 60].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              title="First page"
+            >
+              First
+            </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
+              title="Previous page"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -647,9 +680,19 @@ export default function PayrollPage() {
               onClick={() =>
                 setCurrentPage((p) => Math.min(totalPages, p + 1))
               }
-              disabled={currentPage === totalPages}
+              disabled={currentPage >= totalPages}
+              title="Next page"
             >
               <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage >= totalPages}
+              title="Last page"
+            >
+              Last
             </Button>
           </div>
         </div>

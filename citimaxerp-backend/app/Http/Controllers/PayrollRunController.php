@@ -124,9 +124,13 @@ class PayrollRunController extends Controller
             $companyId = $request->user()->company_id;
             $perPage = $request->input('per_page', 15);
 
+            // Newest pay month first (Nov 2026, Oct 2026 ... Jan 2026, Dec 2025 ...), whenever each was entered -
+            // past payrolls imported later still sit in their own month.
             $runs = $this->withAggregates(
                 PayrollRun::where('company_id', $companyId)
             )
+                ->orderByDesc('pay_year')
+                ->orderByDesc('pay_month')
                 ->orderByDesc('created_at')
                 ->paginate($perPage);
 
