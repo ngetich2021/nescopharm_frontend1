@@ -16,6 +16,7 @@ import {
   type PayrollLedgerAccount,
   type PayrollLedgerDetail,
 } from "@/lib/payroll-runs"
+import { PayrollMonthJournal } from "./PayrollMonthJournal"
 
 const money = (n: number) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const day = (d?: string | null) => (d ? displayDate(d) : "")
@@ -25,7 +26,14 @@ const day = (d?: string | null) => (d ? displayDate(d) : "")
  * NITA, Other Deductions) with its balance; for the one picked, its ledger in the Tally layout (as the
  * supplier ledger) and its payees - who it is owed to, what was paid and what is left.
  */
-export function PayrollLedgerDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+export function PayrollLedgerDialog({ open, onOpenChange, runId, runLabel }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  // From a payroll month's page: opens on that month's journal (Payroll Data / Journals / Ledger Summary).
+  runId?: string
+  runLabel?: string
+}) {
+  const [view, setView] = useState<"month" | "accounts">(runId ? "month" : "accounts")
   const [accounts, setAccounts] = useState<PayrollLedgerAccount[]>([])
   const [key, setKey] = useState("salaries_payable")
   const [from, setFrom] = useState("")
@@ -122,6 +130,17 @@ export function PayrollLedgerDialog({ open, onOpenChange }: { open: boolean; onO
           </DialogDescription>
         </DialogHeader>
 
+        {runId && (
+          <Tabs value={view} onValueChange={(v) => setView(v as "month" | "accounts")}>
+            <TabsList>
+              <TabsTrigger value="month">{runLabel ? `${runLabel} Journal` : "This Month"}</TabsTrigger>
+              <TabsTrigger value="accounts">Payable Accounts</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        {runId && view === "month" && open && <PayrollMonthJournal runId={runId} />}
+
+        {(!runId || view === "accounts") && (<div className="space-y-4">
         {/* The payroll payable accounts - pick one */}
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {accounts.map((a) => (
@@ -311,6 +330,7 @@ export function PayrollLedgerDialog({ open, onOpenChange }: { open: boolean; onO
             </TabsContent>
           </Tabs>
         )}
+        </div>)}
       </DialogContent>
     </Dialog>
   )

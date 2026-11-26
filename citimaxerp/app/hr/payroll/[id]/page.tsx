@@ -327,7 +327,7 @@ export default function PayrollRunDetailPage() {
           )}
         </div>
       </div>
-      <PayrollLedgerDialog open={ledgerOpen} onOpenChange={setLedgerOpen} />
+      <PayrollLedgerDialog open={ledgerOpen} onOpenChange={setLedgerOpen} runId={run.id} runLabel={`${monthName(run.pay_month)} ${run.pay_year}`} />
 
       {/* Summary Cards - 8 cards in responsive grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

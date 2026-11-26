@@ -156,6 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('statutory-payments/{id}', [\App\Http\Controllers\StatutoryPaymentController::class, 'destroy']);
     // Payroll > Open Ledger: payroll payable accounts, each one's Tally ledger and payees
     Route::get('payroll-ledger/accounts', [\App\Http\Controllers\PayrollLedgerController::class, 'accounts']);
+    Route::get('payroll-ledger/month/{runId}', [\App\Http\Controllers\PayrollLedgerController::class, 'month']);
     Route::get('payroll-ledger/{key}', [\App\Http\Controllers\PayrollLedgerController::class, 'show']);
     Route::get('payroll-runs', [\App\Http\Controllers\PayrollRunController::class, 'index']);
     Route::post('payroll-runs', [\App\Http\Controllers\PayrollRunController::class, 'store']);

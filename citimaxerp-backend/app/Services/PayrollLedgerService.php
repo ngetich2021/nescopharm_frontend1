@@ -85,6 +85,198 @@ class PayrollLedgerService
         ];
     }
 
+    /**
+     * One payroll month laid out as the accountant's payroll journal workbook: the payroll computation
+     * per employee, the journals (JV-PAY-1 payroll run, JV-PAY-2 net salaries paid, JV-PAY-3.. each
+     * statutory remittance) with a balance check, and a ledger summary of every account they touch.
+     * Built from the payslips with the same rules LedgerPostingService posts by, so a month that is not
+     * posted (a past "Record" month, or before payroll_posting_start) still shows what its entries are.
+     */
+    public function month(PayrollRun $run): array
+    {
+        $companyId = $run->company_id;
+        $period = Carbon::create((int) $run->pay_year, (int) $run->pay_month, 1)->endOfMonth();
+        $label = $period->format('F Y');
+        $short = $period->format('M Y');
+        $r2 = fn ($v) => round((float) $v, 2);
+
+        // 1. Payroll computation, one row per employee.
+        $slips = DB::table('payroll_payslips as p')->join('employees as e', 'e.id', '=', 'p.employee_id')
+            ->where('p.payroll_run_id', $run->id)
+            ->orderBy('e.employee_number')->orderBy('e.first_name')
+            ->get(['p.*', 'e.employee_number', 'e.first_name', 'e.last_name', 'e.kra_pin']);
+        $employees = [];
+        foreach ($slips as $s) {
+            $gross = $r2($s->gross_pay);
+            $helb = $r2($s->helb);
+            $other = $r2((float) $s->total_custom_deductions + (float) $s->other_deductions - (float) $s->helb);
+            $employerCost = $r2($gross + (float) $s->nssf_employer + (float) $s->housing_levy_employer + (float) $s->nita);
+            $employees[] = [
+                'employee_number' => $s->employee_number,
+                'name' => trim("{$s->first_name} {$s->last_name}"),
+                'kra_pin' => $s->kra_pin,
+                'basic_salary' => $r2($gross - (float) $s->total_allowances),
+                'allowances' => $r2($s->total_allowances),
+                'gross_pay' => $gross,
+                'nssf_employee' => $r2($s->nssf_employee),
+                'shif' => $r2($s->shif),
+                'housing_levy_employee' => $r2($s->housing_levy_employee),
+                'taxable_pay' => $r2($s->taxable_pay),
+                'tax_before_relief' => $r2($s->paye_before_relief),
+                'personal_relief' => $r2((float) $s->personal_relief + (float) $s->insurance_relief),
+                'paye' => $r2($s->paye),
+                'helb' => $helb,
+                'salary_advance' => $r2($s->salary_advance_deduction),
+                'other_deductions' => $other,
+                'total_deductions' => $r2($s->total_deductions),
+                'net_pay' => $r2($s->net_pay),
+                'nssf_employer' => $r2($s->nssf_employer),
+                'housing_levy_employer' => $r2($s->housing_levy_employer),
+                'nita' => $r2($s->nita),
+                'employer_cost' => $employerCost,
+            ];
+        }
+        $sum = fn (string $f) => $r2(array_sum(array_column($employees, $f)));
+        // The ledger leaves out payslips with no gross pay (a statutory minimum that was never withheld).
+        $posting = array_values(array_filter($employees, fn ($e) => $e['gross_pay'] > 0));
+        $t = fn (string $f) => $r2(array_sum(array_column($posting, $f)));
+
+        // 2. Journals.
+        $this->engine->setCompany($companyId);
+        $accounts = [];
+        $acct = function (?string $key, ?string $fallback = null, ?string $id = null) use (&$accounts, $companyId) {
+            try {
+                $id ??= ($key ? $this->engine->resolveAccountId($key) : null) ?: ($fallback ? $this->engine->resolveAccountId($fallback) : null);
+            } catch (\Throwable $e) {
+                $id = null;
+            }
+            if (!$id) {
+                return ['name' => ucwords(str_replace('_', ' ', (string) $key)) . ' (not mapped)', 'type' => '-'];
+            }
+            return $accounts[$id] ??= (function () use ($id, $companyId) {
+                $a = ChartOfAccount::where('company_id', $companyId)->find($id);
+                return ['name' => $a ? "{$a->account_code} {$a->account_name}" : 'Unknown account', 'type' => $a ? ucfirst((string) $a->account_type) : '-'];
+            })();
+        };
+        $line = fn (array $a, string $narration, float $debit, float $credit) => ['account' => $a['name'], 'account_type' => $a['type'], 'narration' => $narration, 'debit' => $debit, 'credit' => $credit];
+
+        $posts = app(LedgerPostingService::class)->payrollPosts($run);
+        $posted = $posts
+            ? JournalEntry::where('company_id', $companyId)->where('source_type', PayrollRun::class)->where('source_id', $run->id)->where('status', 'posted')->get()
+            : collect();
+        $postedNo = fn (string $prefix) => $posted->first(fn ($e) => str_starts_with((string) $e->reference, $prefix))?->entry_number;
+        $notPosted = $run->is_historical
+            ? 'Not posted - a past "Record" month (those salaries are in the books as expenses)'
+            : 'Not posted - salaries before ' . Carbon::parse($this->settingsStart($companyId) ?? $period)->format('d/m/Y') . ' were booked as expenses';
+
+        $journals = [];
+        $gross = $t('gross_pay');
+        if ($gross > 0 && in_array($run->status, ['approved', 'payment_initiated', 'paid'], true)) {
+            $narr = "{$short} payroll run - gross salaries, employer costs and deductions";
+            $helb = $t('helb');
+            $nita = $t('nita');
+            $lines = array_values(array_filter([
+                $line($acct('salaries_expense', 'miscellaneous_expense'), $narr, $gross, 0),
+                $line($acct('nssf_employer_expense', 'salaries_expense'), $narr, $t('nssf_employer'), 0),
+                $line($acct('housing_levy_employer_expense', 'salaries_expense'), $narr, $t('housing_levy_employer'), 0),
+                $line($acct('nita_expense', 'salaries_expense'), $narr, $nita, 0),
+                $line($acct('salaries_payable'), $narr, 0, $t('net_pay')),
+                $line($acct('paye_payable'), $narr, 0, $t('paye')),
+                $line($acct('nssf_payable'), $narr, 0, $r2($t('nssf_employee') + $t('nssf_employer'))),
+                $line($acct('shif_payable'), $narr, 0, $t('shif')),
+                $line($acct('housing_levy_payable'), $narr, 0, $r2($t('housing_levy_employee') + $t('housing_levy_employer'))),
+                $line($acct('nita_payable', 'payroll_deductions_payable'), $narr, 0, $nita),
+                $line($acct('helb_payable', 'payroll_deductions_payable'), $narr, 0, $helb),
+                $line($acct('payroll_deductions_payable'), $narr, 0, $t('other_deductions')),
+                $line($acct('staff_advances'), $narr, 0, $t('salary_advance')),
+            ], fn ($l) => $l['debit'] > 0 || $l['credit'] > 0));
+            $journals[] = $this->journal('JV-PAY-1', $period->toDateString(), "Payroll run {$label}", $lines, $posts ? $postedNo('PAYROLL-') : null, $posts ? null : $notPosted);
+        }
+
+        if ($run->status === 'paid' && $t('net_pay') > 0) {
+            $paidOn = $run->payment_date ?? $run->paid_at ?? $period;
+            $from = $run->payment_account_id
+                ? $acct(null, null, $run->payment_account_id)
+                : ($run->payment_method ? $acct(null, null, $this->engine->resolvePaymentMethodAccountId($run->payment_method)) : ['name' => 'Bank / Cash (account not recorded)', 'type' => 'Asset']);
+            $narr = "{$short} net salaries paid" . ($run->payment_reference ? " - ref {$run->payment_reference}" : '');
+            $journals[] = $this->journal('JV-PAY-2', Carbon::parse($paidOn)->toDateString(), "Net salaries paid {$label}", [
+                $line($acct('salaries_payable'), $narr, $t('net_pay'), 0),
+                $line($from, $narr, 0, $t('net_pay')),
+            ], $posts ? $postedNo('PAYOUT-') : null, $posts ? null : $notPosted);
+        }
+
+        $n = 3;
+        $payments = StatutoryPayment::where('payroll_run_id', $run->id)->orderBy('payment_date')->orderBy('created_at')->get();
+        foreach ($payments as $p) {
+            $def = StatutoryPayment::ITEMS[$p->item] ?? null;
+            if (!$def) {
+                continue;
+            }
+            [$itemLabel, $authority, , $key, $fallback] = $def;
+            $amount = $r2($p->amount);
+            $narr = "{$short} {$itemLabel} paid to {$authority} - ref {$p->reference}";
+            $from = $p->account_id ? $acct(null, null, $p->account_id) : $acct(null, null, $this->engine->resolvePaymentMethodAccountId($p->payment_method));
+            $entryNo = $posts ? JournalEntry::where('source_type', StatutoryPayment::class)->where('source_id', $p->id)->where('status', 'posted')->value('entry_number') : null;
+            $journals[] = $this->journal('JV-PAY-' . $n++, $p->payment_date?->toDateString(), "{$itemLabel} remitted to {$authority}", [
+                $line($acct($key, $fallback), $narr, $amount, 0),
+                $line($from, $narr, 0, $amount),
+            ], $entryNo, $posts ? null : $notPosted);
+        }
+
+        // 3. Ledger summary: every account the journals touch.
+        $summary = [];
+        foreach ($journals as $j) {
+            foreach ($j['lines'] as $l) {
+                $s = &$summary[$l['account']];
+                $s ??= ['account' => $l['account'], 'account_type' => $l['account_type'], 'debit' => 0.0, 'credit' => 0.0];
+                $s['debit'] = $r2($s['debit'] + $l['debit']);
+                $s['credit'] = $r2($s['credit'] + $l['credit']);
+                unset($s);
+            }
+        }
+        $summary = array_values(array_map(function ($s) use ($r2) {
+            $net = $r2($s['debit'] - $s['credit']);
+            return $s + ['net' => abs($net), 'side' => $net > 0 ? 'Dr' : ($net < 0 ? 'Cr' : 'Nil')];
+        }, $summary));
+
+        return [
+            'payroll_run_id' => $run->id,
+            'period_label' => $label,
+            'status' => $run->status,
+            'is_historical' => (bool) $run->is_historical,
+            'posts_to_ledger' => $posts,
+            'employees' => $employees,
+            'totals' => collect(array_keys($employees[0] ?? []))
+                ->reject(fn ($k) => in_array($k, ['employee_number', 'name', 'kra_pin'], true))
+                ->mapWithKeys(fn ($k) => [$k => $sum($k)])->all(),
+            'journals' => $journals,
+            'summary' => $summary,
+            'summary_totals' => ['debit' => $r2(array_sum(array_column($summary, 'debit'))), 'credit' => $r2(array_sum(array_column($summary, 'credit')))],
+        ];
+    }
+
+    private function journal(string $no, ?string $date, string $title, array $lines, ?string $entryNumber, ?string $note): array
+    {
+        $debit = round(array_sum(array_column($lines, 'debit')), 2);
+        $credit = round(array_sum(array_column($lines, 'credit')), 2);
+        return [
+            'journal' => $no,
+            'date' => $date,
+            'title' => $title,
+            'entry_number' => $entryNumber,
+            'note' => $note,
+            'lines' => $lines,
+            'total_debit' => $debit,
+            'total_credit' => $credit,
+            'balanced' => abs($debit - $credit) < 0.01,
+        ];
+    }
+
+    private function settingsStart(string $companyId): ?string
+    {
+        return \App\Models\CompanyAccountingSettings::where('company_id', $companyId)->value('payroll_posting_start');
+    }
+
     /** @return array<string, ChartOfAccount|null> */
     protected function resolve(string $companyId): array
     {

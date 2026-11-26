@@ -393,6 +393,61 @@ export interface PayrollLedgerDetail {
   payees: { kind: 'employees' | 'deductions' | 'statutory'; rows: PayrollPayeeRow[] }
 }
 
+export interface PayrollMonthEmployee {
+  employee_number: string | null
+  name: string
+  kra_pin: string | null
+  basic_salary: number
+  allowances: number
+  gross_pay: number
+  nssf_employee: number
+  shif: number
+  housing_levy_employee: number
+  taxable_pay: number
+  tax_before_relief: number
+  personal_relief: number
+  paye: number
+  helb: number
+  salary_advance: number
+  other_deductions: number
+  total_deductions: number
+  net_pay: number
+  nssf_employer: number
+  housing_levy_employer: number
+  nita: number
+  employer_cost: number
+}
+
+export interface PayrollJournal {
+  journal: string
+  date: string | null
+  title: string
+  entry_number: string | null
+  note: string | null
+  lines: { account: string; account_type: string; narration: string; debit: number; credit: number }[]
+  total_debit: number
+  total_credit: number
+  balanced: boolean
+}
+
+export interface PayrollMonthJournal {
+  payroll_run_id: string
+  period_label: string
+  status: string
+  is_historical: boolean
+  posts_to_ledger: boolean
+  employees: PayrollMonthEmployee[]
+  totals: Partial<Record<keyof PayrollMonthEmployee, number>>
+  journals: PayrollJournal[]
+  summary: { account: string; account_type: string; debit: number; credit: number; net: number; side: 'Dr' | 'Cr' | 'Nil' }[]
+  summary_totals: { debit: number; credit: number }
+}
+
+export async function fetchPayrollMonthJournal(runId: string): Promise<PayrollMonthJournal> {
+  const res = await apiCall<ApiSuccessResponse<PayrollMonthJournal>>(`/payroll-ledger/month/${runId}`, 'GET')
+  return res.data
+}
+
 export async function fetchPayrollLedgerAccounts(): Promise<PayrollLedgerAccount[]> {
   const res = await apiCall<ApiSuccessResponse<PayrollLedgerAccount[]>>('/payroll-ledger/accounts', 'GET')
   return res.data ?? []

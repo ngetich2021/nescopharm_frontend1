@@ -29,6 +29,21 @@ class PayrollLedgerController extends Controller
         }
     }
 
+    // GET /payroll-ledger/month/{runId} - payroll computation, journals (JV-PAY-1..) and ledger summary of one month
+    public function month(Request $request, string $runId): JsonResponse
+    {
+        $run = \App\Models\PayrollRun::where('company_id', $request->user()->company_id)->find($runId);
+        if (!$run) {
+            return response()->json(['status' => 'failed', 'message' => 'Payroll month not found.'], 404);
+        }
+        try {
+            return response()->json(['status' => 'success', 'data' => $this->service->month($run)]);
+        } catch (\Throwable $e) {
+            Log::error('PayrollLedgerController@month: ' . $e->getMessage());
+            return response()->json(['status' => 'failed', 'message' => 'Could not load the payroll journal.'], 500);
+        }
+    }
+
     // GET /payroll-ledger/{key}?date_from=&date_to=&corrections=1
     public function show(Request $request, string $key): JsonResponse
     {
