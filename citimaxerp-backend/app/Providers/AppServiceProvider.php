@@ -10,7 +10,6 @@ use App\Models\ProductVariant;
 use App\Models\ProductPackagingUnit;
 use App\Models\ProductReceiptItem;
 use App\Models\Invoice;
-use App\Observers\InvoiceObserver;
 use App\Observers\LedgerSyncObserver;
 use App\Observers\CompanyAccountingObserver;
 use App\Observers\ProductReceiptItemObserver;
@@ -63,7 +62,7 @@ class AppServiceProvider extends ServiceProvider
         ProductPackagingUnit::observe(ProductPackagingUnitPriceObserver::class);
         ProductReceiptItem::observe(ProductReceiptItemPriceObserver::class);
 
-        Invoice::observe(InvoiceObserver::class);
+        // No invoice observer for eTIMS: an invoice goes to KRA only when someone clicks Raise on eTIMS (26/11/2026).
         ProductReceiptItem::observe(ProductReceiptItemObserver::class);
         // Adjustments, damage/expiry and supplier returns reach eTIMS too.
         \App\Models\InventoryMovement::observe(InventoryMovementEtimsObserver::class);

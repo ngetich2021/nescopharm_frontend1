@@ -168,12 +168,29 @@ class EtimsInvoiceController extends Controller
         abort_unless($this->hasPermission($request, 'can_update_invoices', $this->resolveActiveCompanyId()), 403, 'Unauthorized');
         $companyId = (string) $this->resolveEtimsCompany($request)->id;
         $creditNote = CreditNote::where('company_id', $companyId)->findOrFail($creditNoteId);
-        if (! in_array($creditNote->etims_status, ['failed', 'response_invalid'], true)) {
+        // "Raise on eTIMS" (never raised yet) and "Retry" (refused) both land here: a credit note
+        // goes to KRA only when someone clicks, never by itself when it is issued.
+        if (! in_array($creditNote->etims_status, [null, 'failed', 'response_invalid'], true)) {
             throw ValidationException::withMessages([
-                'etims_status' => 'Only failed credit-note submissions can be retried.',
+                'etims_status' => 'This credit note is already being processed or has already been raised on eTIMS.',
             ]);
         }
-        $result = $creditNoteService->submit($creditNote);
+        if (! in_array($creditNote->status, ['issued', 'applied', 'refunded', 'partially_applied'], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'Credit the credit note first (both approvers), then raise it on eTIMS.',
+            ]);
+        }
+        $config = CompanyEtimsConfig::query()->where('company_id', $companyId)->where('country_code', 'KE')->notSuperseded()->first();
+        if (! $config || ! $config->enabled) {
+            throw ValidationException::withMessages(['activation' => 'eTIMS is not enabled. Open Settings > eTIMS.']);
+        }
+        try {
+            $creditNote->update(['etims_requested' => true]);
+            $result = $creditNoteService->submit($creditNote);
+        } catch (\InvalidArgumentException $e) {
+            // e.g. its invoice has not been raised on eTIMS yet
+            throw ValidationException::withMessages(['etims_status' => $e->getMessage()]);
+        }
         if (! in_array($result->status, ['pending', 'completed'], true)) {
             throw ValidationException::withMessages([
                 'etims_status' => $result->errorMessage ?: 'DigiTax rejected the credit-note request.',

@@ -90,17 +90,23 @@ export function InvoiceEtimsBadge({ invoiceId, isCreditNote = false }: { invoice
     }
   }
 
+  // Nothing goes to KRA by itself: an invoice or credit note is raised only from this button.
   const onSubmit = async () => {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      await submitEtimsInvoice(invoiceId)
-      toast.success("Invoice queued for eTIMS")
+      if (isCreditNote) {
+        await retryEtimsCreditNote(invoiceId)
+        toast.success("Credit note sent to eTIMS")
+      } else {
+        await submitEtimsInvoice(invoiceId)
+        toast.success("Invoice queued for eTIMS")
+      }
       await fetchStatus()
     } catch (e) {
       const message = formatEtimsError(e)
       setSubmitError(message)
-      toast.error("Could not raise invoice on eTIMS", { description: message })
+      toast.error(isCreditNote ? "Could not raise credit note on eTIMS" : "Could not raise invoice on eTIMS", { description: message })
     } finally {
       setSubmitting(false)
     }
@@ -115,26 +121,17 @@ export function InvoiceEtimsBadge({ invoiceId, isCreditNote = false }: { invoice
 
   const s = status.etims_status
   if (!s) {
-    if (isCreditNote) {
-      return (
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm font-medium">eTIMS credit note not raised</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Credit notes go to KRA only once eTIMS is Live, against the original KRA-signed invoice.
-            </p>
-          </CardContent>
-        </Card>
-      )
-    }
-
     return (
       <Card>
         <CardContent className="space-y-3 p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">eTIMS receipt not raised</p>
-              <p className="mt-1 text-xs text-muted-foreground">Submit this invoice to KRA through DigiTax.</p>
+              <p className="text-sm font-medium">{isCreditNote ? "eTIMS credit note not raised" : "eTIMS receipt not raised"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isCreditNote
+                  ? "Goes to KRA only when you click Raise on eTIMS, against its KRA-signed invoice."
+                  : "Goes to KRA only when you click Raise on eTIMS."}
+              </p>
             </div>
             <Button size="sm" onClick={onSubmit} disabled={submitting}>
               {submitting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}

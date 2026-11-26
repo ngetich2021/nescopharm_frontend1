@@ -107,8 +107,8 @@ class CompanyEtimsConfig extends Model
     }
 
     /**
-     * Enabled and confirmed Live. Until then eTIMS never touches a business process: nothing
-     * goes to KRA by itself and nothing is refused because of it. Send to eTIMS still works.
+     * Enabled and confirmed Live. Even then no invoice or credit note goes to KRA by itself: each
+     * is raised only from its "Raise on eTIMS" button (26/11/2026). Stock movements do sync.
      */
     public function scopeLive(Builder $q): Builder
     {

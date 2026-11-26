@@ -334,7 +334,7 @@ export default function EtimsSettingsPage() {
               <Label>Go-live date</Label>
               <Input type="date" value={goLiveDate} onChange={(e) => setGoLiveDate(e.target.value)} />
               <p className="text-xs text-muted-foreground mt-1">
-                Invoices dated on/after this will be submitted automatically.
+                Nothing is sent to KRA by itself: an invoice or credit note goes only when someone clicks Raise on eTIMS on it.
               </p>
             </div>
           </div>
