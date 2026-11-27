@@ -9,6 +9,7 @@ import { PermissionGuard } from "@/components/PermissionGuard"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChequesTable } from "./cheques-table"
 import { BouncedDebitsTable } from "./bounced-debits-table"
+import { toDayKey, todayKey } from "@/components/period-filter"
 
 export default function ChequesPage() {
   const { data } = useDataCache<Cheque[]>(
@@ -18,9 +19,10 @@ export default function ChequesPage() {
   )
   const cheques = data ?? []
 
-  const now = new Date(new Date().toDateString())
+  const today = todayKey()
   const pendingCheques = cheques.filter((c) => c.status === "pending")
-  const overdueCheques = pendingCheques.filter((c) => new Date(c.maturity_date) < now)
+  // Matured = on or after the maturity date (a cheque maturing today counts), still not cleared.
+  const overdueCheques = pendingCheques.filter((c) => toDayKey(c.maturity_date) <= today)
 
   const summary = {
     pendingCount: pendingCheques.length,
@@ -70,11 +72,11 @@ export default function ChequesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium">Matured, Unapproved</CardTitle>
-              <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
+              <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg sm:text-2xl font-bold">{summary.overdueCount}</div>
-              <p className="text-xs text-muted-foreground hidden sm:block">Past maturity date, needs action</p>
+              <div className="text-lg sm:text-2xl font-bold text-orange-700">{summary.overdueCount}</div>
+              <p className="text-xs text-muted-foreground hidden sm:block">Matured, needs clearing (orange rows)</p>
             </CardContent>
           </Card>
 

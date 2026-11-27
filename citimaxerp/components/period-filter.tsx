@@ -39,6 +39,9 @@ export function presetPeriod(preset: PeriodPreset, today = new Date()): Period {
 }
 
 /** The calendar day (yyyy-mm-dd) of an API date: "2026-11-04" stays that day; a timestamp uses local time. */
+/** Today as YYYY-MM-DD in local (Nairobi) time - not UTC, which is still yesterday until 03:00. */
+export const todayKey = (): string => dayKey(new Date())
+
 export function toDayKey(value: string | null | undefined): string {
   if (!value) return ""
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value

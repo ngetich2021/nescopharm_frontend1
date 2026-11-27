@@ -16,7 +16,7 @@ import { displayDate } from "@/lib/date-format"
 import { formatCurrency } from "@/lib/utils"
 import { paymentMethodLabel } from "@/lib/payment-methods"
 import { ExportMenu, useTableExport } from "@/components/export-menu"
-import { PeriodFilter, inPeriod, periodLabel, presetPeriod, toDayKey, type Period } from "@/components/period-filter"
+import { PeriodFilter, inPeriod, periodLabel, presetPeriod, toDayKey, todayKey, type Period } from "@/components/period-filter"
 import { PaymentsTableSkeleton } from "./payments-table-skeleton"
 import { receiptDate, receiptInvoices } from "./payments-table"
 
@@ -79,8 +79,11 @@ function chequeRow(c: Cheque, today: string): CollectionRow {
 const STATUS_CLASS: Record<string, string> = {
   Received: "bg-green-100 text-green-800",
   "Not matured": "bg-blue-100 text-blue-800",
-  "Matured, not cleared": "bg-yellow-100 text-yellow-800",
+  "Matured, not cleared": "bg-orange-200 text-orange-900",
 }
+
+// A cheque that has matured but is not cleared yet: the whole row in soft orange so it stands out.
+const MATURED_ROW = "bg-orange-50 hover:bg-orange-100 border-l-4 border-l-orange-400"
 
 export function CollectionsTable() {
   const { toast } = useToast()
@@ -118,7 +121,7 @@ export function CollectionsTable() {
   }, [companyId])
 
   const allRows = useMemo(() => {
-    const today = toDayKey(new Date().toISOString())
+    const today = todayKey()
     return [...receipts.map(receiptRow), ...cheques.map((c) => chequeRow(c, today))].sort((a, b) =>
       toDayKey(b.date).localeCompare(toDayKey(a.date))
     )
@@ -246,7 +249,7 @@ export function CollectionsTable() {
               </TableRow>
             ) : (
               pageRows.map((r, i) => (
-                <TableRow key={r.id} className="hover:bg-[#E30040]/5">
+                <TableRow key={r.id} className={r.status === "Matured, not cleared" ? MATURED_ROW : "hover:bg-[#E30040]/5"}>
                   <TableCell>{start + i + 1}</TableCell>
                   <TableCell>{r.kind === "receipt" ? "Receipt" : "Cheque in hand"}</TableCell>
                   <TableCell className="font-medium">{r.reference}</TableCell>

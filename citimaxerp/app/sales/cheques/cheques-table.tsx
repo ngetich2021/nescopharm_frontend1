@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toDayKey, todayKey } from "@/components/period-filter"
 import {
   Table,
   TableBody,
@@ -73,8 +74,9 @@ function invoiceCount(cheque: Cheque) {
   return cheque.invoice_lines?.length ?? cheque.invoice_numbers?.length ?? 0
 }
 
+// Matured (on or after its maturity date, Nairobi time) and still not cleared.
 function isOverdue(cheque: Cheque) {
-  return cheque.status === "pending" && new Date(cheque.maturity_date) < new Date(new Date().toDateString())
+  return cheque.status === "pending" && toDayKey(cheque.maturity_date) <= todayKey()
 }
 
 export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
@@ -377,7 +379,10 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
               </TableRow>
             ) : (
               filteredCheques.map((cheque) => (
-                <TableRow key={cheque.id} className="hover:bg-gray-50">
+                <TableRow
+                  key={cheque.id}
+                  className={isOverdue(cheque) ? "bg-orange-50 hover:bg-orange-100 border-l-4 border-l-orange-400" : "hover:bg-gray-50"}
+                >
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       {cheque.cheque_number}
@@ -429,11 +434,11 @@ export function ChequesTable({ initialCheques = [] }: ChequesTableProps) {
                   <TableCell className="font-medium">{formatCurrency(cheque.amount)}</TableCell>
                   <TableCell>{formatDate(cheque.issue_date)}</TableCell>
                   <TableCell>
-                    <span className={isOverdue(cheque) ? "text-red-600 font-semibold" : ""}>
+                    <span className={isOverdue(cheque) ? "text-orange-800 font-semibold" : ""}>
                       {formatDate(cheque.maturity_date)}
                     </span>
                     {isOverdue(cheque) && (
-                      <div className="text-xs text-red-500">Matured, awaiting approval</div>
+                      <div className="text-xs text-orange-700">Matured, awaiting approval</div>
                     )}
                   </TableCell>
                   <TableCell>
