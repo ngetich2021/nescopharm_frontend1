@@ -52,6 +52,7 @@ const EMPTY: CreateAssetPayload = {
   useful_life_years: undefined,
   residual_percent: 0,
   depreciation_start_date: "",
+  disposal_date: "",
   status: "In Use",
 }
 
@@ -216,6 +217,7 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
         useful_life_years: num(asset.useful_life_years),
         residual_percent: num(asset.residual_percent) ?? 0,
         depreciation_start_date: asset.depreciation_start_date?.slice(0, 10) || "",
+        disposal_date: asset.disposal_date?.slice(0, 10) || "",
         status: asset.status || "In Use",
       })
     } else {
@@ -261,6 +263,8 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
       for (const k of ["purchase_date", "depreciation_start_date", "asset_code"] as const) {
         if (!payload[k]) delete payload[k]
       }
+      // Cleared on purpose = no longer disposed (null), so it is always sent.
+      payload.disposal_date = formData.disposal_date || null
       if (isEdit && asset) {
         await updateAsset(asset.id, payload)
         toast({ title: "Success", description: "Asset updated successfully." })
@@ -477,6 +481,19 @@ export function AssetSheet({ open, onOpenChange, onSaved, asset }: AssetSheetPro
                   value={formData.depreciation_start_date}
                   onChange={(e) => handleChange("depreciation_start_date", e.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="disposal_date">Disposal Date</Label>
+                <Input
+                  id="disposal_date"
+                  type="date"
+                  value={formData.disposal_date || ""}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setFormData((prev) => ({ ...prev, disposal_date: v, status: v && !["Disposed", "Written Off"].includes(prev.status || "") ? "Disposed" : prev.status }))
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">Depreciation is charged up to and including this month, then stops.</p>
               </div>
               <p className="sm:col-span-2 text-xs text-muted-foreground">
                 About Ksh {MONEY.format(annual)} a year (Ksh {MONEY.format(annual / 12)} a month), charged from the start month until the cost is written off.

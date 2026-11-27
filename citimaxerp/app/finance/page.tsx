@@ -111,6 +111,7 @@ export default function FinancePage() {
   const navigationCards = [
     { title: "Chart of Accounts", description: "Accounts and live balances", href: "/finance/chart-of-accounts", icon: BookOpen, color: "text-blue-600", bgColor: "bg-blue-50", permission: "can_view_chart_of_accounts" },
     { title: "Journal Entries", description: "Every posting, automatic and manual", href: "/finance/journal-entries", icon: FileText, color: "text-indigo-600", bgColor: "bg-indigo-50", permission: "can_view_journal_entries", count: summary?.posted_entries, badge: summary && summary.draft_entries > 0 ? `${summary.draft_entries} draft` : undefined },
+    { title: "Depreciation Journal", description: "Monthly DEP journal from the Fixed Asset Register, with checks and GL reconciliation", href: "/assets?tab=journal", icon: Calculator, color: "text-rose-600", bgColor: "bg-rose-50", permission: "can_view_journal_entries" },
     { title: "General Ledger", description: "Detailed account activity", href: "/finance/general-ledger", icon: Calculator, color: "text-teal-600", bgColor: "bg-teal-50", permission: "can_view_general_ledger" },
     { title: "Trial Balance", description: "Verify debits equal credits", href: "/finance/trial-balance", icon: Scale, color: "text-orange-600", bgColor: "bg-orange-50", permission: "can_view_trial_balance" },
     { title: "Receivables & Payables", description: "Aging by customer and supplier", href: "/finance/aging", icon: Hourglass, color: "text-amber-600", bgColor: "bg-amber-50", permission: "can_view_accounts_receivable" },

@@ -37,6 +37,7 @@ class AssistantTools
         'expenses_summary' => ['can_view_expenses_menu', 'can_view_finance_menu'],
         'purchase_orders' => ['can_view_purchase_orders_menu'],
         'cash_book' => ['can_view_bank_accounts', 'can_view_general_ledger'],
+        'depreciation_journal' => ['can_view_assets', 'can_view_assets_menu', 'can_view_journal_entries', 'can_view_general_ledger'],
     ];
 
     // Invoices that do not count as sales. Drafts do count: most invoices here stay "draft" after
@@ -126,6 +127,9 @@ class AssistantTools
             'cash_book' => ['Bank Book (Prime Bank) and Cash Book (Cash at Hand / Petty Cash): each money account\'s balance now, and for one book the opening balance, receipts, payments, closing balance and entries in a period (date, particulars, voucher type - Receipt, Payment, Contra = bank-to-cash withdrawal - voucher no., amount). Use for "bank balance", "cash at hand", "petty cash", "cash book", "bank book", "what did we withdraw".', $range + [
                 'book' => ['type' => 'string', 'description' => 'Which book: "bank" or "cash" (or an account code). Leave out for just the balances of all books.'],
                 'limit' => ['type' => 'integer', 'description' => 'Max entries listed (default 15, max 50)'],
+            ], []],
+            'depreciation_journal' => ['Monthly depreciation journal (DEP/YYYY/MM) for one month: charge per asset class, opening/closing accumulated depreciation, NBV, whether it is posted (entry no.), failed checks and the months not posted yet. Use for "depreciation for November", "has depreciation been posted", "accumulated depreciation".', [
+                'month' => ['type' => 'string', 'description' => 'Month as YYYY-MM (default: this month)'],
             ], []],
             'purchase_orders' => ['Purchase orders, newest first, with supplier, total, approval, receipt and payment status.', [
                 'status' => ['type' => 'string', 'description' => 'Optional: pending, partial, received, cancelled'],
@@ -927,6 +931,24 @@ class AssistantTools
                 'receipt' => $r['debit'] ? self::money($r['debit']) : null, 'payment' => $r['credit'] ? self::money($r['credit']) : null,
                 'balance' => self::money($r['balance']) . ' ' . $r['balance_side'],
             ])->values(),
+        ];
+    }
+
+    protected function depreciation_journal(array $args): array
+    {
+        $month = preg_match('/^\d{4}-\d{2}/', (string) ($args['month'] ?? '')) ? substr($args['month'], 0, 7) . '-01' : now()->toDateString();
+        $d = app(\App\Services\DepreciationJournalService::class)->month($this->companyId, $month);
+        return [
+            'month' => $d['period'],
+            'reference' => $d['reference'],
+            'status' => $d['status'],
+            'posted' => $d['posted'] ? ['entry_number' => $d['posted']['entry_number'], 'posting_date' => $d['posted']['posting_date'], 'prepared_by' => $d['posted']['prepared_by'], 'reviewed_by' => $d['posted']['reviewed_by']] : null,
+            'totals' => array_intersect_key($d['totals'], array_flip(['cost', 'opening', 'charge', 'closing', 'nbv'])),
+            'by_class' => array_map(fn ($c) => ['class' => $c['class'], 'charge' => $c['charge'], 'closing' => $c['closing'], 'nbv' => $c['nbv']], $d['classes']),
+            'failed_checks' => array_values(array_map(fn ($c) => "{$c['label']}: {$c['result']}", array_filter($d['checks'], fn ($c) => !$c['ok']))),
+            'months_not_posted' => array_values(array_map(fn ($l) => $l['reference'], array_filter($d['log'], fn ($l) => $l['status'] === 'not_posted'))),
+            'gl_vs_register_difference' => $d['reconciliation']['totals']['difference'],
+            'screen' => '/assets?tab=journal',
         ];
     }
 

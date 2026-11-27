@@ -31,6 +31,7 @@ export interface Asset {
   depreciation_start_date?: string | null
   status?: string | null
   original_category?: string | null
+  disposal_date?: string | null // depreciation stops after this month
   // Worked out by the server as at a date (today by default)
   total_cost?: number | string | null
   depreciable_amount?: number
@@ -67,6 +68,7 @@ export interface CreateAssetPayload {
   depreciation_start_date?: string
   status?: string
   original_category?: string
+  disposal_date?: string | null
 }
 
 export type UpdateAssetPayload = Partial<CreateAssetPayload>
@@ -269,12 +271,13 @@ const REGISTER_COLUMNS: { header: string; field: keyof Asset | "sno"; aliases?: 
   { header: "Accumulated Depreciation", field: "accumulated_depreciation" },
   { header: "Net Book Value", field: "net_book_value" },
   { header: "Status", field: "status", aliases: ["status"] },
+  { header: "Disposal Date", field: "disposal_date", aliases: ["disposaldate", "dateofdisposal", "disposed"] },
   { header: "Original Category", field: "original_category", aliases: ["originalcategory"] },
 ]
 // Worked out by the system, never read back from a sheet.
 const COMPUTED: (keyof Asset)[] = ["annual_depreciation", "monthly_depreciation", "months_depreciated", "accumulated_depreciation", "net_book_value"]
 const MONEY_FIELDS: (keyof Asset)[] = ["total_cost", "purchase_cost", "annual_depreciation", "monthly_depreciation", "accumulated_depreciation", "net_book_value"]
-const DATE_FIELDS: (keyof Asset)[] = ["purchase_date", "depreciation_start_date"]
+const DATE_FIELDS: (keyof Asset)[] = ["purchase_date", "depreciation_start_date", "disposal_date"]
 
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, "")
 const ddmmyyyy = (d?: string | null) => (d ? d.slice(0, 10).split("-").reverse().join("/") : "")

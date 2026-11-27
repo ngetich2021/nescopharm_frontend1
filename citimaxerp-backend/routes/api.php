@@ -703,6 +703,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/asset-options', [AssetController::class, 'options'])->name('assets.options');
     Route::post('/asset-options', [AssetController::class, 'storeOption'])->name('assets.options.store');
     Route::apiResource('assets', AssetController::class);
+    // Monthly Depreciation Journal (DEP/YYYY/MM)
+    Route::get('/depreciation-journal', [\App\Http\Controllers\DepreciationJournalController::class, 'show']);
+    Route::post('/depreciation-journal/accounts', [\App\Http\Controllers\DepreciationJournalController::class, 'setupAccounts']);
+    Route::post('/depreciation-journal/post', [\App\Http\Controllers\DepreciationJournalController::class, 'post']);
+    Route::post('/depreciation-journal/post-missing', [\App\Http\Controllers\DepreciationJournalController::class, 'postMissing']);
+    Route::post('/depreciation-journal/{runId}/reverse', [\App\Http\Controllers\DepreciationJournalController::class, 'reverse']);
 
     // Purchase Order routes
     Route::apiResource('purchase-orders', PurchaseOrderController::class);

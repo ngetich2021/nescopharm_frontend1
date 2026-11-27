@@ -101,6 +101,7 @@ class Asset extends Model
         'depreciation_start_date',
         'status',
         'original_category',
+        'disposal_date',
     ];
 
     protected $casts = [
@@ -112,6 +113,7 @@ class Asset extends Model
         'residual_percent' => 'decimal:2',
         'purchase_date' => 'date:Y-m-d',
         'depreciation_start_date' => 'date:Y-m-d',
+        'disposal_date' => 'date:Y-m-d',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -130,12 +132,17 @@ class Asset extends Model
         $start = $this->depreciation_start_date ? Carbon::parse($this->depreciation_start_date) : null;
 
         $monthly = $lifeMonths > 0 ? $depreciable / $lifeMonths : 0;
+        // Charged up to and including the month of disposal, nothing after (the journal workbook).
+        $disposal = $this->disposal_date ? Carbon::parse($this->disposal_date) : null;
+        $upTo = $disposal && $disposal->lt($asAt) ? $disposal : $asAt;
         $months = 0;
-        if ($start && $lifeMonths > 0 && $asAt->gte($start->copy()->startOfMonth())) {
-            $months = min($lifeMonths, ($asAt->year - $start->year) * 12 + ($asAt->month - $start->month) + 1);
+        if ($start && $lifeMonths > 0 && $upTo->gte($start->copy()->startOfMonth())) {
+            $months = min($lifeMonths, ($upTo->year - $start->year) * 12 + ($upTo->month - $start->month) + 1);
         }
-        $accumulated = min($depreciable, $monthly * $months);
-        $disposed = in_array($this->status, ['Disposed', 'Written Off'], true);
+        // Rounded on the running total, so the monthly charges add up exactly to it.
+        $accumulated = round(min($depreciable, $monthly * $months), 2);
+        $disposed = ($disposal && $disposal->lte($asAt))
+            || (!$disposal && in_array($this->status, ['Disposed', 'Written Off'], true));
 
         return [
             'total_cost' => round($cost, 2),
@@ -146,6 +153,7 @@ class Asset extends Model
             'accumulated_depreciation' => round($accumulated, 2),
             'net_book_value' => $disposed ? 0.0 : round($cost - $accumulated, 2),
             'fully_depreciated' => $lifeMonths > 0 && $months >= $lifeMonths,
+            'disposed' => $disposed,
             'as_at' => $asAt->toDateString(),
         ];
     }

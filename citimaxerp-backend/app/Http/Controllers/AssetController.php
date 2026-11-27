@@ -323,7 +323,7 @@ class AssetController extends Controller
         $fields = ['name', 'category', 'serial_number', 'location', 'notes', 'asset_code', 'tag_number', 'assigned_to', 'supplier',
             'invoice_number', 'date_basis', 'depreciation_method', 'status', 'original_category'];
         $numbers = ['purchase_cost', 'total_cost', 'depreciation_rate', 'useful_life_years', 'residual_percent'];
-        $dates = ['purchase_date', 'depreciation_start_date'];
+        $dates = ['purchase_date', 'depreciation_start_date', 'disposal_date'];
 
         DB::beginTransaction();
         try {
@@ -528,6 +528,7 @@ class AssetController extends Controller
             'depreciation_start_date' => 'nullable|date',
             'status' => 'nullable|string|max:30',
             'original_category' => 'nullable|string|max:255',
+            'disposal_date' => 'nullable|date',
         ];
     }
 }

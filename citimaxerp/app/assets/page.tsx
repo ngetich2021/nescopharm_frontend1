@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AssetsSummary } from "./assets-summary"
 import { AssetsTable } from "./assets-table"
 import { AssetsSchedule } from "./assets-schedule"
+import { DepreciationJournal } from "./depreciation-journal"
 import { PermissionGuard } from "@/components/PermissionGuard"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,6 +22,11 @@ export default function AssetsPage() {
   // Depreciation and net book value are worked out as at this date.
   const [asAt, setAsAt] = useState(today)
   const [tab, setTab] = useState("register")
+  // /assets?tab=journal opens the Depreciation Journal (links from the assistant and Finance).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab")
+    if (t && ["register", "schedule", "journal"].includes(t)) setTab(t)
+  }, [])
   const handleRefresh = () => setRefreshKey((k) => k + 1)
 
   return (
@@ -45,6 +51,7 @@ export default function AssetsPage() {
           <TabsList>
             <TabsTrigger value="register">Register</TabsTrigger>
             <TabsTrigger value="schedule">Schedule</TabsTrigger>
+            <TabsTrigger value="journal">Depreciation Journal</TabsTrigger>
           </TabsList>
 
           <TabsContent value="register" className="space-y-6">
@@ -54,6 +61,10 @@ export default function AssetsPage() {
 
           <TabsContent value="schedule">
             {tab === "schedule" && <AssetsSchedule key={refreshKey} />}
+          </TabsContent>
+
+          <TabsContent value="journal">
+            {tab === "journal" && <DepreciationJournal key={refreshKey} />}
           </TabsContent>
         </Tabs>
       </div>
