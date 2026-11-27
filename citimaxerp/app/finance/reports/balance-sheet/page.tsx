@@ -94,15 +94,23 @@ function GroupRows({ g, indent = true }: { g: Group; indent?: boolean }) {
 export default function BalanceSheetPage() {
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [asOfDate, setAsOfDate] = useState(format(new Date(), "yyyy-MM-dd"))
   const { toast } = useToast()
 
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
+    setLoadError(null)
     getBalanceSheet({ as_of_date: asOfDate })
       .then((res) => { if (!cancelled) setSheet(toSheet(res)) })
-      .catch((error) => toast({ title: "Could not load the balance sheet", description: error?.message ?? "Please try again.", variant: "destructive" }))
+      .catch((error) => {
+        if (cancelled) return
+        const message = error?.message ?? "Please try again."
+        setSheet(null)
+        setLoadError(message)
+        toast({ title: "Could not load the balance sheet", description: message, variant: "destructive" })
+      })
       .finally(() => { if (!cancelled) setIsLoading(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,6 +185,16 @@ export default function BalanceSheetPage() {
           </div>
         </CardContent>
       </Card>
+
+      {!sheet && loadError && !isLoading && (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <AlertTriangle className="mx-auto h-8 w-8 text-red-600" />
+            <p className="mt-3 font-medium">The balance sheet could not be loaded</p>
+            <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {sheet && (
         <Card>

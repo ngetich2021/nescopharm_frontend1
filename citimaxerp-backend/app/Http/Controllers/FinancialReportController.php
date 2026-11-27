@@ -52,6 +52,19 @@ class FinancialReportController extends Controller
     }
 
     /**
+     * Who may see the Balance Sheet and Trial Balance: whoever can view financial reports (the
+     * Accountant), or manage the company - only their own company, unless a system admin.
+     */
+    protected function canViewStatements(Request $request, $companyId): bool
+    {
+        if (!$this->hasPermission($request, 'can_view_financial_reports', $companyId)) {
+            return false;
+        }
+
+        return $request->user()->role?->hasPermission('can_manage_system') || $request->user()->company_id === $companyId;
+    }
+
+    /**
      * Generate Trial Balance Report
      */
     public function trialBalance(Request $request): JsonResponse
@@ -59,7 +72,7 @@ class FinancialReportController extends Controller
         $user = $request->user();
         $companyId = $request->input('company_id', $user->company_id);
 
-        if (!$this->hasPermission($request, 'can_manage_system') && !$this->hasPermission($request, 'can_manage_company', $companyId)) {
+        if (!$this->canViewStatements($request, $companyId)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to view financial reports.',
@@ -96,7 +109,7 @@ class FinancialReportController extends Controller
         $user = $request->user();
         $companyId = $request->input('company_id', $user->company_id);
 
-        if (!$this->hasPermission($request, 'can_manage_system') && !$this->hasPermission($request, 'can_manage_company', $companyId)) {
+        if (!$this->canViewStatements($request, $companyId)) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Unauthorized to view financial reports.',
