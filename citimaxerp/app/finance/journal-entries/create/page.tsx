@@ -83,8 +83,6 @@ const entryTypes = [
 export default function CreateJournalEntryPage() {
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [totalDebits, setTotalDebits] = useState(0)
-  const [totalCredits, setTotalCredits] = useState(0)
   const [accountSearchOpen, setAccountSearchOpen] = useState<{ [key: number]: boolean }>({})
   const router = useRouter()
   const { toast } = useToast()
@@ -110,20 +108,17 @@ export default function CreateJournalEntryPage() {
     name: "items",
   })
 
-  const watchedItems = form.watch("items")
+  // Totals are worked out on every render. The old useEffect keyed on the
+  // watched array missed edits, so the Summary stayed at 0.00 and the
+  // balance check passed on 0 = 0 whatever was typed.
+  const watchedItems = form.watch("items") || []
+  const totalDebits = watchedItems.reduce((sum, item) => sum + (Number(item?.debit_amount) || 0), 0)
+  const totalCredits = watchedItems.reduce((sum, item) => sum + (Number(item?.credit_amount) || 0), 0)
 
   useEffect(() => {
     fetchAccounts()
     generateReference()
   }, [])
-
-  useEffect(() => {
-    // Calculate totals whenever items change
-    const debits = watchedItems.reduce((sum, item) => sum + (Number(item.debit_amount) || 0), 0)
-    const credits = watchedItems.reduce((sum, item) => sum + (Number(item.credit_amount) || 0), 0)
-    setTotalDebits(debits)
-    setTotalCredits(credits)
-  }, [watchedItems])
 
   const fetchAccounts = async () => {
     try {
@@ -173,8 +168,8 @@ export default function CreateJournalEntryPage() {
     }
 
     // Validate that all line items have accounts selected
-    const invalidItems = data.items.some(item => 
-      !item.chart_of_account_id || (item.debit_amount === 0 && item.credit_amount === 0)
+    const invalidItems = data.items.some(item =>
+      !item.chart_of_account_id || (!(Number(item.debit_amount) > 0) && !(Number(item.credit_amount) > 0))
     )
 
     if (invalidItems) {
@@ -186,13 +181,27 @@ export default function CreateJournalEntryPage() {
       return
     }
 
+    // The entry needs a description. If the top box is blank, use the first
+    // line description (e.g. "Capital injection"); if there's none, say so.
+    const description = (data.description || "").trim()
+      || (data.items.find(i => (i.description || "").trim())?.description || "").trim()
+    if (!description) {
+      form.setError("description", { message: "Describe the transaction." })
+      toast({
+        title: "Description needed",
+        description: "Type what this entry is for in Description (left), e.g. \"Capital injection\".",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setIsLoading(true)
-      
+
       const entryData = {
         entry_date: data.entry_date,
         reference: data.reference,
-        description: data.description,
+        description,
         status: 'pending' as const,
         items: data.items.map(item => ({
           account_id: item.chart_of_account_id,
@@ -211,11 +220,11 @@ export default function CreateJournalEntryPage() {
         description: "Journal entry created successfully.",
       })
       router.push('/finance/journal-entries')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating journal entry:', error)
       toast({
-        title: "Error",
-        description: "Failed to create journal entry. Please try again.",
+        title: "Journal entry not saved",
+        description: error?.message || "Failed to create journal entry. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -355,7 +364,7 @@ export default function CreateJournalEntryPage() {
                         name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs font-semibold text-slate-500 uppercase">Description</FormLabel>
+                            <FormLabel className="text-xs font-semibold text-slate-500 uppercase">Description <span className="text-red-500">*</span></FormLabel>
                             <FormControl>
                               <Textarea 
                                 {...field} 
