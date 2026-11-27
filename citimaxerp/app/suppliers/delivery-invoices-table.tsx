@@ -89,7 +89,7 @@ export function DeliveryInvoicesTable() {
   const [payingInvoice, setPayingInvoice] = useState<DeliveryInvoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<DeliveryInvoice | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
   // Cheque payment safeguards
@@ -196,7 +196,7 @@ export function DeliveryInvoicesTable() {
 
   const openPayModal = (invoice: DeliveryInvoice) => {
     setPayingInvoice(invoice);
-    setPaymentMethod("cash");
+    setPaymentMethod(""); // Paid from (Bank / Petty Cash) is picked first
     setPaymentReference("");
     setPaymentDate("");
     setChequeNumber("");
@@ -207,7 +207,7 @@ export function DeliveryInvoicesTable() {
   const handlePay = async () => {
     if (!payingInvoice) return;
     if (!paymentMethod) {
-      toast({ title: "Missing Information", description: "Please select a payment method.", variant: "destructive" });
+      toast({ title: "Missing Information", description: "Choose Paid from - Bank or Petty Cash - first.", variant: "destructive" });
       return;
     }
 

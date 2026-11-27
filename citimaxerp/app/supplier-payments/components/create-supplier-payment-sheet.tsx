@@ -77,7 +77,8 @@ export default function CreateSupplierPaymentSheet({
     purchase_order_id: "",
     amount: "",
     payment_date: new Date().toISOString().split("T")[0],
-    payment_method: "bank_transfer",
+    // Picked by the user: Paid from (Bank / Petty Cash) first, then Paid by.
+    payment_method: "",
     transaction_reference: "",
     notes: "",
     cheque_number: "",
@@ -234,6 +235,12 @@ export default function CreateSupplierPaymentSheet({
     e.preventDefault()
     setLoading(true)
 
+    if (!formData.payment_method) {
+      toast({ title: "Error", description: "Choose Paid from - Bank or Petty Cash - first", variant: "destructive" })
+      setLoading(false)
+      return
+    }
+
     if (formData.payment_method === "cheque" && (!formData.cheque_number || !formData.bank_name || !formData.maturity_date)) {
       toast({
         title: "Error",
@@ -314,7 +321,7 @@ export default function CreateSupplierPaymentSheet({
       purchase_order_id: "",
       amount: "",
       payment_date: new Date().toISOString().split("T")[0],
-      payment_method: "bank_transfer",
+      payment_method: "",
       transaction_reference: "",
       notes: "",
       cheque_number: "",
@@ -484,7 +491,7 @@ export default function CreateSupplierPaymentSheet({
                   </div>
                 </div>
 
-                {/* Who pays: Petty Cash (cash) or Prime Bank (transfer, cheque, M-Pesa) */}
+                {/* Paid from first - Bank (transfer, cheque, M-Pesa) or Petty Cash (cash) - then Paid by */}
                 <PaidFromPicker
                   method={formData.payment_method}
                   onMethodChange={(value) => handleSelectChange("payment_method", value)}
@@ -691,7 +698,7 @@ export default function CreateSupplierPaymentSheet({
                 <Button
                   type="submit"
                   className="min-w-[150px] bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={loading || !formData.supplier_id || !formData.amount}
+                  disabled={loading || !formData.supplier_id || !formData.amount || !formData.payment_method}
                 >
                   {loading ? (
                     <>

@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { SupplierPayment, type SupplierInvoicePaid } from "@/lib/supplier-payments"
+import { paidFromLabel } from "@/components/paid-from-picker"
 import {
   Building2,
   Calendar,
@@ -114,10 +115,8 @@ export default function SupplierPaymentDetailsSheet({
               <div className="flex items-center gap-3">
                 <CreditCard className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Payment Method</p>
-                  <p className="font-medium capitalize">
-                    {payment.payment_method?.replace("_", " ")}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Paid From</p>
+                  <p className="font-medium">{paidFromLabel(payment.payment_method)}</p>
                 </div>
               </div>
 
