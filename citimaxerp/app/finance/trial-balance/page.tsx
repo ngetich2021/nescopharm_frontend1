@@ -43,6 +43,7 @@ interface TrialBalanceData {
 export default function TrialBalancePage() {
   const [trialBalanceData, setTrialBalanceData] = useState<TrialBalanceData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [asOfDate, setAsOfDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const { toast } = useToast()
 
@@ -53,6 +54,7 @@ export default function TrialBalancePage() {
   const fetchTrialBalance = async () => {
     try {
       setIsLoading(true)
+      setLoadError(null)
       const response = await getTrialBalance({ as_of_date: asOfDate })
       const accounts = (response.accounts || []).map((a: any) => ({
         ...a,
@@ -72,6 +74,7 @@ export default function TrialBalancePage() {
     } catch (error: any) {
       console.error('Error fetching trial balance:', error)
       setTrialBalanceData(null)
+      setLoadError(error?.message || "Failed to fetch trial balance data. Please try again.")
       toast({
         title: "Error",
         description: error?.message || "Failed to fetch trial balance data. Please try again.",
@@ -158,7 +161,12 @@ export default function TrialBalancePage() {
               </div>
             </div>
             <div className="flex items-center gap-2 mt-6">
-              {!hasData ? (
+              {loadError ? (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                  <span className="text-sm text-red-600 font-medium">Could not load: {loadError}</span>
+                </>
+              ) : !hasData ? (
                 <span className="text-sm text-muted-foreground">No balances to show for this date</span>
               ) : trialBalanceData?.totals.is_balanced ? (
                 <>
@@ -176,7 +184,18 @@ export default function TrialBalancePage() {
         </CardContent>
       </Card>
 
+      {loadError && (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <AlertTriangle className="mx-auto h-8 w-8 text-red-600" />
+            <p className="mt-3 font-medium">The trial balance could not be loaded</p>
+            <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Trial Balance Table */}
+      {!loadError && (
       <Card>
         <CardHeader>
           <CardTitle>Trial Balance as of {format(new Date(asOfDate), 'dd/MM/yyyy')}</CardTitle>
@@ -296,6 +315,7 @@ export default function TrialBalancePage() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }
