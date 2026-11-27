@@ -560,24 +560,35 @@ class GeneralLedgerController extends Controller
             ->values();
         $currentNumber = \App\Models\JournalEntry::currentNumberRewriter($items->pluck('journalEntry')->unique('id'));
 
+        // One line per journal entry (e.g. DEP/2026/01 = its eight class lines, netted), as the
+        // accountant's 1007 ledger: Dr when the entry raises the group's balance, Cr when it lowers it.
         $running = $opening;
         $dr = $cr = 0.0;
         $rows = [];
-        foreach ($items as $item) {
-            $a = $byId[$item->account_id];
-            $running += $sign((float) $item->debit_amount, (float) $item->credit_amount);
-            $dr += $item->debit_amount;
-            $cr += $item->credit_amount;
+        foreach ($items->groupBy('journal_entry_id') as $entryItems) {
+            $entry = $entryItems->first()->journalEntry;
+            $net = round($entryItems->sum(fn ($i) => (float) $i->debit_amount - (float) $i->credit_amount), 2);
+            if (abs($net) < 0.005) {
+                continue; // moves only between sub-accounts
+            }
+            $running += $debitNormal ? $net : -$net;
+            $debit = $net > 0 ? $net : 0.0;
+            $credit = $net < 0 ? -$net : 0.0;
+            $dr += $debit;
+            $cr += $credit;
+            $subs = $entryItems->map(fn ($i) => $byId[$i->account_id])->unique('id')->reject(fn ($a) => $a->id === $group->id);
             $rows[] = [
-                'id' => $item->id,
-                'journal_entry_id' => $item->journal_entry_id,
-                'date' => $item->journalEntry->entry_date->toDateString(),
-                'reference' => $currentNumber($item->journalEntry, $item->journalEntry->reference),
-                'description' => $currentNumber($item->journalEntry, $item->description ?: $item->journalEntry->description),
-                'entry_type' => $item->journalEntry->entry_type,
-                'sub_account' => $a->id === $group->id ? null : "{$a->account_code} {$a->account_name}",
-                'debit_amount' => round((float) $item->debit_amount, 2),
-                'credit_amount' => round((float) $item->credit_amount, 2),
+                'id' => $entryItems->first()->id,
+                'journal_entry_id' => $entry->id,
+                'date' => $entry->entry_date->toDateString(),
+                'reference' => $currentNumber($entry, $entry->reference),
+                'description' => $currentNumber($entry, $entryItems->count() === 1 ? ($entryItems->first()->description ?: $entry->description) : $entry->description),
+                'entry_type' => $entry->entry_type,
+                'sub_account' => $subs->count() === 1
+                    ? $subs->first()->account_code . ' ' . $subs->first()->account_name
+                    : ($subs->isEmpty() ? null : $subs->pluck('account_code')->sort()->implode(', ')),
+                'debit_amount' => $debit,
+                'credit_amount' => $credit,
                 'running_balance' => round($running, 2),
             ];
         }
