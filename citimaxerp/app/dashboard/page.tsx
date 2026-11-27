@@ -205,7 +205,7 @@ export default function DashboardPage() {
   const canViewFullDashboard = hasPermission("can_view_dashboard_menu");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<string>("last_30_days");
+  const [period, setPeriod] = useState<string>("this_month");
   // Custom range: the boxes being typed in, and the range applied (yyyy-mm-dd).
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
