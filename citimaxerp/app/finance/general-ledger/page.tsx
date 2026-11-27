@@ -55,6 +55,7 @@ interface LedgerTransaction {
   debit_amount: string
   credit_amount: string
   running_balance: string
+  sub_account?: string | null // set when a group account is shown with its sub-accounts
 }
 
 interface LedgerAccount {
@@ -65,6 +66,8 @@ interface LedgerAccount {
     account_type: string
   }
   opening_balance: string
+  is_group?: boolean
+  sub_accounts?: { code: string; name: string; balance: number }[] // balance: debit +, credit -
   transactions: LedgerTransaction[]
   totals: {
     total_debits: string
@@ -82,7 +85,7 @@ function ledgerRow(t: LedgerTransaction, index: number, account = ""): ExportCel
     account,
     format(new Date(t.date), 'dd/MM/yyyy'),
     t.reference,
-    t.description,
+    t.sub_account ? `${t.sub_account}: ${t.description}` : t.description,
     num(t.debit_amount) > 0 ? num(t.debit_amount) : null,
     num(t.credit_amount) > 0 ? num(t.credit_amount) : null,
     num(t.running_balance),
@@ -109,6 +112,15 @@ function LedgerAccountCard({ accountData, buildExport, dateFrom, dateTo }: { acc
             <CardDescription>
               Opening Balance: {formatCurrency(accountData.opening_balance)}
             </CardDescription>
+            {accountData.is_group && (accountData.sub_accounts?.length ?? 0) > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {accountData.sub_accounts!.map((s) => (
+                  <span key={s.code}>
+                    <span className="font-mono">{s.code}</span> {s.name}: <span className="font-medium text-foreground">{formatCurrency(String(Math.abs(s.balance)))} {s.balance >= 0 ? "Dr" : "Cr"}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -161,7 +173,10 @@ function LedgerAccountCard({ accountData, buildExport, dateFrom, dateTo }: { acc
                     <TableCell className="text-center text-muted-foreground tabular-nums">{start + i + 1}</TableCell>
                     <TableCell>{format(new Date(transaction.date), 'dd/MM/yyyy')}</TableCell>
                     <TableCell className="font-mono">{transaction.reference}</TableCell>
-                    <TableCell>{transaction.description}</TableCell>
+                    <TableCell>
+                      {transaction.sub_account && <div className="text-xs font-medium text-blue-700">{transaction.sub_account}</div>}
+                      {transaction.description}
+                    </TableCell>
                     <TableCell className="font-mono text-right">
                       {parseFloat(transaction.debit_amount) > 0 ? formatCurrency(transaction.debit_amount) : '-'}
                     </TableCell>

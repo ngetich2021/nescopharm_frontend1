@@ -83,6 +83,19 @@ class GeneralLedgerController extends Controller
             $customerEntryIds = $customerEntryIds ? $customerEntryIds->whereIn('journal_entry_id', $supplierEntryIds) : $supplierEntryIds;
         }
 
+        // A group account (e.g. 1007 Property Plant and Equipment) shows one ledger with everything
+        // posted to it and to its sub-accounts, each line naming the sub-account.
+        if ($accountId && !$customerEntryIds && ($group = ChartOfAccount::where('company_id', $companyId)->find($accountId))
+            && ChartOfAccount::where('parent_id', $group->id)->exists()) {
+            try {
+                return response()->json(['status' => 'success', 'message' => 'General ledger retrieved successfully.',
+                    'data' => $this->groupLedger($group, $dateFrom, $dateTo)]);
+            } catch (\Throwable $e) {
+                Log::error('General ledger (group) error: ' . $e->getMessage());
+                return response()->json(['status' => 'failed', 'message' => 'Failed to retrieve general ledger.'], 500);
+            }
+        }
+
         try {
             // Build query for journal entry items
             $query = JournalEntryItem::with([
@@ -506,6 +519,101 @@ class GeneralLedgerController extends Controller
     /**
      * Calculate opening balance for an account as of a specific date
      */
+    /**
+     * One ledger for a group account and all its sub-accounts (any depth), in the group's normal
+     * direction: e.g. 1007 PPE = cost (Dr) less accumulated depreciation (Cr) = net book value.
+     */
+    private function groupLedger(ChartOfAccount $group, ?string $dateFrom, ?string $dateTo): array
+    {
+        $accounts = collect([$group]);
+        $level = collect([$group->id]);
+        while ($level->isNotEmpty()) {
+            $children = ChartOfAccount::whereIn('parent_id', $level)->get();
+            $accounts = $accounts->merge($children);
+            $level = $children->pluck('id');
+        }
+        $byId = $accounts->keyBy('id');
+        $debitNormal = $this->hasDebitNormalBalance($group);
+        $sign = fn ($dr, $cr) => $debitNormal ? $dr - $cr : $cr - $dr;
+
+        $opening = 0.0;
+        foreach ($accounts as $a) {
+            $own = (float) ($a->opening_balance ?? 0);
+            // Each account's own opening balance is in its own direction; turn it into the group's.
+            $opening += $this->hasDebitNormalBalance($a) === $debitNormal ? $own : -$own;
+        }
+        if ($dateFrom) {
+            $t = JournalEntryItem::whereIn('account_id', $byId->keys())
+                ->whereHas('journalEntry', fn ($q) => $q->where('company_id', $group->company_id)
+                    ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)->where('entry_date', '<', $dateFrom))
+                ->selectRaw('COALESCE(SUM(debit_amount), 0) as d, COALESCE(SUM(credit_amount), 0) as c')->first();
+            $opening += $sign((float) $t->d, (float) $t->c);
+        }
+
+        $items = JournalEntryItem::with('journalEntry')->whereIn('account_id', $byId->keys())
+            ->whereHas('journalEntry', function ($q) use ($group, $dateFrom, $dateTo) {
+                $q->where('company_id', $group->company_id)->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)
+                    ->when($dateFrom, fn ($w) => $w->where('entry_date', '>=', $dateFrom))
+                    ->when($dateTo, fn ($w) => $w->where('entry_date', '<=', $dateTo));
+            })->get()
+            ->sortBy(fn ($i) => $i->journalEntry->entry_date->toDateString() . $i->journalEntry->created_at?->format('Y-m-d H:i:s.u') . $byId[$i->account_id]->account_code)
+            ->values();
+        $currentNumber = \App\Models\JournalEntry::currentNumberRewriter($items->pluck('journalEntry')->unique('id'));
+
+        $running = $opening;
+        $dr = $cr = 0.0;
+        $rows = [];
+        foreach ($items as $item) {
+            $a = $byId[$item->account_id];
+            $running += $sign((float) $item->debit_amount, (float) $item->credit_amount);
+            $dr += $item->debit_amount;
+            $cr += $item->credit_amount;
+            $rows[] = [
+                'id' => $item->id,
+                'journal_entry_id' => $item->journal_entry_id,
+                'date' => $item->journalEntry->entry_date->toDateString(),
+                'reference' => $currentNumber($item->journalEntry, $item->journalEntry->reference),
+                'description' => $currentNumber($item->journalEntry, $item->description ?: $item->journalEntry->description),
+                'entry_type' => $item->journalEntry->entry_type,
+                'sub_account' => $a->id === $group->id ? null : "{$a->account_code} {$a->account_name}",
+                'debit_amount' => round((float) $item->debit_amount, 2),
+                'credit_amount' => round((float) $item->credit_amount, 2),
+                'running_balance' => round($running, 2),
+            ];
+        }
+
+        // Balance per sub-account at the end of the period (the group's make-up).
+        $closingBy = JournalEntryItem::whereIn('account_id', $byId->keys())
+            ->whereHas('journalEntry', fn ($q) => $q->where('company_id', $group->company_id)
+                ->whereIn('status', \App\Models\JournalEntry::LEDGER_STATUSES)->when($dateTo, fn ($w) => $w->where('entry_date', '<=', $dateTo)))
+            ->groupBy('account_id')->selectRaw('account_id, SUM(debit_amount) - SUM(credit_amount) as net')->pluck('net', 'account_id');
+        $breakdown = $accounts->sortBy('account_code')->map(fn ($a) => [
+            'code' => $a->account_code,
+            'name' => $a->account_name,
+            'balance' => round((float) ($closingBy[$a->id] ?? 0), 2), // debit positive, credit negative
+        ])->filter(fn ($b) => abs($b['balance']) >= 0.005)->values()->all();
+
+        return [
+            'ledger_data' => [[
+                'account' => [
+                    'id' => $group->id,
+                    'code' => $group->account_code,
+                    'name' => $group->account_name . ' (incl. sub-accounts)',
+                    'type' => $group->account_type,
+                    'subtype' => $group->account_subtype,
+                    'normal_balance' => $debitNormal ? 'debit' : 'credit',
+                ],
+                'is_group' => true,
+                'sub_accounts' => $breakdown,
+                'opening_balance' => round($opening, 2),
+                'transactions' => $rows,
+                'totals' => ['total_debits' => round($dr, 2), 'total_credits' => round($cr, 2), 'closing_balance' => round($running, 2)],
+            ]],
+            'filters' => ['date_from' => $dateFrom, 'date_to' => $dateTo, 'account_id' => $group->id],
+            'summary' => ['total_accounts' => 1, 'total_transactions' => count($rows)],
+        ];
+    }
+
     private function calculateOpeningBalance(ChartOfAccount $account, ?string $beforeDate, $entryIds = null): float
     {
         // Narrowed to a customer's entries, the account's own opening balance isn't theirs.
