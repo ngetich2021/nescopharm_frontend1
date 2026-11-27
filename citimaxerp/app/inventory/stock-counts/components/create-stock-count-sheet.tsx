@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import type React from "react"
 
 import { useState, useEffect, useMemo } from "react"
@@ -93,7 +94,7 @@ export function CreateStockCountSheet({ isOpen, onOpenChange, onStockCountCreate
       } catch (error: any) {
         toast({
           title: "Error",
-          description: "Failed to load products for selection. " + (error.message || "Please try again."),
+          description: errorText(error, "Failed to load products for selection. ") + (error.message || "Please try again."),
           variant: "destructive",
         })
       } finally {
@@ -110,7 +111,7 @@ export function CreateStockCountSheet({ isOpen, onOpenChange, onStockCountCreate
       } catch (error: any) {
         toast({
           title: "Error",
-          description: "Failed to load users. " + (error.message || "Please try again."),
+          description: errorText(error, "Failed to load users. ") + (error.message || "Please try again."),
           variant: "destructive",
         })
       } finally {
@@ -126,7 +127,7 @@ export function CreateStockCountSheet({ isOpen, onOpenChange, onStockCountCreate
       } catch (error: any) {
         toast({
           title: "Error",
-          description: "Failed to load stores. " + (error.message || "Please try again."),
+          description: errorText(error, "Failed to load stores. ") + (error.message || "Please try again."),
           variant: "destructive",
         })
       } finally {

@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -51,7 +52,7 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
       const debtPayments = await getDebtPayments(debt.id)
       setPayments(debtPayments)
     } catch (error) {
-      toast.error("Failed to load payment history")
+      toast.error(errorText(error, "Failed to load payment history"))
     } finally {
       setIsLoadingPayments(false)
     }
@@ -104,7 +105,7 @@ export function DebtDetailsSheet({ debt, open, onOpenChange, onPaymentRecorded }
 
       toast.success("Payment recorded successfully")
     } catch (error) {
-      toast.error("Failed to record payment")
+      toast.error(errorText(error, "Failed to record payment"))
     } finally {
       setIsRecordingPayment(false)
     }

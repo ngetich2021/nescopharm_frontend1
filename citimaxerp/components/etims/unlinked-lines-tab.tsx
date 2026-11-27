@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
@@ -43,7 +44,7 @@ export function UnlinkedLinesTab({ onCount }: { onCount?: (n: number) => void })
       setProducts(res.products)
       onCount?.(res.data.length)
     } catch (e) {
-      toast.error("Could not load the lines to link", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not load the lines to link"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }
@@ -71,7 +72,7 @@ export function UnlinkedLinesTab({ onCount }: { onCount?: (n: number) => void })
       toast.success(res.message)
       await load()
     } catch (e) {
-      toast.error("Could not link", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not link"), { description: (e as Error).message })
     } finally {
       setSaving(null)
     }

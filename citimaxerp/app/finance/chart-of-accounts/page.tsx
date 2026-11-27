@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -86,7 +87,7 @@ export default function ChartOfAccountsPage() {
       console.error('Error fetching accounts:', error)
       toast({
         title: "Error",
-        description: "Failed to fetch chart of accounts. Please try again.",
+        description: errorText(error, "Failed to fetch chart of accounts. Please try again."),
         variant: "destructive",
       })
     } finally {

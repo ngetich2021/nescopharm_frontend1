@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect, useMemo } from "react";
 import { createBreakage } from "@/lib/breakages";
 import { fetchUsers, type UserData as UserType } from "@/lib/users";
@@ -165,7 +166,7 @@ export function CreateBreakageModal({
       console.error("Error loading assignable items:", error);
       toast({
         title: "Error",
-        description: "Failed to load assignable items. Please try again.",
+        description: errorText(error, "Failed to load assignable items. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -182,7 +183,7 @@ export function CreateBreakageModal({
       console.error("Error loading users:", error);
       toast({
         title: "Error",
-        description: "Failed to load users. Please try again.",
+        description: errorText(error, "Failed to load users. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -266,7 +267,7 @@ export function CreateBreakageModal({
       console.error("Error creating breakage:", error);
       toast({
         title: "Error",
-        description: "Failed to create breakage report. Please try again.",
+        description: errorText(error, "Failed to create breakage report. Please try again."),
         variant: "destructive",
       });
     } finally {

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGuard } from "@/components/PermissionGuard";
@@ -32,7 +33,7 @@ export function TimeManagementPage() {
       const data = await getTimeEntries({ search: searchTerm || undefined });
       setTimeEntries(data);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to load time entries.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to load time entries."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

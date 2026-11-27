@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -371,7 +372,7 @@ export function CreateProductModal({ isOpen, onClose, onSuccess }: CreateProduct
           } catch (error) {
             toast({
               title: "Upload Error",
-              description: "Failed to process image",
+              description: errorText(error, "Failed to process image"),
               variant: "destructive",
             })
           }
@@ -430,7 +431,7 @@ export function CreateProductModal({ isOpen, onClose, onSuccess }: CreateProduct
           } catch (error) {
             toast({
               title: "Upload Error",
-              description: "Failed to process image",
+              description: errorText(error, "Failed to process image"),
               variant: "destructive",
             })
           }
@@ -616,7 +617,7 @@ export function CreateProductModal({ isOpen, onClose, onSuccess }: CreateProduct
           } catch (error) {
             toast({
               title: "Upload Error",
-              description: "Failed to process variant image",
+              description: errorText(error, "Failed to process variant image"),
               variant: "destructive",
             })
           }

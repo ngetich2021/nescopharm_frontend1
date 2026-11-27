@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -82,7 +83,7 @@ export function AddSerialNumberSheet({ open, onOpenChange, onSerialNumberAdded }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load dropdown data",
+        description: errorText(error, "Failed to load dropdown data"),
         variant: "destructive",
       })
     } finally {
@@ -97,7 +98,7 @@ export function AddSerialNumberSheet({ open, onOpenChange, onSerialNumberAdded }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load batches",
+        description: errorText(error, "Failed to load batches"),
         variant: "destructive",
       })
     }

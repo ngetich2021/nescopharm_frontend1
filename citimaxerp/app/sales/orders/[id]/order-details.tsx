@@ -1,4 +1,5 @@
 "use client"
+import { errorText } from "@/lib/error-message"
 import { displayDate, displayDateTime } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
@@ -254,7 +255,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
           setDeliveryLocations([])
           toast({
             title: "Error",
-            description: "Failed to fetch delivery locations.",
+            description: errorText(error, "Failed to fetch delivery locations."),
             variant: "destructive",
           })
         } finally {
@@ -301,7 +302,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
         if (error.response?.status !== 404) {
           toast({
             title: "Error",
-            description: "Failed to fetch invoice data",
+            description: errorText(error, "Failed to fetch invoice data"),
             variant: "destructive",
           });
         }
@@ -584,7 +585,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update order status. Please try again.",
+        description: errorText(error, "Failed to update order status. Please try again."),
         variant: "destructive",
       });
     }
@@ -1437,7 +1438,7 @@ export function OrderDetails({ order, refreshOrder }: OrderDetailsProps) {
           } catch (error) {
             toast({
               title: "Error",
-              description: "Failed to update delivery location.",
+              description: errorText(error, "Failed to update delivery location."),
               variant: "destructive",
             })
           }

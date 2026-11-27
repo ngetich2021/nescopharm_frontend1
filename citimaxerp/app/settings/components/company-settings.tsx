@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import apiCall from "@/lib/api"
@@ -99,7 +100,7 @@ export function CompanySettings() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load company information.",
+        description: errorText(error, "Failed to load company information."),
         variant: "destructive",
       })
     } finally {

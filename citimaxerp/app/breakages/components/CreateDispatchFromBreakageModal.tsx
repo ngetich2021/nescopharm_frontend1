@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { createDispatch } from "@/lib/dispatch";
 import { type Breakage, updateBreakageStatus } from "@/lib/breakages";
@@ -166,7 +167,7 @@ export function CreateDispatchFromBreakageModal({
       console.error("Error loading stores:", error);
       toast({
         title: "Error",
-        description: "Failed to load stores. Please try again.",
+        description: errorText(error, "Failed to load stores. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -183,7 +184,7 @@ export function CreateDispatchFromBreakageModal({
       console.error("Error loading users:", error);
       toast({
         title: "Error",
-        description: "Failed to load users. Please try again.",
+        description: errorText(error, "Failed to load users. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -256,7 +257,7 @@ export function CreateDispatchFromBreakageModal({
       console.error("Error creating dispatch:", error);
       toast({
         title: "Error",
-        description: "Failed to create dispatch. Please try again.",
+        description: errorText(error, "Failed to create dispatch. Please try again."),
         variant: "destructive",
       });
     } finally {

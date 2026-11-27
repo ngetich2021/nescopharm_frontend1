@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -181,7 +182,7 @@ export default function InvoiceDocumentPage({ params }: { params: Promise<{ id: 
       console.error('Failed to generate PDF:', err)
       toast({
         title: "Error",
-        description: "Failed to generate PDF. Please try printing instead.",
+        description: errorText(err, "Failed to generate PDF. Please try printing instead."),
         variant: "destructive",
       })
     } finally {

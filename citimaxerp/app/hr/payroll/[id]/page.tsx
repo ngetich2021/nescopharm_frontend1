@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -168,10 +169,10 @@ export default function PayrollRunDetailPage() {
       setPayslips(res.data ?? []);
       setTotalPages(res.last_page ?? 1);
       setTotalItems(res.total ?? 0);
-    } catch {
+    } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load payslips.",
+        description: errorText(error, "Failed to load payslips."),
         variant: "destructive",
       });
     } finally {

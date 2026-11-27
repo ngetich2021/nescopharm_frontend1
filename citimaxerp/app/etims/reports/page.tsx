@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,7 +24,7 @@ export default function EtimsReportsPage() {
       setFailures(fl.data)
       setHealth(hl.totals)
     } catch (e) {
-      toast.error("Failed to load eTIMS reports", { description: (e as Error).message })
+      toast.error(errorText(e, "Failed to load eTIMS reports"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }

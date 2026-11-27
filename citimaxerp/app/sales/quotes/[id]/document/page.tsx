@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
@@ -117,7 +118,7 @@ export default function QuoteDocumentPage({ params }: { params: Promise<{ id: st
       toast({ title: "Success", description: "Quotation PDF downloaded" })
     } catch (err) {
       console.error("Failed to generate PDF:", err)
-      toast({ title: "Error", description: "Failed to generate PDF. Please try printing instead.", variant: "destructive" })
+      toast({ title: "Error", description: errorText(err, "Failed to generate PDF. Please try printing instead."), variant: "destructive" })
     } finally {
       setIsDownloading(false)
     }

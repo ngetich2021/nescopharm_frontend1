@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { sizedName } from "@/lib/product-sizes"
 import { SameCodeSizeSelect } from "@/components/same-code-size-select"
 import { LineItemEditDialog, type LineEditResult } from "@/components/line-item-edit-dialog"
@@ -291,7 +292,7 @@ export function EditOrderModal({ order, open, onOpenChange, onOrderUpdated }: Ed
         setCustomersLoaded(true)
       } catch (error) {
         setCustomers([])
-        toast.error("Failed to load customers")
+        toast.error(errorText(error, "Failed to load customers"))
       } finally {
         setCustomersLoading(false)
       }

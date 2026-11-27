@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, useFieldArray } from "react-hook-form"
@@ -128,7 +129,7 @@ export default function CreateJournalEntryPage() {
       console.error('Error fetching accounts:', error)
       toast({
         title: "Error",
-        description: "Failed to fetch chart of accounts. Please try again.",
+        description: errorText(error, "Failed to fetch chart of accounts. Please try again."),
         variant: "destructive",
       })
     }

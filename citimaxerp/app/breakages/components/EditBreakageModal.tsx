@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect, useMemo } from "react";
 import { updateBreakage, type Breakage } from "@/lib/breakages";
 import {
@@ -175,7 +176,7 @@ export function EditBreakageModal({
       console.error("Error loading assignable items:", error);
       toast({
         title: "Error",
-        description: "Failed to load assignable items. Please try again.",
+        description: errorText(error, "Failed to load assignable items. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -251,7 +252,7 @@ export function EditBreakageModal({
       console.error("Error updating breakage:", error);
       toast({
         title: "Error",
-        description: "Failed to update breakage report. Please try again.",
+        description: errorText(error, "Failed to update breakage report. Please try again."),
         variant: "destructive",
       });
     } finally {

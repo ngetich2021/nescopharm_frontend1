@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +33,7 @@ export function DeleteLeaveRequestDialog({ open, onOpenChange, onSuccess, leaveR
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to delete leave request.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to delete leave request."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

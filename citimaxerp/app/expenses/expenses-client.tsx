@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -132,7 +133,7 @@ export function ExpensesClient() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load expenses or categories.",
+        description: errorText(error, "Failed to load expenses or categories."),
         variant: "destructive",
       })
     } finally {

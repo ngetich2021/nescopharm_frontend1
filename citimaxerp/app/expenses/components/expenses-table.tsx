@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState } from "react"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
@@ -70,7 +71,7 @@ export function ExpensesTable({
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to delete expense.",
+        description: errorText(error, "Failed to delete expense."),
         variant: "destructive",
       })
     }
@@ -97,7 +98,7 @@ export function ExpensesTable({
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to approve expense.",
+        description: errorText(error, "Failed to approve expense."),
         variant: "destructive",
       })
     }

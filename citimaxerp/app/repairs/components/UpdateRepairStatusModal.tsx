@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { updateRepairItemsStatus, type Repair } from "@/lib/repairs";
 import {
@@ -151,7 +152,7 @@ export function UpdateRepairStatusModal({
       console.error("Error updating repair item statuses:", error);
       toast({
         title: "Error",
-        description: "Failed to update repair item statuses. Please try again.",
+        description: errorText(error, "Failed to update repair item statuses. Please try again."),
         variant: "destructive",
       });
     } finally {

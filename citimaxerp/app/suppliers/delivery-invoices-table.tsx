@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { orderRef } from "@/lib/order-ref"
 import { InvoiceTotals } from "@/components/invoices/invoice-totals"
 import { displayDate } from "@/lib/date-format"
@@ -188,7 +189,7 @@ export function DeliveryInvoicesTable() {
       if (response.totals) setTotals(response.totals);
     } catch (error) {
       console.error("Failed to load delivery invoices", error);
-      toast({ title: "Error", description: "Failed to load delivery invoices", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to load delivery invoices"), variant: "destructive" });
     } finally {
       setLoading(false);
     }

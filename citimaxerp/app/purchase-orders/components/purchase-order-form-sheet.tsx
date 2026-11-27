@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { errorText } from "@/lib/error-message"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -103,8 +104,8 @@ export function PurchaseOrderFormSheet({ open, onOpenChange, order, onSaved }: P
     if (!open) return
     resetPicker()
     setImportProblems([])
-    getSuppliers().then(setSuppliers).catch(() => toast({ title: "Error", description: "Failed to load suppliers.", variant: "destructive" }))
-    getStores().then(setStores).catch(() => toast({ title: "Error", description: "Failed to load stores.", variant: "destructive" }))
+    getSuppliers().then(setSuppliers).catch((e) => toast({ title: "Error", description: errorText(e, "Failed to load suppliers."), variant: "destructive" }))
+    getStores().then(setStores).catch((e) => toast({ title: "Error", description: errorText(e, "Failed to load stores."), variant: "destructive" }))
 
     if (!order) {
       setSupplierId("")

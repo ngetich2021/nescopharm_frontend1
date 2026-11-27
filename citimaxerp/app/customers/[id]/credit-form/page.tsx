@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -350,7 +351,7 @@ export default function CreditAppraisalFormPage({ params }: { params: Promise<{ 
       console.error('Failed to generate PDF:', err)
       toast({
         title: "Error",
-        description: "Failed to generate PDF. Please try printing instead.",
+        description: errorText(err, "Failed to generate PDF. Please try printing instead."),
         variant: "destructive",
       })
     } finally {

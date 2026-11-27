@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -1340,7 +1341,7 @@ export default function SopDetailPage() {
                   console.error('Download error:', error)
                   toast({
                     title: "Error",
-                    description: "Failed to download file",
+                    description: errorText(error, "Failed to download file"),
                     variant: "destructive",
                   })
                 }

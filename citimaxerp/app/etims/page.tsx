@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
@@ -124,7 +125,7 @@ function InvoicesTab() {
       setLastPage(res.last_page)
       setTotal(res.total)
     } catch (e) {
-      toast.error("Could not load eTIMS invoices", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not load eTIMS invoices"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }
@@ -145,7 +146,7 @@ function InvoicesTab() {
       toast.success("Sent to KRA again")
       await load()
     } catch (e) {
-      toast.error("Could not resend", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not resend"), { description: (e as Error).message })
     } finally {
       setRetrying(null)
     }
@@ -309,7 +310,7 @@ function ProductCodesTab() {
     try {
       setRows((await listEtimsProducts()).data)
     } catch (e) {
-      toast.error("Could not load products", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not load products"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }
@@ -350,7 +351,7 @@ function ProductCodesTab() {
       setFile(f)
       setPreview(res)
     } catch (err) {
-      toast.error("Could not read the file", { description: (err as Error).message })
+      toast.error(errorText(err, "Could not read the file"), { description: (err as Error).message })
     } finally {
       setImporting(false)
     }

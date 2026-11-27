@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { approveRepair, type Repair } from "@/lib/repairs";
 import {
@@ -138,7 +139,7 @@ export function ApproveRepairModal({
       console.error("Error processing approval:", error);
       toast({
         title: "Error",
-        description: "Failed to process approval. Please try again.",
+        description: errorText(error, "Failed to process approval. Please try again."),
         variant: "destructive",
       });
     } finally {

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { assignRepairItems, type Repair, type RepairItem } from "@/lib/repairs";
 import { fetchUsers, type UserData } from "@/lib/users";
@@ -89,7 +90,7 @@ export function AssignRepairModal({
       console.error("Error fetching users:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch users. Please try again.",
+        description: errorText(error, "Failed to fetch users. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -174,7 +175,7 @@ export function AssignRepairModal({
       console.error("Error assigning repair items:", error);
       toast({
         title: "Error",
-        description: "Failed to assign repair items. Please try again.",
+        description: errorText(error, "Failed to assign repair items. Please try again."),
         variant: "destructive",
       });
     } finally {

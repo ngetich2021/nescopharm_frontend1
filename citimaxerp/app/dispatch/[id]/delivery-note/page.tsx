@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, use, useRef } from "react"
@@ -96,7 +97,7 @@ export default function DeliveryNoteDocumentPage({ params }: { params: Promise<{
       toast({ title: "Success", description: "Delivery note PDF downloaded successfully" })
     } catch (err) {
       console.error('Failed to generate PDF:', err)
-      toast({ title: "Error", description: "Failed to generate PDF. Please try printing instead.", variant: "destructive" })
+      toast({ title: "Error", description: errorText(err, "Failed to generate PDF. Please try printing instead."), variant: "destructive" })
     } finally {
       setIsDownloading(false)
     }

@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -126,7 +127,7 @@ export default function FinancialPeriodsPage() {
       console.error("Error fetching financial periods:", error)
       toast({
         title: "Error",
-        description: "Failed to load financial periods.",
+        description: errorText(error, "Failed to load financial periods."),
         variant: "destructive",
       })
     } finally {

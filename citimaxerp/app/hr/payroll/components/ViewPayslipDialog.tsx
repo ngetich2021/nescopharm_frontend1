@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState } from "react"
 import { Download } from "lucide-react"
 import { toast } from "sonner"
@@ -122,8 +123,8 @@ export function ViewPayslipDialog({
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(blobUrl)
-    } catch {
-      toast.error("Failed to download payslip.")
+    } catch (error) {
+      toast.error(errorText(error, "Failed to download payslip."))
     } finally {
       setDownloading(false)
     }

@@ -48,6 +48,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Validation errors name fields in plain words ("product on line 2").
+        \Illuminate\Support\Facades\Validator::resolver(
+            fn ($translator, $data, $rules, $messages, $attributes) =>
+                new \App\Support\FriendlyValidator($translator, $data, $rules, $messages, $attributes)
+        );
+
         // CRITICAL FIX: For Supabase PgBouncer in transaction mode, we MUST use emulated prepares
         // The connection pooler deallocates prepared statements when returning connections to the pool
         // Using native prepared statements causes "prepared statement does not exist" errors

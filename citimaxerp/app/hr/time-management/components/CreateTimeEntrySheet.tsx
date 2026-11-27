@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +62,7 @@ export function CreateTimeEntrySheet({ open, onOpenChange, onSuccess }: CreateTi
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to create time entry.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to create time entry."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

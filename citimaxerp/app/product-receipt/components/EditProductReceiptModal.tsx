@@ -1,6 +1,7 @@
 // Complete EditProductReceiptModal implementation that aligns with CreateProductReceiptModal
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import * as React from "react";
 import {
@@ -288,7 +289,7 @@ export function EditProductReceiptModal({
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load receipt details.",
+        description: errorText(error, "Failed to load receipt details."),
         variant: "destructive",
       });
       console.error('Error loading receipt:', error);
@@ -305,7 +306,7 @@ export function EditProductReceiptModal({
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load stores",
+        description: errorText(error, "Failed to load stores"),
         variant: "destructive",
       });
     } finally {
@@ -321,7 +322,7 @@ export function EditProductReceiptModal({
     } catch (error: any) {
       toast({
         title: "Error", 
-        description: "Failed to load suppliers",
+        description: errorText(error, "Failed to load suppliers"),
         variant: "destructive",
       });
     } finally {
@@ -337,7 +338,7 @@ export function EditProductReceiptModal({
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: errorText(error, "Failed to load products"),
         variant: "destructive",
       });
     } finally {
@@ -467,7 +468,7 @@ export function EditProductReceiptModal({
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to refresh products list",
+        description: errorText(error, "Failed to refresh products list"),
         variant: "destructive",
       });
     }

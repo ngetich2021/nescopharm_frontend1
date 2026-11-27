@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -188,7 +189,7 @@ export function CreateOrderModal({
         setCustomersLoaded(true)
       } catch (error) {
         setCustomers([])
-        toast.error("Failed to load customers")
+        toast.error(errorText(error, "Failed to load customers"))
       } finally {
         setCustomersLoading(false)
       }

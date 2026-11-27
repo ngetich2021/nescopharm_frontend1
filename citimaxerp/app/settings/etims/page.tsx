@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -64,7 +65,7 @@ export default function EtimsSettingsPage() {
         if (res.config.go_live_date) setGoLiveDate(res.config.go_live_date)
       }
     } catch (e) {
-      toast.error("Failed to load eTIMS configuration", { description: (e as Error).message })
+      toast.error(errorText(e, "Failed to load eTIMS configuration"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }
@@ -80,7 +81,7 @@ export default function EtimsSettingsPage() {
       setWizard(res.wizard)
       toast.success("Identity saved")
     } catch (e) {
-      toast.error("Could not save identity", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not save identity"), { description: (e as Error).message })
     } finally {
       setSavingIdentity(false)
     }
@@ -96,7 +97,7 @@ export default function EtimsSettingsPage() {
       setApiKey("")
       toast.success("Credentials saved")
     } catch (e) {
-      toast.error("Could not save credentials", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not save credentials"), { description: (e as Error).message })
     } finally {
       setSavingCreds(false)
     }
@@ -125,7 +126,7 @@ export default function EtimsSettingsPage() {
       setWizard(res.wizard)
       toast.success(enable ? "eTIMS enabled" : "eTIMS disabled")
     } catch (e) {
-      toast.error("Could not change activation state", { description: (e as Error).message })
+      toast.error(errorText(e, "Could not change activation state"), { description: (e as Error).message })
     } finally {
       setSavingActivation(false)
     }

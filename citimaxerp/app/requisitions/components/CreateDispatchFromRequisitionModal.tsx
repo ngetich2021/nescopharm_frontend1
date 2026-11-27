@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { createDispatch, getProductBatches, type InventoryBatch } from "@/lib/dispatch";
 import { type Requisition } from "@/lib/requisitions";
@@ -215,7 +216,7 @@ export function CreateDispatchFromRequisitionModal({
       console.error("Error loading data:", error);
       toast({
         title: "Error",
-        description: "Failed to load data. Please try again.",
+        description: errorText(error, "Failed to load data. Please try again."),
         variant: "destructive",
       });
     } finally {

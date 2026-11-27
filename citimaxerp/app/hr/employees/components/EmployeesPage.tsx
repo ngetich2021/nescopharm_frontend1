@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -117,7 +118,7 @@ export function EmployeesPage() {
       console.error('Error fetching employees:', error)
       toast({
         title: "Error",
-        description: "Failed to fetch employees. Please try again.",
+        description: errorText(error, "Failed to fetch employees. Please try again."),
         variant: "destructive",
       })
     } finally {
@@ -159,7 +160,7 @@ export function EmployeesPage() {
       console.error('Error fetching employee statistics:', error)
       toast({
         title: "Error",
-        description: "Failed to fetch employee statistics. Please try again.",
+        description: errorText(error, "Failed to fetch employee statistics. Please try again."),
         variant: "destructive",
       })
     }

@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import type React from "react"
 
 import { useEffect, useState } from "react"
@@ -187,7 +188,7 @@ export function UsersTable() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load user and role data.",
+        description: errorText(error, "Failed to load user and role data."),
         variant: "destructive",
       })
     } finally {

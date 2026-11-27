@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -93,8 +94,8 @@ export function PayrollConfigPage() {
       const res = await getPayrollConfigurations();
       setConfigs(res.configurations ?? []);
       setCurrent(res.current ?? null);
-    } catch {
-      toast({ title: "Error", description: "Failed to load configurations.", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: errorText(error, "Failed to load configurations."), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -130,8 +131,8 @@ export function PayrollConfigPage() {
       }
       setDialogOpen(false);
       load();
-    } catch {
-      toast({ title: "Error", description: "Failed to save configuration.", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: errorText(error, "Failed to save configuration."), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -145,8 +146,8 @@ export function PayrollConfigPage() {
       toast({ title: "Deleted", description: "Configuration deleted." });
       setDeleteTarget(null);
       load();
-    } catch {
-      toast({ title: "Error", description: "Failed to delete configuration.", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Error", description: errorText(error, "Failed to delete configuration."), variant: "destructive" });
     } finally {
       setDeleteLoading(false);
     }

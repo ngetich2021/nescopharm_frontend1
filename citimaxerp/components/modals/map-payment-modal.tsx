@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -53,7 +54,7 @@ export function MapPaymentModal({
       console.error('Failed to load payments:', error)
       toast({
         title: "Error",
-        description: "Failed to load available payments",
+        description: errorText(error, "Failed to load available payments"),
         variant: "destructive",
       })
       setAllPayments([])

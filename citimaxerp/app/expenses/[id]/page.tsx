@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate, displayDateTime } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
@@ -52,7 +53,7 @@ export default function ExpenseDetailsPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load expense details or categories.",
+        description: errorText(error, "Failed to load expense details or categories."),
         variant: "destructive",
       })
       console.error(error)
@@ -78,7 +79,7 @@ export default function ExpenseDetailsPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to delete expense.",
+        description: errorText(error, "Failed to delete expense."),
         variant: "destructive",
       })
       console.error(error)

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,7 +72,7 @@ export function EditTimeEntrySheet({ open, onOpenChange, onSuccess, timeEntry }:
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to update time entry.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to update time entry."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

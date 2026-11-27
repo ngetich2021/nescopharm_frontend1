@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -207,10 +208,10 @@ export default function PayrollPage() {
       setRuns(res.data ?? []);
       setTotalPages(res.last_page ?? 1);
       setTotalItems(res.total ?? 0);
-    } catch {
+    } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load payroll runs.",
+        description: errorText(error, "Failed to load payroll runs."),
         variant: "destructive",
       });
     } finally {

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { RepairsSummary } from "./RepairsSummary";
@@ -44,7 +45,7 @@ export function RepairsPage() {
       console.error('Error fetching repairs:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch repairs. Please try again.",
+        description: errorText(error, "Failed to fetch repairs. Please try again."),
         variant: "destructive",
       });
     } finally {

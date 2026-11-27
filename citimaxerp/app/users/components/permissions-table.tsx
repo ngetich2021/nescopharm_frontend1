@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,8 +62,8 @@ export function PermissionsTable() {
       const res = await getPermissions()
       setPermissions(res.permissions)
       setCategories(res.categories)
-    } catch {
-      toast({ title: "Error", description: "Failed to load permissions.", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorText(error, "Failed to load permissions."), variant: "destructive" })
     } finally {
       setLoading(false)
       setRefreshing(false)

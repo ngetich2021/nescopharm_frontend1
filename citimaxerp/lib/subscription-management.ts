@@ -1,3 +1,4 @@
+import { errorText } from "./error-message"
 import apiCall from "@/lib/api"
 
 // Define types for subscription-related data
@@ -80,7 +81,7 @@ export async function createSubscriptionPlanAdmin(
     const data = await apiCall<SubscriptionPlan>("/admin/subscription-plans", "POST", planData)
     return data
   } catch (error) {
-    throw new Error("Failed to create subscription plan.")
+    throw new Error(errorText(error, "Failed to create subscription plan."))
   }
 }
 
@@ -96,7 +97,7 @@ export async function updateSubscriptionPlanAdmin(
     const data = await apiCall<SubscriptionPlan>(`/admin/subscription-plans/${planId}`, "PUT", planData)
     return data
   } catch (error) {
-    throw new Error("Failed to update subscription plan.")
+    throw new Error(errorText(error, "Failed to update subscription plan."))
   }
 }
 
@@ -108,7 +109,7 @@ export async function deleteSubscriptionPlanAdmin(planId: string): Promise<void>
   try {
     await apiCall(`/admin/subscription-plans/${planId}`, "DELETE")
   } catch (error) {
-    throw new Error("Failed to delete subscription plan.")
+    throw new Error(errorText(error, "Failed to delete subscription plan."))
   }
 }
 
@@ -159,7 +160,7 @@ export async function createSubscriptionPaymentRecord(
     const data = await apiCall<SubscriptionPayment>("/admin/subscription-payments", "POST", paymentData)
     return data
   } catch (error) {
-    throw new Error("Failed to create subscription payment record.")
+    throw new Error(errorText(error, "Failed to create subscription payment record."))
   }
 }
 
@@ -192,6 +193,6 @@ export async function updateSubscriptionStatus(
     const data = await apiCall<Subscription>(`/admin/subscriptions/${subscriptionId}`, "PUT", updateData)
     return data
   } catch (error) {
-    throw new Error("Failed to update subscription.")
+    throw new Error(errorText(error, "Failed to update subscription."))
   }
 }

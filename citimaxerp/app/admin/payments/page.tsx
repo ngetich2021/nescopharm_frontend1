@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { CardDescription } from "@/components/ui/card"
 
@@ -39,7 +40,7 @@ export default function AdminPaymentsPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load payment data.",
+        description: errorText(error, "Failed to load payment data."),
         variant: "destructive",
       })
     } finally {

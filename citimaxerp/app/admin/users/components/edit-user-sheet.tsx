@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import type React from "react"
 
 import { useEffect, useState } from "react"
@@ -55,7 +56,7 @@ export function EditUserSheet({ user, isOpen, onOpenChange, onUserUpdated }: Edi
       } catch (error) {
         toast({
           title: "Error",
-          description: "Failed to load necessary data for user form.",
+          description: errorText(error, "Failed to load necessary data for user form."),
           variant: "destructive",
         })
       }
@@ -74,7 +75,7 @@ export function EditUserSheet({ user, isOpen, onOpenChange, onUserUpdated }: Edi
         } catch (error) {
           toast({
             title: "Error",
-            description: "Failed to load roles for the selected company.",
+            description: errorText(error, "Failed to load roles for the selected company."),
             variant: "destructive",
           })
         }

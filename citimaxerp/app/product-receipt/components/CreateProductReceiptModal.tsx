@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import * as React from "react";
 import {
@@ -454,7 +455,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load stores",
+        description: errorText(error, "Failed to load stores"),
         variant: "destructive",
       });
     } finally {
@@ -486,7 +487,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: errorText(error, "Failed to load products"),
         variant: "destructive",
       });
     } finally {
@@ -502,7 +503,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load categories",
+        description: errorText(error, "Failed to load categories"),
         variant: "destructive",
       });
     } finally {
@@ -729,7 +730,7 @@ type ProductReceiptFormValues = z.infer<typeof formSchema>;
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to refresh products list",
+        description: errorText(error, "Failed to refresh products list"),
         variant: "destructive",
       });
     }

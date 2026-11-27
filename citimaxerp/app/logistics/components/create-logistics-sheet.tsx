@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -76,7 +77,7 @@ export function CreateLogisticsSheet({ isOpen, onOpenChange, onLogisticsCreated 
       const availableDispatches = response.data.filter((d) => !d.logistic)
       setDispatches(availableDispatches)
     } catch (error) {
-      toast({ title: "Error", description: "Failed to load order dispatches.", variant: "destructive" })
+      toast({ title: "Error", description: errorText(error, "Failed to load order dispatches."), variant: "destructive" })
     } finally {
       setLoadingDispatches(false)
     }
@@ -88,7 +89,7 @@ export function CreateLogisticsSheet({ isOpen, onOpenChange, onLogisticsCreated 
       const persons = await getDeliveryPersons()
       setDeliveryPersons(persons)
     } catch (error) {
-      toast({ title: "Error", description: "Failed to load delivery persons.", variant: "destructive" })
+      toast({ title: "Error", description: errorText(error, "Failed to load delivery persons."), variant: "destructive" })
     } finally {
       setLoadingDeliveryPersons(false)
     }

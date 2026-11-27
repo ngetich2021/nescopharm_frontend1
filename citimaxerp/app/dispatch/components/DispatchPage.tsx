@@ -1,4 +1,5 @@
 "use client";
+import { errorText } from "@/lib/error-message"
 import { matchesDocNumber } from "@/lib/utils"
 import { useState, useEffect, Suspense } from "react";
 import {
@@ -78,7 +79,7 @@ export default function DispatchPage() {
       console.error('Error fetching dispatches:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch dispatches. Please try again.",
+        description: errorText(error, "Failed to fetch dispatches. Please try again."),
         variant: "destructive",
       });
       setDispatches([]); // Ensure robust state on error

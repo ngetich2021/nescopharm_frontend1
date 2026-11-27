@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { CreateLeaveRequestSheet } from "./CreateLeaveRequestSheet";
@@ -33,7 +34,7 @@ export function LeaveManagementPage() {
       setLeaveRequests(data.leave_requests);
       setRecordsApprover(data.records_approver);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to load leave requests.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to load leave requests."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

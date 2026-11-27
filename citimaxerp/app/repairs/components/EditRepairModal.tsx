@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect, useMemo } from "react";
 import {
   Sheet,
@@ -172,7 +173,7 @@ export function EditRepairModal({
       console.error('Error fetching assignable items:', error);
       toast({
         title: "Error",
-        description: "Failed to load assignable items.",
+        description: errorText(error, "Failed to load assignable items."),
         variant: "destructive",
       });
     } finally {
@@ -189,7 +190,7 @@ export function EditRepairModal({
       console.error("Error loading users:", error);
       toast({
         title: "Error",
-        description: "Failed to load users. Please try again.",
+        description: errorText(error, "Failed to load users. Please try again."),
         variant: "destructive",
       });
     } finally {

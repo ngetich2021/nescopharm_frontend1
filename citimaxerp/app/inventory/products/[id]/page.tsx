@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
@@ -108,7 +109,7 @@ export default function ProductDetailsPage() {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load product details",
+        description: errorText(error, "Failed to load product details"),
         variant: "destructive",
       })
     } finally {

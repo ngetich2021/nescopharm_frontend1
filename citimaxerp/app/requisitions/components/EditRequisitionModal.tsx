@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -144,7 +145,7 @@ export function EditRequisitionModal({ open, onOpenChange, onSuccess, requisitio
       console.error('Error fetching data:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch data. Please try again.",
+        description: errorText(error, "Failed to fetch data. Please try again."),
         variant: "destructive",
       });
     }

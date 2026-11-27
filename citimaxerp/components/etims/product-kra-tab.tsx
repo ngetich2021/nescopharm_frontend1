@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,7 +63,7 @@ export function ProductKraTab({ productId }: { productId: string }) {
       setTaxTypeCode(reg.tax_type_code ?? "B")
       setCountryOfOriginCode(reg.country_of_origin_code ?? "KE")
     } catch (e) {
-      toast.error("Failed to load KRA fields", { description: (e as Error).message })
+      toast.error(errorText(e, "Failed to load KRA fields"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }

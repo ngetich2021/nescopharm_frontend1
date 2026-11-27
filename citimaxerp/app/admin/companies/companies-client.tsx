@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -36,7 +37,7 @@ export function CompaniesClient() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load company data.",
+        description: errorText(error, "Failed to load company data."),
         variant: "destructive",
       })
     } finally {

@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,7 +63,7 @@ export function DeleteProductModal({ isOpen, onClose, onSuccess, product }: Dele
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to delete product",
+        description: errorText(error, "Failed to delete product"),
         variant: "destructive",
       })
     } finally {

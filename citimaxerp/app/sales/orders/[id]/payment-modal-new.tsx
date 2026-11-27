@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { INSTANT_PAYMENT_METHODS } from "@/lib/payment-methods"
 import type React from "react"
 import { useState, useEffect } from "react"
@@ -52,7 +53,7 @@ export function PaymentModal({ orderId, onClose }: PaymentModalProps) {
       } catch (error) {
         toast({
           title: "Error",
-          description: "Failed to load order details.",
+          description: errorText(error, "Failed to load order details."),
           variant: "destructive",
         });
       }

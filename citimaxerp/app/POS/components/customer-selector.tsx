@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -48,7 +49,7 @@ export function CustomerSelector({ selectedCustomer, onCustomerSelect }: Custome
       console.error("Failed to load customers:", error)
       toast({
         title: "Error",
-        description: "Failed to load customers",
+        description: errorText(error, "Failed to load customers"),
         variant: "destructive",
       })
     } finally {

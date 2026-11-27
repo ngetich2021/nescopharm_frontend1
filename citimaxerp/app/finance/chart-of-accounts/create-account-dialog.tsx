@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -142,7 +143,7 @@ export default function CreateAccountDialog({ open, onOpenChange, onSuccess }: C
       console.error('Error creating account:', error)
       toast({
         title: "Error",
-        description: "Failed to create account",
+        description: errorText(error, "Failed to create account"),
         variant: "destructive"
       })
     } finally {

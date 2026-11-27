@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import {
@@ -171,7 +172,7 @@ export default function CreateSupplierPaymentSheet({
       console.error("Error fetching suppliers:", error)
       toast({
         title: "Error",
-        description: "Failed to load suppliers",
+        description: errorText(error, "Failed to load suppliers"),
         variant: "destructive",
       })
     } finally {

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { BreakagesSummary } from "./BreakagesSummary";
@@ -41,7 +42,7 @@ export function BreakagesPage() {
       console.error('Error fetching breakages:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch breakages. Please try again.",
+        description: errorText(error, "Failed to fetch breakages. Please try again."),
         variant: "destructive",
       });
     } finally {

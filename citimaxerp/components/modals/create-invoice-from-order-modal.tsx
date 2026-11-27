@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -118,7 +119,7 @@ export function CreateInvoiceFromOrderModal({ open, onClose, onSuccess }: Create
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load orders",
+        description: errorText(error, "Failed to load orders"),
         variant: "destructive",
       })
     }

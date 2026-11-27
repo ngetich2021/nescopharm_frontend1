@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -41,7 +42,7 @@ export default function EtimsSupplierReceiptsPage() {
       setReceipts(list.data.data)
       setRecon(r)
     } catch (e) {
-      toast.error("Failed to load supplier receipts", { description: (e as Error).message })
+      toast.error(errorText(e, "Failed to load supplier receipts"), { description: (e as Error).message })
     } finally {
       setLoading(false)
     }

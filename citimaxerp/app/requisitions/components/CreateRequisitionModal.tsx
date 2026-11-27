@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -132,7 +133,7 @@ export function CreateRequisitionModal({ open, onOpenChange, onSuccess }: Create
       console.error('Error fetching users:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch approvers. Please try again.",
+        description: errorText(error, "Failed to fetch approvers. Please try again."),
         variant: "destructive",
       });
     }

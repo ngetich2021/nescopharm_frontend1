@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -275,7 +276,7 @@ export function EditEmployeeSheet({ employee, open, onOpenChange, onSuccess }: E
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to load employees for supervisor selection.",
+        description: errorText(error, "Failed to load employees for supervisor selection."),
         variant: "destructive",
       });
     } finally {

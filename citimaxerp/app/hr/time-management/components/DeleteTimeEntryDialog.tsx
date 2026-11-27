@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +33,7 @@ export function DeleteTimeEntryDialog({ open, onOpenChange, onSuccess, timeEntry
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to delete time entry.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to delete time entry."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

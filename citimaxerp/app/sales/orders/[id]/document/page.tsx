@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
 import { useState, useEffect, use, useRef } from "react"
@@ -142,7 +143,7 @@ export default function OrderDocumentPage({ params }: { params: Promise<{ id: st
       console.error('Failed to generate PDF:', err)
       toast({
         title: "Error",
-        description: "Failed to generate PDF. Please try printing instead.",
+        description: errorText(err, "Failed to generate PDF. Please try printing instead."),
         variant: "destructive",
       })
     } finally {

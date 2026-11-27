@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { RequisitionsSummary } from "./RequisitionsSummary";
@@ -43,7 +44,7 @@ export function RequisitionsPage() {
       console.error('Error fetching requisitions:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch requisitions. Please try again.",
+        description: errorText(error, "Failed to fetch requisitions. Please try again."),
         variant: "destructive",
       });
     } finally {

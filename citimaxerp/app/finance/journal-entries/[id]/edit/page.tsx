@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useForm, useFieldArray } from "react-hook-form"
@@ -150,7 +151,7 @@ export default function EditJournalEntryPage() {
       console.error("Failed to fetch accounts:", error)
       toast({
         title: "Error",
-        description: "Failed to load chart of accounts.",
+        description: errorText(error, "Failed to load chart of accounts."),
         variant: "destructive",
       })
     }
@@ -183,7 +184,7 @@ export default function EditJournalEntryPage() {
       console.error("Failed to fetch entry:", error)
       toast({
         title: "Error",
-        description: "Failed to load journal entry details.",
+        description: errorText(error, "Failed to load journal entry details."),
         variant: "destructive",
       })
       router.push('/finance/journal-entries')

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { CreateSalaryAdvanceSheet } from "./CreateSalaryAdvanceSheet";
@@ -31,7 +32,7 @@ export function SalaryAdvancePage() {
       const data = await getSalaryAdvances({ search: searchTerm || undefined });
       setSalaryAdvanceRequests(data);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to load salary advances.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to load salary advances."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

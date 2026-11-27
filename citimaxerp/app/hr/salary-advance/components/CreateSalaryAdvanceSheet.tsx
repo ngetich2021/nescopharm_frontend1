@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +59,7 @@ export function CreateSalaryAdvanceSheet({ open, onOpenChange, onSuccess }: Crea
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to create salary advance request.", variant: "destructive" });
+      toast({ title: "Error", description: errorText(error, "Failed to create salary advance request."), variant: "destructive" });
     } finally {
       setLoading(false);
     }

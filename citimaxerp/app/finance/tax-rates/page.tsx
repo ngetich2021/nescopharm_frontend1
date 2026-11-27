@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -167,7 +168,7 @@ export default function TaxRatesPage() {
       console.error("Error fetching tax rates:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch tax rates. Please try again.",
+        description: errorText(error, "Failed to fetch tax rates. Please try again."),
         variant: "destructive",
       })
     } finally {
@@ -281,7 +282,7 @@ export default function TaxRatesPage() {
       console.error("Error deleting tax rate:", error)
       toast({
         title: "Error",
-        description: "Failed to delete tax rate. Please try again.",
+        description: errorText(error, "Failed to delete tax rate. Please try again."),
         variant: "destructive",
       })
     }

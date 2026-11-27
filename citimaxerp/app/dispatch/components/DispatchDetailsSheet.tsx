@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { orderRef } from "@/lib/order-ref"
 import { displayDate } from "@/lib/date-format"
 import { sizedName } from "@/lib/product-sizes"
@@ -164,7 +165,7 @@ export function DispatchDetailsSheet({
       console.error("Error submitting dispatch:", error);
       toast({
         title: "Error",
-        description: "Failed to submit dispatch",
+        description: errorText(error, "Failed to submit dispatch"),
         variant: "destructive",
       });
     } finally {
@@ -237,7 +238,7 @@ export function DispatchDetailsSheet({
       console.error("Error rejecting dispatch:", error);
       toast({
         title: "Error",
-        description: "Failed to reject dispatch",
+        description: errorText(error, "Failed to reject dispatch"),
         variant: "destructive",
       });
     } finally {

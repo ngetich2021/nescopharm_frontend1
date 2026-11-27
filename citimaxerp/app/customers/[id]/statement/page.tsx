@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useEffect, useRef, useState, use } from "react"
 import { useRouter } from "next/navigation"
@@ -321,7 +322,7 @@ export default function CustomerStatementPage({ params }: { params: Promise<{ id
       toast({ title: "Success", description: "Statement PDF downloaded successfully" })
     } catch (err) {
       console.error("Failed to generate PDF:", err)
-      toast({ title: "Error", description: "Failed to generate PDF. Please try printing instead.", variant: "destructive" })
+      toast({ title: "Error", description: errorText(err, "Failed to generate PDF. Please try printing instead."), variant: "destructive" })
     } finally {
       setIsDownloading(false)
     }

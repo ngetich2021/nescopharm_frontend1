@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
@@ -188,7 +189,7 @@ export default function JournalEntryDetailPage() {
       console.error('Error fetching journal entry:', error)
       toast({
         title: "Error",
-        description: "Failed to fetch journal entry details.",
+        description: errorText(error, "Failed to fetch journal entry details."),
         variant: "destructive",
       })
     } finally {
@@ -212,7 +213,7 @@ export default function JournalEntryDetailPage() {
       console.error('Error posting entry:', error)
       toast({
         title: "Error",
-        description: "Failed to post journal entry.",
+        description: errorText(error, "Failed to post journal entry."),
         variant: "destructive",
       })
     }

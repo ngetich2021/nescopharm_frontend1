@@ -1,5 +1,6 @@
 "use client";
 
+import { errorText } from "@/lib/error-message"
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,7 +101,7 @@ export function EmployeeSelectionSheet({
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to fetch employees. Please try again.",
+        description: errorText(error, "Failed to fetch employees. Please try again."),
         variant: "destructive",
       });
     } finally {

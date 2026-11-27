@@ -1,5 +1,6 @@
 "use client"
 
+import { errorText } from "@/lib/error-message"
 import { displayDate } from "@/lib/date-format"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -176,7 +177,7 @@ export function StockCountDetailsModal({ isOpen, onClose, stockCountId }: StockC
       setError("Failed to load stock count details")
       toast({
         title: "Error",
-        description: "Failed to load stock count details",
+        description: errorText(err, "Failed to load stock count details"),
         variant: "destructive",
       })
     } finally {
