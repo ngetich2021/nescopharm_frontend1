@@ -16,7 +16,7 @@ import { ExportMenu, useTableExport } from "@/components/export-menu"
 import { displayDate, displayDateTime } from "@/lib/date-format"
 import type { TableExport } from "@/lib/table-export"
 import {
-  AlertTriangle, BookCheck, CheckCircle2, ChevronLeft, ChevronRight, History, Landmark, Loader2, RotateCcw, Send, Settings2, XCircle,
+  AlertTriangle, BookCheck, CheckCircle2, ChevronLeft, ChevronRight, History, Loader2, RotateCcw, Send, Settings2, XCircle,
 } from "lucide-react"
 import {
   fetchDepreciationJournal, postDepreciationJournal, postMissingDepreciation, reverseDepreciationJournal, setupDepreciationAccounts,
@@ -183,10 +183,10 @@ export function DepreciationJournal() {
     }
     const recon: TableExport = {
       fileName: "", title: `Register to GL Reconciliation at ${day(d.period_end)} (${r.basis === "closing" ? "after posting" : "before posting - register opening"})`, sheetName: "GL Reconciliation",
-      headers: ["S/No", "Asset class", "Register cost", "GL cost", "Register acc. dep.", "GL acc. dep.", "Difference"],
-      moneyColumns: [2, 3, 4, 5, 6],
-      rows: r.rows.map((x, i) => [i + 1, x.class, x.register_cost, x.gl_cost, x.register_accumulated, x.gl_accumulated, x.difference]),
-      footer: [["", "TOTAL", r.totals.register_cost, r.totals.gl_cost, r.totals.register_accumulated, r.totals.gl_accumulated, r.totals.difference]],
+      headers: ["S/No", "Asset class", "Register acc. dep.", "GL acc. dep.", "Difference"],
+      moneyColumns: [2, 3, 4],
+      rows: r.rows.map((x, i) => [i + 1, x.class, x.register_accumulated, x.gl_accumulated, x.difference]),
+      footer: [["", "TOTAL", r.totals.register_accumulated, r.totals.gl_accumulated, r.totals.difference]],
     }
     return {
       fileName: `Monthly Depreciation Journal ${d.reference.replace(/\//g, "-")}`,
@@ -651,7 +651,7 @@ export function DepreciationJournal() {
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-600">
                 <tr className={th}>
-                  <th className="text-left">S/No</th><th className="text-left">Asset class</th><th className="text-right">Register cost</th><th className="text-right">GL cost (1007xx)</th>
+                  <th className="text-left">S/No</th><th className="text-left">Asset class</th>
                   <th className="text-right">Register acc. dep.</th><th className="text-right">GL acc. dep. (1007 1x)</th><th className="text-right">Difference</th>
                 </tr>
               </thead>
@@ -660,8 +660,6 @@ export function DepreciationJournal() {
                   <tr key={x.class} className={td}>
                     <td className="text-muted-foreground">{i + 1}</td>
                     <td className="whitespace-nowrap font-medium">{x.class}</td>
-                    <td className={num}>{money(x.register_cost)}</td>
-                    <td className={num}>{money(x.gl_cost)}</td>
                     <td className={num}>{money(x.register_accumulated)}</td>
                     <td className={num}>{money(x.gl_accumulated)}</td>
                     <td className={`${num} font-semibold ${Math.abs(x.difference) < 0.005 ? "text-emerald-700" : "text-red-600"}`}>{money(x.difference)}</td>
@@ -671,25 +669,12 @@ export function DepreciationJournal() {
               <tfoot className="font-bold">
                 <tr className={td}>
                   <td colSpan={2}>TOTAL</td>
-                  <td className={num}>{money(r.totals.register_cost)}</td><td className={num}>{money(r.totals.gl_cost)}</td>
                   <td className={num}>{money(r.totals.register_accumulated)}</td><td className={num}>{money(r.totals.gl_accumulated)}</td>
                   <td className={`${num} ${Math.abs(r.totals.difference) < 0.005 ? "text-emerald-700" : "text-red-600"}`}>{money(r.totals.difference)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          {Math.abs(r.group_balance) >= 0.005 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-              <Landmark className="mt-0.5 h-4 w-4 shrink-0" />
-              {money(r.group_balance)} is posted straight to the 1007 Property Plant and Equipment group (not to a class&apos;s cost account) - e.g. an expense coded to 1007.
-              Move it to the right class&apos;s cost account by journal so the cost side agrees too.
-            </div>
-          )}
-          {Math.abs(r.totals.register_cost - r.totals.gl_cost - r.group_balance) >= 0.005 && (
-            <p className="text-xs text-muted-foreground">
-              Register cost not yet in the GL cost accounts: {money(r.totals.register_cost - r.totals.gl_cost - r.group_balance)}. Capitalising the register&apos;s cost is a separate opening journal, decided with the accountant.
-            </p>
-          )}
         </TabsContent>
 
         {/* Account Mapping */}
